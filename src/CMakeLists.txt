@@ -2,12 +2,13 @@ include(FetchContent)
 
 # Find OpenSMT2
 SET(OPENSMT_HOME CACHE STRING "OpenSMT installation directory")
-    find_package(OpenSMT CONFIG PATHS ${OPENSMT_HOME} NO_DEFAULT_PATH)
+find_package(OpenSMT CONFIG PATHS ${OPENSMT_HOME} NO_DEFAULT_PATH)
+
 if (OpenSMT_FOUND)
 else(OpenSMT_FOUND)
     FetchContent_Declare(
         OpenSMT
-        GIT_REPOSITORY git@github.com:usi-verification-and-security/opensmt.git
+        GIT_REPOSITORY https://github.com/usi-verification-and-security/opensmt.git
         GIT_TAG master 
         GIT_SHALLOW true
         GIT_PROGRESS true
