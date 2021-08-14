@@ -342,7 +342,9 @@ TEST_F(MBP_RealTest, test_avoidRedundantBounds) {
 
 TEST_F(MBP_RealTest, test_EqualityNotNormalized) {
     // x + y = x + 1
-    PTRef lit = logic.mkEq(logic.mkNumPlus(x,y), logic.mkNumPlus(x, one));
+    PTRef lhs = logic.mkNumPlus(x,y);
+    PTRef rhs = logic.mkNumPlus(x, one);
+    PTRef lit = logic.mkEq(lhs, rhs);
     ModelBuilder builder(logic);
     builder.addVarValue(x, one);
     builder.addVarValue(y, one);
