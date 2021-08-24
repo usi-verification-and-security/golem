@@ -52,8 +52,19 @@ public:
         out << "(define " << logic.printTerm(function) << ' ' << logic.printTerm(definition) << ")\n";
     }
 
-    template<typename TPred>
-    vec<PTRef> getTopLevelConjuncts(PTRef root, TPred predicate) const {
+
+    struct Conjunction {
+        static bool isCorrectJunction(Logic & logic, PTRef term) { return logic.isAnd(term); }
+        static bool isOtherJunction(Logic & logic, PTRef term) { return logic.isOr(term); }
+    };
+
+    struct Disjunction {
+        static bool isCorrectJunction(Logic & logic, PTRef term) { return logic.isOr(term); }
+        static bool isOtherJunction(Logic & logic, PTRef term) { return logic.isAnd(term); }
+    };
+
+    template<typename Junction, typename TPred>
+    vec<PTRef> getTopLevelJuncts(PTRef root, TPred predicate) const {
         // Inspired by Logic::getNewFacts
         vec<PTRef> res;
         Map<PtAsgn,bool,PtAsgnHash> isdup;
@@ -69,14 +80,14 @@ public:
             if (isdup.has(pta)) continue;
             isdup.insert(pta, true);
             Pterm const & t = logic.getPterm(pta.tr);
-            if (logic.isAnd(pta.tr) and pta.sgn == l_True) {
+            if (Junction::isCorrectJunction(logic, pta.tr) and pta.sgn == l_True) {
                 for (int i = 0; i < t.size(); i++) {
                     PTRef c;
                     lbool c_sign;
                     logic.purify(t[i], c, c_sign);
                     queue.push(PtAsgn(c, c_sign));
                 }
-            } else if (logic.isOr(pta.tr) and (pta.sgn == l_False)) {
+            } else if (Junction::isOtherJunction(logic, pta.tr) and (pta.sgn == l_False)) {
                 for (int i = 0; i < t.size(); i++) {
                     PTRef c;
                     lbool c_sign;
@@ -93,8 +104,22 @@ public:
         return res;
     }
 
+    template<typename TPred>
+    vec<PTRef> getTopLevelConjuncts(PTRef root, TPred predicate) const {
+        return getTopLevelJuncts<Conjunction>(root, predicate);
+    }
+
     vec<PTRef> getTopLevelConjuncts(PTRef root) const {
         return getTopLevelConjuncts(root, [](PTRef){ return true; });
+    }
+
+    template<typename TPred>
+    vec<PTRef> getTopLevelDisjuncts(PTRef root, TPred predicate) const {
+        return getTopLevelJuncts<Disjunction>(root, predicate);
+    }
+
+    vec<PTRef> getTopLevelDisjuncts(PTRef root) const {
+        return getTopLevelDisjuncts(root, [](PTRef){ return true; });
     }
 
     PTRef conjoin (PTRef what, PTRef to);
