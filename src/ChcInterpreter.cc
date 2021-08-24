@@ -362,7 +362,28 @@ void ChcInterpreterContext::interpretCheckSat() {
                 }
             }
         }
+    } else {
+        if (opts.getOption(Options::ENGINE) != "spacer") {
+            throw std::logic_error("Only Spacer engine can solve nonlinear CHCs at the moment!");
+        }
+        auto engine = std::unique_ptr<Engine>(new Spacer(logic, opts));
+        auto res = engine->solve(*hypergraph);
+        switch (res.getAnswer()) {
+            case VerificationResult::SAFE: {
+                std::cout << "sat" << std::endl;
+                break;
+            }
+            case VerificationResult::UNSAFE: {
+                std::cout << "unsat" << std::endl;
+                break;
+            }
+            case VerificationResult::UNKNOWN:
+                std::cout << "unknown" << std::endl;
+                break;
+        }
     }
+
+
 }
 
 void ChcInterpreterContext::reportError(std::string msg) {
