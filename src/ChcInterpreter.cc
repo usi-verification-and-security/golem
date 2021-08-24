@@ -398,19 +398,7 @@ ChClause ChcInterpreterContext::chclauseFromPTRef(PTRef ref) {
     }
     assert(logic.isOr(disjunction));
     // identify interpreted part and uninterpreted part
-    vec<PTRef> disjuncts;
-    for (int i = 0; i < logic.getPterm(disjunction).size(); ++i) {
-        PTRef arg = logic.getPterm(disjunction)[i];
-        if (logic.isNot(arg) && logic.isAnd(logic.getPterm(arg)[0])) {
-            // special case, argument is a negation of conjunction -> lift the disjuncts
-            PTRef negatedConjunction = logic.getPterm(arg)[0];
-            for (int j = 0; j < logic.getPterm(negatedConjunction).size(); ++j) {
-                disjuncts.push(logic.mkNot(logic.getPterm(negatedConjunction)[j]));
-            }
-        } else { // default case
-            disjuncts.push(arg);
-        }
-    }
+    vec<PTRef> disjuncts = TermUtils(logic).getTopLevelDisjuncts(disjunction);
     // find uninterpreted predicates (positive or negative)
     auto uninterpretedEnd = std::partition(disjuncts.begin(), disjuncts.end(), [this, &logic](PTRef arg) {
         return this->isUninterpretedPredicate(arg) || (logic.isNot(arg) && this->isUninterpretedPredicate(logic.getPterm(arg)[0]));
