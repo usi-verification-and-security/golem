@@ -16,6 +16,7 @@ target_sources(GolemTest
     PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/test_MBP.cc"
     PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/test_NNF.cc"
     PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/test_QE.cc"
+    PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/test_Spacer.cc"
     PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/test_TermUtils.cc"
     )
 
