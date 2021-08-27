@@ -176,6 +176,8 @@ GraphVerificationResult Spacer::solve(const ChcDirectedGraph & system) {
 GraphVerificationResult SpacerContext::run() {
     std::size_t currentBound = 1;
     while(true) {
+        over.insert(graph.getEntryId(), currentBound, logic.getTerm_true());
+        under.insert(graph.getEntryId(), currentBound, logic.getTerm_true());
         auto boundedResult = boundSafety(currentBound);
         switch (boundedResult) {
             case BoundedSafetyResult::UNSAFE:
