@@ -8,6 +8,10 @@
 #include <unordered_map>
 #include <unordered_set>
 
+#define TRACE_LEVEL 0
+
+#define TRACE(l,m) if (TRACE_LEVEL >= l) { std::cout << m << std::endl; }
+
 class ApproxMap {
 public:
     vec<PTRef> getComponents(VId vid, std::size_t bound) {
@@ -213,11 +217,13 @@ std::vector<EId> incomingEdges(VId v, ChcDirectedHyperGraph const & graph) {
 }
 
 SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t currentBound) {
+    TRACE(1, "\nRunning bounded safety check at level " << currentBound)
     VId query = graph.getExitId();
     PriorityQueue pqueue;
     pqueue.push(ProofObligation{query, currentBound, logic.getTerm_true()});
     lowestChangedLevel = currentBound;
     while(not pqueue.empty()) {
+        TRACE(2, "Examining proof obligation " << pqueue.peek().vertex.id)
         auto const & pob = pqueue.peek();
         if (pob.vertex == graph.getEntryId()) {
             assert(false); // With the must summaries, we actually never finish here
@@ -227,12 +233,14 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
         bool mustReached = false;
         std::vector<ProofObligation> newProofObligations;
         for (EId edgeId : edges) {
+            TRACE(2, "Considering edge " << edgeId.id)
             auto edge = graph.getEdge(edgeId);
             assert(edge.to == pob.vertex);
             // test if vertex can be reached using must summaries
             assert(pob.bound > 0);
             auto result = mustReachable(edgeId, pob.constraint, pob.bound - 1);
             if (result.applied) {
+                TRACE(1, "Must summary successfully applied!")
                 assert(result.mustSummary != PTRef_Undef);
                 PTRef definitelyReachable = TimeMachine(logic).sendFlaThroughTime(result.mustSummary, -1);
                 // definitelyReachable must be current state fla in vertex pob.vertex
@@ -246,6 +254,7 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
             } else {
                 auto result = mayReachable(edgeId, pob.constraint, pob.bound - 1);
                 if (result.blocked) {
+                    TRACE(2, "Edge blocked by current may-summaries")
                     continue; // This edge has been blocked, we can continue
                 }
             }
@@ -276,6 +285,7 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
                     PTRef newConstraint = projectFormula(logic.mkAnd(body, pob.constraint), predicateVars, res.model.get());
                     PTRef newPob = TimeMachine(logic).sendFlaThroughTime(newConstraint, 1); // ensure POB is next-state fla
                     newProofObligations.push_back(ProofObligation{targets[vertexToRefine], bound, newPob});
+                    TRACE(2, "New proof obligation generated")
                     break;
                 }
                 if (res.answer == QueryAnswer::VALID) {
@@ -309,7 +319,7 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
                     throw std::logic_error("All edges should have been blocked, but they are not!");
                 }
                 PTRef newLemma = TimeMachine(logic).sendFlaThroughTime(res.interpolant, -1);
-//                std::cout << "Learnt new lemma for " << pob.vertex.id << " at level " << pob.bound << " - " << logic.printTerm(newLemma) << std::endl;
+                TRACE(2, "Learnt new lemma for " << pob.vertex.id << " at level " << pob.bound << " - " << logic.pp(newLemma))
                 over.insert(pob.vertex, pob.bound, newLemma);
                 if (pob.bound < lowestChangedLevel) {
                     lowestChangedLevel = pob.bound;
@@ -317,7 +327,7 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
                 pqueue.pop(); // This POB has been successfully blocked
             } else {
                 for (auto const& npob : newProofObligations) {
-//                    std::cout << "Pushing new proof obligation " << logic.printTerm(npob.constraint) << " for " << npob.vertex.id << " at level " << npob.bound << std::endl;
+                    TRACE(2,"Pushing new proof obligation " << logic.pp(npob.constraint) << " for " << npob.vertex.id << " at level " << npob.bound)
                     pqueue.push(npob);
                 }
             }
