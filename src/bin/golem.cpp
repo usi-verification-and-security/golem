@@ -26,6 +26,7 @@ int main( int argc, char * argv[] ) {
             opensmt_error2(logic_str.c_str(), "Unknown logic specified!");
         }
     }(logicToUse);
+    logic->enableExtendedSignature(true);
 
     if (inputFile.empty()) {
         opensmt_error("No input file provided");

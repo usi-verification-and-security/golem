@@ -445,6 +445,7 @@ protected:
         c = logic.mkBoolVar("c");
         zero = logic.getTerm_NumZero();
         one = logic.getTerm_NumOne();
+        logic.enableExtendedSignature(true);
     }
 };
 
