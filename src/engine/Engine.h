@@ -54,6 +54,14 @@ public:
             invalidityWitness = graphToSystemInvalidityWitness(graphResult.getInvalidityWitness(), ctx);
         }
     }
+
+    SystemVerificationResult(GraphVerificationResult && graphResult) {
+        answer = graphResult.getAnswer();
+        if (answer == VerificationResult::SAFE) {
+            validityWitness = graphResult.getValidityWitness();
+        }
+    }
+
     VerificationResult getAnswer() const { return answer; }
 
     ValidityWitness const & getValidityWitness() const { return validityWitness; }

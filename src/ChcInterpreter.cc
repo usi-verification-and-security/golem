@@ -371,6 +371,20 @@ void ChcInterpreterContext::interpretCheckSat() {
         switch (res.getAnswer()) {
             case VerificationResult::SAFE: {
                 std::cout << "sat" << std::endl;
+                if (opts.hasOption(Options::VALIDATE_RESULT)) {
+                    SystemVerificationResult systemResult(std::move(res));
+                    auto validationResult = Validator(logic).validate(*normalizedSystem.normalizedSystem, systemResult);
+                    switch (validationResult) {
+                        case Validator::Result::VALIDATED: {
+                            std::cout << "Internal witness validation successful!" << std::endl;
+                            break;
+                        }
+                        case Validator::Result::NOT_VALIDATED: {
+                            std::cout << "Internal witness validation failed!" << std::endl;
+                            break;
+                        }
+                    }
+                }
                 break;
             }
             case VerificationResult::UNSAFE: {
