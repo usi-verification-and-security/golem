@@ -32,7 +32,7 @@ Options CommandLineParser::parse(int argc, char ** argv) {
     Options res;
     int validate = 0;
     int printWitness = 0;
-    int accelerateLoops = 1;
+    int accelerateLoops = 0;
     int computeWitness = 0;
     int lraItpAlg = 0;
     int forcedCovering = 0;
@@ -64,6 +64,8 @@ Options CommandLineParser::parse(int argc, char ** argv) {
                 if (long_options[option_index].flag == &accelerateLoops and optarg) {
                     if (isDisableKeyword(optarg)) {
                         accelerateLoops = 0;
+                    } else {
+                        accelerateLoops = 1;
                     }
                 } else if (long_options[option_index].flag == &computeWitness and optarg) {
                     if (isDisableKeyword(optarg)) {
