@@ -143,8 +143,9 @@ void TermUtils::printTermWithLets(ostream & out, PTRef root) {
         bool introduceLet = false;
         if (logic.isAnd(ref) or logic.isOr(ref)) { introduceLet = true; }
         if (introduceLet) {
-            out << "(let " << '(' << toLetId(ref) << ' ' << actualRepr << ')';
+            out << "(let " << '(' << '(' << toLetId(ref) << ' ' << actualRepr << ')' << ')';
             strRepr.insert({ref, toLetId(ref)});
+            ++letCount;
         } else {
             strRepr.insert({ref, std::move(actualRepr)});
         }
