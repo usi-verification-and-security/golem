@@ -598,9 +598,13 @@ TEST_F(MBP_IntTest, test_AuxiliaryVarAndDisequality) {
     PTRef two = logic.mkConst(FastRational(2));
     PTRef three = logic.mkConst(FastRational(3));
     PTRef y2 = logic.mkNumTimes(two, y);
+    // x - 1 mod 2 = 0
     PTRef lit1 = logic.mkEq(logic.mkIntMod(logic.mkNumMinus(x, one), two), zero);
+    // x - 2y != 0
     PTRef lit2 = logic.mkNot(logic.mkEq(logic.mkNumMinus(x,y2), zero));
+    // x <= 3
     PTRef lit3 = logic.mkNumLeq(x, three);
+    // x >= 3
     PTRef lit4 = logic.mkNumLeq(three, x);
     PTRef fla = logic.mkAnd({lit1, lit2, lit3, lit4});
     ModelBuilder builder(logic);
@@ -609,8 +613,7 @@ TEST_F(MBP_IntTest, test_AuxiliaryVarAndDisequality) {
     auto model = builder.build();
     PTRef res = mbp.project(fla, {x}, *model);
     std::cout << logic.pp(res) << std::endl;
-    // FIXME: Update LIA-MBP to the result here is "y <= 1"
-    EXPECT_EQ(res, logic.mkAnd(logic.mkNumLeq(y, one), logic.mkNumLeq(one, y)));
+    EXPECT_EQ(res, logic.getTerm_true());
 }
 
 TEST_F(MBP_IntTest, test_ResolvesToTrue) {
