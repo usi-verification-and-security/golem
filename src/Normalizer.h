@@ -50,7 +50,7 @@ class Normalizer{
             topLevelEqualities.push(logic.mkEq(nextStateVar, arg));
             newArgs.push(nextStateVar);
         }
-        PTRef newPredicate = logic.insertTerm(predicateSymbol, newArgs);
+        PTRef newPredicate = logic.insertTerm(predicateSymbol, std::move(newArgs));
         return ChcHead{newPredicate};
     }
 
@@ -81,7 +81,7 @@ class Normalizer{
                 nextVars.push(timeMachine.sendVarThroughTime(var, 1));
             }
             SymRef symbol = entry.first;
-            repre.addRepresentation(symbol, logic.insertTerm(symbol, stateVars), logic.insertTerm(symbol, nextVars));
+            repre.addRepresentation(symbol, logic.insertTerm(symbol, std::move(stateVars)), logic.insertTerm(symbol, std::move(nextVars)));
         }
         return repre;
     }

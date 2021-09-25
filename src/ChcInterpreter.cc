@@ -231,8 +231,7 @@ PTRef ChcInterpreterContext::parseTerm(const ASTNode & termNode) {
             return tr;
         }
         char* msg = nullptr;
-        vec<PTRef> emptyArgs{};
-        tr = logic.resolveTerm(name, emptyArgs, &msg);
+        tr = logic.resolveTerm(name, {}, &msg);
         assert(tr != PTRef_Undef);
         return tr;
     }
@@ -253,7 +252,7 @@ PTRef ChcInterpreterContext::parseTerm(const ASTNode & termNode) {
         assert(args.size() > 0);
         char* msg = nullptr;
         PTRef tr = PTRef_Undef;
-        tr = logic.resolveTerm(name, args, &msg);
+        tr = logic.resolveTerm(name, std::move(args), &msg);
         assert(tr != PTRef_Undef);
         return tr;
     }
