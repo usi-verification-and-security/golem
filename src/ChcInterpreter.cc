@@ -466,7 +466,7 @@ std::unique_ptr<Engine> ChcInterpreterContext::getEngine() const {
     if (engineStr == "abmc") {
         return std::unique_ptr<Engine>(new AcceleratedBmc(logic, opts));
     } else if (engineStr == "abmc-single") {
-        return std::unique_ptr<Engine>(new AcceleratedBmc2(logic, opts));
+        return std::unique_ptr<Engine>(new AcceleratedBmcSingle(logic, opts));
     } else if (engineStr == "bmc") {
         return std::unique_ptr<Engine>(new BMC(logic, opts));
     } else if (engineStr == "lawi") {
