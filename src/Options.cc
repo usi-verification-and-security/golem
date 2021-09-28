@@ -20,6 +20,7 @@ const std::string Options::PRINT_WITNESS = "print-witness";
 const std::string Options::LRA_ITP_ALG = "lra-itp-algorithm";
 const std::string Options::FORCED_COVERING = "forced-covering";
 const std::string Options::VERBOSE = "verbose";
+const std::string Options::ELAT_USE_QE = "elat.use-qe";
 
 namespace{
 bool isDisableKeyword(const char* word) {
@@ -37,6 +38,7 @@ Options CommandLineParser::parse(int argc, char ** argv) {
     int lraItpAlg = 0;
     int forcedCovering = 0;
     int verbose = 0;
+    int elatUseQE = 0;
 
     struct option long_options[] =
         {
@@ -51,6 +53,7 @@ Options CommandLineParser::parse(int argc, char ** argv) {
             {Options::LRA_ITP_ALG.c_str(), required_argument, &lraItpAlg, 0},
             {Options::FORCED_COVERING.c_str(), optional_argument, &forcedCovering, 1},
             {Options::VERBOSE.c_str(), optional_argument, &verbose, 1},
+            {Options::ELAT_USE_QE.c_str(), optional_argument, &elatUseQE, 1},
             {0, 0, 0, 0}
         };
     while (true) {
@@ -77,6 +80,8 @@ Options CommandLineParser::parse(int argc, char ** argv) {
                     } else {
                         forcedCovering = 1;
                     }
+                } else if (long_options[option_index].flag == &elatUseQE) {
+                    elatUseQE = 1;
                 } else if (long_options[option_index].flag == &lraItpAlg) {
                     assert(optarg);
                     lraItpAlg = std::atoi(optarg);
@@ -130,6 +135,9 @@ Options CommandLineParser::parse(int argc, char ** argv) {
     }
     if (forcedCovering) {
         res.addOption(Options::FORCED_COVERING, "true");
+    }
+    if (elatUseQE) {
+        res.addOption(Options::ELAT_USE_QE, "true");
     }
     res.addOption(Options::LRA_ITP_ALG, std::to_string(lraItpAlg));
     res.addOption(Options::VERBOSE, std::to_string(verbose));

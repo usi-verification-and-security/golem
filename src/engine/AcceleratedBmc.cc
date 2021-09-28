@@ -250,6 +250,14 @@ bool AcceleratedBmcBase::isPureTransitionFormula(PTRef fla) const {
     });
 }
 
+PTRef AcceleratedBmcBase::eliminateVars(PTRef fla, const vec<PTRef> & vars, Model & model) {
+    if (useQE) {
+        return QuantifierElimination(logic).eliminate(fla, vars);
+    } else {
+        return ModelBasedProjection(logic).project(fla, vars, model);
+    }
+}
+
 
 
 
@@ -762,14 +770,13 @@ PTRef AcceleratedBmcBase::extractMidPoint(PTRef start, PTRef firstTransition, PT
     assert(isPureTransitionFormula(firstTransition));
     assert(isPureStateFormula(getNextVersion(goal, -2)));
     assert(isPureTransitionFormula(getNextVersion(secondTransition, -1)));
-    ModelBasedProjection mbp(logic);
     PTRef firstStep = logic.mkAnd(start, firstTransition);
     PTRef secondStep = logic.mkAnd(goal, secondTransition);
     assert(model.evaluate(firstStep) == logic.getTerm_true() and model.evaluate(secondStep) == logic.getTerm_true());
     vec<PTRef> toEliminate = getStateVars(0);
-    PTRef midPointFromStart = mbp.project(firstStep, toEliminate, model);
+    PTRef midPointFromStart = eliminateVars(firstStep, toEliminate, model);
     toEliminate = getStateVars(2);
-    PTRef midPointFromGoal = mbp.project(secondStep, toEliminate, model);
+    PTRef midPointFromGoal = eliminateVars(secondStep, toEliminate, model);
     PTRef midPoint = getNextVersion(logic.mkAnd(midPointFromStart, midPointFromGoal), -1);
     assert(isPureStateFormula(midPoint));
     return midPoint;
@@ -777,7 +784,6 @@ PTRef AcceleratedBmcBase::extractMidPoint(PTRef start, PTRef firstTransition, PT
 
 PTRef AcceleratedBmcBase::refineTwoStepTarget(PTRef start, PTRef twoSteptransition, PTRef goal, Model & model) {
     assert(isPureStateFormula(getNextVersion(goal, -2)));
-    ModelBasedProjection mbp(logic);
     PTRef transitionQuery = logic.mkAnd({start, twoSteptransition, goal});
     assert(model.evaluate(transitionQuery) == logic.getTerm_true());
     auto nextnextStateVars = getStateVars(2);
@@ -790,7 +796,7 @@ PTRef AcceleratedBmcBase::refineTwoStepTarget(PTRef start, PTRef twoSteptransiti
             toEliminate.push(var);
         }
     }
-    PTRef refinedGoal = mbp.project(transitionQuery, toEliminate, model);
+    PTRef refinedGoal = eliminateVars(transitionQuery, toEliminate, model);
     assert(refinedGoal != logic.getTerm_false());
     return getNextVersion(refinedGoal, -2);
 }

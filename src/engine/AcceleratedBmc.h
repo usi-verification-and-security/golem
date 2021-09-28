@@ -28,6 +28,7 @@ protected:
     Logic & logic;
     Options const & options;
     int verbosity = 0;
+    bool useQE = false;
 
     // Versioned representation of the transition system
     PTRef init;
@@ -41,6 +42,9 @@ public:
     AcceleratedBmcBase(Logic& logic, Options const & options) : logic(logic), options(options) {
         if (options.hasOption(Options::VERBOSE)) {
             verbosity = std::stoi(options.getOption(Options::VERBOSE));
+        }
+        if (options.hasOption(Options::ELAT_USE_QE)) {
+            useQE = true;
         }
     }
 
@@ -101,6 +105,8 @@ protected:
     PTRef refineTwoStepTarget(PTRef start, PTRef transition, PTRef goal, Model& model);
 
     PTRef extractMidPoint(PTRef start, PTRef firstTransition, PTRef secondTransition, PTRef goal, Model& model);
+
+    PTRef eliminateVars(PTRef fla, vec<PTRef> const & vars, Model & model);
 };
 
 class AcceleratedBmc : public AcceleratedBmcBase {
