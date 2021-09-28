@@ -1108,7 +1108,6 @@ SolverWrapper* AcceleratedBmcSingle::getReachabilitySolver(unsigned short power)
 GraphVerificationResult AcceleratedBmcSingle::solveTransitionSystem(TransitionSystem & system, ChcDirectedGraph const & graph) {
     resetTransitionSystem(system);
     queryCache.emplace_back();
-    queryCache.emplace_back();
     unsigned short power = 1;
     while (true) {
         auto res = checkPower(power);
@@ -1148,12 +1147,13 @@ GraphVerificationResult AcceleratedBmcSingle::solveTransitionSystem(TransitionSy
 VerificationResult AcceleratedBmcSingle::checkPower(unsigned short power) {
     assert(power > 0);
     TRACE(1, "Checking power " << power)
+    queryCache.emplace_back();
     auto res = reachabilityQuery(init, query, power);
     if (isReachable(res)) {
         return VerificationResult::UNSAFE;
     } else if (isUnreachable(res)) {
         if (verbose() > 0) {
-            std::cout << "; System is safe up to <2^" << power - 1 << " steps" << std::endl;
+            std::cout << "; System is safe up to <=2^" << power - 1 << " steps" << std::endl;
         }
         // Check if we have not reached fixed point.
         if (power >= 3) {
@@ -1163,20 +1163,7 @@ VerificationResult AcceleratedBmcSingle::checkPower(unsigned short power) {
             }
         }
     }
-    queryCache.emplace_back();
-    // Second compute the exact power using the concatenation of previous one
-    res = reachabilityQuery(init, query, power);
-    if (isReachable(res)) {
-        return VerificationResult::UNSAFE;
-    } else if (isUnreachable(res)) {
-        if (verbose() > 0) {
-            std::cout << "; System is safe up to 2^" << power - 1 << " steps" << std::endl;
-        }
-        return VerificationResult::UNKNOWN;
-    } else {
-        assert(false);
-        throw std::logic_error("Unreachable code!");
-    }
+    return VerificationResult::UNKNOWN;
 }
 
 AcceleratedBmcSingle::QueryResult AcceleratedBmcSingle::reachabilityExactOneStep(PTRef from, PTRef to) {
@@ -1220,8 +1207,8 @@ AcceleratedBmcSingle::QueryResult AcceleratedBmcSingle::reachabilityExactZeroSte
  * If 'to' is unreachable, we interpolate over the 2 step transition to obtain 1-step transition of level n.
  */
 AcceleratedBmcSingle::QueryResult AcceleratedBmcSingle::reachabilityQuery(PTRef from, PTRef to, unsigned short power) {
-    //        std::cout << "Checking exact reachability on level " << power << " from " << logic.printTerm(from) << " to " << logic.printTerm(to) << std::endl;
-    TRACE(2,"Checking exact reachability on level " << power << " from " << from.x << " to " << to.x)
+    //        std::cout << "Checking LEQ reachability on level " << power << " from " << logic.printTerm(from) << " to " << logic.printTerm(to) << std::endl;
+    TRACE(2,"Checking LEQ reachability on level " << power << " from " << from.x << " to " << to.x)
     assert(power >= 0);
     if (power == 0) { // Basic check with real transition relation
         auto res = reachabilityExactZeroStep(from, to);
