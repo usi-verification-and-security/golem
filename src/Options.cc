@@ -23,6 +23,26 @@ const std::string Options::VERBOSE = "verbose";
 const std::string Options::TPA_USE_QE = "tpa.use-qe";
 
 namespace{
+
+void printUsage() {
+    std::cout <<
+        "Usage: golem [options] [-i] file\n"
+        "\n"
+        "-h,--help                  Print this help message\n"
+        "-l,--logic <name>          SMT-LIB logic to use (required); possible values: QF_LRA, QF_LIA\n"
+        "-e,--engine <name>         Select engine to use; supported engines:\n"
+        "                               bmc - bounded model checking (only transition systems)\n"
+        "                               lawi - Lazy Abstraction with Interpolants (only linear CHC systems)\n"
+        "                               tpa - Transition Power Abstraction (only transition systems)\n"
+        "                               spacer - custom implementation of Spacer (any CHC system)\n"
+        "--validate                 Internally validate computed solution\n"
+        "--print-witness            Print computed solution\n"
+        "-v                         Increase verbosity (can be applied multiple times)\n"
+        "-i,--input <file>          Input file (option not required)\n"
+        ;
+    std::cout << std::flush;
+}
+
 bool isDisableKeyword(const char* word) {
     return strcmp(word, "no") == 0 or strcmp(word, "false") == 0 or strcmp(word, "disable") == 0;
 }
@@ -42,6 +62,7 @@ Options CommandLineParser::parse(int argc, char ** argv) {
 
     struct option long_options[] =
         {
+            {"help", no_argument, nullptr, 'h'},
             {Options::ENGINE.c_str(), required_argument, nullptr, 'e'},
             {Options::LOGIC.c_str(), required_argument, nullptr, 'l'},
             {Options::INPUT_FILE.c_str(), required_argument, nullptr, 'i'},
@@ -59,7 +80,7 @@ Options CommandLineParser::parse(int argc, char ** argv) {
     while (true) {
         int option_index = 0;
 
-        int c = getopt_long(argc, argv, "e:l:i:f:v", long_options, &option_index);
+        int c = getopt_long(argc, argv, "e:l:i:f:vh", long_options, &option_index);
         if (c == -1) { break; }
 
         switch (c) {
@@ -109,13 +130,17 @@ Options CommandLineParser::parse(int argc, char ** argv) {
             case 'v':
                 ++verbose;
                 break;
+            case 'h':
+                printUsage();
+                exit(0);
             default:
                 abort();
         }
     }
     if (optind < argc) {
         if (optind < argc - 1 || res.hasOption(Options::INPUT_FILE)) {
-            std::cerr << "Error in parsing the command line argument" << std::endl;
+            std::cerr << "Error in parsing the command line argument" << '\n';
+            printUsage();
             exit(1);
         }
         // Assume the last argument not assigned to any option is input file
