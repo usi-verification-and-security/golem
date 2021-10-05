@@ -36,7 +36,7 @@ public:
     static const std::string LRA_ITP_ALG;
     static const std::string FORCED_COVERING;
     static const std::string VERBOSE;
-    static const std::string ELAT_USE_QE;
+    static const std::string TPA_USE_QE;
 };
 
 class CommandLineParser {

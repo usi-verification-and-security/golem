@@ -23,7 +23,7 @@ public:
     virtual PTRef lastQueryTransitionInterpolant() = 0;
 };
 
-class AcceleratedBmcBase : public Engine {
+class TPABase : public Engine {
 protected:
     Logic & logic;
     Options const & options;
@@ -39,16 +39,16 @@ protected:
     PTRef inductiveInvariant = PTRef_Undef;
 
 public:
-    AcceleratedBmcBase(Logic& logic, Options const & options) : logic(logic), options(options) {
+    TPABase(Logic& logic, Options const & options) : logic(logic), options(options) {
         if (options.hasOption(Options::VERBOSE)) {
             verbosity = std::stoi(options.getOption(Options::VERBOSE));
         }
-        if (options.hasOption(Options::ELAT_USE_QE)) {
+        if (options.hasOption(Options::TPA_USE_QE)) {
             useQE = true;
         }
     }
 
-    virtual ~AcceleratedBmcBase() = default;
+    virtual ~TPABase() = default;
 
     GraphVerificationResult solve(ChcDirectedHyperGraph & system) override {
         throw std::logic_error("Not supported yet!");
@@ -109,7 +109,7 @@ protected:
     PTRef eliminateVars(PTRef fla, vec<PTRef> const & vars, Model & model);
 };
 
-class AcceleratedBmc : public AcceleratedBmcBase {
+class TPASplit : public TPABase {
 
     vec<PTRef> exactPowers;
     vec<PTRef> lessThanPowers;
@@ -117,9 +117,9 @@ class AcceleratedBmc : public AcceleratedBmcBase {
     vec<SolverWrapper*> reachabilitySolvers;
 
 public:
-    AcceleratedBmc(Logic& logic, Options const & options) : AcceleratedBmcBase(logic, options) {}
+    TPASplit(Logic& logic, Options const & options) : TPABase(logic, options) {}
 
-    ~AcceleratedBmc() override;
+    ~TPASplit() override;
 
 private:
     void resetTransitionSystem(TransitionSystem const & system);
@@ -149,16 +149,16 @@ private:
     bool checkExactFixedPoint(unsigned short power);
 };
 
-class AcceleratedBmcSingle : public AcceleratedBmcBase {
+class TPABasic : public TPABase {
 
     vec<PTRef> transitionHierarchy;
 
     vec<SolverWrapper*> reachabilitySolvers;
 
 public:
-    AcceleratedBmcSingle(Logic& logic, Options const & options) : AcceleratedBmcBase(logic, options) {}
+    TPABasic(Logic& logic, Options const & options) : TPABase(logic, options) {}
 
-    ~AcceleratedBmcSingle() override;
+    ~TPABasic() override;
 
 
 private:

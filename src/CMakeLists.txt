@@ -32,7 +32,7 @@ target_sources(golem_lib
     PRIVATE ChcSystem.cc
     PRIVATE ChcInterpreter.cc
     PRIVATE ChcGraph.cc
-    PRIVATE engine/AcceleratedBmc.cc
+    PRIVATE engine/TPA.cc
     PRIVATE engine/Bmc.cc
     PRIVATE engine/Lawi.cc
     PRIVATE engine/Spacer.cc

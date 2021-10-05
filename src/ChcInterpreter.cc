@@ -2,7 +2,7 @@
 // Created by Martin Blicha on 15.07.20.
 //
 
-#include <engine/AcceleratedBmc.h>
+#include <engine/TPA.h>
 #include <engine/Bmc.h>
 #include <engine/Lawi.h>
 #include <engine/Spacer.h>
@@ -463,10 +463,10 @@ bool ChcInterpreterContext::isUninterpretedPredicate(PTRef ref) const {
 
 std::unique_ptr<Engine> ChcInterpreterContext::getEngine() const {
     std::string engineStr = opts.hasOption(Options::ENGINE) ? opts.getOption(Options::ENGINE) : "lawi";
-    if (engineStr == "abmc") {
-        return std::unique_ptr<Engine>(new AcceleratedBmc(logic, opts));
-    } else if (engineStr == "abmc-single") {
-        return std::unique_ptr<Engine>(new AcceleratedBmcSingle(logic, opts));
+    if (engineStr == "tpa-split") {
+        return std::unique_ptr<Engine>(new TPASplit(logic, opts));
+    } else if (engineStr == "tpa") {
+        return std::unique_ptr<Engine>(new TPABasic(logic, opts));
     } else if (engineStr == "bmc") {
         return std::unique_ptr<Engine>(new BMC(logic, opts));
     } else if (engineStr == "lawi") {

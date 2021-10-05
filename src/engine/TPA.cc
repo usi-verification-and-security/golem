@@ -2,7 +2,7 @@
 // Created by Martin Blicha on 01.06.21.
 //
 
-#include "AcceleratedBmc.h"
+#include "TPA.h"
 #include "TransformationUtils.h"
 #include "TransitionSystem.h"
 #include "ModelBasedProjection.h"
@@ -185,13 +185,13 @@ public:
 };
 
 
-AcceleratedBmc::~AcceleratedBmc() {
+TPASplit::~TPASplit() {
     for (SolverWrapper* solver : reachabilitySolvers) {
         delete solver;
     }
 }
 
-GraphVerificationResult AcceleratedBmcBase::solve(const ChcDirectedGraph & system) {
+GraphVerificationResult TPABase::solve(const ChcDirectedGraph & system) {
     if (isTransitionSystem(system)) {
         auto ts = toTransitionSystem(system, logic);
         return solveTransitionSystem(*ts, system);
@@ -201,19 +201,19 @@ GraphVerificationResult AcceleratedBmcBase::solve(const ChcDirectedGraph & syste
     }
 }
 
-PTRef AcceleratedBmcBase::getInit() const {
+PTRef TPABase::getInit() const {
     return init;
 }
 
-PTRef AcceleratedBmcBase::getTransitionRelation() const {
+PTRef TPABase::getTransitionRelation() const {
     return transition;
 }
 
-PTRef AcceleratedBmcBase::getQuery() const {
+PTRef TPABase::getQuery() const {
     return query;
 }
 
-vec<PTRef> AcceleratedBmcBase::getStateVars(int version) const {
+vec<PTRef> TPABase::getStateVars(int version) const {
     vec<PTRef> versioned;
     TimeMachine timeMachine(logic);
     for (PTRef var : stateVariables) {
@@ -222,7 +222,7 @@ vec<PTRef> AcceleratedBmcBase::getStateVars(int version) const {
     return versioned;
 }
 
-PTRef AcceleratedBmcBase::getNextVersion(PTRef currentVersion, int shift) const {
+PTRef TPABase::getNextVersion(PTRef currentVersion, int shift) const {
     auto it = versioningCache.find({currentVersion, shift});
     if (it != versioningCache.end()) {
         return it->second;
@@ -232,7 +232,7 @@ PTRef AcceleratedBmcBase::getNextVersion(PTRef currentVersion, int shift) const 
     return res;
 }
 
-bool AcceleratedBmcBase::isPureStateFormula(PTRef fla) const {
+bool TPABase::isPureStateFormula(PTRef fla) const {
     auto vars = TermUtils(logic).getVars(fla);
     auto stateVars = getStateVars(0);
     return std::all_of(vars.begin(), vars.end(), [&](PTRef var) {
@@ -240,7 +240,7 @@ bool AcceleratedBmcBase::isPureStateFormula(PTRef fla) const {
     });
 }
 
-bool AcceleratedBmcBase::isPureTransitionFormula(PTRef fla) const {
+bool TPABase::isPureTransitionFormula(PTRef fla) const {
     auto vars = TermUtils(logic).getVars(fla);
     auto stateVars = getStateVars(0);
     auto nextStateVars = getStateVars(1);
@@ -250,7 +250,7 @@ bool AcceleratedBmcBase::isPureTransitionFormula(PTRef fla) const {
     });
 }
 
-PTRef AcceleratedBmcBase::eliminateVars(PTRef fla, const vec<PTRef> & vars, Model & model) {
+PTRef TPABase::eliminateVars(PTRef fla, const vec<PTRef> & vars, Model & model) {
     if (useQE) {
         return QuantifierElimination(logic).eliminate(fla, vars);
     } else {
@@ -262,12 +262,12 @@ PTRef AcceleratedBmcBase::eliminateVars(PTRef fla, const vec<PTRef> & vars, Mode
 
 
 
-PTRef AcceleratedBmc::getExactPower(unsigned short power) const {
+PTRef TPASplit::getExactPower(unsigned short power) const {
     assert(power >= 0 and power < exactPowers.size());
     return exactPowers[power];
 }
 
-void AcceleratedBmc::storeExactPower(unsigned short power, PTRef tr) {
+void TPASplit::storeExactPower(unsigned short power, PTRef tr) {
 //    std::cout << "Strengthening exact reachability on level " << power << " with " << logic.printTerm(tr) << std::endl;
     if (power >= 2 and not isPureTransitionFormula(tr)) {
         throw std::logic_error("Transition relation has some auxiliary variables!");
@@ -288,12 +288,12 @@ void AcceleratedBmc::storeExactPower(unsigned short power, PTRef tr) {
     }
 }
 
-PTRef AcceleratedBmc::getLessThanPower(unsigned short power) const {
+PTRef TPASplit::getLessThanPower(unsigned short power) const {
     assert(power >= 0 and power < lessThanPowers.size());
     return lessThanPowers[power];
 }
 
-void AcceleratedBmc::storeLessThanPower(unsigned short power, PTRef tr) {
+void TPASplit::storeLessThanPower(unsigned short power, PTRef tr) {
 //    std::cout << "Strengthening less-than reachability on level " << power << " with " << logic.printTerm(tr) << std::endl;
     assert(power >= 0);
     if (power >= 2 and not isPureTransitionFormula(tr)) {
@@ -305,13 +305,13 @@ void AcceleratedBmc::storeLessThanPower(unsigned short power, PTRef tr) {
     lessThanPowers[power] = toStore;
 }
 
-SolverWrapper* AcceleratedBmc::getExactReachabilitySolver(unsigned short power) const {
+SolverWrapper* TPASplit::getExactReachabilitySolver(unsigned short power) const {
     assert(reachabilitySolvers.size() > power);
     return reachabilitySolvers[power];
 }
 
 
-GraphVerificationResult AcceleratedBmc::solveTransitionSystem(TransitionSystem & system, ChcDirectedGraph const & graph) {
+GraphVerificationResult TPASplit::solveTransitionSystem(TransitionSystem & system, ChcDirectedGraph const & graph) {
     resetTransitionSystem(system);
     queryCache.emplace_back();
     unsigned short power = 1;
@@ -351,7 +351,7 @@ GraphVerificationResult AcceleratedBmc::solveTransitionSystem(TransitionSystem &
 }
 
 
-VerificationResult AcceleratedBmc::checkPower(unsigned short power) {
+VerificationResult TPASplit::checkPower(unsigned short power) {
     assert(power > 0);
     TRACE(1, "Checking power " << power)
     // First compute the <2^n transition relation using information from previous level;
@@ -390,7 +390,7 @@ VerificationResult AcceleratedBmc::checkPower(unsigned short power) {
     }
 }
 
-AcceleratedBmc::QueryResult AcceleratedBmc::reachabilityExactOneStep(PTRef from, PTRef to) {
+TPASplit::QueryResult TPASplit::reachabilityExactOneStep(PTRef from, PTRef to) {
     // TODO: this solver can be persistent and used incrementally
     QueryResult result;
     SMTConfig config;
@@ -409,7 +409,7 @@ AcceleratedBmc::QueryResult AcceleratedBmc::reachabilityExactOneStep(PTRef from,
     throw std::logic_error("Accelerated BMC: Unexpected situation checking reachability");
 }
 
-AcceleratedBmc::QueryResult AcceleratedBmc::reachabilityExactZeroStep(PTRef from, PTRef to) {
+TPASplit::QueryResult TPASplit::reachabilityExactZeroStep(PTRef from, PTRef to) {
     QueryResult result;
     SMTConfig config;
     MainSolver solver(logic, config, "0-step checker");
@@ -430,7 +430,7 @@ AcceleratedBmc::QueryResult AcceleratedBmc::reachabilityExactZeroStep(PTRef from
  * We do this using the (n-1)th abstraction of the transition relation and check 2-step reachability in this abstraction.
  * If 'to' is unreachable, we interpolate over the 2 step transition to obtain 1-step transition of level n.
  */
-AcceleratedBmc::QueryResult AcceleratedBmc::reachabilityQueryExact(PTRef from, PTRef to, unsigned short power) {
+TPASplit::QueryResult TPASplit::reachabilityQueryExact(PTRef from, PTRef to, unsigned short power) {
 //        std::cout << "Checking exact reachability on level " << power << " from " << logic.printTerm(from) << " to " << logic.printTerm(to) << std::endl;
     TRACE(2,"Checking exact reachability on level " << power << " from " << from.x << " to " << to.x)
     assert(power >= 1);
@@ -526,7 +526,7 @@ AcceleratedBmc::QueryResult AcceleratedBmc::reachabilityQueryExact(PTRef from, P
  * Reachability in <2^n steps can happen if it is reachable in <2^(n-1) steps or if it is reachable in 2^(n-1) + <2^(n-1) steps.
  * If 'to' is unreachable, we interpolate over the 2 step transition to obtain 1-step transition of level n.
  */
-AcceleratedBmc::QueryResult AcceleratedBmc::reachabilityQueryLessThan(PTRef from, PTRef to, unsigned short power) {
+TPASplit::QueryResult TPASplit::reachabilityQueryLessThan(PTRef from, PTRef to, unsigned short power) {
 //        std::cout << "Checking less-than reachability on level " << power << " from " << logic.printTerm(from) << " to " << logic.printTerm(to) << std::endl;
     TRACE(2,"Checking less-than reachability on level " << power << " from " << from.x << " to " << to.x)
     assert(power >= 1);
@@ -658,7 +658,7 @@ AcceleratedBmc::QueryResult AcceleratedBmc::reachabilityQueryLessThan(PTRef from
 }
 
 
-PTRef AcceleratedBmcBase::simplifyInterpolant(PTRef itp) {
+PTRef TPABase::simplifyInterpolant(PTRef itp) {
     auto & laLogic = dynamic_cast<LALogic&>(logic);
     LATermUtils utils(laLogic);
     if (logic.isOr(itp)) {
@@ -672,7 +672,7 @@ PTRef AcceleratedBmcBase::simplifyInterpolant(PTRef itp) {
 }
 
 // TODO: unify cleanInterpolant and shiftOnlyNextVars. They are dual to each other and very similar
-PTRef AcceleratedBmcBase::cleanInterpolant(PTRef itp) {
+PTRef TPABase::cleanInterpolant(PTRef itp) {
     TermUtils utils(logic);
     auto itpVars = utils.getVars(itp);
     auto currentVars = getStateVars(0);
@@ -690,7 +690,7 @@ PTRef AcceleratedBmcBase::cleanInterpolant(PTRef itp) {
     return utils.varSubstitute(itp, subst);
 }
 
-PTRef AcceleratedBmcBase::shiftOnlyNextVars(PTRef fla) {
+PTRef TPABase::shiftOnlyNextVars(PTRef fla) {
     TermUtils utils(logic);
     auto vars = utils.getVars(fla);
     auto currentVars = getStateVars(0);
@@ -708,7 +708,7 @@ PTRef AcceleratedBmcBase::shiftOnlyNextVars(PTRef fla) {
     return utils.varSubstitute(fla, subst);
 }
 
-void AcceleratedBmc::resetTransitionSystem(TransitionSystem const & system) {
+void TPASplit::resetTransitionSystem(TransitionSystem const & system) {
     TimeMachine timeMachine(logic);
     TermUtils utils(logic);
     this->stateVariables.clear();
@@ -765,7 +765,7 @@ void AcceleratedBmc::resetTransitionSystem(TransitionSystem const & system) {
 //    std::cout << "Query: " << logic.printTerm(query) << std::endl;
 }
 
-PTRef AcceleratedBmcBase::extractMidPoint(PTRef start, PTRef firstTransition, PTRef secondTransition, PTRef goal, Model & model) {
+PTRef TPABase::extractMidPoint(PTRef start, PTRef firstTransition, PTRef secondTransition, PTRef goal, Model & model) {
     assert(isPureStateFormula(start));
     assert(isPureTransitionFormula(firstTransition));
     assert(isPureStateFormula(getNextVersion(goal, -2)));
@@ -782,7 +782,7 @@ PTRef AcceleratedBmcBase::extractMidPoint(PTRef start, PTRef firstTransition, PT
     return midPoint;
 }
 
-PTRef AcceleratedBmcBase::refineTwoStepTarget(PTRef start, PTRef twoSteptransition, PTRef goal, Model & model) {
+PTRef TPABase::refineTwoStepTarget(PTRef start, PTRef twoSteptransition, PTRef goal, Model & model) {
     assert(isPureStateFormula(getNextVersion(goal, -2)));
     PTRef transitionQuery = logic.mkAnd({start, twoSteptransition, goal});
     assert(model.evaluate(transitionQuery) == logic.getTerm_true());
@@ -801,7 +801,7 @@ PTRef AcceleratedBmcBase::refineTwoStepTarget(PTRef start, PTRef twoSteptransiti
     return getNextVersion(refinedGoal, -2);
 }
 
-bool AcceleratedBmc::verifyLessThanPower(unsigned short power) {
+bool TPASplit::verifyLessThanPower(unsigned short power) {
     assert(power >= 2);
     SMTConfig config;
     MainSolver solver(logic, config, "");
@@ -819,7 +819,7 @@ bool AcceleratedBmc::verifyLessThanPower(unsigned short power) {
     return res == s_False;
 }
 
-bool AcceleratedBmc::verifyExactPower(unsigned short power) {
+bool TPASplit::verifyExactPower(unsigned short power) {
     assert(power >= 2);
     if (power > 2) {
         bool previousRes = verifyExactPower(power - 1);
@@ -841,7 +841,7 @@ bool AcceleratedBmc::verifyExactPower(unsigned short power) {
 }
 
 
-bool AcceleratedBmc::checkLessThanFixedPoint(unsigned short power) {
+bool TPASplit::checkLessThanFixedPoint(unsigned short power) {
     assert(power >= 3);
     assert(verifyLessThanPower(power));
     for (unsigned short i = 3; i <= power; ++i) {
@@ -904,7 +904,7 @@ bool AcceleratedBmc::checkLessThanFixedPoint(unsigned short power) {
     return false;
 }
 
-bool AcceleratedBmc::checkExactFixedPoint(unsigned short power) {
+bool TPASplit::checkExactFixedPoint(unsigned short power) {
     assert(power >= 2);
     for (unsigned short i = 2; i <= power; ++i) {
         PTRef currentLevelTransition = getExactPower(i);
@@ -989,7 +989,7 @@ bool AcceleratedBmc::checkExactFixedPoint(unsigned short power) {
     return false;
 }
 
-PTRef AcceleratedBmcBase::kinductiveToInductive(PTRef invariant, unsigned long k) {
+PTRef TPABase::kinductiveToInductive(PTRef invariant, unsigned long k) {
     /*
      * If P(x) is k-inductive invariant then the following formula is 1-inductive invariant:
      * P(x_0)
@@ -1032,7 +1032,7 @@ PTRef AcceleratedBmcBase::kinductiveToInductive(PTRef invariant, unsigned long k
     return logic.mkAnd(resArgs);
 }
 
-bool AcceleratedBmcBase::verifyKinductiveInvariant(PTRef fla, unsigned long k) {
+bool TPABase::verifyKinductiveInvariant(PTRef fla, unsigned long k) {
     SMTConfig config;
     // Base cases:
     {
@@ -1066,19 +1066,19 @@ bool AcceleratedBmcBase::verifyKinductiveInvariant(PTRef fla, unsigned long k) {
 }
 
 // Single hierarchy version:
-AcceleratedBmcSingle::~AcceleratedBmcSingle() {
+TPABasic::~TPABasic() {
     for (SolverWrapper* solver : reachabilitySolvers) {
         delete solver;
     }
 }
 
 
-PTRef AcceleratedBmcSingle::getLevelTransition(unsigned short power) const {
+PTRef TPABasic::getLevelTransition(unsigned short power) const {
     assert(power >= 0 and power < transitionHierarchy.size());
     return transitionHierarchy[power];
 }
 
-void AcceleratedBmcSingle::storeLevelTransition(unsigned short power, PTRef tr) {
+void TPABasic::storeLevelTransition(unsigned short power, PTRef tr) {
     //    std::cout << "Strengthening exact reachability on level " << power << " with " << logic.printTerm(tr) << std::endl;
     if (power >= 2 and not isPureTransitionFormula(tr)) {
         throw std::logic_error("Transition relation has some auxiliary variables!");
@@ -1099,13 +1099,13 @@ void AcceleratedBmcSingle::storeLevelTransition(unsigned short power, PTRef tr) 
     }
 }
 
-SolverWrapper* AcceleratedBmcSingle::getReachabilitySolver(unsigned short power) const {
+SolverWrapper* TPABasic::getReachabilitySolver(unsigned short power) const {
     assert(reachabilitySolvers.size() > power);
     return reachabilitySolvers[power];
 }
 
 
-GraphVerificationResult AcceleratedBmcSingle::solveTransitionSystem(TransitionSystem & system, ChcDirectedGraph const & graph) {
+GraphVerificationResult TPABasic::solveTransitionSystem(TransitionSystem & system, ChcDirectedGraph const & graph) {
     resetTransitionSystem(system);
     queryCache.emplace_back();
     unsigned short power = 1;
@@ -1144,7 +1144,7 @@ GraphVerificationResult AcceleratedBmcSingle::solveTransitionSystem(TransitionSy
     }
 }
 
-VerificationResult AcceleratedBmcSingle::checkPower(unsigned short power) {
+VerificationResult TPABasic::checkPower(unsigned short power) {
     assert(power > 0);
     TRACE(1, "Checking power " << power)
     queryCache.emplace_back();
@@ -1166,7 +1166,7 @@ VerificationResult AcceleratedBmcSingle::checkPower(unsigned short power) {
     return VerificationResult::UNKNOWN;
 }
 
-AcceleratedBmcSingle::QueryResult AcceleratedBmcSingle::reachabilityExactOneStep(PTRef from, PTRef to) {
+TPABasic::QueryResult TPABasic::reachabilityExactOneStep(PTRef from, PTRef to) {
     // TODO: this solver can be persistent and used incrementally
     QueryResult result;
     SMTConfig config;
@@ -1185,7 +1185,7 @@ AcceleratedBmcSingle::QueryResult AcceleratedBmcSingle::reachabilityExactOneStep
     throw std::logic_error("Accelerated BMC: Unexpected situation checking reachability");
 }
 
-AcceleratedBmcSingle::QueryResult AcceleratedBmcSingle::reachabilityExactZeroStep(PTRef from, PTRef to) {
+TPABasic::QueryResult TPABasic::reachabilityExactZeroStep(PTRef from, PTRef to) {
     QueryResult result;
     SMTConfig config;
     MainSolver solver(logic, config, "0-step checker");
@@ -1206,7 +1206,7 @@ AcceleratedBmcSingle::QueryResult AcceleratedBmcSingle::reachabilityExactZeroSte
  * We do this using the (n-1)th abstraction of the transition relation and check 2-step reachability in this abstraction.
  * If 'to' is unreachable, we interpolate over the 2 step transition to obtain 1-step transition of level n.
  */
-AcceleratedBmcSingle::QueryResult AcceleratedBmcSingle::reachabilityQuery(PTRef from, PTRef to, unsigned short power) {
+TPABasic::QueryResult TPABasic::reachabilityQuery(PTRef from, PTRef to, unsigned short power) {
     //        std::cout << "Checking LEQ reachability on level " << power << " from " << logic.printTerm(from) << " to " << logic.printTerm(to) << std::endl;
     TRACE(2,"Checking LEQ reachability on level " << power << " from " << from.x << " to " << to.x)
     assert(power >= 0);
@@ -1298,7 +1298,7 @@ AcceleratedBmcSingle::QueryResult AcceleratedBmcSingle::reachabilityQuery(PTRef 
 }
 
 
-void AcceleratedBmcSingle::resetTransitionSystem(TransitionSystem const & system) {
+void TPABasic::resetTransitionSystem(TransitionSystem const & system) {
     TimeMachine timeMachine(logic);
     TermUtils utils(logic);
     this->stateVariables.clear();
@@ -1352,7 +1352,7 @@ void AcceleratedBmcSingle::resetTransitionSystem(TransitionSystem const & system
     //    std::cout << "Query: " << logic.printTerm(query) << std::endl;
 }
 
-bool AcceleratedBmcSingle::verifyLevel(unsigned short power) {
+bool TPABasic::verifyLevel(unsigned short power) {
     assert(power >= 2);
     SMTConfig config;
     MainSolver solver(logic, config, "");
@@ -1365,7 +1365,7 @@ bool AcceleratedBmcSingle::verifyLevel(unsigned short power) {
     return res == s_False;
 }
 
-bool AcceleratedBmcSingle::checkFixedPoint(unsigned short power) {
+bool TPABasic::checkFixedPoint(unsigned short power) {
     assert(power >= 3);
     verifyLevel(power);
     for (unsigned short i = 3; i <= power; ++i) {
