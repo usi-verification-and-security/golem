@@ -108,6 +108,88 @@ ChcDirectedGraph ChcDirectedGraph::reverse(Logic & logic) const {
     return ChcDirectedGraph(std::move(rvertices), std::move(redges), this->predicates, rentry, rexit);
 }
 
+void ChcDirectedGraph::contractVertices(const std::vector<VId> & verticesToContract, Logic & logic) {
+    std::unordered_map<VId, VId, VertexHasher> remapping;
+    for (VId vid : verticesToContract) {
+        auto it = remapping.find(vid);
+        VId actualId = it != remapping.end() ? it->second : vid;
+        contractVertex(actualId, logic, remapping);
+    }
+}
+
+void ChcDirectedGraph::contractVertex(VId vid, Logic & logic, std::unordered_map<VId, VId, VertexHasher> & remapping) {
+    auto adjacencyList = AdjacencyListsGraphRepresentation::from(*this);
+    auto const & incomingEdges = adjacencyList.getIncomingEdgesFor(vid);
+    auto const & outgoingEdges = adjacencyList.getOutgoingEdgesFor(vid);
+    for (EId incomingId : incomingEdges) {
+        for (EId outgoingId : outgoingEdges) {
+            mergeEdges(incomingId, outgoingId, logic);
+        }
+    }
+    deleteNode(vid, remapping);
+}
+
+PTRef ChcDirectedGraph::mergeLabels(const DirectedEdge & incoming, const DirectedEdge & outgoing, Logic & logic) {
+    PTRef incomingLabel = incoming.fla.fla;
+    PTRef outgoingLabel = outgoing.fla.fla;
+    TermUtils utils(logic);
+    TermUtils::substitutions_map subMap;
+    utils.insertVarPairsFromPredicates(getNextStateVersion(incoming.to), getStateVersion(outgoing.from), subMap);
+    PTRef updatedIncomingLabel = utils.varSubstitute(incomingLabel, subMap);
+    return logic.mkAnd(updatedIncomingLabel, outgoingLabel);
+}
+
+void ChcDirectedGraph::mergeEdges(EId incomingId, EId outgoingId, Logic & logic) {
+    auto const & incoming = getEdge(incomingId);
+    auto const & outgoing = getEdge(outgoingId);
+    if (incoming.to != outgoing.from) { throw std::logic_error("ChcDirectedGraph::mergeEdges: Trying to merge edges without comming node!\n"); }
+
+    VId source = incoming.from;
+    VId target = outgoing.to;
+    PTRef mergedLabel = mergeLabels(incoming, outgoing, logic);
+    edges.push_back(DirectedEdge{.from = source, .to = target, .fla = InterpretedFla{mergedLabel}});
+}
+
+void ChcDirectedGraph::mergeMultiEdges(Logic & logic) {
+    std::unordered_map<std::pair<VId, VId>, std::vector<unsigned>, EdgeHasher> buckets;
+    std::vector<unsigned> edgesToRemove;
+    for (unsigned i = 0; i < edges.size(); ++i) {
+        auto const & edge = edges[i];
+        auto pair = std::make_pair(edge.from, edge.to);
+        buckets[pair].push_back(i);
+    }
+    for (auto const & bucketEntry : buckets) {
+        auto const & bucket = bucketEntry.second;
+        if (bucket.size() < 2) { continue; }
+        vec<PTRef> labels;
+        labels.capacity(bucket.size());
+        for (auto index : bucket) {
+            labels.push(edges[index].fla.fla);
+        }
+        edges[bucket[0]].fla = InterpretedFla{logic.mkOr(std::move(labels))};
+        std::for_each(bucket.begin() + 1, bucket.end(), [&edgesToRemove](unsigned i) { edgesToRemove.push_back(i); });
+    }
+    std::sort(edgesToRemove.begin(), edgesToRemove.end());
+    std::for_each(edgesToRemove.crbegin(), edgesToRemove.crend(), [this](auto index) { edges.erase(begin(edges) + index); });
+}
+
+void ChcDirectedGraph::deleteNode(VId vid, std::unordered_map<VId, VId, VertexHasher> & remapping) {
+    assert(vid != getEntryId() and vid != getExitId());
+    edges.erase(std::remove_if(edges.begin(), edges.end(), [this, vid](DirectedEdge const & edge) {
+        return edge.from == vid or edge.to == vid;
+    }), edges.end());
+
+    VId last = vertices.back().id;
+    vertices[vid.id] = vertices.back();
+    vertices[vid.id].id = vid;
+    vertices.pop_back();
+    remapping.insert({last, vid});
+    for (DirectedEdge & edge : edges) {
+        if (edge.to == last) { edge.to = vid; }
+        if (edge.from == last) { edge.from = vid; }
+    }
+}
+
 AdjacencyListsGraphRepresentation AdjacencyListsGraphRepresentation::from(const ChcDirectedGraph & graph) {
     auto edges = graph.getEdges();
     auto vertices = graph.getVertices();

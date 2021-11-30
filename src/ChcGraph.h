@@ -100,6 +100,20 @@ class ChcDirectedGraph {
     std::vector<DirectedEdge> edges;
     CanonicalPredicateRepresentation predicates;
 
+    // graph transformations
+    friend class GraphTransformations;
+    void contractVertices(std::vector<VId> const & verticesToContract, Logic & logic);
+    void contractVertex(VId vid, Logic & logic, std::unordered_map<VId, VId, VertexHasher> &);
+    void mergeEdges(EId incoming, EId outgoing, Logic & logic);
+    void deleteNode(VId vid, std::unordered_map<VId, VId, VertexHasher> &);
+    PTRef mergeLabels(DirectedEdge const & incoming, DirectedEdge const & outgoing, Logic & logic);
+    void mergeMultiEdges(Logic & logic);
+
+    template<typename TFun>
+    void removeEdges(TFun fun) {
+        edges.erase(std::remove_if(edges.begin(), edges.end(), fun), edges.end());
+    }
+
 public:
     ChcDirectedGraph(std::vector<Vertex> vertices, std::vector<DirectedEdge> edges, CanonicalPredicateRepresentation predicates, VId entry, VId exit) :
         vertices(std::move(vertices)), edges(std::move(edges)), predicates(std::move(predicates)), entry(entry), exit(exit)

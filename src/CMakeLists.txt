@@ -47,6 +47,7 @@ target_sources(golem_lib
     PRIVATE Witnesses.cc
     PRIVATE ModelBasedProjection.cc
     PRIVATE QuantifierElimination.cc
+    PRIVATE graph/GraphTransformations.cc
     )
 
 target_include_directories(golem_lib PUBLIC ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/src/include)

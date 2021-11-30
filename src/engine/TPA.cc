@@ -7,6 +7,7 @@
 #include "TransitionSystem.h"
 #include "ModelBasedProjection.h"
 #include "QuantifierElimination.h"
+#include "graph/GraphTransformations.h"
 
 #define TRACE_LEVEL 0
 
@@ -197,6 +198,16 @@ GraphVerificationResult TPABase::solve(const ChcDirectedGraph & system) {
         return solveTransitionSystem(*ts, system);
     }
     else {
+//        std::cout << "Before:\n";
+//        system.toDot(std::cout, logic);
+//        std::cout << "\n\n";
+        auto simplifiedGraph = GraphTransformations(logic).eliminateNodes(system);
+//        std::cout << "After:\n";
+//        simplifiedGraph.toDot(std::cout, logic);
+        if (isTransitionSystem(simplifiedGraph)) {
+            auto ts = toTransitionSystem(simplifiedGraph, logic);
+            return solveTransitionSystem(*ts, simplifiedGraph);
+        }
         throw std::logic_error("BMC cannot handle general CHC systems yet!");
     }
 }
