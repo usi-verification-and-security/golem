@@ -33,12 +33,16 @@ ChcDirectedGraph GraphTransformations::eliminateNodes(const ChcDirectedGraph & g
 }
 
 void GraphTransformations::eliminateNonLoopingNodes(ChcDirectedGraph & graph) {
-    auto selfLoopNodes = getNodesWithSelfLoop(graph);
-    auto vertices = graph.getVertices();
-    vertices.erase(std::remove_if(vertices.begin(), vertices.end(), [&](VId vid) {
-        return selfLoopNodes.find(vid) != selfLoopNodes.end() or vid == graph.getEntryId() or vid == graph.getExitId();
-    }), vertices.end());
-    graph.contractVertices(vertices, logic);
+    while(true) {
+        auto selfLoopNodes = getNodesWithSelfLoop(graph);
+        auto vertices = graph.getVertices();
+        vertices.erase(std::remove_if(vertices.begin(), vertices.end(), [&](VId vid) {
+            return selfLoopNodes.find(vid) != selfLoopNodes.end() or vid == graph.getEntryId() or
+                   vid == graph.getExitId();
+        }), vertices.end());
+        if (vertices.empty()) { return; }
+        graph.contractVertex(vertices[0], logic);
+    }
 }
 
 void GraphTransformations::removeAlwaysValidClauses(ChcDirectedGraph & graph) {

@@ -108,25 +108,18 @@ ChcDirectedGraph ChcDirectedGraph::reverse(Logic & logic) const {
     return ChcDirectedGraph(std::move(rvertices), std::move(redges), this->predicates, rentry, rexit);
 }
 
-void ChcDirectedGraph::contractVertices(const std::vector<VId> & verticesToContract, Logic & logic) {
-    std::unordered_map<VId, VId, VertexHasher> remapping;
-    for (VId vid : verticesToContract) {
-        auto it = remapping.find(vid);
-        VId actualId = it != remapping.end() ? it->second : vid;
-        contractVertex(actualId, logic, remapping);
-    }
-}
-
-void ChcDirectedGraph::contractVertex(VId vid, Logic & logic, std::unordered_map<VId, VId, VertexHasher> & remapping) {
+void ChcDirectedGraph::contractVertex(VId vid, Logic & logic) {
     auto adjacencyList = AdjacencyListsGraphRepresentation::from(*this);
     auto const & incomingEdges = adjacencyList.getIncomingEdgesFor(vid);
     auto const & outgoingEdges = adjacencyList.getOutgoingEdgesFor(vid);
     for (EId incomingId : incomingEdges) {
+        assert(getEdge(incomingId).to != getEdge(incomingId).from);
         for (EId outgoingId : outgoingEdges) {
+            assert(getEdge(outgoingId).to != getEdge(outgoingId).from);
             mergeEdges(incomingId, outgoingId, logic);
         }
     }
-    deleteNode(vid, remapping);
+    deleteNode(vid);
 }
 
 PTRef ChcDirectedGraph::mergeLabels(const DirectedEdge & incoming, const DirectedEdge & outgoing, Logic & logic) {
@@ -173,7 +166,7 @@ void ChcDirectedGraph::mergeMultiEdges(Logic & logic) {
     std::for_each(edgesToRemove.crbegin(), edgesToRemove.crend(), [this](auto index) { edges.erase(begin(edges) + index); });
 }
 
-void ChcDirectedGraph::deleteNode(VId vid, std::unordered_map<VId, VId, VertexHasher> & remapping) {
+void ChcDirectedGraph::deleteNode(VId vid) {
     assert(vid != getEntryId() and vid != getExitId());
     edges.erase(std::remove_if(edges.begin(), edges.end(), [this, vid](DirectedEdge const & edge) {
         return edge.from == vid or edge.to == vid;
@@ -183,7 +176,6 @@ void ChcDirectedGraph::deleteNode(VId vid, std::unordered_map<VId, VId, VertexHa
     vertices[vid.id] = vertices.back();
     vertices[vid.id].id = vid;
     vertices.pop_back();
-    remapping.insert({last, vid});
     for (DirectedEdge & edge : edges) {
         if (edge.to == last) { edge.to = vid; }
         if (edge.from == last) { edge.from = vid; }

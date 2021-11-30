@@ -102,10 +102,9 @@ class ChcDirectedGraph {
 
     // graph transformations
     friend class GraphTransformations;
-    void contractVertices(std::vector<VId> const & verticesToContract, Logic & logic);
-    void contractVertex(VId vid, Logic & logic, std::unordered_map<VId, VId, VertexHasher> &);
+    void contractVertex(VId vid, Logic & logic);
     void mergeEdges(EId incoming, EId outgoing, Logic & logic);
-    void deleteNode(VId vid, std::unordered_map<VId, VId, VertexHasher> &);
+    void deleteNode(VId vid);
     PTRef mergeLabels(DirectedEdge const & incoming, DirectedEdge const & outgoing, Logic & logic);
     void mergeMultiEdges(Logic & logic);
 
