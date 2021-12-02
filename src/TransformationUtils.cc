@@ -110,3 +110,28 @@ std::unique_ptr<TransitionSystem> toTransitionSystem(ChcDirectedGraph const & gr
     return ts;
 }
 
+bool isTransitionSystemChain(ChcDirectedGraph const & graph) {
+    if (graph.getVertices().size() < 3) { return false; }
+    auto graphRepresentation = AdjacencyListsGraphRepresentation::from(graph);
+    auto reversePostorder = graphRepresentation.reversePostOrder();
+    assert(graph.getEntryId() == reversePostorder[0]);
+    assert(graph.getExitId() == reversePostorder.back());
+    if (graphRepresentation.getOutgoingEdgesFor(reversePostorder[0]).size() != 1
+        or graphRepresentation.getIncomingEdgesFor(reversePostorder.back()).size() != 1) {
+        return false;
+    }
+    for (unsigned i = 1; i < reversePostorder.size() - 1; ++i) {
+        VId current = reversePostorder[i];
+        auto const & outEdges = graphRepresentation.getOutgoingEdgesFor(current);
+        if (outEdges.size() != 2) { return false; }
+        bool hasSelfLoop = false;
+        bool hasEdgeToNext = false;
+        for (EId eid : outEdges) {
+            hasSelfLoop |= graph.getTarget(eid) == current;
+            hasEdgeToNext |= graph.getTarget(eid) == reversePostorder[i+1];
+        }
+        if (not (hasSelfLoop and hasEdgeToNext)) { return false; }
+    }
+    return true;
+}
+
