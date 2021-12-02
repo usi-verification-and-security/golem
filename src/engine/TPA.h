@@ -28,6 +28,7 @@ class TPABase;
 class TPAEngine : public Engine {
     Logic & logic;
     Options const & options;
+    friend class TransitionSystemNetworkManager;
 public:
     TPAEngine(Logic & logic, Options const & options) : logic(logic), options(options) {}
 
@@ -39,6 +40,8 @@ public:
 
 private:
     std::unique_ptr<TPABase> mkSolver();
+    
+    GraphVerificationResult solveTransitionSystemChain(ChcDirectedGraph const & graph);
 };
 
 class TPABase {

@@ -1362,3 +1362,68 @@ bool TPABasic::checkFixedPoint(unsigned short power) {
     }
     return false;
 }
+
+/*
+ * Extension for chain (or DAG) of transition systems
+ */
+
+class TransitionSystemNetworkManager {
+    TPAEngine & owner;
+    Logic & logic;
+    ChcDirectedGraph const & graph;
+    AdjacencyListsGraphRepresentation adjacencyRepresentation;
+
+public:
+    TransitionSystemNetworkManager(TPAEngine & owner, ChcDirectedGraph const & graph) :
+        owner(owner),
+        logic(owner.logic),
+        graph(graph),
+        adjacencyRepresentation(AdjacencyListsGraphRepresentation::from(graph))
+        {}
+
+    GraphVerificationResult solve() &&;
+
+private:
+    struct NetworkNode {
+        std::unique_ptr<TPABase> solver;
+    };
+
+    std::unordered_map<VId, NetworkNode, VertexHasher> networkMap;
+
+    std::unique_ptr<TPABase> mkSolver() const { return owner.mkSolver(); }
+
+    TransitionSystem getTransitionSystemFor(VId vid) const;
+};
+
+GraphVerificationResult TPAEngine::solveTransitionSystemChain(const ChcDirectedGraph & graph) {
+    return TransitionSystemNetworkManager(*this, graph).solve();
+}
+
+GraphVerificationResult TransitionSystemNetworkManager::solve() && {
+    // init phase
+    assert(networkMap.empty());
+    for (VId vid : graph.getVertices()) {
+        if (vid == graph.getEntryId() or vid == graph.getExitId()) { continue; }
+        networkMap.insert({vid, NetworkNode()});
+        auto & node = networkMap.at(vid);
+        node.solver = mkSolver();
+        TransitionSystem ts = getTransitionSystemFor(vid);
+        node.solver->resetTransitionSystem(ts);
+    }
+    for (EId eid : adjacencyRepresentation.getOutgoingEdgesFor(graph.getEntryId())) {
+        VId target = graph.getTarget(eid);
+//        networkMap.at(target).solver->updateInitialStates();
+    }
+    throw std::logic_error("Not implemented yet!");
+}
+
+TransitionSystem TransitionSystemNetworkManager::getTransitionSystemFor(VId vid) const {
+    EId loopEdge = adjacencyRepresentation.getSelfLoopFor(vid).value();
+    auto edgeVars = getVariablesFromEdge(logic, graph, loopEdge);
+    auto systemType = systemTypeFrom(edgeVars.stateVars, edgeVars.auxiliaryVars, logic);
+    PTRef loopLabel = graph.getEdgeLabel(loopEdge);
+    PTRef transitionFla = transitionFormulaInSystemType(*systemType, edgeVars, loopLabel, logic);
+    return TransitionSystem(logic, std::move(systemType), logic.getTerm_true(), transitionFla, logic.getTerm_false());
+}
+
+
