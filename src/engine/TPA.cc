@@ -13,6 +13,33 @@
 
 #define TRACE(l,m) if (TRACE_LEVEL >= l) {std::cout << m << std::endl; }
 
+std::unique_ptr<TPABase> TPAEngine::mkSolver() {
+    assert(options.hasOption(Options::ENGINE));
+    auto val = options.getOption(Options::ENGINE);
+    if (val == "tpa-split") {
+        return std::unique_ptr<TPABase>(new TPASplit(logic, options));
+    } else if (val == "tpa") {
+        return std::unique_ptr<TPABase>(new TPABasic(logic, options));
+    } else {
+        throw std::logic_error("Unexpected situation");
+    }
+}
+
+GraphVerificationResult TPAEngine::solve(const ChcDirectedGraph & system) {
+    if (isTransitionSystem(system)) {
+        auto ts = toTransitionSystem(system, logic);
+        return mkSolver()->solveTransitionSystem(*ts, system);
+    }
+    else {
+        auto simplifiedGraph = GraphTransformations(logic).eliminateNodes(system);
+        if (isTransitionSystem(simplifiedGraph)) {
+            auto ts = toTransitionSystem(simplifiedGraph, logic);
+            return mkSolver()->solveTransitionSystem(*ts, simplifiedGraph);
+        }
+        throw std::logic_error("BMC cannot handle general CHC systems yet!");
+    }
+}
+
 class SolverWrapperSingleUse : public SolverWrapper {
     Logic & logic;
     SMTConfig config;
@@ -189,26 +216,6 @@ public:
 TPASplit::~TPASplit() {
     for (SolverWrapper* solver : reachabilitySolvers) {
         delete solver;
-    }
-}
-
-GraphVerificationResult TPABase::solve(const ChcDirectedGraph & system) {
-    if (isTransitionSystem(system)) {
-        auto ts = toTransitionSystem(system, logic);
-        return solveTransitionSystem(*ts, system);
-    }
-    else {
-//        std::cout << "Before:\n";
-//        system.toDot(std::cout, logic);
-//        std::cout << "\n\n";
-        auto simplifiedGraph = GraphTransformations(logic).eliminateNodes(system);
-//        std::cout << "After:\n";
-//        simplifiedGraph.toDot(std::cout, logic);
-        if (isTransitionSystem(simplifiedGraph)) {
-            auto ts = toTransitionSystem(simplifiedGraph, logic);
-            return solveTransitionSystem(*ts, simplifiedGraph);
-        }
-        throw std::logic_error("BMC cannot handle general CHC systems yet!");
     }
 }
 

@@ -463,10 +463,8 @@ bool ChcInterpreterContext::isUninterpretedPredicate(PTRef ref) const {
 
 std::unique_ptr<Engine> ChcInterpreterContext::getEngine() const {
     std::string engineStr = opts.hasOption(Options::ENGINE) ? opts.getOption(Options::ENGINE) : "lawi";
-    if (engineStr == "tpa-split") {
-        return std::unique_ptr<Engine>(new TPASplit(logic, opts));
-    } else if (engineStr == "tpa") {
-        return std::unique_ptr<Engine>(new TPABasic(logic, opts));
+    if (engineStr == "tpa-split" or engineStr == "tpa") {
+        return std::unique_ptr<Engine>(new TPAEngine(logic, opts));
     } else if (engineStr == "bmc") {
         return std::unique_ptr<Engine>(new BMC(logic, opts));
     } else if (engineStr == "lawi") {

@@ -23,7 +23,25 @@ public:
     virtual PTRef lastQueryTransitionInterpolant() = 0;
 };
 
-class TPABase : public Engine {
+class TPABase;
+
+class TPAEngine : public Engine {
+    Logic & logic;
+    Options const & options;
+public:
+    TPAEngine(Logic & logic, Options const & options) : logic(logic), options(options) {}
+
+    GraphVerificationResult solve(ChcDirectedHyperGraph & system) override {
+        throw std::logic_error("Not supported yet!");
+    }
+
+    GraphVerificationResult solve(const ChcDirectedGraph & system) override;
+
+private:
+    std::unique_ptr<TPABase> mkSolver();
+};
+
+class TPABase {
 protected:
     Logic & logic;
     Options const & options;
@@ -50,11 +68,7 @@ public:
 
     virtual ~TPABase() = default;
 
-    GraphVerificationResult solve(ChcDirectedHyperGraph & system) override {
-        throw std::logic_error("Not supported yet!");
-    }
-
-    GraphVerificationResult solve(const ChcDirectedGraph & system) override;
+    virtual GraphVerificationResult solveTransitionSystem(TransitionSystem & system, ChcDirectedGraph const & graph) = 0;
 
 protected:
     struct QueryResult {
@@ -75,8 +89,6 @@ protected:
         }
     };
     mutable std::unordered_map<std::pair<PTRef, int>, PTRef, VersionHasher> versioningCache;
-
-    virtual GraphVerificationResult solveTransitionSystem(TransitionSystem & system, ChcDirectedGraph const & graph) = 0;
 
     PTRef getInit() const;
     PTRef getTransitionRelation() const;
