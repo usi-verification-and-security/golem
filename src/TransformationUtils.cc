@@ -42,8 +42,8 @@ std::unique_ptr<TransitionSystem> toTransitionSystem(ChcDirectedGraph const & gr
     auto stateVars = systemType->getStateVars();
     auto nextStateVars = systemType->getNextStateVars();
     auto auxiliaryVars = systemType->getAuxiliaryVars();
-    assert(stateVars.size() == edgeVars.stateVars.size_());
-    assert(nextStateVars.size() == edgeVars.nextStateVars.size_());
+    assert(stateVars.size() == edgeVars.stateVars.size());
+    assert(nextStateVars.size() == edgeVars.nextStateVars.size());
     PTRef init = PTRef_Undef;
     PTRef transitionRelation = PTRef_Undef;
     PTRef bad = PTRef_Undef;
@@ -119,7 +119,7 @@ EdgeVariables getVariablesFromEdge(Logic & logic, ChcDirectedGraph const & graph
     for (PTRef var : allVars) {
         if (std::find(res.stateVars.begin(), res.stateVars.end(), var) == res.stateVars.end() and
             std::find(res.nextStateVars.begin(), res.nextStateVars.end(), var) == res.nextStateVars.end()) {
-            res.auxiliaryVars.push(var);
+            res.auxiliaryVars.push_back(var);
         }
     }
     return res;
@@ -145,4 +145,3 @@ PTRef transitionFormulaInSystemType(SystemType const & systemType, EdgeVariables
                    [](PTRef key, PTRef value) { return std::make_pair(key, value); });
     return TermUtils(logic).varSubstitute(edgeLabel, subMap);
 }
-

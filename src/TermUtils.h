@@ -7,6 +7,8 @@
 
 #include "osmt_terms.h"
 
+#include <algorithm>
+
 class TermUtils {
     Logic & logic;
 public:
@@ -26,17 +28,13 @@ public:
         return keys;
     }
 
-    vec<PTRef> getVarsFromPredicateInOrder(PTRef predicate) const {
+    std::vector<PTRef> getVarsFromPredicateInOrder(PTRef predicate) const {
         assert(isUPOrConstant(predicate));
-        vec<PTRef> vars;
-        // iterate over children, all of them should be variables
-        auto size = logic.getPterm(predicate).size();
-        vars.capacity(size);
-        for (int i = 0; i < size; ++i) {
-            PTRef var = logic.getPterm(predicate)[i];
-            assert(logic.isVar(var));
-            vars.push(var);
-        }
+        auto const & pterm = logic.getPterm(predicate);
+        assert(std::all_of(pterm.begin(), pterm.end(), [&](PTRef child) { return logic.isVar(child); }));
+        std::vector<PTRef> vars;
+        vars.resize(pterm.size());
+        std::copy(pterm.begin(), pterm.end(), vars.begin());
         return vars;
     }
 
