@@ -75,6 +75,10 @@ public:
 
     void resetTransitionSystem(TransitionSystem const & system);
 
+    void updateInitialStates(PTRef);
+
+    void updateQueryStates(PTRef);
+
 protected:
 
     virtual VerificationResult checkPower(unsigned short power) = 0;

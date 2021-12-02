@@ -32,9 +32,8 @@ GraphVerificationResult TPAEngine::solve(const ChcDirectedGraph & system) {
     }
     else {
         auto simplifiedGraph = GraphTransformations(logic).eliminateNodes(system);
-        if (isTransitionSystem(simplifiedGraph)) {
-            auto ts = toTransitionSystem(simplifiedGraph, logic);
-            return mkSolver()->solveTransitionSystem(*ts, simplifiedGraph);
+        if (isTransitionSystemChain(simplifiedGraph)) {
+            solveTransitionSystemChain(simplifiedGraph);
         }
         throw std::logic_error("BMC cannot handle general CHC systems yet!");
     }
@@ -274,6 +273,18 @@ PTRef TPABase::eliminateVars(PTRef fla, const vec<PTRef> & vars, Model & model) 
     } else {
         return ModelBasedProjection(logic).project(fla, vars, model);
     }
+}
+
+void TPABase::updateInitialStates(PTRef fla) {
+    assert(isPureStateFormula(fla));
+    this->init = fla;
+    // TODO: reset any information that depends on init
+}
+
+void TPABase::updateQueryStates(PTRef fla) {
+    assert(isPureStateFormula(fla));
+    this->query = fla;
+    // TODO: reset any information that depends on query
 }
 
 
@@ -1410,9 +1421,14 @@ GraphVerificationResult TransitionSystemNetworkManager::solve() && {
         TransitionSystem ts = getTransitionSystemFor(vid);
         node.solver->resetTransitionSystem(ts);
     }
+    TimeMachine tm(logic);
     for (EId eid : adjacencyRepresentation.getOutgoingEdgesFor(graph.getEntryId())) {
         VId target = graph.getTarget(eid);
-//        networkMap.at(target).solver->updateInitialStates();
+        networkMap.at(target).solver->updateInitialStates(tm.sendFlaThroughTime(graph.getEdgeLabel(eid), -1));
+    }
+    for (EId eid : adjacencyRepresentation.getIncomingEdgesFor(graph.getExitId())) {
+        VId source = graph.getSource(eid);
+        networkMap.at(source).solver->updateQueryStates(tm.sendFlaThroughTime(graph.getEdgeLabel(eid), 0));
     }
     throw std::logic_error("Not implemented yet!");
 }
@@ -1420,7 +1436,7 @@ GraphVerificationResult TransitionSystemNetworkManager::solve() && {
 TransitionSystem TransitionSystemNetworkManager::getTransitionSystemFor(VId vid) const {
     EId loopEdge = adjacencyRepresentation.getSelfLoopFor(vid).value();
     auto edgeVars = getVariablesFromEdge(logic, graph, loopEdge);
-    auto systemType = systemTypeFrom(edgeVars.stateVars, edgeVars.auxiliaryVars, logic);
+    auto systemType = std::make_unique<SystemType>(edgeVars.stateVars, edgeVars.auxiliaryVars, logic);
     PTRef loopLabel = graph.getEdgeLabel(loopEdge);
     PTRef transitionFla = transitionFormulaInSystemType(*systemType, edgeVars, loopLabel, logic);
     return TransitionSystem(logic, std::move(systemType), logic.getTerm_true(), transitionFla, logic.getTerm_false());
