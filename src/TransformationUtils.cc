@@ -38,11 +38,7 @@ std::unique_ptr<TransitionSystem> toTransitionSystem(ChcDirectedGraph const & gr
     EId loopEdge = adjacencyRepresentation.getSelfLoopFor(loopNode).value();
     auto edgeVars = getVariablesFromEdge(logic, graph, loopEdge);
     // Now we can continue building the transition system
-    std::vector<SRef> stateVarTypes;
-    std::transform(edgeVars.stateVars.begin(), edgeVars.stateVars.end(), std::back_inserter(stateVarTypes), [&logic](PTRef var){ return logic.getSortRef(var); });
-    std::vector<SRef> auxVarTypes;
-    std::transform(edgeVars.auxiliaryVars.begin(), edgeVars.auxiliaryVars.end(), std::back_inserter(auxVarTypes), [&logic](PTRef var){ return logic.getSortRef(var); });
-    auto systemType = std::unique_ptr<SystemType>(new SystemType(std::move(stateVarTypes), std::move(auxVarTypes), logic));
+    auto systemType = systemTypeFrom(edgeVars.stateVars, edgeVars.auxiliaryVars, logic);
     auto stateVars = systemType->getStateVars();
     auto nextStateVars = systemType->getNextStateVars();
     auto auxiliaryVars = systemType->getAuxiliaryVars();
@@ -69,16 +65,7 @@ std::unique_ptr<TransitionSystem> toTransitionSystem(ChcDirectedGraph const & gr
 //            std::cout << logic.printTerm(init) << std::endl;
         }
         if (isLoop) {
-            std::unordered_map<PTRef, PTRef, PTRefHash> subMap;
-            std::transform(edgeVars.stateVars.begin(), edgeVars.stateVars.end(), stateVars.begin(), std::inserter(subMap, subMap.end()),
-                           [](PTRef key, PTRef value) { return std::make_pair(key, value); });
-
-            std::transform(edgeVars.nextStateVars.begin(), edgeVars.nextStateVars.end(), nextStateVars.begin(), std::inserter(subMap, subMap.end()),
-                           [](PTRef key, PTRef value) { return std::make_pair(key, value); });
-
-            std::transform(edgeVars.auxiliaryVars.begin(), edgeVars.auxiliaryVars.end(), auxiliaryVars.begin(), std::inserter(subMap, subMap.end()),
-                           [](PTRef key, PTRef value) { return std::make_pair(key, value); });
-            transitionRelation = utils.varSubstitute(fla, subMap);
+            transitionRelation = transitionFormulaInSystemType(*systemType, edgeVars, fla, logic);
 //            std::cout << logic.printTerm(transitionRelation) << std::endl;
         }
         if (isEnd) {
@@ -136,5 +123,26 @@ EdgeVariables getVariablesFromEdge(Logic & logic, ChcDirectedGraph const & graph
         }
     }
     return res;
+}
+
+std::unique_ptr<SystemType> systemTypeFrom(vec<PTRef> const & stateVars, vec<PTRef> const & auxiliaryVars, Logic & logic) {
+    std::vector<SRef> stateVarTypes;
+    std::transform(stateVars.begin(), stateVars.end(), std::back_inserter(stateVarTypes), [&logic](PTRef var){ return logic.getSortRef(var); });
+    std::vector<SRef> auxVarTypes;
+    std::transform(auxiliaryVars.begin(), auxiliaryVars.end(), std::back_inserter(auxVarTypes), [&logic](PTRef var){ return logic.getSortRef(var); });
+    return std::make_unique<SystemType>(std::move(stateVarTypes), std::move(auxVarTypes), logic);
+}
+
+PTRef transitionFormulaInSystemType(SystemType const & systemType, EdgeVariables const & edgeVars, PTRef edgeLabel, Logic & logic) {
+    std::unordered_map<PTRef, PTRef, PTRefHash> subMap;
+    std::transform(edgeVars.stateVars.begin(), edgeVars.stateVars.end(), systemType.getStateVars().begin(), std::inserter(subMap, subMap.end()),
+                   [](PTRef key, PTRef value) { return std::make_pair(key, value); });
+
+    std::transform(edgeVars.nextStateVars.begin(), edgeVars.nextStateVars.end(), systemType.getNextStateVars().begin(), std::inserter(subMap, subMap.end()),
+                   [](PTRef key, PTRef value) { return std::make_pair(key, value); });
+
+    std::transform(edgeVars.auxiliaryVars.begin(), edgeVars.auxiliaryVars.end(), systemType.getAuxiliaryVars().begin(), std::inserter(subMap, subMap.end()),
+                   [](PTRef key, PTRef value) { return std::make_pair(key, value); });
+    return TermUtils(logic).varSubstitute(edgeLabel, subMap);
 }
 

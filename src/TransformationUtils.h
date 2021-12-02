@@ -23,4 +23,8 @@ struct EdgeVariables {
 
 EdgeVariables getVariablesFromEdge(Logic & logic, ChcDirectedGraph const & graph, EId eid);
 
+std::unique_ptr<SystemType> systemTypeFrom(vec<PTRef> const & stateVars, vec<PTRef> const & auxVars, Logic & logic);
+
+PTRef transitionFormulaInSystemType(SystemType const & systemType, EdgeVariables const & edgeVariables, PTRef edgeLabel, Logic & logic);
+
 #endif //OPENSMT_TRANSFORMATIONUTILS_H
