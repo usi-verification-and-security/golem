@@ -23,6 +23,7 @@ public:
 
     SystemType(std::vector<SRef> stateVarTypes, Logic & logic);
     SystemType(std::vector<SRef> stateVarTypes, std::vector<SRef> auxiliaryVarTypes, Logic & logic);
+    SystemType(std::vector<PTRef> stateVars, std::vector<PTRef> auxiliaryVars, Logic & logic);
 
     bool isStateFormula(PTRef fla) const;
 

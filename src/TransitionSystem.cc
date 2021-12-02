@@ -118,6 +118,14 @@ SystemType::SystemType(std::vector<SRef> stateVarTypes, std::vector<SRef> auxili
     std::transform(auxiliaryVarTypes.begin(), auxiliaryVarTypes.end(), std::back_inserter(auxiliaryVars), helper);
 }
 
+SystemType::SystemType(std::vector<PTRef> stateVars, std::vector<PTRef> auxiliaryVars, Logic & logic) : logic(logic) {
+    std::transform(stateVars.begin(), stateVars.end(), std::back_inserter(nextStateVars), [&logic](PTRef var) {
+        return TimeMachine(logic).sendVarThroughTime(var, 1);
+    });
+    this->stateVars = std::move(stateVars);
+    this->auxiliaryVars = std::move(auxiliaryVars);
+}
+
 bool SystemType::isStateFormula(PTRef fla) const {
     auto const & currentStateVars = stateVars;
     vec<PTRef> vars = TermUtils(logic).getVars(fla);
