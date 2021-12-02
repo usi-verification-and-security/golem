@@ -70,7 +70,12 @@ public:
 
     virtual GraphVerificationResult solveTransitionSystem(TransitionSystem & system, ChcDirectedGraph const & graph) = 0;
 
+    void resetTransitionSystem(TransitionSystem const & system);
+
 protected:
+
+    virtual void resetPowers() = 0;
+
     struct QueryResult {
         ReachabilityResult result;
         PTRef refinedTarget = PTRef_Undef;
@@ -134,9 +139,9 @@ public:
     ~TPASplit() override;
 
 private:
-    void resetTransitionSystem(TransitionSystem const & system);
-
     GraphVerificationResult solveTransitionSystem(TransitionSystem & system, ChcDirectedGraph const & graph) override;
+
+    void resetPowers() override;
 
     VerificationResult checkPower(unsigned short power);
 
@@ -174,9 +179,9 @@ public:
 
 
 private:
-    void resetTransitionSystem(TransitionSystem const & system);
-
     GraphVerificationResult solveTransitionSystem(TransitionSystem & system, ChcDirectedGraph const & graph) override;
+
+    void resetPowers() override;
 
     VerificationResult checkPower(unsigned short power);
 

@@ -726,7 +726,7 @@ PTRef TPABase::shiftOnlyNextVars(PTRef fla) {
     return utils.varSubstitute(fla, subst);
 }
 
-void TPASplit::resetTransitionSystem(TransitionSystem const & system) {
+void TPABase::resetTransitionSystem(TransitionSystem const & system) {
     TimeMachine timeMachine(logic);
     TermUtils utils(logic);
     this->stateVariables.clear();
@@ -755,12 +755,10 @@ void TPASplit::resetTransitionSystem(TransitionSystem const & system) {
         throw std::logic_error("Query states contain some non-state variable");
     }
     auto nextStateVars = system.getNextStateVars();
-    vec<PTRef> currentNextEqs;
     assert(nextStateVars.size() == stateVars.size());
     for (int i = 0; i < nextStateVars.size(); ++i) {
-        PTRef nextStateVersioned = timeMachine.sendVarThroughTime(substMap[stateVars[i]], 1);
-        substMap.insert({nextStateVars[i], nextStateVersioned});
-        currentNextEqs.push(logic.mkEq(stateVariables[i], nextStateVersioned));
+            PTRef nextStateVersioned = timeMachine.sendVarThroughTime(substMap[stateVars[i]], 1);
+            substMap.insert({nextStateVars[i], nextStateVersioned});
     }
     this->transition = utils.varSubstitute(system.getTransition(), substMap);
     this->transition = utils.toNNF(this->transition);
@@ -771,12 +769,7 @@ void TPASplit::resetTransitionSystem(TransitionSystem const & system) {
         this->transition = ::simplifyUnderAssignment_Aggressive(this->transition, logic);
 //    std::cout << "After simplifications 2: " << transition.x << std::endl;
     }
-    this->exactPowers.clear();
-    this->lessThanPowers.clear();
-    storeExactPower(0, logic.mkAnd(currentNextEqs));
-    storeExactPower(1, transition);
-    lessThanPowers.push(PTRef_Undef); // <0 does not make sense
-    lessThanPowers.push(exactPowers[0]); // <1 is just exact 0
+    resetPowers();
 //    std::cout << "Init: " << logic.printTerm(init) << std::endl;
 //    std::cout << "Transition: " << logic.printTerm(transition) << std::endl;
 //    std::cout << "Transition: "; TermUtils(logic).printTermWithLets(std::cout, transition); std::cout << std::endl;
@@ -817,6 +810,22 @@ PTRef TPABase::refineTwoStepTarget(PTRef start, PTRef twoSteptransition, PTRef g
     PTRef refinedGoal = eliminateVars(transitionQuery, toEliminate, model);
     assert(refinedGoal != logic.getTerm_false());
     return getNextVersion(refinedGoal, -2);
+}
+
+void TPASplit::resetPowers() {
+    TimeMachine timeMachine(logic);
+    vec<PTRef> currentNextEqs;
+    for (PTRef stateVar : stateVariables) {
+        PTRef nextStateVar = timeMachine.sendVarThroughTime(stateVar, 1);
+        currentNextEqs.push(logic.mkEq(stateVar, nextStateVar));
+    }
+    PTRef identity = logic.mkAnd(std::move(currentNextEqs));
+    this->exactPowers.clear();
+    this->lessThanPowers.clear();
+    storeExactPower(0, identity);
+    storeExactPower(1, transition);
+    lessThanPowers.push(PTRef_Undef); // <0 does not make sense
+    lessThanPowers.push(exactPowers[0]); // <1 is just exact 0
 }
 
 bool TPASplit::verifyLessThanPower(unsigned short power) {
@@ -1315,59 +1324,16 @@ TPABasic::QueryResult TPABasic::reachabilityQuery(PTRef from, PTRef to, unsigned
     }
 }
 
-
-void TPABasic::resetTransitionSystem(TransitionSystem const & system) {
+void TPABasic::resetPowers() {
     TimeMachine timeMachine(logic);
-    TermUtils utils(logic);
-    this->stateVariables.clear();
-    this->auxiliaryVariables.clear();
-    auto stateVars = system.getStateVars();
-    auto auxVars = system.getAuxiliaryVars();
-    TermUtils::substitutions_map substMap;
-    for (PTRef var : stateVars) {
-        PTRef versionedVar = timeMachine.getVarVersionZero(var);
-        this->stateVariables.push(versionedVar);
-        substMap.insert({var, versionedVar});
-    }
-    for (PTRef var : auxVars) {
-        PTRef versionedVar = timeMachine.getVarVersionZero(var);
-        this->auxiliaryVariables.push(versionedVar);
-        substMap.insert({var, versionedVar});
-    }
-    this->init = utils.varSubstitute(system.getInit(), substMap);
-    this->init = utils.toNNF(this->init);
-    if (not isPureStateFormula(init)) {
-        throw std::logic_error("Initial states contain some non-state variable");
-    }
-    this->query = utils.varSubstitute(system.getQuery(), substMap);
-    this->query = utils.toNNF(this->query);
-    if (not isPureStateFormula(query)) {
-        throw std::logic_error("Query states contain some non-state variable");
-    }
-    auto nextStateVars = system.getNextStateVars();
     vec<PTRef> currentNextEqs;
-    assert(nextStateVars.size() == stateVars.size());
-    for (int i = 0; i < nextStateVars.size(); ++i) {
-        PTRef nextStateVersioned = timeMachine.sendVarThroughTime(substMap[stateVars[i]], 1);
-        substMap.insert({nextStateVars[i], nextStateVersioned});
-        currentNextEqs.push(logic.mkEq(stateVariables[i], nextStateVersioned));
+    for (PTRef stateVar : stateVariables) {
+        PTRef nextStateVar = timeMachine.sendVarThroughTime(stateVar, 1);
+        currentNextEqs.push(logic.mkEq(stateVar, nextStateVar));
     }
-    PTRef identity = logic.mkAnd(currentNextEqs);
-    this->transition = utils.varSubstitute(system.getTransition(), substMap);
-    this->transition = utils.toNNF(this->transition);
-    //    std::cout << "Before simplifications: " << transition.x << std::endl;
-    if (not logic.isAtom(this->transition)) {
-        this->transition = ::rewriteMaxArityAggresive(logic, this->transition);
-        //    std::cout << "After simplifications 1: " << transition.x << std::endl;
-        this->transition = ::simplifyUnderAssignment_Aggressive(this->transition, logic);
-        //    std::cout << "After simplifications 2: " << transition.x << std::endl;
-    }
+    PTRef identity = logic.mkAnd(std::move(currentNextEqs));
     this->transitionHierarchy.clear();
     storeLevelTransition(0, logic.mkOr(identity, transition));
-    //    std::cout << "Init: " << logic.printTerm(init) << std::endl;
-    //    std::cout << "Transition: " << logic.printTerm(transition) << std::endl;
-    //    std::cout << "Transition: "; TermUtils(logic).printTermWithLets(std::cout, transition); std::cout << std::endl;
-    //    std::cout << "Query: " << logic.printTerm(query) << std::endl;
 }
 
 bool TPABasic::verifyLevel(unsigned short power) {
