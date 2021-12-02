@@ -230,6 +230,14 @@ std::vector<VId> AdjacencyListsGraphRepresentation::reversePostOrder() const {
     return order;
 }
 
+std::optional<EId> AdjacencyListsGraphRepresentation::getSelfLoopFor(VId node) const {
+    auto const & outEdges = getOutgoingEdgesFor(node);
+    auto it = std::find_if(outEdges.begin(), outEdges.end(), [&](EId eid) {
+        return getEdge(eid).to == node;
+    });
+    return it != outEdges.end() ? *it : std::optional<EId>{};
+}
+
 std::unique_ptr<ChcDirectedHyperGraph> ChcDirectedGraph::toHyperGraph() const {
     std::vector<DirectedHyperEdge> hyperEdges;
     std::transform(this->edges.begin(), this->edges.end(), std::back_inserter(hyperEdges), [](DirectedEdge const& edge) {
