@@ -733,34 +733,25 @@ void TPABase::resetTransitionSystem(TransitionSystem const & system) {
     this->auxiliaryVariables.clear();
     auto stateVars = system.getStateVars();
     auto auxVars = system.getAuxiliaryVars();
-    TermUtils::substitutions_map substMap;
+    assert(std::all_of(stateVars.begin(), stateVars.end(), [&](PTRef var){ return timeMachine.isVersioned(var) and timeMachine.getVersionNumber(var) == 0; }));
+    assert(std::all_of(auxVars.begin(), auxVars.end(), [&](PTRef var){ return timeMachine.isVersioned(var) and timeMachine.getVersionNumber(var) == 0; }));
     for (PTRef var : stateVars) {
-        PTRef versionedVar = timeMachine.getVarVersionZero(var);
-        this->stateVariables.push(versionedVar);
-        substMap.insert({var, versionedVar});
+        this->stateVariables.push(var);
     }
     for (PTRef var : auxVars) {
-        PTRef versionedVar = timeMachine.getVarVersionZero(var);
-        this->auxiliaryVariables.push(versionedVar);
-        substMap.insert({var, versionedVar});
+        this->auxiliaryVariables.push(var);
     }
-    this->init = utils.varSubstitute(system.getInit(), substMap);
+    this->init = system.getInit();
     this->init = utils.toNNF(this->init);
     if (not isPureStateFormula(init)) {
         throw std::logic_error("Initial states contain some non-state variable");
     }
-    this->query = utils.varSubstitute(system.getQuery(), substMap);
+    this->query = system.getQuery();
     this->query = utils.toNNF(this->query);
     if (not isPureStateFormula(query)) {
         throw std::logic_error("Query states contain some non-state variable");
     }
-    auto nextStateVars = system.getNextStateVars();
-    assert(nextStateVars.size() == stateVars.size());
-    for (int i = 0; i < nextStateVars.size(); ++i) {
-            PTRef nextStateVersioned = timeMachine.sendVarThroughTime(substMap[stateVars[i]], 1);
-            substMap.insert({nextStateVars[i], nextStateVersioned});
-    }
-    this->transition = utils.varSubstitute(system.getTransition(), substMap);
+    this->transition = system.getTransition();
     this->transition = utils.toNNF(this->transition);
 //    std::cout << "Before simplifications: " << transition.x << std::endl;
     if (not logic.isAtom(this->transition)) {

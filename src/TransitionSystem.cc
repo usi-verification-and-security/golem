@@ -110,12 +110,18 @@ SystemType::SystemType(std::vector<SRef> stateVarTypes, std::vector<SRef> auxili
 
         PTRef operator()(SRef sref) { return logic.mkVar(sref, std::string(prefix + varNamePrefix + std::to_string(counter++)).c_str());}
     };
+    TimeMachine tm(logic);
     Helper helper{logic, "x"};
-    std::transform(stateVarTypes.begin(), stateVarTypes.end(), std::back_inserter(stateVars), helper);
-    helper.varNamePrefix = "xp";
-    std::transform(stateVarTypes.begin(), stateVarTypes.end(), std::back_inserter(nextStateVars), helper);
+    std::transform(stateVarTypes.begin(), stateVarTypes.end(), std::back_inserter(stateVars), [&](SRef sref) {
+        return tm.getVarVersionZero(helper(sref));
+    });
+    std::transform(stateVars.begin(), stateVars.end(), std::back_inserter(nextStateVars), [&](PTRef var) {
+        return tm.sendVarThroughTime(var,1);
+    });
     helper.varNamePrefix = "aux";
-    std::transform(auxiliaryVarTypes.begin(), auxiliaryVarTypes.end(), std::back_inserter(auxiliaryVars), helper);
+    std::transform(auxiliaryVarTypes.begin(), auxiliaryVarTypes.end(), std::back_inserter(auxiliaryVars), [&](SRef sref) {
+        return tm.getVarVersionZero(helper(sref));
+    });
 }
 
 SystemType::SystemType(std::vector<PTRef> stateVars, std::vector<PTRef> auxiliaryVars, Logic & logic) : logic(logic) {
