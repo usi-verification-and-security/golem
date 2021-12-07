@@ -33,7 +33,7 @@ GraphVerificationResult TPAEngine::solve(const ChcDirectedGraph & system) {
     else {
         auto simplifiedGraph = GraphTransformations(logic).eliminateNodes(system);
         if (isTransitionSystemChain(simplifiedGraph)) {
-            solveTransitionSystemChain(simplifiedGraph);
+            return solveTransitionSystemChain(simplifiedGraph);
         }
         throw std::logic_error("BMC cannot handle general CHC systems yet!");
     }
@@ -230,6 +230,10 @@ PTRef TPABase::getQuery() const {
     return query;
 }
 
+PTRef TPABase::getExplanation() const {
+    return explanation;
+}
+
 vec<PTRef> TPABase::getStateVars(int version) const {
     vec<PTRef> versioned;
     TimeMachine timeMachine(logic);
@@ -278,12 +282,20 @@ PTRef TPABase::eliminateVars(PTRef fla, const vec<PTRef> & vars, Model & model) 
 void TPABase::resetInitialStates(PTRef fla) {
     assert(isPureStateFormula(fla));
     this->init = fla;
+    queryCache.clear();
+    versioningCache.clear();
+    inductiveInvariant = PTRef_Undef;
+    explanation = PTRef_Undef;
     // TODO: reset any information that depends on init
 }
 
 void TPABase::updateQueryStates(PTRef fla) {
     assert(isPureStateFormula(fla));
     this->query = logic.mkAnd(fla, this->query);
+    queryCache.clear();
+    versioningCache.clear();
+    inductiveInvariant = PTRef_Undef;
+    explanation = PTRef_Undef;
     // TODO: reset any information that depends on query
 }
 
@@ -342,37 +354,49 @@ SolverWrapper* TPASplit::getExactReachabilitySolver(unsigned short power) const 
 
 GraphVerificationResult TPABase::solveTransitionSystem(TransitionSystem & system, ChcDirectedGraph const & graph) {
     resetTransitionSystem(system);
+    auto res = solve();
+    switch (res) {
+        case VerificationResult::UNSAFE:
+            return GraphVerificationResult(res);
+        case VerificationResult::SAFE:
+        {
+            if (not options.hasOption(Options::COMPUTE_WITNESS) or inductiveInvariant == PTRef_Undef) {
+                return GraphVerificationResult(res);
+            }
+//                std::cout << "Computed invariant: " << logic.printTerm(stateInvariant) << std::endl;
+            auto vertices = graph.getVertices();
+            assert(vertices.size() == 3);
+            VId vertex = vertices[2];
+            assert(vertex != graph.getEntryId() and vertex != graph.getExitId());
+            TermUtils utils(logic);
+            TermUtils::substitutions_map subs;
+            auto graphVars = utils.getVarsFromPredicateInOrder(graph.getStateVersion(vertex));
+            auto systemVars = getStateVars(0);
+            assert(graphVars.size() == systemVars.size());
+            for (int i = 0; i < graphVars.size(); ++i) {
+                subs.insert({systemVars[i], graphVars[i]});
+            }
+            PTRef graphInvariant = utils.varSubstitute(inductiveInvariant, subs);
+//                std::cout << "Graph invariant: " << logic.printTerm(graphInvariant) << std::endl;
+            ValidityWitness::definitions_type definitions;
+            definitions.insert({graph.getStateVersion(vertex), graphInvariant});
+            return GraphVerificationResult(res, ValidityWitness(definitions));
+        }
+        case VerificationResult::UNKNOWN:
+            assert(false);
+            throw std::logic_error("Unreachable!");
+    }
+}
+
+VerificationResult TPABase::solve() {
     queryCache.emplace_back();
     unsigned short power = 1;
     while (true) {
         auto res = checkPower(power);
         switch (res) {
             case VerificationResult::UNSAFE:
-                return GraphVerificationResult(res);
             case VerificationResult::SAFE:
-            {
-                if (not options.hasOption(Options::COMPUTE_WITNESS) or inductiveInvariant == PTRef_Undef) {
-                    return GraphVerificationResult(res);
-                }
-//                std::cout << "Computed invariant: " << logic.printTerm(stateInvariant) << std::endl;
-                auto vertices = graph.getVertices();
-                assert(vertices.size() == 3);
-                VId vertex = vertices[2];
-                assert(vertex != graph.getEntryId() and vertex != graph.getExitId());
-                TermUtils utils(logic);
-                TermUtils::substitutions_map subs;
-                auto graphVars = utils.getVarsFromPredicateInOrder(graph.getStateVersion(vertex));
-                auto systemVars = getStateVars(0);
-                assert(graphVars.size() == systemVars.size());
-                for (int i = 0; i < graphVars.size(); ++i) {
-                    subs.insert({systemVars[i], graphVars[i]});
-                }
-                PTRef graphInvariant = utils.varSubstitute(inductiveInvariant, subs);
-//                std::cout << "Graph invariant: " << logic.printTerm(graphInvariant) << std::endl;
-                ValidityWitness::definitions_type definitions;
-                definitions.insert({graph.getStateVersion(vertex), graphInvariant});
-                return GraphVerificationResult(res, ValidityWitness(definitions));
-            }
+                return res;
             case VerificationResult::UNKNOWN:
                 ++power;
         }
@@ -386,6 +410,7 @@ VerificationResult TPASplit::checkPower(unsigned short power) {
     // First compute the <2^n transition relation using information from previous level;
     auto res = reachabilityQueryLessThan(init, query, power);
     if (isReachable(res)) {
+        explanation = res.refinedTarget;
         return VerificationResult::UNSAFE;
     } else if (isUnreachable(res)) {
         if (verbose() > 0) {
@@ -407,6 +432,7 @@ VerificationResult TPASplit::checkPower(unsigned short power) {
     // Second compute the exact power using the concatenation of previous one
     res = reachabilityQueryExact(init, query, power);
     if (isReachable(res)) {
+        explanation = res.refinedTarget;
         return VerificationResult::UNSAFE;
     } else if (isUnreachable(res)) {
         if (verbose() > 0) {
@@ -441,11 +467,16 @@ TPASplit::QueryResult TPASplit::reachabilityExactOneStep(PTRef from, PTRef to) {
 TPASplit::QueryResult TPASplit::reachabilityExactZeroStep(PTRef from, PTRef to) {
     QueryResult result;
     SMTConfig config;
+    const char * msg = "ok";
+    config.setOption(SMTConfig::o_produce_models, SMTOption(true), msg);
     MainSolver solver(logic, config, "0-step checker");
-    solver.insertFormula(logic.mkAnd(from, to));
+    PTRef intersection = logic.mkAnd(from, to);
+    solver.insertFormula(intersection);
     auto res = solver.check();
     if (res == s_True) {
         result.result = ReachabilityResult::REACHABLE;
+        assert(isPureStateFormula(intersection));
+        result.refinedTarget = intersection;
         return result;
     } else if (res == s_False) {
         result.result = ReachabilityResult::UNREACHABLE;
@@ -899,6 +930,9 @@ bool TPASplit::checkLessThanFixedPoint(unsigned short power) {
 //                     std::cout << "Computing inductive invariant" << std::endl;
                     inductiveInvariant = getNextVersion(QuantifierElimination(logic).keepOnly(logic.mkAnd(init, currentLevelTransition), getStateVars(1)), -1);
                 }
+                if (shouldComputeExplanation()) {
+                    explanation = restrictedInvariant ? logic.mkNot(init) : unsafeInitialStates(currentLevelTransition);
+                }
                 return true;
             }
         }
@@ -925,6 +959,9 @@ bool TPASplit::checkLessThanFixedPoint(unsigned short power) {
                     // std::cout << "Computing inductive invariant" << std::endl;
                     inductiveInvariant = logic.mkNot(QuantifierElimination(logic).keepOnly(logic.mkAnd(currentLevelTransition,
                         getNextVersion(query)), getStateVars(0)));
+                }
+                if (shouldComputeExplanation()) {
+                    explanation = unsafeInitialStates(currentLevelTransition);
                 }
                 return true;
             }
@@ -979,6 +1016,18 @@ bool TPASplit::checkExactFixedPoint(unsigned short power) {
                         assert(false);
                 }
                 std::cout << std::endl;
+            }
+            if (shouldComputeExplanation()) {
+                if (restrictedInvariant == 1) {
+                    explanation = logic.mkNot(init);
+                } else {
+                    PTRef transitionInvariant = logic.mkOr(
+                            shiftOnlyNextVars(getLessThanPower(i)),
+                            logic.mkAnd(getLessThanPower(i), getNextVersion(getExactPower(i)))
+                    );
+                    explanation = unsafeInitialStates(transitionInvariant);
+                }
+
             }
             if (options.hasOption(Options::COMPUTE_WITNESS) and options.getOption(Options::COMPUTE_WITNESS) == "true" and restrictedInvariant != 2) {
                 if (i <= 10) {
@@ -1139,6 +1188,7 @@ VerificationResult TPABasic::checkPower(unsigned short power) {
     queryCache.emplace_back();
     auto res = reachabilityQuery(init, query, power);
     if (isReachable(res)) {
+        explanation = res.refinedTarget;
         return VerificationResult::UNSAFE;
     } else if (isUnreachable(res)) {
         if (verbose() > 0) {
@@ -1374,6 +1424,28 @@ bool TPABasic::checkFixedPoint(unsigned short power) {
     return false;
 }
 
+PTRef TPABase::unsafeInitialStates(PTRef transitionInvariant) {
+    SMTConfig config;
+    const char * msg = "ok";
+    config.setOption(SMTConfig::o_produce_models, SMTOption(false), msg);
+    config.setOption(SMTConfig::o_produce_inter, SMTOption(true), msg);
+    config.setLRAInterpolationAlgorithm(itp_lra_alg_decomposing_strong);
+    config.setSimplifyInterpolant(4);
+    MainSolver solver(logic, config, "Unsafe initial states computation");
+    solver.insertFormula(getInit());
+    solver.insertFormula(transitionInvariant);
+    solver.insertFormula(getNextVersion(getQuery()));
+    auto res = solver.check();
+    if (res != s_False) {
+        throw std::logic_error("SMT query was suppose to be unsat, but is not!");
+    }
+    auto itpContext = solver.getInterpolationContext();
+    ipartitions_t mask = (1 >> 1) + (1 >> 2); // This puts transition + query into the A-part
+    vec<PTRef> itps;
+    itpContext->getSingleInterpolant(itps, mask);
+    return logic.mkNot(itps[0]);
+}
+
 /*
  * Extension for chain (or DAG) of transition systems
  */
@@ -1514,7 +1586,7 @@ TransitionSystem TransitionSystemNetworkManager::constructTransitionSystemFor(VI
     auto systemType = std::make_unique<SystemType>(edgeVars.stateVars, edgeVars.auxiliaryVars, logic);
     PTRef loopLabel = graph.getEdgeLabel(loopEdge);
     PTRef transitionFla = transitionFormulaInSystemType(*systemType, edgeVars, loopLabel, logic);
-    return TransitionSystem(logic, std::move(systemType), logic.getTerm_true(), transitionFla, logic.getTerm_false());
+    return TransitionSystem(logic, std::move(systemType), logic.getTerm_true(), transitionFla, logic.getTerm_true());
 }
 
 TransitionSystemNetworkManager::QueryResult TransitionSystemNetworkManager::queryEdge(EId eid, PTRef sourceCondition, PTRef targetCondition) {
@@ -1550,7 +1622,7 @@ TransitionSystemNetworkManager::QueryResult TransitionSystemNetworkManager::quer
         return {ReachabilityResult::REACHABLE, eliminated};
     } else if (res == s_False) {
         auto itpContext = solver.getInterpolationContext();
-        ipartitions_t mask = (1 >> 1) + (1 >> 2); // This puts label + target into the A-part
+        ipartitions_t mask = (1 << 1) + (1 << 2); // This puts label + target into the A-part
 
         vec<PTRef> itps;
         itpContext->getSingleInterpolant(itps, mask);
@@ -1562,7 +1634,20 @@ TransitionSystemNetworkManager::QueryResult TransitionSystemNetworkManager::quer
 }
 
 TransitionSystemNetworkManager::QueryResult TransitionSystemNetworkManager::queryTransitionSystem(NetworkNode & node) {
-    throw std::logic_error("Not implemented yet");
+    auto res = node.solver->solve();
+    assert(res != VerificationResult::UNKNOWN);
+    PTRef explanation = node.solver->getExplanation();
+    assert(explanation != PTRef_Undef);
+    switch (res) {
+        case VerificationResult::UNSAFE:
+            return {ReachabilityResult::REACHABLE, explanation};
+        case VerificationResult::SAFE:
+            return {ReachabilityResult::UNREACHABLE, explanation};
+        default:
+            assert(false);
+            throw std::logic_error("Unreachable");
+
+    }
 }
 
 

@@ -58,6 +58,7 @@ protected:
     vec<PTRef> stateVariables;
     vec<PTRef> auxiliaryVariables;
     PTRef inductiveInvariant = PTRef_Undef;
+    PTRef explanation = PTRef_Undef;
 
 public:
     TPABase(Logic& logic, Options const & options) : logic(logic), options(options) {
@@ -75,6 +76,8 @@ public:
 
     void resetTransitionSystem(TransitionSystem const & system);
 
+    VerificationResult solve();
+
     void resetInitialStates(PTRef);
 
     void updateQueryStates(PTRef);
@@ -82,6 +85,8 @@ public:
     PTRef getInit() const;
     PTRef getTransitionRelation() const;
     PTRef getQuery() const;
+
+    PTRef getExplanation() const;
 
 protected:
 
@@ -121,6 +126,7 @@ protected:
     PTRef simplifyInterpolant(PTRef itp);
 
     int verbose() const { return verbosity; }
+    bool shouldComputeExplanation() const { return true; } // TODO: make this configurable
 
     bool isPureStateFormula(PTRef fla) const;
     bool isPureTransitionFormula(PTRef fla) const;
@@ -133,6 +139,8 @@ protected:
     PTRef extractMidPoint(PTRef start, PTRef firstTransition, PTRef secondTransition, PTRef goal, Model& model);
 
     PTRef eliminateVars(PTRef fla, vec<PTRef> const & vars, Model & model);
+
+    PTRef unsafeInitialStates(PTRef transitionInvariant);
 };
 
 class TPASplit : public TPABase {

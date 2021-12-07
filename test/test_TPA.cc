@@ -128,4 +128,5 @@ TEST(TPA_test, test_TPA_chain_of_two) {
     auto graph = hypergraph->toNormalGraph();
     TPAEngine engine(logic, options);
     auto res = engine.solve(*graph);
+    ASSERT_EQ(res.getAnswer(), VerificationResult::UNSAFE);
 }
