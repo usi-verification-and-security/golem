@@ -329,7 +329,7 @@ SolverWrapper* TPASplit::getExactReachabilitySolver(unsigned short power) const 
 }
 
 
-GraphVerificationResult TPASplit::solveTransitionSystem(TransitionSystem & system, ChcDirectedGraph const & graph) {
+GraphVerificationResult TPABase::solveTransitionSystem(TransitionSystem & system, ChcDirectedGraph const & graph) {
     resetTransitionSystem(system);
     queryCache.emplace_back();
     unsigned short power = 1;
@@ -1120,46 +1120,6 @@ void TPABasic::storeLevelTransition(unsigned short power, PTRef tr) {
 SolverWrapper* TPABasic::getReachabilitySolver(unsigned short power) const {
     assert(reachabilitySolvers.size() > power);
     return reachabilitySolvers[power];
-}
-
-
-GraphVerificationResult TPABasic::solveTransitionSystem(TransitionSystem & system, ChcDirectedGraph const & graph) {
-    resetTransitionSystem(system);
-    queryCache.emplace_back();
-    unsigned short power = 1;
-    while (true) {
-        auto res = checkPower(power);
-        switch (res) {
-            case VerificationResult::UNSAFE:
-                return GraphVerificationResult(res);
-                case VerificationResult::SAFE:
-                {
-                    if (not options.hasOption(Options::COMPUTE_WITNESS) or inductiveInvariant == PTRef_Undef) {
-                        return GraphVerificationResult(res);
-                    }
-                    //                std::cout << "Computed invariant: " << logic.printTerm(stateInvariant) << std::endl;
-                    auto vertices = graph.getVertices();
-                    assert(vertices.size() == 3);
-                    VId vertex = vertices[2];
-                    assert(vertex != graph.getEntryId() and vertex != graph.getExitId());
-                    TermUtils utils(logic);
-                    TermUtils::substitutions_map subs;
-                    auto graphVars = utils.getVarsFromPredicateInOrder(graph.getStateVersion(vertex));
-                    auto systemVars = getStateVars(0);
-                    assert(graphVars.size() == systemVars.size());
-                    for (int i = 0; i < graphVars.size(); ++i) {
-                        subs.insert({systemVars[i], graphVars[i]});
-                    }
-                    PTRef graphInvariant = utils.varSubstitute(inductiveInvariant, subs);
-                    //                std::cout << "Graph invariant: " << logic.printTerm(graphInvariant) << std::endl;
-                    ValidityWitness::definitions_type definitions;
-                    definitions.insert({graph.getStateVersion(vertex), graphInvariant});
-                    return GraphVerificationResult(res, ValidityWitness(definitions));
-                }
-                case VerificationResult::UNKNOWN:
-                    ++power;
-        }
-    }
 }
 
 VerificationResult TPABasic::checkPower(unsigned short power) {

@@ -68,11 +68,13 @@ public:
 
     virtual ~TPABase() = default;
 
-    virtual GraphVerificationResult solveTransitionSystem(TransitionSystem & system, ChcDirectedGraph const & graph) = 0;
+    virtual GraphVerificationResult solveTransitionSystem(TransitionSystem & system, ChcDirectedGraph const & graph);
 
     void resetTransitionSystem(TransitionSystem const & system);
 
 protected:
+
+    virtual VerificationResult checkPower(unsigned short power) = 0;
 
     virtual void resetPowers() = 0;
 
@@ -139,11 +141,9 @@ public:
     ~TPASplit() override;
 
 private:
-    GraphVerificationResult solveTransitionSystem(TransitionSystem & system, ChcDirectedGraph const & graph) override;
-
     void resetPowers() override;
 
-    VerificationResult checkPower(unsigned short power);
+    VerificationResult checkPower(unsigned short power) override;
 
     PTRef getExactPower(unsigned short power) const;
     void storeExactPower(unsigned short power, PTRef tr);
@@ -179,11 +179,9 @@ public:
 
 
 private:
-    GraphVerificationResult solveTransitionSystem(TransitionSystem & system, ChcDirectedGraph const & graph) override;
-
     void resetPowers() override;
 
-    VerificationResult checkPower(unsigned short power);
+    VerificationResult checkPower(unsigned short power) override;
 
     PTRef getLevelTransition(unsigned short) const;
     void storeLevelTransition(unsigned short, PTRef);
