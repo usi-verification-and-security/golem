@@ -75,9 +75,13 @@ public:
 
     void resetTransitionSystem(TransitionSystem const & system);
 
-    void updateInitialStates(PTRef);
+    void resetInitialStates(PTRef);
 
     void updateQueryStates(PTRef);
+
+    PTRef getInit() const;
+    PTRef getTransitionRelation() const;
+    PTRef getQuery() const;
 
 protected:
 
@@ -103,10 +107,6 @@ protected:
         }
     };
     mutable std::unordered_map<std::pair<PTRef, int>, PTRef, VersionHasher> versioningCache;
-
-    PTRef getInit() const;
-    PTRef getTransitionRelation() const;
-    PTRef getQuery() const;
 
     PTRef getNextVersion(PTRef currentVersion, int) const ;
     PTRef getNextVersion(PTRef currentVersion) const { return getNextVersion(currentVersion, 1); };
