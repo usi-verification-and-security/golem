@@ -1541,6 +1541,7 @@ GraphVerificationResult TransitionSystemNetworkManager::solve() && {
         node.solver = mkSolver();
         TransitionSystem ts = constructTransitionSystemFor(vid);
         node.solver->resetTransitionSystem(ts);
+        node.trulySafe = logic.getTerm_false();
     }
     TimeMachine tm(logic);
     for (EId eid : adjacencyRepresentation.getOutgoingEdgesFor(graph.getEntryId())) {
