@@ -86,7 +86,7 @@ TEST(TPA_test, test_TPA_simple_unsafe)
     */
 }
 
-TEST(TPA_test, test_TPA_chain_of_two) {
+TEST(TPA_test, test_TPA_chain_of_two_unsafe) {
     LIALogic logic;
     Options options;
     options.addOption(Options::LOGIC, "QF_LIA");
@@ -129,4 +129,49 @@ TEST(TPA_test, test_TPA_chain_of_two) {
     TPAEngine engine(logic, options);
     auto res = engine.solve(*graph);
     ASSERT_EQ(res.getAnswer(), VerificationResult::UNSAFE);
+}
+
+TEST(TPA_test, test_TPA_chain_of_two_safe) {
+    LIALogic logic;
+    Options options;
+    options.addOption(Options::LOGIC, "QF_LIA");
+    options.addOption(Options::COMPUTE_WITNESS, "true");
+    options.addOption(Options::ENGINE, "tpa-split");
+    SymRef s1 = logic.declareFun("s1", logic.getSort_bool(), {logic.getSort_num()}, nullptr, false);
+    SymRef s2 = logic.declareFun("s2", logic.getSort_bool(), {logic.getSort_num()}, nullptr, false);
+    PTRef x = logic.mkNumVar("x");
+    PTRef xp = logic.mkNumVar("xp");
+    PTRef predS1Current = logic.mkUninterpFun(s1, {x});
+    PTRef predS1Next = logic.mkUninterpFun(s1, {xp});
+    PTRef predS2Current = logic.mkUninterpFun(s2, {x});
+    PTRef predS2Next = logic.mkUninterpFun(s2, {xp});
+    ChcSystem system;
+    system.addUninterpretedPredicate(s1);
+    system.addUninterpretedPredicate(s2);
+    system.addClause(
+            ChcHead{UninterpretedPredicate{predS1Next}},
+            ChcBody{logic.mkEq(xp, logic.getTerm_NumZero()), {}});
+    system.addClause(
+            ChcHead{UninterpretedPredicate{predS1Next}},
+            ChcBody{logic.mkEq(xp, logic.mkNumPlus(x, logic.getTerm_NumOne())), {UninterpretedPredicate{predS1Current}}}
+    );
+    system.addClause(
+            ChcHead{UninterpretedPredicate{predS2Current}},
+            ChcBody{logic.getTerm_true(), {UninterpretedPredicate{predS1Current}}}
+    );
+    system.addClause(
+            ChcHead{UninterpretedPredicate{predS2Next}},
+            ChcBody{logic.mkEq(xp, logic.mkNumPlus(x, logic.mkConst(FastRational(2)))),
+                    {UninterpretedPredicate{predS2Current}}}
+    );
+    system.addClause(
+            ChcHead{UninterpretedPredicate{logic.getTerm_false()}},
+            ChcBody{logic.mkNumLt(x, logic.getTerm_NumZero()), {UninterpretedPredicate{predS2Current}}}
+    );
+    auto hypergraph = ChcGraphBuilder(logic).buildGraph(Normalizer(logic).normalize(system));
+    ASSERT_TRUE(hypergraph->isNormalGraph());
+    auto graph = hypergraph->toNormalGraph();
+    TPAEngine engine(logic, options);
+    auto res = engine.solve(*graph);
+    ASSERT_EQ(res.getAnswer(), VerificationResult::SAFE);
 }
