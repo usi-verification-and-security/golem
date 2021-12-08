@@ -449,12 +449,29 @@ TPASplit::QueryResult TPASplit::reachabilityExactOneStep(PTRef from, PTRef to) {
     // TODO: this solver can be persistent and used incrementally
     QueryResult result;
     SMTConfig config;
+    const char * msg = "ok";
+    config.setOption(SMTConfig::o_produce_models, SMTOption(true), msg);
     MainSolver solver(logic, config, "1-step checker");
     solver.insertFormula(getExactPower(1));
     PTRef goal = getNextVersion(to);
     solver.insertFormula(logic.mkAnd(from, goal));
     auto res = solver.check();
     if (res == s_True) {
+        { // TODO: refactor this out
+            TermUtils utils(logic);
+            PTRef query = logic.mkAnd({from, getExactPower(1), goal});
+            auto vars = utils.getVars(query);
+            auto nextStateVars = getStateVars(1);
+            vec<PTRef> toEliminate;
+            for (PTRef var : vars) {
+                auto it = std::find(nextStateVars.begin(), nextStateVars.end(), var);
+                if (it == nextStateVars.end()) {
+                    toEliminate.push(var);
+                }
+            }
+            PTRef refinedGoal = eliminateVars(query, toEliminate, *solver.getModel());
+            result.refinedTarget = getNextVersion(refinedGoal, -1);
+        }
         result.result = ReachabilityResult::REACHABLE;
         return result;
     } else if (res == s_False) {
@@ -1440,7 +1457,7 @@ PTRef TPABase::unsafeInitialStates(PTRef transitionInvariant) {
         throw std::logic_error("SMT query was suppose to be unsat, but is not!");
     }
     auto itpContext = solver.getInterpolationContext();
-    ipartitions_t mask = (1 >> 1) + (1 >> 2); // This puts transition + query into the A-part
+    ipartitions_t mask = (1 << 1) + (1 << 2); // This puts transition + query into the A-part
     vec<PTRef> itps;
     itpContext->getSingleInterpolant(itps, mask);
     return logic.mkNot(itps[0]);
@@ -1471,6 +1488,8 @@ private:
         std::unique_ptr<TPABase> solver {nullptr};
         PTRef trulyReached {PTRef_Undef};
         PTRef trulySafe {PTRef_Undef};
+        EId next;
+        EId previous;
     };
 
     struct QueryResult {
@@ -1489,14 +1508,15 @@ private:
     TransitionSystem constructTransitionSystemFor(VId vid) const;
 
     NetworkNode & getNode(VId vid) { return networkMap.at(vid); }
+    NetworkNode const & getNode(VId vid) const { return networkMap.at(vid); }
 
-    VId getChainStart() const { return graph.getTarget(getOutgoingEdge(graph.getEntryId())); }
+    VId getChainStart() const { return graph.getTarget(adjacencyRepresentation.getOutgoingEdgesFor(graph.getEntryId())[0]); }
 
-    VId getChainEnd() const { return graph.getSource(getIncomingEdge(graph.getExitId())); }
+    VId getChainEnd() const { return graph.getSource(adjacencyRepresentation.getIncomingEdgesFor(graph.getExitId())[0]); }
 
-    EId getIncomingEdge(VId vid) const { return adjacencyRepresentation.getIncomingEdgesFor(vid)[0]; }
+    EId getIncomingEdge(VId vid) const { return getNode(vid).previous; }
 
-    EId getOutgoingEdge(VId vid) const { return adjacencyRepresentation.getOutgoingEdgesFor(vid)[0]; }
+    EId getOutgoingEdge(VId vid) const { return getNode(vid).next; }
 
     PTRef getInitialStates(VId vid) const {return networkMap.at(vid).solver->getInit(); }
 
@@ -1530,6 +1550,31 @@ GraphVerificationResult TransitionSystemNetworkManager::solve() && {
     for (EId eid : adjacencyRepresentation.getIncomingEdgesFor(graph.getExitId())) {
         VId source = graph.getSource(eid);
         networkMap.at(source).solver->updateQueryStates(tm.sendFlaThroughTime(graph.getEdgeLabel(eid), 0));
+    }
+    // Connect the network
+    for (VId vid : adjacencyRepresentation.reversePostOrder()) {
+        if (vid != graph.getExitId()) {
+            auto outGoingEdges = adjacencyRepresentation.getOutgoingEdgesFor(vid);
+            outGoingEdges.erase(std::remove_if(outGoingEdges.begin(), outGoingEdges.end(), [this](EId eid) {
+                return graph.getSource(eid) == graph.getTarget(eid);
+            }), outGoingEdges.end());
+            assert(outGoingEdges.size() == 1);
+            EId edge = outGoingEdges[0];
+            if (graph.getTarget(edge) != graph.getExitId()) {
+                getNode(graph.getTarget(edge)).previous = edge;
+            }
+        }
+        if (vid != graph.getEntryId()) {
+            auto incomingEdges = adjacencyRepresentation.getIncomingEdgesFor(vid);
+            incomingEdges.erase(std::remove_if(incomingEdges.begin(), incomingEdges.end(), [this](EId eid) {
+                return graph.getSource(eid) == graph.getTarget(eid);
+            }), incomingEdges.end());
+            assert(incomingEdges.size() == 1);
+            EId edge = incomingEdges[0];
+            if (graph.getSource(edge) != graph.getEntryId()) {
+                getNode(graph.getSource(edge)).next = edge;
+            }
+        }
     }
     // solving phase
     VId current = getChainStart();
@@ -1598,6 +1643,7 @@ TransitionSystemNetworkManager::QueryResult TransitionSystemNetworkManager::quer
     config.setSimplifyInterpolant(4);
     MainSolver solver(logic, config, "Edge query solver");
     PTRef label = graph.getEdgeLabel(eid);
+    TRACE(1, "Querying edge " << eid.id << " with label " << logic.pp(label) << "\n\tsource is " << logic.pp(sourceCondition) << "\n\ttarget is " << logic.pp(targetCondition))
     PTRef target = TimeMachine(logic).sendFlaThroughTime(targetCondition, 1);
     solver.insertFormula(sourceCondition);
     solver.insertFormula(label);
@@ -1609,7 +1655,7 @@ TransitionSystemNetworkManager::QueryResult TransitionSystemNetworkManager::quer
         PTRef query = logic.mkAnd({sourceCondition, label, target});
         TermUtils utils(logic);
         auto allVars = utils.getVars(query);
-        auto targetVars = utils.getVars(target);
+        auto targetVars = utils.getVarsFromPredicateInOrder(graph.getNextStateVersion(graph.getTarget(eid)));
         vec<PTRef> toEliminate;
         for (PTRef var : allVars) {
             auto it = std::find(targetVars.begin(), targetVars.end(), var);
@@ -1619,6 +1665,7 @@ TransitionSystemNetworkManager::QueryResult TransitionSystemNetworkManager::quer
         }
         PTRef eliminated = mbp.project(query, toEliminate, *model);
         eliminated = TimeMachine(logic).sendFlaThroughTime(eliminated, -1);
+        TRACE(1, "Propagating along the edge " << logic.pp(eliminated))
         return {ReachabilityResult::REACHABLE, eliminated};
     } else if (res == s_False) {
         auto itpContext = solver.getInterpolationContext();
@@ -1628,6 +1675,7 @@ TransitionSystemNetworkManager::QueryResult TransitionSystemNetworkManager::quer
         itpContext->getSingleInterpolant(itps, mask);
         assert(itps.size() == 1);
         PTRef explanation = logic.mkNot(itps[0]);
+        TRACE(1, "Blocking edge with " << logic.pp(explanation))
         return {ReachabilityResult::UNREACHABLE, explanation};
     }
     throw std::logic_error("Error in the underlying SMT solver");
@@ -1640,8 +1688,10 @@ TransitionSystemNetworkManager::QueryResult TransitionSystemNetworkManager::quer
     assert(explanation != PTRef_Undef);
     switch (res) {
         case VerificationResult::UNSAFE:
+            TRACE(1, "TS propagates reachable states to " << logic.pp(explanation))
             return {ReachabilityResult::REACHABLE, explanation};
         case VerificationResult::SAFE:
+            TRACE(1, "TS blocks " << logic.pp(explanation))
             return {ReachabilityResult::UNREACHABLE, explanation};
         default:
             assert(false);
