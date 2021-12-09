@@ -140,6 +140,8 @@ protected:
 
     PTRef eliminateVars(PTRef fla, vec<PTRef> const & vars, Model & model);
 
+    PTRef keepOnlyVars(PTRef fla, vec<PTRef> const & vars, Model & model);
+
     PTRef unsafeInitialStates(PTRef transitionInvariant);
 };
 

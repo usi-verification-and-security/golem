@@ -279,6 +279,14 @@ PTRef TPABase::eliminateVars(PTRef fla, const vec<PTRef> & vars, Model & model) 
     }
 }
 
+PTRef TPABase::keepOnlyVars(PTRef fla, const vec<PTRef> & vars, Model & model) {
+    if (useQE) {
+        return QuantifierElimination(logic).keepOnly(fla, vars);
+    } else {
+        return ModelBasedProjection(logic).keepOnly(fla, vars, model);
+    }
+}
+
 void TPABase::resetInitialStates(PTRef fla) {
     assert(isPureStateFormula(fla));
     this->init = fla;
@@ -454,18 +462,9 @@ TPASplit::QueryResult TPASplit::reachabilityExactOneStep(PTRef from, PTRef to) {
     auto res = solver.check();
     if (res == s_True) {
         { // TODO: refactor this out
-            TermUtils utils(logic);
             PTRef query = logic.mkAnd({from, getExactPower(1), goal});
-            auto vars = utils.getVars(query);
             auto nextStateVars = getStateVars(1);
-            vec<PTRef> toEliminate;
-            for (PTRef var : vars) {
-                auto it = std::find(nextStateVars.begin(), nextStateVars.end(), var);
-                if (it == nextStateVars.end()) {
-                    toEliminate.push(var);
-                }
-            }
-            PTRef refinedGoal = eliminateVars(query, toEliminate, *solver.getModel());
+            PTRef refinedGoal = keepOnlyVars(query, nextStateVars, *solver.getModel());
             result.refinedTarget = getNextVersion(refinedGoal, -1);
         }
         result.result = ReachabilityResult::REACHABLE;
@@ -844,16 +843,7 @@ PTRef TPABase::refineTwoStepTarget(PTRef start, PTRef twoSteptransition, PTRef g
     PTRef transitionQuery = logic.mkAnd({start, twoSteptransition, goal});
     assert(model.evaluate(transitionQuery) == logic.getTerm_true());
     auto nextnextStateVars = getStateVars(2);
-    TermUtils utils(logic);
-    auto vars = utils.getVars(transitionQuery);
-    vec<PTRef> toEliminate;
-    for (PTRef var : vars) {
-        auto it = std::find(nextnextStateVars.begin(), nextnextStateVars.end(), var);
-        if (it == nextnextStateVars.end()) {
-            toEliminate.push(var);
-        }
-    }
-    PTRef refinedGoal = eliminateVars(transitionQuery, toEliminate, model);
+    PTRef refinedGoal = keepOnlyVars(transitionQuery, nextnextStateVars, model);
     assert(refinedGoal != logic.getTerm_false());
     return getNextVersion(refinedGoal, -2);
 }
@@ -1650,17 +1640,8 @@ TransitionSystemNetworkManager::QueryResult TransitionSystemNetworkManager::quer
         auto model = solver.getModel();
         ModelBasedProjection mbp(logic);
         PTRef query = logic.mkAnd({sourceCondition, label, target});
-        TermUtils utils(logic);
-        auto allVars = utils.getVars(query);
-        auto targetVars = utils.getVarsFromPredicateInOrder(graph.getNextStateVersion(graph.getTarget(eid)));
-        vec<PTRef> toEliminate;
-        for (PTRef var : allVars) {
-            auto it = std::find(targetVars.begin(), targetVars.end(), var);
-            if (it == targetVars.end()) {
-                toEliminate.push(var);
-            }
-        }
-        PTRef eliminated = mbp.project(query, toEliminate, *model);
+        auto targetVars = TermUtils(logic).getVarsFromPredicateInOrder(graph.getNextStateVersion(graph.getTarget(eid)));
+        PTRef eliminated = mbp.keepOnly(query, targetVars, *model);
         eliminated = TimeMachine(logic).sendFlaThroughTime(eliminated, -1);
         TRACE(1, "Propagating along the edge " << logic.pp(eliminated))
         return {ReachabilityResult::REACHABLE, eliminated};

@@ -24,7 +24,9 @@ public:
 
     explicit ModelBasedProjection(Logic & logic) : logic(logic) {}
 
-    PTRef project(PTRef fla, vec<PTRef> const& varsToEliminate, Model& model);
+    PTRef project(PTRef fla, vec<PTRef> const & varsToEliminate, Model & model);
+
+    PTRef keepOnly(PTRef fla, vec<PTRef> const & varsToKeep, Model & model);
 
     using implicant_t = std::vector<PtAsgn>;
 private:

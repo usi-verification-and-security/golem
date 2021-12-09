@@ -419,6 +419,16 @@ void checkImplicant(ModelBasedProjection::implicant_t const & implicant, Logic &
 }
 }
 
+PTRef ModelBasedProjection::keepOnly(PTRef fla, const vec<PTRef> & varsToKeep, Model & model) {
+    auto allVars = TermUtils(logic).getVars(fla);
+    vec<PTRef> toEliminate;
+    for (PTRef var : allVars) {
+        if (std::find(varsToKeep.begin(), varsToKeep.end(), var) == varsToKeep.end()) {
+            toEliminate.push(var);
+        }
+    }
+    return project(fla, toEliminate, model);
+}
 
 PTRef ModelBasedProjection::project(PTRef fla, const vec<PTRef> & varsToEliminate, Model & model) {
     vec<PTRef> tmp;
