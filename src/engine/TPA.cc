@@ -27,10 +27,14 @@ std::unique_ptr<TPABase> TPAEngine::mkSolver() {
 
 GraphVerificationResult TPAEngine::solve(const ChcDirectedGraph & system) {
     if (isTransitionSystem(system)) {
+        assert(not options.hasOption(TPABase::COMPUTE_INVARIANT) and not options.hasOption(TPABase::COMPUTE_EXPLANATION));
+        options.addOption(TPABase::COMPUTE_INVARIANT, "true");
         auto ts = toTransitionSystem(system, logic);
         return mkSolver()->solveTransitionSystem(*ts, system);
     }
     else {
+        assert(not options.hasOption(TPABase::COMPUTE_INVARIANT) and not options.hasOption(TPABase::COMPUTE_EXPLANATION));
+        options.addOption(TPABase::COMPUTE_EXPLANATION, "true");
         auto simplifiedGraph = GraphTransformations(logic).eliminateNodes(system);
         if (isTransitionSystemChain(simplifiedGraph)) {
             return solveTransitionSystemChain(simplifiedGraph);
@@ -211,6 +215,8 @@ public:
 
 };
 
+const std::string TPABase::COMPUTE_INVARIANT = "tpa.invariant";
+const std::string TPABase::COMPUTE_EXPLANATION = "tpa.explanation";
 
 TPASplit::~TPASplit() {
     for (SolverWrapper* solver : reachabilitySolvers) {
@@ -929,7 +935,7 @@ bool TPASplit::checkLessThanFixedPoint(unsigned short power) {
                     std::cout << "; Right fixed point detected in less-than relation on level " << i << " from " << power << std::endl;
                     std::cout << "; Fixed point detected for " << (not restrictedInvariant ? "whole transition relation" : "transition relation restricted to init") << std::endl;
                 }
-                if (options.hasOption(Options::COMPUTE_WITNESS) and options.getOption(Options::COMPUTE_WITNESS) == "true") {
+                if (shouldComputeInvariant()) {
 //                     std::cout << "Computing inductive invariant" << std::endl;
                     inductiveInvariant = getNextVersion(QuantifierElimination(logic).keepOnly(logic.mkAnd(init, currentLevelTransition), getStateVars(1)), -1);
                 }
@@ -958,7 +964,7 @@ bool TPASplit::checkLessThanFixedPoint(unsigned short power) {
                     std::cout << "; Left fixed point detected in less-than relation on level " << i << " from " << power << std::endl;
                     std::cout << "; Fixed point detected for " << (not restrictedInvariant ? "whole transition relation" : "transition relation restricted to bad") << std::endl;
                 }
-                if (options.hasOption(Options::COMPUTE_WITNESS) and options.getOption(Options::COMPUTE_WITNESS) == "true") {
+                if (shouldComputeInvariant()) {
                     // std::cout << "Computing inductive invariant" << std::endl;
                     inductiveInvariant = logic.mkNot(QuantifierElimination(logic).keepOnly(logic.mkAnd(currentLevelTransition,
                         getNextVersion(query)), getStateVars(0)));
@@ -1032,7 +1038,7 @@ bool TPASplit::checkExactFixedPoint(unsigned short power) {
                 }
 
             }
-            if (options.hasOption(Options::COMPUTE_WITNESS) and options.getOption(Options::COMPUTE_WITNESS) == "true" and restrictedInvariant != 2) {
+            if (shouldComputeInvariant() and restrictedInvariant != 2) {
                 if (i <= 10) {
 //                    std::cout << "Computing inductive invariant" << std::endl;
                     assert(verifyLessThanPower(i));

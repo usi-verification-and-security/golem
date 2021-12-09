@@ -27,10 +27,10 @@ class TPABase;
 
 class TPAEngine : public Engine {
     Logic & logic;
-    Options const & options;
+    Options options;
     friend class TransitionSystemNetworkManager;
 public:
-    TPAEngine(Logic & logic, Options const & options) : logic(logic), options(options) {}
+    TPAEngine(Logic & logic, Options options) : logic(logic), options(std::move(options)) {}
 
     GraphVerificationResult solve(ChcDirectedHyperGraph & system) override {
         throw std::logic_error("Not supported yet!");
@@ -50,6 +50,8 @@ protected:
     Options const & options;
     int verbosity = 0;
     bool useQE = false;
+    bool computeExplanation = false;
+    bool computeInductiveInvariant = false;
 
     // Versioned representation of the transition system
     PTRef init;
@@ -61,6 +63,9 @@ protected:
     PTRef explanation = PTRef_Undef;
 
 public:
+    static const std::string COMPUTE_INVARIANT;
+    static const std::string COMPUTE_EXPLANATION;
+
     TPABase(Logic& logic, Options const & options) : logic(logic), options(options) {
         if (options.hasOption(Options::VERBOSE)) {
             verbosity = std::stoi(options.getOption(Options::VERBOSE));
@@ -68,6 +73,8 @@ public:
         if (options.hasOption(Options::TPA_USE_QE)) {
             useQE = true;
         }
+        computeInductiveInvariant = options.hasOption(TPABase::COMPUTE_INVARIANT) and options.getOption(TPABase::COMPUTE_INVARIANT) == "true";
+        computeExplanation = options.hasOption(TPABase::COMPUTE_EXPLANATION) and options.getOption(TPABase::COMPUTE_EXPLANATION) == "true";
     }
 
     virtual ~TPABase() = default;
@@ -126,7 +133,8 @@ protected:
     PTRef simplifyInterpolant(PTRef itp);
 
     int verbose() const { return verbosity; }
-    bool shouldComputeExplanation() const { return true; } // TODO: make this configurable
+    bool shouldComputeExplanation() const { return computeExplanation; }
+    bool shouldComputeInvariant() const { return computeInductiveInvariant; }
 
     bool isPureStateFormula(PTRef fla) const;
     bool isPureTransitionFormula(PTRef fla) const;
