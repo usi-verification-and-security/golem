@@ -1478,6 +1478,8 @@ private:
         EId previous;
     };
 
+    std::unordered_map<VId, NetworkNode, VertexHasher> networkMap;
+
     struct QueryResult {
         ReachabilityResult reachabilityResult;
         PTRef explanation;
@@ -1487,7 +1489,7 @@ private:
         return res == ReachabilityResult::REACHABLE;
     }
 
-    std::unordered_map<VId, NetworkNode, VertexHasher> networkMap;
+    void initNetwork();
 
     std::unique_ptr<TPABase> mkSolver() const { return owner.mkSolver(); }
 
@@ -1517,8 +1519,7 @@ GraphVerificationResult TPAEngine::solveTransitionSystemChain(const ChcDirectedG
     return TransitionSystemNetworkManager(*this, graph).solve();
 }
 
-GraphVerificationResult TransitionSystemNetworkManager::solve() && {
-    // init phase
+void TransitionSystemNetworkManager::initNetwork() {
     assert(networkMap.empty());
     for (VId vid : graph.getVertices()) {
         if (vid == graph.getEntryId() or vid == graph.getExitId()) { continue; }
@@ -1563,7 +1564,11 @@ GraphVerificationResult TransitionSystemNetworkManager::solve() && {
             }
         }
     }
-    // solving phase
+}
+
+GraphVerificationResult TransitionSystemNetworkManager::solve() && {
+    initNetwork();
+
     VId current = getChainStart();
     while (true) {
         auto [res,explanation] = queryTransitionSystem(networkMap.at(current));
