@@ -283,20 +283,16 @@ void TPABase::resetInitialStates(PTRef fla) {
     assert(isPureStateFormula(fla));
     this->init = fla;
     queryCache.clear();
-    versioningCache.clear();
     inductiveInvariant = PTRef_Undef;
     explanation = PTRef_Undef;
-    // TODO: reset any information that depends on init
 }
 
 void TPABase::updateQueryStates(PTRef fla) {
     assert(isPureStateFormula(fla));
     this->query = logic.mkAnd(fla, this->query);
     queryCache.clear();
-    versioningCache.clear();
     inductiveInvariant = PTRef_Undef;
     explanation = PTRef_Undef;
-    // TODO: reset any information that depends on query
 }
 
 
