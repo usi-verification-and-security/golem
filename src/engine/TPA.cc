@@ -27,14 +27,10 @@ std::unique_ptr<TPABase> TPAEngine::mkSolver() {
 
 GraphVerificationResult TPAEngine::solve(const ChcDirectedGraph & system) {
     if (isTransitionSystem(system)) {
-        assert(not options.hasOption(TPABase::COMPUTE_INVARIANT) and not options.hasOption(TPABase::COMPUTE_EXPLANATION));
-        options.addOption(TPABase::COMPUTE_INVARIANT, "true");
         auto ts = toTransitionSystem(system, logic);
         return mkSolver()->solveTransitionSystem(*ts, system);
     }
     else {
-        assert(not options.hasOption(TPABase::COMPUTE_INVARIANT) and not options.hasOption(TPABase::COMPUTE_EXPLANATION));
-        options.addOption(TPABase::COMPUTE_EXPLANATION, "true");
         auto simplifiedGraph = GraphTransformations(logic).eliminateNodes(system);
         if (isTransitionSystemChain(simplifiedGraph)) {
             return solveTransitionSystemChain(simplifiedGraph);
@@ -215,9 +211,6 @@ public:
 
 };
 
-const std::string TPABase::COMPUTE_INVARIANT = "tpa.invariant";
-const std::string TPABase::COMPUTE_EXPLANATION = "tpa.explanation";
-
 TPASplit::~TPASplit() {
     for (SolverWrapper* solver : reachabilitySolvers) {
         delete solver;
@@ -234,10 +227,6 @@ PTRef TPABase::getTransitionRelation() const {
 
 PTRef TPABase::getQuery() const {
     return query;
-}
-
-PTRef TPABase::getExplanation() const {
-    return explanation;
 }
 
 vec<PTRef> TPABase::getStateVars(int version) const {
@@ -297,21 +286,15 @@ void TPABase::resetInitialStates(PTRef fla) {
     assert(isPureStateFormula(fla));
     this->init = fla;
     queryCache.clear();
-    inductiveInvariant = PTRef_Undef;
-    explanation = PTRef_Undef;
+    explanation.invariantType = SafetyExplanation::TransitionInvariantType::NONE;
 }
 
 void TPABase::updateQueryStates(PTRef fla) {
     assert(isPureStateFormula(fla));
     this->query = logic.mkAnd(fla, this->query);
     queryCache.clear();
-    inductiveInvariant = PTRef_Undef;
-    explanation = PTRef_Undef;
+    explanation.invariantType = SafetyExplanation::TransitionInvariantType::NONE;
 }
-
-
-
-
 
 PTRef TPASplit::getExactPower(unsigned short power) const {
     assert(power >= 0 and power < exactPowers.size());
@@ -365,15 +348,19 @@ SolverWrapper* TPASplit::getExactReachabilitySolver(unsigned short power) const 
 GraphVerificationResult TPABase::solveTransitionSystem(TransitionSystem & system, ChcDirectedGraph const & graph) {
     resetTransitionSystem(system);
     auto res = solve();
+    // FIXME: just return the result here, let the engine decide what to do with it
     switch (res) {
         case VerificationResult::UNSAFE:
             return GraphVerificationResult(res);
         case VerificationResult::SAFE:
         {
-            if (not options.hasOption(Options::COMPUTE_WITNESS) or inductiveInvariant == PTRef_Undef) {
+            if (not options.hasOption(Options::COMPUTE_WITNESS)) {
                 return GraphVerificationResult(res);
             }
-//                std::cout << "Computed invariant: " << logic.printTerm(stateInvariant) << std::endl;
+            PTRef inductiveInvariant = getInductiveInvariant();
+            if (inductiveInvariant == PTRef_Undef) {
+                return GraphVerificationResult(res);
+            }
             auto vertices = graph.getVertices();
             assert(vertices.size() == 3);
             VId vertex = vertices[2];
@@ -420,7 +407,7 @@ VerificationResult TPASplit::checkPower(unsigned short power) {
     // First compute the <2^n transition relation using information from previous level;
     auto res = reachabilityQueryLessThan(init, query, power);
     if (isReachable(res)) {
-        explanation = res.refinedTarget;
+        reachedStates = ReachedStates{res.refinedTarget};
         return VerificationResult::UNSAFE;
     } else if (isUnreachable(res)) {
         if (verbose() > 0) {
@@ -442,7 +429,7 @@ VerificationResult TPASplit::checkPower(unsigned short power) {
     // Second compute the exact power using the concatenation of previous one
     res = reachabilityQueryExact(init, query, power);
     if (isReachable(res)) {
-        explanation = res.refinedTarget;
+        reachedStates = ReachedStates{res.refinedTarget};
         return VerificationResult::UNSAFE;
     } else if (isUnreachable(res)) {
         if (verbose() > 0) {
@@ -768,7 +755,7 @@ PTRef TPABase::cleanInterpolant(PTRef itp) {
     return utils.varSubstitute(itp, subst);
 }
 
-PTRef TPABase::shiftOnlyNextVars(PTRef fla) {
+PTRef TPABase::shiftOnlyNextVars(PTRef fla) const {
     TermUtils utils(logic);
     auto vars = utils.getVars(fla);
     auto currentVars = getStateVars(0);
@@ -870,7 +857,7 @@ void TPASplit::resetPowers() {
     lessThanPowers.push(exactPowers[0]); // <1 is just exact 0
 }
 
-bool TPASplit::verifyLessThanPower(unsigned short power) {
+bool TPASplit::verifyLessThanPower(unsigned short power) const {
     assert(power >= 2);
     SMTConfig config;
     MainSolver solver(logic, config, "");
@@ -888,7 +875,7 @@ bool TPASplit::verifyLessThanPower(unsigned short power) {
     return res == s_False;
 }
 
-bool TPASplit::verifyExactPower(unsigned short power) {
+bool TPASplit::verifyExactPower(unsigned short power) const {
     assert(power >= 2);
     if (power > 2) {
         bool previousRes = verifyExactPower(power - 1);
@@ -935,13 +922,10 @@ bool TPASplit::checkLessThanFixedPoint(unsigned short power) {
                     std::cout << "; Right fixed point detected in less-than relation on level " << i << " from " << power << std::endl;
                     std::cout << "; Fixed point detected for " << (not restrictedInvariant ? "whole transition relation" : "transition relation restricted to init") << std::endl;
                 }
-                if (shouldComputeInvariant()) {
-//                     std::cout << "Computing inductive invariant" << std::endl;
-                    inductiveInvariant = getNextVersion(QuantifierElimination(logic).keepOnly(logic.mkAnd(init, currentLevelTransition), getStateVars(1)), -1);
-                }
-                if (shouldComputeExplanation()) {
-                    explanation = restrictedInvariant ? logic.mkNot(init) : unsafeInitialStates(currentLevelTransition);
-                }
+                explanation.invariantType = restrictedInvariant ? SafetyExplanation::TransitionInvariantType::RESTRICTED_TO_INIT : SafetyExplanation::TransitionInvariantType::UNRESTRICTED;
+                explanation.relationType = TPAType::LESS_THAN;
+                explanation.power = i;
+                explanation.fixedPointType = SafetyExplanation::FixedPointType::RIGHT;
                 return true;
             }
         }
@@ -964,14 +948,10 @@ bool TPASplit::checkLessThanFixedPoint(unsigned short power) {
                     std::cout << "; Left fixed point detected in less-than relation on level " << i << " from " << power << std::endl;
                     std::cout << "; Fixed point detected for " << (not restrictedInvariant ? "whole transition relation" : "transition relation restricted to bad") << std::endl;
                 }
-                if (shouldComputeInvariant()) {
-                    // std::cout << "Computing inductive invariant" << std::endl;
-                    inductiveInvariant = logic.mkNot(QuantifierElimination(logic).keepOnly(logic.mkAnd(currentLevelTransition,
-                        getNextVersion(query)), getStateVars(0)));
-                }
-                if (shouldComputeExplanation()) {
-                    explanation = unsafeInitialStates(currentLevelTransition);
-                }
+                explanation.invariantType = restrictedInvariant ? SafetyExplanation::TransitionInvariantType::RESTRICTED_TO_QUERY : SafetyExplanation::TransitionInvariantType::UNRESTRICTED;
+                explanation.relationType = TPAType::LESS_THAN;
+                explanation.power = i;
+                explanation.fixedPointType = SafetyExplanation::FixedPointType::LEFT;
                 return true;
             }
         }
@@ -1026,57 +1006,18 @@ bool TPASplit::checkExactFixedPoint(unsigned short power) {
                 }
                 std::cout << std::endl;
             }
-            if (shouldComputeExplanation()) {
-                if (restrictedInvariant == 1) {
-                    explanation = logic.mkNot(init);
-                } else {
-                    PTRef transitionInvariant = logic.mkOr(
-                            shiftOnlyNextVars(getLessThanPower(i)),
-                            logic.mkAnd(getLessThanPower(i), getNextVersion(getExactPower(i)))
-                    );
-                    explanation = unsafeInitialStates(transitionInvariant);
-                }
-
-            }
-            if (shouldComputeInvariant() and restrictedInvariant != 2) {
-                if (i <= 10) {
-//                    std::cout << "Computing inductive invariant" << std::endl;
-                    assert(verifyLessThanPower(i));
-                    assert(verifyExactPower(i));
-//                    std::cout << "Less-than transition: " << logic.printTerm(getLessThanPower(i)) << '\n';
-//                    std::cout << "Exact transition: " << logic.printTerm(getExactPower(i)) << std::endl;
-                    PTRef transitionInvariant = logic.mkOr(
-                        shiftOnlyNextVars(getLessThanPower(i)),
-                        logic.mkAnd(getLessThanPower(i), getNextVersion(getExactPower(i)))
-                    );
-//                    std::cout << "Transition invariant: " << logic.printTerm(transitionInvariant) << std::endl;
-                    PTRef stateInvariant = QuantifierElimination(logic).eliminate(
-                        logic.mkAnd(init, transitionInvariant), getStateVars(0));
-//                    std::cout << "After eliminating current state vars: " << logic.printTerm(stateInvariant) << std::endl;
-                    stateInvariant = QuantifierElimination(logic).eliminate(stateInvariant, getStateVars(1));
-                    stateInvariant = getNextVersion(stateInvariant, -2);
-//                    std::cout << "State invariant: " << logic.printTerm(stateInvariant) << std::endl;
-                    unsigned long k = 1;
-                    k <<= (i - 1);
-                    assert(verifyKinductiveInvariant(stateInvariant, k));
-//                    std::cout << "K-inductivness of invariant sucessfully checked for k=" << k << std::endl;
-                    inductiveInvariant = kinductiveToInductive(stateInvariant, k);
-//                    std::cout << "Inductive invariant: " << logic.printTerm(inductiveInvariant) << std::endl;
-//                    std::cout << "Inductive invariant computed!" << std::endl;
-                    assert(verifyKinductiveInvariant(inductiveInvariant, 1));
-                } else {
-                    std::cerr << "; k-inductive invariant computed, by k is too large to compute 1-inductive invariant"
-                              << std::endl;
-                    inductiveInvariant = PTRef_Undef;
-                }
-            }
+            explanation.invariantType = restrictedInvariant == 0 ? SafetyExplanation::TransitionInvariantType::UNRESTRICTED
+                    : restrictedInvariant == 1 ? SafetyExplanation::TransitionInvariantType::RESTRICTED_TO_INIT
+                    : SafetyExplanation::TransitionInvariantType::RESTRICTED_TO_QUERY;
+            explanation.relationType = TPAType::EQUALS;
+            explanation.power = i;
             return true;
         }
     }
     return false;
 }
 
-PTRef TPABase::kinductiveToInductive(PTRef invariant, unsigned long k) {
+PTRef TPABase::kinductiveToInductive(PTRef invariant, unsigned long k) const {
     /*
      * If P(x) is k-inductive invariant then the following formula is 1-inductive invariant:
      * P(x_0)
@@ -1119,7 +1060,7 @@ PTRef TPABase::kinductiveToInductive(PTRef invariant, unsigned long k) {
     return logic.mkAnd(resArgs);
 }
 
-bool TPABase::verifyKinductiveInvariant(PTRef fla, unsigned long k) {
+bool TPABase::verifyKinductiveInvariant(PTRef fla, unsigned long k) const {
     SMTConfig config;
     // Base cases:
     {
@@ -1197,7 +1138,7 @@ VerificationResult TPABasic::checkPower(unsigned short power) {
     queryCache.emplace_back();
     auto res = reachabilityQuery(init, query, power);
     if (isReachable(res)) {
-        explanation = res.refinedTarget;
+        reachedStates = ReachedStates{res.refinedTarget};
         return VerificationResult::UNSAFE;
     } else if (isUnreachable(res)) {
         if (verbose() > 0) {
@@ -1395,10 +1336,10 @@ bool TPABasic::checkFixedPoint(unsigned short power) {
                     std::cout << "; Right fixed point detected in on level " << i << " from " << power << std::endl;
                     std::cout << "; Fixed point detected for " << (not restrictedInvariant ? "whole transition relation" : "transition relation restricted to init") << std::endl;
                 }
-                if (options.hasOption(Options::COMPUTE_WITNESS) and options.getOption(Options::COMPUTE_WITNESS) == "true") {
-                    //                     std::cout << "Computing inductive invariant" << std::endl;
-                    inductiveInvariant = getNextVersion(QuantifierElimination(logic).keepOnly(logic.mkAnd(init, currentLevelTransition), getStateVars(1)), -1);
-                }
+                explanation.invariantType = restrictedInvariant ? SafetyExplanation::TransitionInvariantType::RESTRICTED_TO_INIT : SafetyExplanation::TransitionInvariantType::UNRESTRICTED;
+                explanation.relationType = TPAType::LESS_THAN;
+                explanation.fixedPointType = SafetyExplanation::FixedPointType::RIGHT;
+                explanation.power = i;
                 return true;
             }
         }
@@ -1421,11 +1362,10 @@ bool TPABasic::checkFixedPoint(unsigned short power) {
                     std::cout << "; Left fixed point detected on level " << i << " from " << power << std::endl;
                     std::cout << "; Fixed point detected for " << (not restrictedInvariant ? "whole transition relation" : "transition relation restricted to bad") << std::endl;
                 }
-                if (options.hasOption(Options::COMPUTE_WITNESS) and options.getOption(Options::COMPUTE_WITNESS) == "true") {
-                    // std::cout << "Computing inductive invariant" << std::endl;
-                    inductiveInvariant = logic.mkNot(QuantifierElimination(logic).keepOnly(logic.mkAnd(currentLevelTransition,
-                        getNextVersion(query)), getStateVars(0)));
-                }
+                explanation.invariantType = restrictedInvariant ? SafetyExplanation::TransitionInvariantType::RESTRICTED_TO_QUERY : SafetyExplanation::TransitionInvariantType::UNRESTRICTED;
+                explanation.relationType = TPAType::LESS_THAN;
+                explanation.fixedPointType = SafetyExplanation::FixedPointType::LEFT;
+                explanation.power = i;
                 return true;
             }
         }
@@ -1433,7 +1373,7 @@ bool TPABasic::checkFixedPoint(unsigned short power) {
     return false;
 }
 
-PTRef TPABase::unsafeInitialStates(PTRef transitionInvariant) {
+PTRef TPABase::unsafeInitialStates(PTRef transitionInvariant) const {
     SMTConfig config;
     const char * msg = "ok";
     config.setOption(SMTConfig::o_produce_models, SMTOption(false), msg);
@@ -1673,15 +1613,19 @@ TransitionSystemNetworkManager::QueryResult TransitionSystemNetworkManager::quer
 TransitionSystemNetworkManager::QueryResult TransitionSystemNetworkManager::queryTransitionSystem(NetworkNode & node) {
     auto res = node.solver->solve();
     assert(res != VerificationResult::UNKNOWN);
-    PTRef explanation = node.solver->getExplanation();
-    assert(explanation != PTRef_Undef);
     switch (res) {
-        case VerificationResult::UNSAFE:
+        case VerificationResult::UNSAFE: {
+            PTRef explanation = node.solver->getReachedStates();
+            assert(explanation != PTRef_Undef);
             TRACE(1, "TS propagates reachable states to " << logic.pp(explanation))
             return {ReachabilityResult::REACHABLE, explanation};
-        case VerificationResult::SAFE:
+        }
+        case VerificationResult::SAFE: {
+            PTRef explanation = node.solver->getSafetyExplanation();
+            assert(explanation != PTRef_Undef);
             TRACE(1, "TS blocks " << logic.pp(explanation))
             return {ReachabilityResult::UNREACHABLE, explanation};
+        }
         default:
             assert(false);
             throw std::logic_error("Unreachable");
@@ -1689,4 +1633,81 @@ TransitionSystemNetworkManager::QueryResult TransitionSystemNetworkManager::quer
     }
 }
 
+PTRef TPASplit::getPower(unsigned short power, TPAType relationType) const {
+    if (relationType == TPAType::LESS_THAN) {
+        return getLessThanPower(power);
+    }
+    assert(relationType == TPAType::EQUALS);
+    return getExactPower(power);
+}
 
+PTRef TPABasic::getPower(unsigned short power, TPAType relationType) const {
+    assert(relationType == TPAType::LESS_THAN); (void)relationType;
+    return getLevelTransition(power);
+}
+
+PTRef TPABase::getReachedStates() const {
+    return reachedStates.reachedStates;
+}
+
+PTRef TPABase::getSafetyExplanation() const {
+    if (explanation.invariantType == SafetyExplanation::TransitionInvariantType::RESTRICTED_TO_INIT) {
+        return logic.mkNot(init);
+    }
+    auto power = explanation.power;
+    PTRef transitionInvariant = explanation.relationType == TPAType::LESS_THAN ? getPower(power, explanation.relationType)
+            : logic.mkOr(shiftOnlyNextVars(getPower(power, TPAType::LESS_THAN)),logic.mkAnd(getPower(power, TPAType::LESS_THAN), getNextVersion(getPower(power, TPAType::EQUALS))));
+    return unsafeInitialStates(transitionInvariant);
+}
+
+PTRef TPABase::getInductiveInvariant() const {
+    assert(explanation.invariantType != SafetyExplanation::TransitionInvariantType::NONE);
+    if (explanation.relationType == TPAType::LESS_THAN) {
+        PTRef transitionAbstraction = getPower(explanation.power, explanation.relationType);
+        switch (explanation.fixedPointType) {
+            case SafetyExplanation::FixedPointType::LEFT:
+                return logic.mkNot(QuantifierElimination(logic).keepOnly(logic.mkAnd(transitionAbstraction, getNextVersion(query)), getStateVars(0)));
+            case SafetyExplanation::FixedPointType::RIGHT:
+                return getNextVersion(QuantifierElimination(logic).keepOnly(logic.mkAnd(init, transitionAbstraction), getStateVars(1)), -1);
+        }
+    } else if (explanation.relationType == TPAType::EQUALS) {
+        if (explanation.invariantType == SafetyExplanation::TransitionInvariantType::RESTRICTED_TO_QUERY) {
+            return PTRef_Undef;
+        }
+        if (explanation.power > 10) {
+            std::cerr << "; k-inductive invariant computed, by k is too large to compute 1-inductive invariant"
+                      << std::endl;
+            return PTRef_Undef;
+        }
+        return static_cast<TPASplit const *>(this)->inductiveInvariantFromEqualsTransitionInvariant();
+    }
+    throw std::logic_error("Unreachable!");
+}
+
+PTRef TPASplit::inductiveInvariantFromEqualsTransitionInvariant() const {
+    unsigned short power = explanation.power;
+    assert(verifyLessThanPower(power));
+    assert(verifyExactPower(power));
+//    std::cout << "Less-than transition: " << logic.printTerm(getLessThanPower(i)) << '\n';
+//    std::cout << "Exact transition: " << logic.printTerm(getExactPower(i)) << std::endl;
+    PTRef transitionInvariant = logic.mkOr(
+            shiftOnlyNextVars(getLessThanPower(power)),
+            logic.mkAnd(getLessThanPower(power), getNextVersion(getExactPower(power)))
+    );
+//    std::cout << "Transition invariant: " << logic.printTerm(transitionInvariant) << std::endl;
+    PTRef stateInvariant = QuantifierElimination(logic).eliminate(
+            logic.mkAnd(init, transitionInvariant), getStateVars(0));
+//    std::cout << "After eliminating current state vars: " << logic.printTerm(stateInvariant) << std::endl;
+    stateInvariant = QuantifierElimination(logic).eliminate(stateInvariant, getStateVars(1));
+    stateInvariant = getNextVersion(stateInvariant, -2);
+//    std::cout << "State invariant: " << logic.printTerm(stateInvariant) << std::endl;
+    unsigned long k = 1;
+    k <<= (power - 1);
+    assert(verifyKinductiveInvariant(stateInvariant, k));
+//    std::cout << "K-inductivness of invariant sucessfully checked for k=" << k << std::endl;
+    PTRef inductiveInvariant = kinductiveToInductive(stateInvariant, k);
+//    std::cout << "Inductive invariant: " << logic.printTerm(inductiveInvariant) << std::endl;
+//    std::cout << "Inductive invariant computed!" << std::endl;
+    assert(verifyKinductiveInvariant(inductiveInvariant, 1));
+    return inductiveInvariant;
+}

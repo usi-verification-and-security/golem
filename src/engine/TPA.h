@@ -44,14 +44,43 @@ private:
     GraphVerificationResult solveTransitionSystemChain(ChcDirectedGraph const & graph);
 };
 
+enum class TPAType : char {
+    LESS_THAN,
+    EQUALS
+};
+
+struct SafetyExplanation {
+    enum class TransitionInvariantType : char {
+        NONE,
+        UNRESTRICTED,
+        RESTRICTED_TO_INIT,
+        RESTRICTED_TO_QUERY
+    };
+
+    enum class FixedPointType : char {
+        LEFT,
+        RIGHT
+    };
+
+    TransitionInvariantType invariantType { TransitionInvariantType::NONE };
+    TPAType relationType { TPAType::LESS_THAN };
+    FixedPointType fixedPointType { FixedPointType::LEFT };
+    unsigned power { 0 };
+};
+
+struct ReachedStates {
+    PTRef reachedStates { PTRef_Undef };
+};
+
 class TPABase {
 protected:
     Logic & logic;
     Options const & options;
     int verbosity = 0;
     bool useQE = false;
-    bool computeExplanation = false;
-    bool computeInductiveInvariant = false;
+    SafetyExplanation explanation;
+    ReachedStates reachedStates;
+
 
     // Versioned representation of the transition system
     PTRef init;
@@ -59,12 +88,8 @@ protected:
     PTRef query;
     vec<PTRef> stateVariables;
     vec<PTRef> auxiliaryVariables;
-    PTRef inductiveInvariant = PTRef_Undef;
-    PTRef explanation = PTRef_Undef;
 
 public:
-    static const std::string COMPUTE_INVARIANT;
-    static const std::string COMPUTE_EXPLANATION;
 
     TPABase(Logic& logic, Options const & options) : logic(logic), options(options) {
         if (options.hasOption(Options::VERBOSE)) {
@@ -73,8 +98,6 @@ public:
         if (options.hasOption(Options::TPA_USE_QE)) {
             useQE = true;
         }
-        computeInductiveInvariant = options.hasOption(TPABase::COMPUTE_INVARIANT) and options.getOption(TPABase::COMPUTE_INVARIANT) == "true";
-        computeExplanation = options.hasOption(TPABase::COMPUTE_EXPLANATION) and options.getOption(TPABase::COMPUTE_EXPLANATION) == "true";
     }
 
     virtual ~TPABase() = default;
@@ -93,13 +116,17 @@ public:
     PTRef getTransitionRelation() const;
     PTRef getQuery() const;
 
-    PTRef getExplanation() const;
+    PTRef getSafetyExplanation() const;
+    PTRef getReachedStates() const;
+    PTRef getInductiveInvariant() const;
 
 protected:
 
     virtual VerificationResult checkPower(unsigned short power) = 0;
 
     virtual void resetPowers() = 0;
+
+    virtual PTRef getPower(unsigned short power, TPAType relationType) const = 0;
 
     struct QueryResult {
         ReachabilityResult result;
@@ -128,19 +155,17 @@ protected:
     /* Shifts only next-next vars to next vars */
     PTRef cleanInterpolant(PTRef itp);
     /* Shifts only next vars to next-next vars */
-    PTRef shiftOnlyNextVars(PTRef transition);
+    PTRef shiftOnlyNextVars(PTRef transition) const;
 
     PTRef simplifyInterpolant(PTRef itp);
 
     int verbose() const { return verbosity; }
-    bool shouldComputeExplanation() const { return computeExplanation; }
-    bool shouldComputeInvariant() const { return computeInductiveInvariant; }
 
     bool isPureStateFormula(PTRef fla) const;
     bool isPureTransitionFormula(PTRef fla) const;
 
-    bool verifyKinductiveInvariant(PTRef invariant, unsigned long k);
-    PTRef kinductiveToInductive(PTRef invariant, unsigned long k);
+    bool verifyKinductiveInvariant(PTRef invariant, unsigned long k) const;
+    PTRef kinductiveToInductive(PTRef invariant, unsigned long k) const;
 
     PTRef refineTwoStepTarget(PTRef start, PTRef transition, PTRef goal, Model& model);
 
@@ -150,7 +175,7 @@ protected:
 
     PTRef keepOnlyVars(PTRef fla, vec<PTRef> const & vars, Model & model);
 
-    PTRef unsafeInitialStates(PTRef transitionInvariant);
+    PTRef unsafeInitialStates(PTRef transitionInvariant) const;
 };
 
 class TPASplit : public TPABase {
@@ -165,10 +190,13 @@ public:
 
     ~TPASplit() override;
 
+    PTRef inductiveInvariantFromEqualsTransitionInvariant() const;
+
 private:
     void resetPowers() override;
 
     VerificationResult checkPower(unsigned short power) override;
+    PTRef getPower(unsigned short power, TPAType relationType) const override;
 
     PTRef getExactPower(unsigned short power) const;
     void storeExactPower(unsigned short power, PTRef tr);
@@ -184,8 +212,8 @@ private:
     QueryResult reachabilityExactOneStep(PTRef from, PTRef to);
     QueryResult reachabilityExactZeroStep(PTRef from, PTRef to);
 
-    bool verifyLessThanPower(unsigned short power);
-    bool verifyExactPower(unsigned short power);
+    bool verifyLessThanPower(unsigned short power) const;
+    bool verifyExactPower(unsigned short power) const;
 
     bool checkLessThanFixedPoint(unsigned short power);
     bool checkExactFixedPoint(unsigned short power);
@@ -207,6 +235,8 @@ private:
     void resetPowers() override;
 
     VerificationResult checkPower(unsigned short power) override;
+
+    PTRef getPower(unsigned short power, TPAType relationType) const override;
 
     PTRef getLevelTransition(unsigned short) const;
     void storeLevelTransition(unsigned short, PTRef);
