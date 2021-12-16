@@ -1373,7 +1373,7 @@ bool TPABasic::checkFixedPoint(unsigned short power) {
     return false;
 }
 
-PTRef TPABase::unsafeInitialStates(PTRef transitionInvariant) const {
+PTRef TPABase::unsafeInitialStates(PTRef start, PTRef transitionInvariant, PTRef target) const {
     SMTConfig config;
     const char * msg = "ok";
     config.setOption(SMTConfig::o_produce_models, SMTOption(false), msg);
@@ -1381,9 +1381,9 @@ PTRef TPABase::unsafeInitialStates(PTRef transitionInvariant) const {
     config.setLRAInterpolationAlgorithm(itp_lra_alg_decomposing_strong);
     config.setSimplifyInterpolant(4);
     MainSolver solver(logic, config, "Unsafe initial states computation");
-    solver.insertFormula(getInit());
+    solver.insertFormula(start);
     solver.insertFormula(transitionInvariant);
-    solver.insertFormula(getNextVersion(getQuery()));
+    solver.insertFormula(target);
     auto res = solver.check();
     if (res != s_False) {
         throw std::logic_error("SMT query was suppose to be unsat, but is not!");
@@ -1657,7 +1657,11 @@ PTRef TPABase::getSafetyExplanation() const {
     auto power = explanation.power;
     PTRef transitionInvariant = explanation.relationType == TPAType::LESS_THAN ? getPower(power, explanation.relationType)
             : logic.mkOr(shiftOnlyNextVars(getPower(power, TPAType::LESS_THAN)),logic.mkAnd(getPower(power, TPAType::LESS_THAN), getNextVersion(getPower(power, TPAType::EQUALS))));
-    return unsafeInitialStates(transitionInvariant);
+    return unsafeInitialStates(
+            getInit(),
+            transitionInvariant,
+            getNextVersion(getQuery(), explanation.relationType == TPAType::LESS_THAN ? 1 : 2)
+    );
 }
 
 PTRef TPABase::getInductiveInvariant() const {

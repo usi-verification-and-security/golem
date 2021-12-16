@@ -175,7 +175,7 @@ protected:
 
     PTRef keepOnlyVars(PTRef fla, vec<PTRef> const & vars, Model & model);
 
-    PTRef unsafeInitialStates(PTRef transitionInvariant) const;
+    PTRef unsafeInitialStates(PTRef start, PTRef transitionInvariant, PTRef target) const;
 };
 
 class TPASplit : public TPABase {
