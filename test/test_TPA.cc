@@ -70,20 +70,19 @@ TEST(TPA_test, test_TPA_simple_unsafe)
             ChcHead{UninterpretedPredicate{logic.getTerm_false()}},
             ChcBody{logic.mkNumGt(x, logic.getTerm_NumOne()), {UninterpretedPredicate{current}}}
     );
-    auto hypergraph = ChcGraphBuilder(logic).buildGraph(Normalizer(logic).normalize(system));
+    auto normalizedSystem = Normalizer(logic).normalize(system);
+    auto hypergraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
     ASSERT_TRUE(hypergraph->isNormalGraph());
     auto graph = hypergraph->toNormalGraph();
     TPAEngine engine(logic, options);
     auto res = engine.solve(*graph);
     auto answer = res.getAnswer();
     ASSERT_EQ(answer, VerificationResult::UNSAFE);
-    /* TODO: Uncomment when TPA suppports invalidity witnesses
-    auto witness = res.getInvalidityWitness();
+//    auto witness = res.getInvalidityWitness();
     ChcGraphContext ctx(*graph, logic);
     SystemVerificationResult systemResult (std::move(res), ctx);
-    auto validationResult = Validator(logic).validate(system, systemResult);
+    auto validationResult = Validator(logic).validate(*normalizedSystem.normalizedSystem, systemResult);
     ASSERT_EQ(validationResult, Validator::Result::VALIDATED);
-    */
 }
 
 TEST(TPA_test, test_TPA_chain_of_two_unsafe) {

@@ -351,7 +351,7 @@ GraphVerificationResult TPABase::solveTransitionSystem(TransitionSystem & system
     // FIXME: just return the result here, let the engine decide what to do with it
     switch (res) {
         case VerificationResult::UNSAFE:
-            return GraphVerificationResult(res);
+            return GraphVerificationResult(res, computeInvalidityWitness(graph));
         case VerificationResult::SAFE:
         {
             if (not options.hasOption(Options::COMPUTE_WITNESS)) {
@@ -407,7 +407,7 @@ VerificationResult TPASplit::checkPower(unsigned short power) {
     // First compute the <2^n transition relation using information from previous level;
     auto res = reachabilityQueryLessThan(init, query, power);
     if (isReachable(res)) {
-        reachedStates = ReachedStates{res.refinedTarget};
+        reachedStates = ReachedStates{res.refinedTarget, res.steps};
         return VerificationResult::UNSAFE;
     } else if (isUnreachable(res)) {
         if (verbose() > 0) {
@@ -429,7 +429,7 @@ VerificationResult TPASplit::checkPower(unsigned short power) {
     // Second compute the exact power using the concatenation of previous one
     res = reachabilityQueryExact(init, query, power);
     if (isReachable(res)) {
-        reachedStates = ReachedStates{res.refinedTarget};
+        reachedStates = ReachedStates{res.refinedTarget, res.steps};
         return VerificationResult::UNSAFE;
     } else if (isUnreachable(res)) {
         if (verbose() > 0) {
@@ -459,6 +459,7 @@ TPASplit::QueryResult TPASplit::reachabilityExactOneStep(PTRef from, PTRef to) {
             auto nextStateVars = getStateVars(1);
             PTRef refinedGoal = keepOnlyVars(query, nextStateVars, *solver.getModel());
             result.refinedTarget = getNextVersion(refinedGoal, -1);
+            result.steps = 1;
         }
         result.result = ReachabilityResult::REACHABLE;
         return result;
@@ -482,6 +483,7 @@ TPASplit::QueryResult TPASplit::reachabilityExactZeroStep(PTRef from, PTRef to) 
         result.result = ReachabilityResult::REACHABLE;
         assert(isPureStateFormula(intersection));
         result.refinedTarget = intersection;
+        result.steps = 0;
         return result;
     } else if (res == s_False) {
         result.result = ReachabilityResult::UNREACHABLE;
@@ -526,6 +528,7 @@ TPASplit::QueryResult TPASplit::reachabilityQueryExact(PTRef from, PTRef to, uns
                 if (power == 2) { // Base case, the 2 steps of the exact transition relation have been used
                     result.result = ReachabilityResult::REACHABLE;
                     result.refinedTarget = refineTwoStepTarget(from, logic.mkAnd(previousTransition, translatedPreviousTransition), goal, *model);
+                    result.steps = 2;
                     TRACE(3, "Exact: Truly reachable states are " << result.refinedTarget.x)
                     assert(result.refinedTarget != logic.getTerm_false());
                     queryCache[power].insert({{from, to}, result});
@@ -552,6 +555,7 @@ TPASplit::QueryResult TPASplit::reachabilityQueryExact(PTRef from, PTRef to, uns
                         throw std::logic_error("Refined reachable target not set in subquery!");
                     }
                 }
+                unsigned stepsToMidpoint = extractStepsTaken(subQueryRes);
                 // here the first half of the found path is feasible, check the second half
                 subQueryRes = reachabilityQueryExact(nextState, to, power - 1);
                 if (isUnreachable(subQueryRes)) {
@@ -562,6 +566,7 @@ TPASplit::QueryResult TPASplit::reachabilityQueryExact(PTRef from, PTRef to, uns
                 assert(isReachable(subQueryRes));
                 TRACE(3, "Exact: Second half was reachable, reachable states are " << extractReachableTarget(subQueryRes).x)
                 // both halves of the found path are feasible => this path is feasible!
+                subQueryRes.steps += stepsToMidpoint;
                 queryCache[power].insert({{from, to}, subQueryRes});
                 return subQueryRes;
             }
@@ -599,6 +604,7 @@ TPASplit::QueryResult TPASplit::reachabilityQueryLessThan(PTRef from, PTRef to, 
         QueryResult result;
         result.result = ReachabilityResult::REACHABLE;
         result.refinedTarget = to;
+        result.steps = 0;
         return result;
     }
     if (power == 1) {
@@ -660,6 +666,7 @@ TPASplit::QueryResult TPASplit::reachabilityQueryLessThan(PTRef from, PTRef to, 
                     // TODO: double-check this
                     result.result = ReachabilityResult::REACHABLE;
                     result.refinedTarget = logic.mkAnd(from, to); // TODO: check if this is needed
+                    result.steps = 0;
                     TRACE(3, "Less-than: Truly reachable states are " << result.refinedTarget.x)
                     TRACE(4, "Less-than: Truly reachable states are " << logic.pp(result.refinedTarget))
                     return result;
@@ -681,6 +688,7 @@ TPASplit::QueryResult TPASplit::reachabilityQueryLessThan(PTRef from, PTRef to, 
                 if (power == 2) { // Since it was not reachable in 0 steps (checked above), here it means it was reachable in exactly 1 step
                     result.result = ReachabilityResult::REACHABLE;
                     result.refinedTarget = refineTwoStepTarget(from, logic.mkAnd(previousLessThanTransition, translatedExactTransition), goal, *model);
+                    result.steps = 1;
                     TRACE(3, "Less-than: Truly reachable states are " << result.refinedTarget.x)
                     return result;
                 }
@@ -703,6 +711,7 @@ TPASplit::QueryResult TPASplit::reachabilityQueryLessThan(PTRef from, PTRef to, 
                     TRACE(3, "Modified midpoint : " << nextState.x)
                     TRACE(4, "Modified midpoint : " << logic.pp(nextState))
                 }
+                unsigned stepsToMidpoint = extractStepsTaken(subQueryRes);
                 // here the first half of the found path is feasible, check the second half
                 PTRef previousExactTransition = getExactPower(power - 1);
                 subQueryRes = reachabilityQueryExact(nextState, to, power - 1);
@@ -714,6 +723,7 @@ TPASplit::QueryResult TPASplit::reachabilityQueryLessThan(PTRef from, PTRef to, 
                 assert(isReachable(subQueryRes));
                 TRACE(3, "Less-than: Second half was reachable, reachable states are " << extractReachableTarget(subQueryRes).x)
                 // both halves of the found path are feasible => this path is feasible!
+                subQueryRes.steps += stepsToMidpoint;
                 return subQueryRes;
             }
         } else {
@@ -1714,4 +1724,32 @@ PTRef TPASplit::inductiveInvariantFromEqualsTransitionInvariant() const {
 //    std::cout << "Inductive invariant computed!" << std::endl;
     assert(verifyKinductiveInvariant(inductiveInvariant, 1));
     return inductiveInvariant;
+}
+
+InvalidityWitness TPABase::computeInvalidityWitness(ChcDirectedGraph const & graph) const {
+    auto vertices = graph.getVertices();
+    assert(vertices.size() == 3);
+    VId loopingVertex = vertices[2];
+    assert(loopingVertex != graph.getEntryId() and loopingVertex != graph.getExitId());
+    auto edges = graph.getEdges();
+    auto it = std::find_if(edges.begin(), edges.end(), [&graph](EId eid) {
+        return graph.getSource(eid) == graph.getTarget(eid);
+    });
+    assert(it != edges.end());
+    EId loopingEdge = *it;
+    EId startEdge = *(std::find_if(edges.begin(), edges.end(), [&](EId eid) {
+        return graph.getSource(eid) == graph.getEntryId() and graph.getTarget(eid) == loopingVertex;
+    }));
+    EId finalEdge = *(std::find_if(edges.begin(), edges.end(), [&](EId eid) {
+        return graph.getTarget(eid) == graph.getExitId() and graph.getSource(eid) == loopingVertex;
+    }));
+    unsigned steps = reachedStates.steps;
+    InvalidityWitness witness;
+    InvalidityWitness::ErrorPath path;
+    std::vector<EId> pathEdges(steps, loopingEdge);
+    pathEdges.push_back(finalEdge);
+    pathEdges.insert(pathEdges.begin(), startEdge);
+    path.setPath(std::move(pathEdges));
+    witness.setErrorPath(std::move(path));
+    return witness;
 }

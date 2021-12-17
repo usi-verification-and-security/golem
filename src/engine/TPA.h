@@ -70,6 +70,7 @@ struct SafetyExplanation {
 
 struct ReachedStates {
     PTRef reachedStates { PTRef_Undef };
+    unsigned steps { 0 };
 };
 
 class TPABase {
@@ -130,12 +131,14 @@ protected:
 
     struct QueryResult {
         ReachabilityResult result;
-        PTRef refinedTarget = PTRef_Undef;
+        PTRef refinedTarget { PTRef_Undef };
+        unsigned steps { 0 };
     };
 
     static bool isReachable (QueryResult res) { return res.result == ReachabilityResult::REACHABLE; };
     static bool isUnreachable (QueryResult res) { return res.result == ReachabilityResult::UNREACHABLE; };
     static PTRef extractReachableTarget (QueryResult res) { return res.refinedTarget; };
+    static unsigned extractStepsTaken (QueryResult res) { return res.steps; };
 
     using CacheType = std::unordered_map<std::pair<PTRef, PTRef>, QueryResult, PTRefPairHash>;
     std::vector<CacheType> queryCache;
@@ -176,6 +179,8 @@ protected:
     PTRef keepOnlyVars(PTRef fla, vec<PTRef> const & vars, Model & model);
 
     PTRef unsafeInitialStates(PTRef start, PTRef transitionInvariant, PTRef target) const;
+
+    InvalidityWitness computeInvalidityWitness(ChcDirectedGraph const &) const;
 };
 
 class TPASplit : public TPABase {
