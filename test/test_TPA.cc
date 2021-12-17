@@ -122,12 +122,17 @@ TEST(TPA_test, test_TPA_chain_of_two_unsafe) {
             ChcHead{UninterpretedPredicate{logic.getTerm_false()}},
             ChcBody{logic.mkNumLt(x, logic.getTerm_NumZero()), {UninterpretedPredicate{predS2Current}}}
     );
-    auto hypergraph = ChcGraphBuilder(logic).buildGraph(Normalizer(logic).normalize(system));
+    auto normalizedSystem = Normalizer(logic).normalize(system);
+    auto hypergraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
     ASSERT_TRUE(hypergraph->isNormalGraph());
     auto graph = hypergraph->toNormalGraph();
     TPAEngine engine(logic, options);
     auto res = engine.solve(*graph);
     ASSERT_EQ(res.getAnswer(), VerificationResult::UNSAFE);
+    ChcGraphContext ctx(*graph, logic);
+    SystemVerificationResult systemResult (std::move(res), ctx);
+    auto validationResult = Validator(logic).validate(*normalizedSystem.normalizedSystem, systemResult);
+    ASSERT_EQ(validationResult, Validator::Result::VALIDATED);
 }
 
 TEST(TPA_test, test_TPA_chain_of_two_safe) {

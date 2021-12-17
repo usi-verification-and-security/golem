@@ -35,7 +35,7 @@ GraphVerificationResult TPAEngine::solve(const ChcDirectedGraph & graph) {
         }
         switch (res) {
             case VerificationResult::UNSAFE:
-                return GraphVerificationResult(res, solver->computeInvalidityWitness(graph));
+                return GraphVerificationResult(res, computeInvalidityWitness(graph, solver->getTransitionStepCount()));
             case VerificationResult::SAFE:
             {
                 PTRef inductiveInvariant = solver->getInductiveInvariant();
@@ -1455,6 +1455,8 @@ private:
     QueryResult queryEdge(EId eid, PTRef sourceCondition, PTRef targetCondition);
 
     QueryResult queryTransitionSystem(NetworkNode & node);
+
+    InvalidityWitness computeInvalidityWitness() const;
 };
 
 GraphVerificationResult TPAEngine::solveTransitionSystemChain(const ChcDirectedGraph & graph) {
@@ -1516,7 +1518,7 @@ GraphVerificationResult TransitionSystemNetworkManager::solve() && {
         auto [res,explanation] = queryTransitionSystem(networkMap.at(current));
         if (reachable(res)) {
             if (current == getChainEnd()) {
-                return {VerificationResult::UNSAFE, InvalidityWitness{}};
+                return {VerificationResult::UNSAFE, computeInvalidityWitness()};
             }
             EId nextEdge = getOutgoingEdge(current);
             getNode(current).trulyReached = explanation;
@@ -1557,6 +1559,29 @@ GraphVerificationResult TransitionSystemNetworkManager::solve() && {
         assert(false); // Unreachable
     }
     throw std::logic_error("Unreachable!");
+}
+
+InvalidityWitness TransitionSystemNetworkManager::computeInvalidityWitness() const {
+    std::vector<EId> errorPath;
+    VId current = getChainStart();
+    errorPath.push_back(getIncomingEdge(current));
+    while (true) {
+        auto steps = getNode(current).solver->getTransitionStepCount();
+        errorPath.insert(errorPath.end(), steps, adjacencyRepresentation.getSelfLoopFor(current).value());
+        if (current == getChainEnd()) {
+            break;
+        }
+        EId next = getOutgoingEdge(current);
+        errorPath.push_back(next);
+        current = graph.getTarget(next);
+    }
+    errorPath.push_back(getNode(current).next);
+    InvalidityWitness witness;
+    InvalidityWitness::ErrorPath path;
+    path.setPath(std::move(errorPath));
+    witness.setErrorPath(std::move(path));
+    return witness;
+
 }
 
 TransitionSystem TransitionSystemNetworkManager::constructTransitionSystemFor(VId vid) const {
@@ -1646,6 +1671,10 @@ PTRef TPABase::getReachedStates() const {
     return reachedStates.reachedStates;
 }
 
+unsigned TPABase::getTransitionStepCount() const {
+    return reachedStates.steps;
+}
+
 PTRef TPABase::getSafetyExplanation() const {
     if (explanation.invariantType == SafetyExplanation::TransitionInvariantType::RESTRICTED_TO_INIT) {
         return logic.mkNot(init);
@@ -1712,7 +1741,7 @@ PTRef TPASplit::inductiveInvariantFromEqualsTransitionInvariant() const {
     return inductiveInvariant;
 }
 
-InvalidityWitness TPABase::computeInvalidityWitness(ChcDirectedGraph const & graph) const {
+InvalidityWitness TPAEngine::computeInvalidityWitness(ChcDirectedGraph const & graph, unsigned steps) const {
     auto vertices = graph.getVertices();
     assert(vertices.size() == 3);
     VId loopingVertex = vertices[2];
@@ -1729,7 +1758,6 @@ InvalidityWitness TPABase::computeInvalidityWitness(ChcDirectedGraph const & gra
     EId finalEdge = *(std::find_if(edges.begin(), edges.end(), [&](EId eid) {
         return graph.getTarget(eid) == graph.getExitId() and graph.getSource(eid) == loopingVertex;
     }));
-    unsigned steps = reachedStates.steps;
     InvalidityWitness witness;
     InvalidityWitness::ErrorPath path;
     std::vector<EId> pathEdges(steps, loopingEdge);

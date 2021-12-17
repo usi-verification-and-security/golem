@@ -44,6 +44,8 @@ private:
     GraphVerificationResult solveTransitionSystemChain(ChcDirectedGraph const & graph);
 
     ValidityWitness computeValidityWitness(ChcDirectedGraph const & graph, TransitionSystem const & ts, PTRef inductiveInvariant) const;
+
+    InvalidityWitness computeInvalidityWitness(ChcDirectedGraph const & graph, unsigned steps) const;
 };
 
 enum class TPAType : char {
@@ -121,9 +123,8 @@ public:
 
     PTRef getSafetyExplanation() const;
     PTRef getReachedStates() const;
+    unsigned getTransitionStepCount() const;
     PTRef getInductiveInvariant() const;
-
-    InvalidityWitness computeInvalidityWitness(ChcDirectedGraph const &) const;
 
 protected:
 
