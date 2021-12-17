@@ -42,6 +42,8 @@ private:
     std::unique_ptr<TPABase> mkSolver();
     
     GraphVerificationResult solveTransitionSystemChain(ChcDirectedGraph const & graph);
+
+    ValidityWitness computeValidityWitness(ChcDirectedGraph const & graph, TransitionSystem const & ts, PTRef inductiveInvariant) const;
 };
 
 enum class TPAType : char {
@@ -103,7 +105,7 @@ public:
 
     virtual ~TPABase() = default;
 
-    virtual GraphVerificationResult solveTransitionSystem(TransitionSystem & system, ChcDirectedGraph const & graph);
+    virtual VerificationResult solveTransitionSystem(TransitionSystem & system);
 
     void resetTransitionSystem(TransitionSystem const & system);
 
@@ -120,6 +122,8 @@ public:
     PTRef getSafetyExplanation() const;
     PTRef getReachedStates() const;
     PTRef getInductiveInvariant() const;
+
+    InvalidityWitness computeInvalidityWitness(ChcDirectedGraph const &) const;
 
 protected:
 
@@ -179,8 +183,6 @@ protected:
     PTRef keepOnlyVars(PTRef fla, vec<PTRef> const & vars, Model & model);
 
     PTRef unsafeInitialStates(PTRef start, PTRef transitionInvariant, PTRef target) const;
-
-    InvalidityWitness computeInvalidityWitness(ChcDirectedGraph const &) const;
 };
 
 class TPASplit : public TPABase {

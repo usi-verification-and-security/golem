@@ -25,13 +25,34 @@ std::unique_ptr<TPABase> TPAEngine::mkSolver() {
     }
 }
 
-GraphVerificationResult TPAEngine::solve(const ChcDirectedGraph & system) {
-    if (isTransitionSystem(system)) {
-        auto ts = toTransitionSystem(system, logic);
-        return mkSolver()->solveTransitionSystem(*ts, system);
+GraphVerificationResult TPAEngine::solve(const ChcDirectedGraph & graph) {
+    if (isTransitionSystem(graph)) {
+        auto ts = toTransitionSystem(graph, logic);
+        auto solver = mkSolver();
+        auto res = solver->solveTransitionSystem(*ts);
+        if (not options.hasOption(Options::COMPUTE_WITNESS)) {
+            return GraphVerificationResult(res);
+        }
+        switch (res) {
+            case VerificationResult::UNSAFE:
+                return GraphVerificationResult(res, solver->computeInvalidityWitness(graph));
+            case VerificationResult::SAFE:
+            {
+                PTRef inductiveInvariant = solver->getInductiveInvariant();
+                if (inductiveInvariant == PTRef_Undef) {
+                    return GraphVerificationResult(res);
+                }
+//                std::cout << "TS invariant: " << logic.printTerm(inductiveInvariant) << std::endl;
+                return GraphVerificationResult(res, computeValidityWitness(graph, *ts, inductiveInvariant));
+            }
+            case VerificationResult::UNKNOWN:
+                assert(false);
+                throw std::logic_error("Unreachable!");
+        }
+
     }
     else {
-        auto simplifiedGraph = GraphTransformations(logic).eliminateNodes(system);
+        auto simplifiedGraph = GraphTransformations(logic).eliminateNodes(graph);
         if (isTransitionSystemChain(simplifiedGraph)) {
             return solveTransitionSystemChain(simplifiedGraph);
         }
@@ -345,44 +366,9 @@ SolverWrapper* TPASplit::getExactReachabilitySolver(unsigned short power) const 
 }
 
 
-GraphVerificationResult TPABase::solveTransitionSystem(TransitionSystem & system, ChcDirectedGraph const & graph) {
+VerificationResult TPABase::solveTransitionSystem(TransitionSystem & system) {
     resetTransitionSystem(system);
-    auto res = solve();
-    // FIXME: just return the result here, let the engine decide what to do with it
-    switch (res) {
-        case VerificationResult::UNSAFE:
-            return GraphVerificationResult(res, computeInvalidityWitness(graph));
-        case VerificationResult::SAFE:
-        {
-            if (not options.hasOption(Options::COMPUTE_WITNESS)) {
-                return GraphVerificationResult(res);
-            }
-            PTRef inductiveInvariant = getInductiveInvariant();
-            if (inductiveInvariant == PTRef_Undef) {
-                return GraphVerificationResult(res);
-            }
-            auto vertices = graph.getVertices();
-            assert(vertices.size() == 3);
-            VId vertex = vertices[2];
-            assert(vertex != graph.getEntryId() and vertex != graph.getExitId());
-            TermUtils utils(logic);
-            TermUtils::substitutions_map subs;
-            auto graphVars = utils.getVarsFromPredicateInOrder(graph.getStateVersion(vertex));
-            auto systemVars = getStateVars(0);
-            assert(graphVars.size() == systemVars.size());
-            for (int i = 0; i < graphVars.size(); ++i) {
-                subs.insert({systemVars[i], graphVars[i]});
-            }
-            PTRef graphInvariant = utils.varSubstitute(inductiveInvariant, subs);
-//                std::cout << "Graph invariant: " << logic.printTerm(graphInvariant) << std::endl;
-            ValidityWitness::definitions_type definitions;
-            definitions.insert({graph.getStateVersion(vertex), graphInvariant});
-            return GraphVerificationResult(res, ValidityWitness(definitions));
-        }
-        case VerificationResult::UNKNOWN:
-            assert(false);
-            throw std::logic_error("Unreachable!");
-    }
+    return solve();
 }
 
 VerificationResult TPABase::solve() {
@@ -1752,4 +1738,24 @@ InvalidityWitness TPABase::computeInvalidityWitness(ChcDirectedGraph const & gra
     path.setPath(std::move(pathEdges));
     witness.setErrorPath(std::move(path));
     return witness;
+}
+
+ValidityWitness TPAEngine::computeValidityWitness(ChcDirectedGraph const & graph, TransitionSystem const & ts, PTRef inductiveInvariant) const {
+    auto vertices = graph.getVertices();
+    assert(vertices.size() == 3);
+    VId vertex = vertices[2];
+    assert(vertex != graph.getEntryId() and vertex != graph.getExitId());
+    TermUtils utils(logic);
+    TermUtils::substitutions_map subs;
+    auto graphVars = utils.getVarsFromPredicateInOrder(graph.getStateVersion(vertex));
+    auto systemVars = ts.getStateVars();
+    assert(graphVars.size() == systemVars.size());
+    for (int i = 0; i < graphVars.size(); ++i) {
+        subs.insert({systemVars[i], graphVars[i]});
+    }
+    PTRef graphInvariant = utils.varSubstitute(inductiveInvariant, subs);
+//    std::cout << "Graph invariant: " << logic.printTerm(graphInvariant) << std::endl;
+    ValidityWitness::definitions_type definitions;
+    definitions.insert({graph.getStateVersion(vertex), graphInvariant});
+    return ValidityWitness(definitions);
 }
