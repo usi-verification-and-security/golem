@@ -1677,6 +1677,7 @@ unsigned TPABase::getTransitionStepCount() const {
 
 PTRef TPABase::getSafetyExplanation() const {
     if (explanation.invariantType == SafetyExplanation::TransitionInvariantType::RESTRICTED_TO_INIT) {
+        // TODO: compute the safe inductive invariant and return negation of that?
         return logic.mkNot(init);
     }
     auto power = explanation.power;
