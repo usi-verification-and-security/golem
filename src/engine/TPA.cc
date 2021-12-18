@@ -853,6 +853,14 @@ void TPASplit::resetPowers() {
     lessThanPowers.push(exactPowers[0]); // <1 is just exact 0
 }
 
+bool TPASplit::verifyPower(unsigned short power, TPAType relationType) const {
+    if (relationType == TPAType::LESS_THAN) {
+        return verifyLessThanPower(power);
+    } else {
+        return verifyExactPower(power);
+    }
+}
+
 bool TPASplit::verifyLessThanPower(unsigned short power) const {
     assert(power >= 2);
     SMTConfig config;
@@ -893,11 +901,11 @@ bool TPASplit::verifyExactPower(unsigned short power) const {
 }
 
 
-bool TPASplit::checkLessThanFixedPoint(unsigned short power) {
+bool TPABase::checkLessThanFixedPoint(unsigned short power) {
     assert(power >= 3);
-    assert(verifyLessThanPower(power));
+    assert(verifyPower(power, TPAType::LESS_THAN));
     for (unsigned short i = 3; i <= power; ++i) {
-        PTRef currentLevelTransition = getLessThanPower(i);
+        PTRef currentLevelTransition = getPower(i, TPAType::LESS_THAN);
         // first check if it is fixed point with respect to initial state
         SMTConfig config;
         {
@@ -957,6 +965,7 @@ bool TPASplit::checkLessThanFixedPoint(unsigned short power) {
 
 bool TPASplit::checkExactFixedPoint(unsigned short power) {
     assert(power >= 2);
+    assert(verifyExactPower(power));
     for (unsigned short i = 2; i <= power; ++i) {
         PTRef currentLevelTransition = getExactPower(i);
         PTRef currentTwoStep = logic.mkAnd(currentLevelTransition, getNextVersion(currentLevelTransition));
@@ -1142,7 +1151,7 @@ VerificationResult TPABasic::checkPower(unsigned short power) {
         }
         // Check if we have not reached fixed point.
         if (power >= 3) {
-            bool fixedPointReached = checkFixedPoint(power);
+            bool fixedPointReached = checkLessThanFixedPoint(power);
             if (fixedPointReached) {
                 return VerificationResult::SAFE;
             }
@@ -1294,79 +1303,22 @@ void TPABasic::resetPowers() {
     storeLevelTransition(0, logic.mkOr(identity, transition));
 }
 
-bool TPABasic::verifyLevel(unsigned short power) {
-    assert(power >= 2);
+bool TPABasic::verifyPower(unsigned short power, TPAType relationType) const {
+    assert(relationType == TPAType::LESS_THAN);
+    return verifyPower(power);
+}
+
+bool TPABasic::verifyPower(unsigned short level) const {
+    assert(level >= 2);
     SMTConfig config;
     MainSolver solver(logic, config, "");
-    PTRef current = getLevelTransition(power);
-    PTRef previous = getLevelTransition(power - 1);
+    PTRef current = getLevelTransition(level);
+    PTRef previous = getLevelTransition(level - 1);
     solver.insertFormula(logic.mkAnd(previous, getNextVersion(previous)));
     solver.insertFormula(logic.mkNot(shiftOnlyNextVars(current)));
     solver.insertFormula(logic.mkNot(shiftOnlyNextVars(current)));
     auto res = solver.check();
     return res == s_False;
-}
-
-bool TPABasic::checkFixedPoint(unsigned short power) {
-    assert(power >= 3);
-    verifyLevel(power);
-    for (unsigned short i = 3; i <= power; ++i) {
-        PTRef currentLevelTransition = getLevelTransition(i);
-        // first check if it is fixed point with respect to initial state
-        SMTConfig config;
-        {
-            MainSolver solver(logic, config, "Fixed-point checker");
-            solver.insertFormula(logic.mkAnd({currentLevelTransition, getNextVersion(transition), logic.mkNot(shiftOnlyNextVars(currentLevelTransition))}));
-            auto satres = solver.check();
-            bool restrictedInvariant = false;
-            if (satres != s_False) {
-                solver.push();
-                solver.insertFormula(init);
-                satres = solver.check();
-                if (satres == s_False) {
-                    restrictedInvariant = true;
-                }
-            }
-            if (satres == s_False) {
-                if (verbose() > 0) {
-                    std::cout << "; Right fixed point detected in on level " << i << " from " << power << std::endl;
-                    std::cout << "; Fixed point detected for " << (not restrictedInvariant ? "whole transition relation" : "transition relation restricted to init") << std::endl;
-                }
-                explanation.invariantType = restrictedInvariant ? SafetyExplanation::TransitionInvariantType::RESTRICTED_TO_INIT : SafetyExplanation::TransitionInvariantType::UNRESTRICTED;
-                explanation.relationType = TPAType::LESS_THAN;
-                explanation.fixedPointType = SafetyExplanation::FixedPointType::RIGHT;
-                explanation.power = i;
-                return true;
-            }
-        }
-        // now check if it is fixed point with respect to bad states
-        {
-            MainSolver solver(logic, config, "Fixed-point checker");
-            solver.insertFormula(logic.mkAnd({transition, getNextVersion(currentLevelTransition), logic.mkNot(shiftOnlyNextVars(currentLevelTransition))}));
-            auto satres = solver.check();
-            bool restrictedInvariant = false;
-            if (satres != s_False) {
-                solver.push();
-                solver.insertFormula(getNextVersion(query, 2));
-                satres = solver.check();
-                if (satres == s_False) {
-                    restrictedInvariant = true;
-                }
-            }
-            if (satres == s_False) {
-                if (verbose() > 0) {
-                    std::cout << "; Left fixed point detected on level " << i << " from " << power << std::endl;
-                    std::cout << "; Fixed point detected for " << (not restrictedInvariant ? "whole transition relation" : "transition relation restricted to bad") << std::endl;
-                }
-                explanation.invariantType = restrictedInvariant ? SafetyExplanation::TransitionInvariantType::RESTRICTED_TO_QUERY : SafetyExplanation::TransitionInvariantType::UNRESTRICTED;
-                explanation.relationType = TPAType::LESS_THAN;
-                explanation.fixedPointType = SafetyExplanation::FixedPointType::LEFT;
-                explanation.power = i;
-                return true;
-            }
-        }
-    }
-    return false;
 }
 
 PTRef TPABase::unsafeInitialStates(PTRef start, PTRef transitionInvariant, PTRef target) const {

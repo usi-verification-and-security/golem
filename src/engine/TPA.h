@@ -133,6 +133,7 @@ protected:
     virtual void resetPowers() = 0;
 
     virtual PTRef getPower(unsigned short power, TPAType relationType) const = 0;
+    virtual bool verifyPower(unsigned short power, TPAType relationType) const = 0;
 
     struct QueryResult {
         ReachabilityResult result;
@@ -184,6 +185,8 @@ protected:
     PTRef keepOnlyVars(PTRef fla, vec<PTRef> const & vars, Model & model);
 
     PTRef unsafeInitialStates(PTRef start, PTRef transitionInvariant, PTRef target) const;
+
+    bool checkLessThanFixedPoint(unsigned short power);
 };
 
 class TPASplit : public TPABase {
@@ -205,6 +208,7 @@ private:
 
     VerificationResult checkPower(unsigned short power) override;
     PTRef getPower(unsigned short power, TPAType relationType) const override;
+    bool verifyPower(unsigned short power, TPAType relationType) const override;
 
     PTRef getExactPower(unsigned short power) const;
     void storeExactPower(unsigned short power, PTRef tr);
@@ -223,7 +227,6 @@ private:
     bool verifyLessThanPower(unsigned short power) const;
     bool verifyExactPower(unsigned short power) const;
 
-    bool checkLessThanFixedPoint(unsigned short power);
     bool checkExactFixedPoint(unsigned short power);
 };
 
@@ -245,6 +248,7 @@ private:
     VerificationResult checkPower(unsigned short power) override;
 
     PTRef getPower(unsigned short power, TPAType relationType) const override;
+    bool verifyPower(unsigned short power, TPAType relationType) const override;
 
     PTRef getLevelTransition(unsigned short) const;
     void storeLevelTransition(unsigned short, PTRef);
@@ -256,9 +260,7 @@ private:
     QueryResult reachabilityExactOneStep(PTRef from, PTRef to);
     QueryResult reachabilityExactZeroStep(PTRef from, PTRef to);
 
-    bool verifyLevel(unsigned short level);
-
-    bool checkFixedPoint(unsigned short power);
+    bool verifyPower(unsigned short level) const;
 };
 
 
