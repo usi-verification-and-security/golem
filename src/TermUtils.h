@@ -239,6 +239,14 @@ public:
         return logic.mkVar(sort, newName.c_str());
     }
 
+    PTRef getVarVersionZero(std::string const & name, SRef sort) {
+        assert(not isVersionedName(name));
+        std::stringstream ss;
+        ss << name << versionSeparator << 0;
+        std::string newName = ss.str();
+        return logic.mkVar(sort, newName.c_str());
+    }
+
     int getVersionNumber(PTRef var) {
         assert(logic.isVar(var));
         assert(isVersioned(var));
@@ -257,11 +265,15 @@ public:
         return rewriter.rewrite(fla);
     }
 
+    bool isVersionedName(std::string const & name) const {
+        auto pos = name.rfind(versionSeparator);
+        return pos != std::string::npos;
+    }
+
     bool isVersioned(PTRef var) const {
         assert(logic.isVar(var));
         std::string varName = logic.getSymName(var);
-        auto pos = varName.rfind(versionSeparator);
-        return pos != std::string::npos;
+        return isVersionedName(varName);
     }
 };
 
