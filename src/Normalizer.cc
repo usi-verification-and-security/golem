@@ -75,8 +75,7 @@ ChClause Normalizer::eliminateRedundantVariables(ChClause && clause) {
                 PTRef localVar = *it;
                 SRef sort = logic.getSortRef(localVar);
                 std::string uniq_name = "aux#" + std::to_string(counter++);
-                PTRef versionlessVar = logic.mkVar(sort, uniq_name.c_str());
-                PTRef renamed = timeMachine.getVarVersionZero(versionlessVar);
+                PTRef renamed = timeMachine.getVarVersionZero(uniq_name, sort);
                 subst.insert({localVar, renamed});
             }
             newInterpretedBody = utils.varSubstitute(newInterpretedBody, subst);
