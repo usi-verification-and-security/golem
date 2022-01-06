@@ -38,6 +38,18 @@ public:
         return vars;
     }
 
+    void transitiveClosure(substitutions_map & subMap) const {
+        MapWithKeys<PTRef, PTRef, PTRefHash> map;
+        for (auto const & entry : subMap) {
+            map.insert(entry.first, entry.second);
+        }
+        logic.substitutionsTransitiveClosure(map);
+        subMap.clear();
+        for (auto const & key : map.getKeys()) {
+            subMap.insert({key, map[key]});
+        }
+    }
+
     PTRef varSubstitute(PTRef term, substitutions_map const & subMap) const {
         MapWithKeys<PTRef, PTRef, PTRefHash> map;
         for (auto const & entry : subMap) {
@@ -267,13 +279,6 @@ public:
     PTRef getNextStateRepresentation(SymRef sym) const { return nextVersion.at(sym); }
 };
 
-class UnableToEliminateQuantifierException : std::exception {
-    std::string explanation;
-public:
-    UnableToEliminateQuantifierException(std::string expl) : explanation(std::move(expl)) {}
-    UnableToEliminateQuantifierException() : explanation("") {}
-};
-
 class TrivialQuantifierElimination {
     Logic & logic;
 
@@ -281,62 +286,39 @@ class TrivialQuantifierElimination {
 public:
     TrivialQuantifierElimination(Logic & logic) : logic(logic) {}
 
-    PTRef eliminateVars(vec<PTRef> const & vars, PTRef fla) const {
-        PTRef current = fla;
-        for (PTRef var : vars) {
-            current = eliminateVar(var, current);
-        }
-        return current;
-    }
+    PTRef tryEliminateVars(vec<PTRef> const & vars, PTRef fla) const {
+        if (vars.size() == 0) { return fla; }
+        TermUtils::substitutions_map substMap;
+        std::unordered_set<PTRef, PTRefHash> forbiddenVars;
+        TermUtils utils(logic);
+        auto topLevelEqualities = utils.getTopLevelConjuncts(fla, [&](PTRef conjunct) { return logic.isEquality(conjunct); });
 
-    /** Eliminates variable 'var' from formula 'fla'
-     *  Throws exception if unable to eliminate
-     */
-    PTRef eliminateVar(PTRef var, PTRef fla) const {
-        assert(logic.isVar(var));
-        if (not logic.isVar(var)) {
-            throw std::invalid_argument("Quantifier elimination error: " + std::string(logic.printTerm(var)) + " is not a var!");
-        }
-//        std::cout << "Eliminating " << logic.printTerm(var) << std::endl;
-        // Heuristic 1: if there is a top-level definition of the variable, substitute the var with its definition
-        //  a) Collect top-level equalities
-        Logic & logic = this->logic;
-        auto topLevelEqualities = TermUtils(logic).getTopLevelConjuncts(fla, [&logic](PTRef conjunct) { return logic.isEquality(conjunct); });
-        // b) Check if any is a definition for the given variable
-        auto it = std::find_if(topLevelEqualities.begin(), topLevelEqualities.end(),
-                               [var, &logic](PTRef equality){
-            assert(logic.isEquality(equality));
-            PTRef lhs = logic.getPterm(equality)[0];
-            PTRef rhs = logic.getPterm(equality)[1];
-            return lhs == var or rhs == var;
-        });
-        if (it != topLevelEqualities.end()) {
-            // found a simple definition; substitute and return
-            PTRef eq = *it;
-            PTRef lhs = logic.getPterm(eq)[0];
-            PTRef rhs = logic.getPterm(eq)[1];
-            assert(lhs == var or rhs == var);
-            std::unordered_map<PTRef, PTRef, PTRefHash> subs {{lhs == var ? lhs : rhs, lhs == var ? rhs : lhs}};
-            PTRef res = TermUtils(logic).varSubstitute(fla, subs);
-            return res;
-        }
-        // c) check if any equality contains the variable
-        it = std::find_if(topLevelEqualities.begin(), topLevelEqualities.end(),
-                          [var, &logic](PTRef equality){
-                              auto vars = TermUtils(logic).getVars(equality);
-                              return std::find(vars.begin(), vars.end(), var) != vars.end();
-                          });
-        if (it != topLevelEqualities.end()) {
-            PTRef subst = tryGetSubstitutionFromEquality(var, *it);
-            if (subst != PTRef_Undef) {
-                std::unordered_map<PTRef, PTRef, PTRefHash> subs {{var, subst}};
-                PTRef res = TermUtils(logic).varSubstitute(fla, subs);
-                return res;
+        for (PTRef var : vars) {
+            assert(logic.isVar(var));
+            if (not logic.isVar(var)) {
+                throw std::invalid_argument("Quantifier elimination error: " + std::string(logic.printTerm(var)) + " is not a var!");
+            }
+            if (forbiddenVars.count(var) != 0) { continue; }
+            for (PTRef equality : topLevelEqualities) {
+                auto eqVars = utils.getVars(equality);
+                auto it = std::find(eqVars.begin(), eqVars.end(), var);
+                if (it != eqVars.end()) {
+                    PTRef subst = tryGetSubstitutionFromEquality(var, equality);
+                    if (subst != PTRef_Undef) {
+                        substMap.insert({var, subst});
+                        forbiddenVars.insert(eqVars.begin(), eqVars.end());
+                        break;
+                    }
+                }
             }
         }
-        // Unable to eliminate this variable, just return the original formula
-        return fla;
-//        throw UnableToEliminateQuantifierException("Unable to eliminate variable " + std::string(logic.printTerm(var)) + " from " + std::string(logic.printTerm(fla)));
+
+        if (substMap.empty()) {
+            return fla;
+        }
+        utils.transitiveClosure(substMap);
+        PTRef res = utils.varSubstitute(fla, substMap);
+        return res;
     }
 };
 

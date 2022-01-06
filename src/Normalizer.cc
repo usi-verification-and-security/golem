@@ -63,7 +63,7 @@ ChClause Normalizer::eliminateRedundantVariables(ChClause && clause) {
         allVars.shrink_(allVars.end() - newEnd);
         if (allVars.size() > 0) {
 //            std::cout << "Before variable elimination: " << logic.printTerm(newInterpretedBody) << std::endl;
-            newInterpretedBody = TrivialQuantifierElimination(logic).eliminateVars(allVars, newInterpretedBody);
+            newInterpretedBody = TrivialQuantifierElimination(logic).tryEliminateVars(allVars, newInterpretedBody);
 //            std::cout << "After variable elimination: " << logic.printTerm(newInterpretedBody) << std::endl;
         }
         auto varsAfterElimination = utils.getVars(newInterpretedBody);
