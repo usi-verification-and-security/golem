@@ -1,6 +1,8 @@
-//
-// Created by Martin Blicha on 01.09.20.
-//
+/*
+ * Copyright (c) 2020-2022, Martin Blicha <martin.blicha@gmail.com>
+ *
+ * SPDX-License-Identifier: MIT
+ */
 
 #include "Normalizer.h"
 
@@ -12,7 +14,7 @@ NormalizedChcSystem Normalizer::normalize(const ChcSystem & system) {
     }
     CanonicalPredicateRepresentation cpr = getCanonicalPredicateRepresentation();
     // build graph out of normalized system
-    std::unique_ptr<ChcSystem> newSystem(new ChcSystem());
+    auto newSystem = std::make_unique<ChcSystem>();
     for (auto const & clause : normalized) {
         newSystem->addClause(clause);
     }

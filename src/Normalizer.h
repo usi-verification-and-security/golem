@@ -1,6 +1,8 @@
-//
-// Created by Martin Blicha on 01.09.20.
-//
+/*
+ * Copyright (c) 2020-2022, Martin Blicha <martin.blicha@gmail.com>
+ *
+ * SPDX-License-Identifier: MIT
+ */
 
 #ifndef OPENSMT_NORMALIZER_H
 #define OPENSMT_NORMALIZER_H

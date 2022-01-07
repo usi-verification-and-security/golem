@@ -1,6 +1,8 @@
-//
-// Created by Martin Blicha on 15.07.20.
-//
+/*
+ * Copyright (c) 2020-2022, Martin Blicha <martin.blicha@gmail.com>
+ *
+ * SPDX-License-Identifier: MIT
+ */
 
 #include <engine/TPA.h>
 #include <engine/Bmc.h>
@@ -298,11 +300,9 @@ PTRef ChcInterpreterContext::parseTerm(const ASTNode & termNode) {
 }
 
 void ChcInterpreterContext::interpretCheckSat() {
-    ChcPrinter printer{logic};
-//    printer.print(*system, std::cout);
-    ChcGraphBuilder builder{logic};
+//    ChcPrinter(logic).print(*system, std::cout);
     auto normalizedSystem = Normalizer(logic).normalize(*system);
-    auto hypergraph = builder.buildGraph(normalizedSystem);
+    auto hypergraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
     if (hypergraph->isNormalGraph()) {
         auto graph = hypergraph->toNormalGraph();
 //        graph->toDot(std::cout, logic);
