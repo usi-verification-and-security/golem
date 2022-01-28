@@ -1200,9 +1200,16 @@ TPABasic::QueryResult TPABasic::reachabilityQuery(PTRef from, PTRef to, unsigned
                 PTRef previousTransition = getLevelTransition(power - 1);
                 PTRef translatedPreviousTransition = getNextVersion(previousTransition);
                 auto model = solver->lastQueryModel();
-                if (power == 1) { // Base case, the 2 steps of the exact transition relation have been used
+                if (power == 1) { // Base case, <=2 steps of the exact transition relation have been used
                     result.result = ReachabilityResult::REACHABLE;
+                    bool firstStepTaken = model->evaluate(identity) == logic.getTerm_false();
+                    bool secondStepTaken = model->evaluate(getNextVersion(identity)) == logic.getTerm_false();
+                    assert((not firstStepTaken or model->evaluate(transition) == logic.getTerm_true())
+                        and (not secondStepTaken or model->evaluate(getNextVersion(transition)) == logic.getTerm_true()));
                     result.refinedTarget = refineTwoStepTarget(from, logic.mkAnd(previousTransition, translatedPreviousTransition), goal, *model);
+                    result.steps = firstStepTaken + secondStepTaken;
+                    // MB: Refined steps are computed from the whole formula representing 0-2 steps.
+                    //     It might be possible that the step count is not correct ?!
                     TRACE(3, "Exact: Truly reachable states are " << result.refinedTarget.x)
                     assert(result.refinedTarget != logic.getTerm_false());
                     queryCache[power].insert({{from, to}, result});
@@ -1227,6 +1234,7 @@ TPABasic::QueryResult TPABasic::reachabilityQuery(PTRef from, PTRef to, unsigned
                         throw std::logic_error("Refined reachable target not set in subquery!");
                     }
                 }
+                unsigned stepsToMidpoint = extractStepsTaken(subQueryRes);
                 // here the first half of the found path is feasible, check the second half
                 subQueryRes = reachabilityQuery(nextState, to, power - 1);
                 if (isUnreachable(subQueryRes)) {
@@ -1237,6 +1245,7 @@ TPABasic::QueryResult TPABasic::reachabilityQuery(PTRef from, PTRef to, unsigned
                 assert(isReachable(subQueryRes));
                 TRACE(3, "Exact: Second half was reachable, reachable states are " << extractReachableTarget(subQueryRes).x)
                 // both halves of the found path are feasible => this path is feasible!
+                subQueryRes.steps += stepsToMidpoint;
                 queryCache[power].insert({{from, to}, subQueryRes});
                 return subQueryRes;
             }
