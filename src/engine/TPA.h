@@ -187,6 +187,9 @@ protected:
     PTRef unsafeInitialStates(PTRef start, PTRef transitionInvariant, PTRef target) const;
 
     bool checkLessThanFixedPoint(unsigned short power);
+
+    QueryResult reachabilityExactOneStep(PTRef from, PTRef to);
+    QueryResult reachabilityExactZeroStep(PTRef from, PTRef to);
 };
 
 class TPASplit : public TPABase {
@@ -221,9 +224,6 @@ private:
     QueryResult reachabilityQueryExact(PTRef from, PTRef to, unsigned short power);
     QueryResult reachabilityQueryLessThan(PTRef from, PTRef to, unsigned short power);
 
-    QueryResult reachabilityExactOneStep(PTRef from, PTRef to);
-    QueryResult reachabilityExactZeroStep(PTRef from, PTRef to);
-
     bool verifyLessThanPower(unsigned short power) const;
     bool verifyExactPower(unsigned short power) const;
 
@@ -256,9 +256,6 @@ private:
     SolverWrapper* getReachabilitySolver(unsigned short power) const;
 
     QueryResult reachabilityQuery(PTRef from, PTRef to, unsigned short power);
-
-    QueryResult reachabilityExactOneStep(PTRef from, PTRef to);
-    QueryResult reachabilityExactZeroStep(PTRef from, PTRef to);
 
     bool verifyPower(unsigned short level) const;
 };

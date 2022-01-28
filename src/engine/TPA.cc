@@ -428,22 +428,21 @@ VerificationResult TPASplit::checkPower(unsigned short power) {
     }
 }
 
-TPASplit::QueryResult TPASplit::reachabilityExactOneStep(PTRef from, PTRef to) {
+TPABase::QueryResult TPABase::reachabilityExactOneStep(PTRef from, PTRef to) {
     // TODO: this solver can be persistent and used incrementally
     QueryResult result;
     SMTConfig config;
     const char * msg = "ok";
     config.setOption(SMTConfig::o_produce_models, SMTOption(true), msg);
     MainSolver solver(logic, config, "1-step checker");
-    solver.insertFormula(getExactPower(1));
     PTRef goal = getNextVersion(to);
-    solver.insertFormula(logic.mkAnd(from, goal));
+    PTRef smtQuery = logic.mkAnd({from, transition, goal});
+    solver.insertFormula(smtQuery);
     auto res = solver.check();
     if (res == s_True) {
         { // TODO: refactor this out
-            PTRef query = logic.mkAnd({from, getExactPower(1), goal});
             auto nextStateVars = getStateVars(1);
-            PTRef refinedGoal = keepOnlyVars(query, nextStateVars, *solver.getModel());
+            PTRef refinedGoal = keepOnlyVars(smtQuery, nextStateVars, *solver.getModel());
             result.refinedTarget = getNextVersion(refinedGoal, -1);
             result.steps = 1;
         }
@@ -453,10 +452,10 @@ TPASplit::QueryResult TPASplit::reachabilityExactOneStep(PTRef from, PTRef to) {
         result.result = ReachabilityResult::UNREACHABLE;
         return result;
     }
-    throw std::logic_error("Accelerated BMC: Unexpected situation checking reachability");
+    throw std::logic_error("TPA: Unexpected situation checking reachability");
 }
 
-TPASplit::QueryResult TPASplit::reachabilityExactZeroStep(PTRef from, PTRef to) {
+TPABase::QueryResult TPABase::reachabilityExactZeroStep(PTRef from, PTRef to) {
     QueryResult result;
     SMTConfig config;
     const char * msg = "ok";
@@ -475,7 +474,7 @@ TPASplit::QueryResult TPASplit::reachabilityExactZeroStep(PTRef from, PTRef to) 
         result.result = ReachabilityResult::UNREACHABLE;
         return result;
     }
-    throw std::logic_error("Accelerated BMC: Unexpected situation checking reachability");
+    throw std::logic_error("TPA: Unexpected situation checking reachability");
 }
 
 /*
@@ -1143,7 +1142,7 @@ VerificationResult TPABasic::checkPower(unsigned short power) {
     queryCache.emplace_back();
     auto res = reachabilityQuery(init, query, power);
     if (isReachable(res)) {
-        reachedStates = ReachedStates{res.refinedTarget};
+        reachedStates = ReachedStates{res.refinedTarget, res.steps};
         return VerificationResult::UNSAFE;
     } else if (isUnreachable(res)) {
         if (verbose() > 0) {
@@ -1158,41 +1157,6 @@ VerificationResult TPABasic::checkPower(unsigned short power) {
         }
     }
     return VerificationResult::UNKNOWN;
-}
-
-TPABasic::QueryResult TPABasic::reachabilityExactOneStep(PTRef from, PTRef to) {
-    // TODO: this solver can be persistent and used incrementally
-    QueryResult result;
-    SMTConfig config;
-    MainSolver solver(logic, config, "1-step checker");
-    solver.insertFormula(transition);
-    PTRef goal = getNextVersion(to);
-    solver.insertFormula(logic.mkAnd(from, goal));
-    auto res = solver.check();
-    if (res == s_True) {
-        result.result = ReachabilityResult::REACHABLE;
-        return result;
-    } else if (res == s_False) {
-        result.result = ReachabilityResult::UNREACHABLE;
-        return result;
-    }
-    throw std::logic_error("Accelerated BMC: Unexpected situation checking reachability");
-}
-
-TPABasic::QueryResult TPABasic::reachabilityExactZeroStep(PTRef from, PTRef to) {
-    QueryResult result;
-    SMTConfig config;
-    MainSolver solver(logic, config, "0-step checker");
-    solver.insertFormula(logic.mkAnd(from, to));
-    auto res = solver.check();
-    if (res == s_True) {
-        result.result = ReachabilityResult::REACHABLE;
-        return result;
-    } else if (res == s_False) {
-        result.result = ReachabilityResult::UNREACHABLE;
-        return result;
-    }
-    throw std::logic_error("Accelerated BMC: Unexpected situation checking reachability");
 }
 
 /*
