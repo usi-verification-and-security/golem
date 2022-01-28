@@ -85,6 +85,120 @@ TEST(TPA_test, test_TPA_simple_unsafe)
     ASSERT_EQ(validationResult, Validator::Result::VALIDATED);
 }
 
+TEST(TPA_test, test_TPA_CEX_zero) {
+    LIALogic logic;
+    Options options;
+    options.addOption(Options::LOGIC, "QF_LIA");
+    options.addOption(Options::COMPUTE_WITNESS, "true");
+    options.addOption(Options::ENGINE, "tpa");
+    SymRef s1 = logic.declareFun("s1", logic.getSort_bool(), {logic.getSort_num()}, nullptr, false);
+    PTRef x = logic.mkNumVar("x");
+    PTRef xp = logic.mkNumVar("xp");
+    PTRef current = logic.mkUninterpFun(s1, {x});
+    PTRef next = logic.mkUninterpFun(s1, {xp});
+    ChcSystem system;
+    system.addUninterpretedPredicate(s1);
+    system.addClause( // x' = 0 => S1(x')
+            ChcHead{UninterpretedPredicate{next}},
+            ChcBody{logic.mkEq(xp, logic.getTerm_NumZero()), {}});
+    system.addClause( // S1(x) and x' = x + 1 => S1(x')
+            ChcHead{UninterpretedPredicate{next}},
+            ChcBody{logic.mkEq(xp, logic.mkNumPlus(x, logic.getTerm_NumOne())), {UninterpretedPredicate{current}}}
+    );
+    system.addClause( // S1(x) and x = 0 => false
+            ChcHead{UninterpretedPredicate{logic.getTerm_false()}},
+            ChcBody{logic.mkEq(x, logic.getTerm_NumZero()), {UninterpretedPredicate{current}}}
+    );
+    auto normalizedSystem = Normalizer(logic).normalize(system);
+    auto hypergraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
+    ASSERT_TRUE(hypergraph->isNormalGraph());
+    auto graph = hypergraph->toNormalGraph();
+    TPAEngine engine(logic, options);
+    auto res = engine.solve(*graph);
+    auto answer = res.getAnswer();
+    ASSERT_EQ(answer, VerificationResult::UNSAFE);
+    ChcGraphContext ctx(*graph, logic);
+    SystemVerificationResult systemResult (std::move(res), ctx);
+    auto validationResult = Validator(logic).validate(*normalizedSystem.normalizedSystem, systemResult);
+    ASSERT_EQ(validationResult, Validator::Result::VALIDATED);
+}
+
+TEST(TPA_test, test_TPA_CEX_one) {
+    LIALogic logic;
+    Options options;
+    options.addOption(Options::LOGIC, "QF_LIA");
+    options.addOption(Options::COMPUTE_WITNESS, "true");
+    options.addOption(Options::ENGINE, "tpa");
+    SymRef s1 = logic.declareFun("s1", logic.getSort_bool(), {logic.getSort_num()}, nullptr, false);
+    PTRef x = logic.mkNumVar("x");
+    PTRef xp = logic.mkNumVar("xp");
+    PTRef current = logic.mkUninterpFun(s1, {x});
+    PTRef next = logic.mkUninterpFun(s1, {xp});
+    ChcSystem system;
+    system.addUninterpretedPredicate(s1);
+    system.addClause( // x' = 0 => S1(x')
+            ChcHead{UninterpretedPredicate{next}},
+            ChcBody{logic.mkEq(xp, logic.getTerm_NumZero()), {}});
+    system.addClause( // S1(x) and x' = x + 1 => S1(x')
+            ChcHead{UninterpretedPredicate{next}},
+            ChcBody{logic.mkEq(xp, logic.mkNumPlus(x, logic.getTerm_NumOne())), {UninterpretedPredicate{current}}}
+    );
+    system.addClause( // S1(x) and x = 1 => false
+            ChcHead{UninterpretedPredicate{logic.getTerm_false()}},
+            ChcBody{logic.mkEq(x, logic.getTerm_NumOne()), {UninterpretedPredicate{current}}}
+    );
+    auto normalizedSystem = Normalizer(logic).normalize(system);
+    auto hypergraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
+    ASSERT_TRUE(hypergraph->isNormalGraph());
+    auto graph = hypergraph->toNormalGraph();
+    TPAEngine engine(logic, options);
+    auto res = engine.solve(*graph);
+    auto answer = res.getAnswer();
+    ASSERT_EQ(answer, VerificationResult::UNSAFE);
+    ChcGraphContext ctx(*graph, logic);
+    SystemVerificationResult systemResult (std::move(res), ctx);
+    auto validationResult = Validator(logic).validate(*normalizedSystem.normalizedSystem, systemResult);
+    ASSERT_EQ(validationResult, Validator::Result::VALIDATED);
+}
+
+TEST(TPA_test, test_TPA_CEX_six) {
+    LIALogic logic;
+    Options options;
+    options.addOption(Options::LOGIC, "QF_LIA");
+    options.addOption(Options::COMPUTE_WITNESS, "true");
+    options.addOption(Options::ENGINE, "tpa");
+    SymRef s1 = logic.declareFun("s1", logic.getSort_bool(), {logic.getSort_num()}, nullptr, false);
+    PTRef x = logic.mkNumVar("x");
+    PTRef xp = logic.mkNumVar("xp");
+    PTRef current = logic.mkUninterpFun(s1, {x});
+    PTRef next = logic.mkUninterpFun(s1, {xp});
+    ChcSystem system;
+    system.addUninterpretedPredicate(s1);
+    system.addClause( // x' = 0 => S1(x')
+            ChcHead{UninterpretedPredicate{next}},
+            ChcBody{logic.mkEq(xp, logic.getTerm_NumZero()), {}});
+    system.addClause( // S1(x) and x' = x + 1 => S1(x')
+            ChcHead{UninterpretedPredicate{next}},
+            ChcBody{logic.mkEq(xp, logic.mkNumPlus(x, logic.getTerm_NumOne())), {UninterpretedPredicate{current}}}
+    );
+    system.addClause( // S1(x) and x = 6 => false
+            ChcHead{UninterpretedPredicate{logic.getTerm_false()}},
+            ChcBody{logic.mkEq(x, logic.mkConst(6)), {UninterpretedPredicate{current}}}
+    );
+    auto normalizedSystem = Normalizer(logic).normalize(system);
+    auto hypergraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
+    ASSERT_TRUE(hypergraph->isNormalGraph());
+    auto graph = hypergraph->toNormalGraph();
+    TPAEngine engine(logic, options);
+    auto res = engine.solve(*graph);
+    auto answer = res.getAnswer();
+    ASSERT_EQ(answer, VerificationResult::UNSAFE);
+    ChcGraphContext ctx(*graph, logic);
+    SystemVerificationResult systemResult (std::move(res), ctx);
+    auto validationResult = Validator(logic).validate(*normalizedSystem.normalizedSystem, systemResult);
+    ASSERT_EQ(validationResult, Validator::Result::VALIDATED);
+}
+
 TEST(TPA_test, test_TPA_chain_of_two_unsafe) {
     LIALogic logic;
     Options options;
