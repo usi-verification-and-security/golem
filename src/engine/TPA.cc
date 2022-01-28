@@ -768,6 +768,17 @@ PTRef TPABase::shiftOnlyNextVars(PTRef fla) const {
     return utils.varSubstitute(fla, subst);
 }
 
+PTRef TPABase::computeIdentity() const {
+    TimeMachine timeMachine(logic);
+    vec<PTRef> currentNextEqs;
+    currentNextEqs.capacity(stateVariables.size());
+    for (PTRef stateVar : stateVariables) {
+        PTRef nextStateVar = timeMachine.sendVarThroughTime(stateVar, 1);
+        currentNextEqs.push(logic.mkEq(stateVar, nextStateVar));
+    }
+    return logic.mkAnd(std::move(currentNextEqs));
+}
+
 void TPABase::resetTransitionSystem(TransitionSystem const & system) {
     TimeMachine timeMachine(logic);
     TermUtils utils(logic);
@@ -802,6 +813,7 @@ void TPABase::resetTransitionSystem(TransitionSystem const & system) {
         this->transition = ::simplifyUnderAssignment_Aggressive(this->transition, logic);
 //    std::cout << "After simplifications 2: " << transition.x << std::endl;
     }
+    this->identity = computeIdentity();
     resetPowers();
 //    std::cout << "Init: " << logic.printTerm(init) << std::endl;
 //    std::cout << "Transition: " << logic.printTerm(transition) << std::endl;
@@ -837,13 +849,6 @@ PTRef TPABase::refineTwoStepTarget(PTRef start, PTRef twoSteptransition, PTRef g
 }
 
 void TPASplit::resetPowers() {
-    TimeMachine timeMachine(logic);
-    vec<PTRef> currentNextEqs;
-    for (PTRef stateVar : stateVariables) {
-        PTRef nextStateVar = timeMachine.sendVarThroughTime(stateVar, 1);
-        currentNextEqs.push(logic.mkEq(stateVar, nextStateVar));
-    }
-    PTRef identity = logic.mkAnd(std::move(currentNextEqs));
     this->exactPowers.clear();
     this->lessThanPowers.clear();
     storeExactPower(0, identity);
@@ -1256,13 +1261,6 @@ TPABasic::QueryResult TPABasic::reachabilityQuery(PTRef from, PTRef to, unsigned
 }
 
 void TPABasic::resetPowers() {
-    TimeMachine timeMachine(logic);
-    vec<PTRef> currentNextEqs;
-    for (PTRef stateVar : stateVariables) {
-        PTRef nextStateVar = timeMachine.sendVarThroughTime(stateVar, 1);
-        currentNextEqs.push(logic.mkEq(stateVar, nextStateVar));
-    }
-    PTRef identity = logic.mkAnd(std::move(currentNextEqs));
     this->transitionHierarchy.clear();
     storeLevelTransition(0, logic.mkOr(identity, transition));
 }

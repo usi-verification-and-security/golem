@@ -94,6 +94,8 @@ protected:
     vec<PTRef> stateVariables;
     vec<PTRef> auxiliaryVariables;
 
+    PTRef identity {PTRef_Undef};
+
 public:
 
     TPABase(Logic& logic, Options const & options) : logic(logic), options(options) {
@@ -190,6 +192,8 @@ protected:
 
     QueryResult reachabilityExactOneStep(PTRef from, PTRef to);
     QueryResult reachabilityExactZeroStep(PTRef from, PTRef to);
+
+    PTRef computeIdentity() const;
 };
 
 class TPASplit : public TPABase {
