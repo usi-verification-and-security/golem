@@ -266,23 +266,23 @@ TEST(TPA_test, test_TPA_chain_of_two_safe) {
     ChcSystem system;
     system.addUninterpretedPredicate(s1);
     system.addUninterpretedPredicate(s2);
-    system.addClause(
+    system.addClause( // x = 0 => S1(x)
             ChcHead{UninterpretedPredicate{predS1Next}},
             ChcBody{logic.mkEq(xp, logic.getTerm_NumZero()), {}});
-    system.addClause(
+    system.addClause( // S1(x) & x' = x + 1 => S1(x')
             ChcHead{UninterpretedPredicate{predS1Next}},
             ChcBody{logic.mkEq(xp, logic.mkNumPlus(x, logic.getTerm_NumOne())), {UninterpretedPredicate{predS1Current}}}
     );
-    system.addClause(
+    system.addClause( // S1(x) => S2(x)
             ChcHead{UninterpretedPredicate{predS2Current}},
             ChcBody{logic.getTerm_true(), {UninterpretedPredicate{predS1Current}}}
     );
-    system.addClause(
+    system.addClause( // S2(x) & x' = x + 2 => S2(x')
             ChcHead{UninterpretedPredicate{predS2Next}},
             ChcBody{logic.mkEq(xp, logic.mkNumPlus(x, logic.mkConst(FastRational(2)))),
                     {UninterpretedPredicate{predS2Current}}}
     );
-    system.addClause(
+    system.addClause( // S2(x) & x < 0 => false
             ChcHead{UninterpretedPredicate{logic.getTerm_false()}},
             ChcBody{logic.mkNumLt(x, logic.getTerm_NumZero()), {UninterpretedPredicate{predS2Current}}}
     );
