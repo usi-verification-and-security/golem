@@ -1,6 +1,8 @@
-//
-// Created by Martin Blicha on 21.02.21.
-//
+/*
+ * Copyright (c) 2021-2022, Martin Blicha <martin.blicha@gmail.com>
+ *
+ * SPDX-License-Identifier: MIT
+ */
 
 #include "Spacer.h"
 #include "ModelBasedProjection.h"
