@@ -39,6 +39,7 @@ ChClause Normalizer::eliminateRedundantVariables(ChClause && clause) {
     // build substitution map
     std::unordered_map<PTRef, PTRef, PTRefHash> subst;
     for (PTRef eq : topLevelEqualities) {
+        if (not logic.isEquality(eq)) { continue; } // It could be the result of simplifying boolean equality to constant
         PTRef lhs = logic.getPterm(eq)[0];
         PTRef rhs = logic.getPterm(eq)[1];
         if (logic.isVar(lhs) && validVars.find(lhs) == validVars.end()) {

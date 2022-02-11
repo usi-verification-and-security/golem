@@ -51,6 +51,8 @@ public:
     }
 
     PTRef varSubstitute(PTRef term, substitutions_map const & subMap) const {
+        if (subMap.empty()) { return term; }
+
         MapWithKeys<PTRef, PTRef, PTRefHash> map;
         for (auto const & entry : subMap) {
             map.insert(entry.first, entry.second);
