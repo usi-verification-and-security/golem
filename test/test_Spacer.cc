@@ -162,3 +162,47 @@ TEST(Spacer_test, test_BasicNonLinearSystem_Unsafe)
     auto answer = res.getAnswer();
     ASSERT_EQ(answer, VerificationResult::UNSAFE);
 }
+
+TEST(Spacer_test, test_NonLinearSystem_Bug)
+{
+    LRALogic logic;
+    Options options;
+    SymRef M = logic.declareFun("M", logic.getSort_bool(), {logic.getSort_num()}, nullptr, false);
+    SymRef B = logic.declareFun("B", logic.getSort_bool(), {logic.getSort_bool()}, nullptr, false);
+    PTRef x = logic.mkNumVar("x");
+    PTRef xp = logic.mkNumVar("xp");
+    PTRef b = logic.mkBoolVar("b");
+    PTRef zero = logic.getTerm_NumZero();
+    PTRef one = logic.getTerm_NumOne();
+    ChcSystem system;
+    system.addUninterpretedPredicate(M);
+    system.addUninterpretedPredicate(B);
+    system.addClause( // true => B(b)
+            ChcHead{UninterpretedPredicate{logic.mkUninterpFun(B, {b})}},
+            ChcBody{InterpretedFla{logic.getTerm_true()}, {}}
+    );
+    system.addClause( // true => M(0)
+            ChcHead{UninterpretedPredicate{logic.mkUninterpFun(M, {zero})}},
+            ChcBody{InterpretedFla{logic.getTerm_true()}, {}}
+    );
+    system.addClause( // B(true) & B(false) & M(0) => M(1)
+            ChcHead{UninterpretedPredicate{logic.mkUninterpFun(M, {one})}},
+            ChcBody{InterpretedFla{logic.getTerm_true()}, {
+                    UninterpretedPredicate{logic.mkUninterpFun(B, {logic.getTerm_true()})},
+                    UninterpretedPredicate{logic.mkUninterpFun(B, {logic.getTerm_false()})},
+                    UninterpretedPredicate{logic.mkUninterpFun(M, {zero})},
+            }});
+    system.addClause( // M(1) => false
+            ChcHead{UninterpretedPredicate{logic.getTerm_false()}},
+            ChcBody{InterpretedFla{logic.getTerm_true()}, {UninterpretedPredicate{logic.mkUninterpFun(M, {one})}}}
+    );
+    ChcPrinter{logic, std::cout}.print(system);
+    auto normalizedSystem = Normalizer(logic).normalize(system);
+    ChcPrinter{logic, std::cout}.print(*normalizedSystem.normalizedSystem);
+    auto hypergraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
+    Spacer engine(logic, options);
+    auto res = engine.solve(*hypergraph);
+    auto answer = res.getAnswer();
+    ASSERT_EQ(answer, VerificationResult::UNSAFE);
+}
+
