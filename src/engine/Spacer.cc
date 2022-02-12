@@ -151,7 +151,7 @@ class SpacerContext {
 
     MayReachResult mayReachable(EId eid, PTRef targetConstraint, std::size_t bound);
 
-    PTRef projectFormula(PTRef fla, vec<PTRef> const & vars, Model* model);
+    PTRef projectFormula(PTRef fla, vec<PTRef> const & vars, Model & model);
 
 
 public:
@@ -283,10 +283,11 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
                 PTRef body = logic.mkAnd(components);
                 auto res = implies(body, logic.mkNot(pob.constraint));
                 if (res.answer == QueryAnswer::INVALID) {
+                    assert(res.model);
                     // When this source is over-approximated and the edge becomes feasible -> extract next proof obligation
                     VId source = sources[vertexToRefine];
                     auto predicateVars = TermUtils(logic).getVars(graph.getStateVersion(source));
-                    PTRef newConstraint = projectFormula(logic.mkAnd(body, pob.constraint), predicateVars, res.model.get());
+                    PTRef newConstraint = projectFormula(logic.mkAnd(body, pob.constraint), predicateVars, *res.model);
                     PTRef newPob = TimeMachine(logic).sendFlaThroughTime(newConstraint, 1); // ensure POB is next-state fla
                     newProofObligations.push_back(ProofObligation{sources[vertexToRefine], bound, newPob});
                     TRACE(2, "New proof obligation generated")
@@ -416,10 +417,11 @@ SpacerContext::MustReachResult SpacerContext::mustReachable(EId eid, PTRef targe
     auto implCheckRes = implies(body, logic.mkNot(targetConstraint));
     MustReachResult res;
     if (implCheckRes.answer == SpacerContext::QueryAnswer::INVALID) {
+        assert(implCheckRes.model);
         res.applied = true;
         // eliminate variables from body except variables present in predicate of edge target
         auto predicateVars = TermUtils(logic).getVars(graph.getNextStateVersion(target));
-        PTRef newMustSummary = projectFormula(body, predicateVars, implCheckRes.model.get()); // TODO: is body OK, or do I need to project also the head?
+        PTRef newMustSummary = projectFormula(body, predicateVars, *implCheckRes.model); // TODO: is body OK, or do I need to project also the head?
         res.mustSummary = newMustSummary;
     } else {
         res.applied = false;
@@ -515,10 +517,7 @@ bool SpacerContext::tryPushComponents(VId vid, std::size_t level, PTRef body) {
 
 
 
-PTRef SpacerContext::projectFormula(PTRef fla, const vec<PTRef> &toVars, Model *model) {
-    if (not model) {
-        throw std::logic_error("Model not provided to MBP!");
-    }
+PTRef SpacerContext::projectFormula(PTRef fla, const vec<PTRef> &toVars, Model & model) {
     assert(std::all_of(toVars.begin(), toVars.end(), [this](PTRef var) { return logic.isVar(var); }));
 //    std::cout << "Projecting " << logic.printTerm(fla) << " to variables ";
 //    std::for_each(toVars.begin(), toVars.end(), [&](PTRef var) { std::cout << logic.printTerm(var) << ' '; });
@@ -533,7 +532,7 @@ PTRef SpacerContext::projectFormula(PTRef fla, const vec<PTRef> &toVars, Model *
         }
     }
     ModelBasedProjection mbp(logic);
-    PTRef res = mbp.project(fla, toEliminate, *model);
+    PTRef res = mbp.project(fla, toEliminate, model);
 //    std::cout << "\nResult is " << logic.printTerm(res) << std::endl;
     return res;
 }
