@@ -16,9 +16,9 @@
 
 class ApproxMap {
 public:
-    vec<PTRef> getComponents(VId vid, std::size_t bound) {
+    vec<PTRef> getComponents(VId vid, std::size_t bound) const {
         vec<PTRef> res;
-        ensureBound(bound);
+        (const_cast<ApproxMap*>(this))->ensureBound(bound);
         auto const& boundMap = innerMap[bound];
         auto it = boundMap.find(vid);
         if (it != boundMap.end()) {
@@ -100,13 +100,19 @@ class SpacerContext {
 
     std::size_t lowestChangedLevel = 0;
 
-    PTRef getMustSummary(VId vid, std::size_t bound) {
+    PTRef getMustSummary(VId vid, std::size_t bound) const {
         return logic.mkOr(under.getComponents(vid, bound));
     }
 
-    PTRef getMaySummary(VId vid, std::size_t bound) {
+    PTRef getMaySummary(VId vid, std::size_t bound) const {
         return logic.mkAnd(over.getComponents(vid, bound));
     }
+
+    PTRef getEdgeMustSummary(DirectedHyperEdge const & edge, std::size_t bound) const;
+
+    PTRef getEdgeMaySummary(DirectedHyperEdge const & edge, std::size_t bound) const;
+
+    PTRef getEdgeMixedSummary(DirectedHyperEdge const & edge, std::size_t bound, std::size_t lastMayIndex) const;
 
     enum class BoundedSafetyResult { SAFE, UNSAFE };
 
@@ -272,22 +278,14 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
             auto bound = pob.bound - 1;
             // looking for vertex which is the point where using over-approximation makes the edge feasible
             while(true) {
-                vec<PTRef> components;
-                for (std::size_t i = 0; i <= vertexToRefine; ++i) {
-                    components.push(getMaySummary(sources[i], bound));
-                }
-                for (std::size_t i = vertexToRefine + 1; i < sources.size(); ++i) {
-                    components.push(getMustSummary(sources[i], bound));
-                }
-                components.push(edge.fla.fla);
-                PTRef body = logic.mkAnd(components);
-                auto res = implies(body, logic.mkNot(pob.constraint));
+                PTRef mixedEdgeSummary = getEdgeMixedSummary(edge, bound, vertexToRefine);
+                auto res = implies(mixedEdgeSummary, logic.mkNot(pob.constraint));
                 if (res.answer == QueryAnswer::INVALID) {
                     assert(res.model);
                     // When this source is over-approximated and the edge becomes feasible -> extract next proof obligation
                     VId source = sources[vertexToRefine];
                     auto predicateVars = TermUtils(logic).getVars(graph.getStateVersion(source));
-                    PTRef newConstraint = projectFormula(logic.mkAnd(body, pob.constraint), predicateVars, *res.model);
+                    PTRef newConstraint = projectFormula(logic.mkAnd(mixedEdgeSummary, pob.constraint), predicateVars, *res.model);
                     PTRef newPob = TimeMachine(logic).sendFlaThroughTime(newConstraint, 1); // ensure POB is next-state fla
                     newProofObligations.push_back(ProofObligation{sources[vertexToRefine], bound, newPob});
                     TRACE(2, "New proof obligation generated")
@@ -308,15 +306,9 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
             if (newProofObligations.empty()) {
                 // all edges are blocked; compute new lemma blocking the current proof obligation
                 // TODO:
-                vec<PTRef> edgeRepresentations;
+                vec<PTRef> edgeRepresentations; edgeRepresentations.capacity(edges.size());
                 for (EId eid : edges) {
-                    vec<PTRef> sourceFlas;
-                    auto sources = graph.getSources(eid);
-                    for (VId source : sources) {
-                        sourceFlas.push(getMaySummary(source, pob.bound - 1));
-                    }
-                    sourceFlas.push(graph.getEdgeLabel(eid));
-                    edgeRepresentations.push(logic.mkAnd(sourceFlas));
+                    edgeRepresentations.push(getEdgeMaySummary(graph.getEdge(eid), pob.bound - 1));
                 }
                 auto res = interpolatingImplies(logic.mkOr(edgeRepresentations), logic.mkNot(pob.constraint));
                 assert(res.answer == QueryAnswer::VALID);
@@ -407,21 +399,15 @@ SpacerContext::ItpQueryResult SpacerContext::interpolatingImplies(PTRef antecede
 SpacerContext::MustReachResult SpacerContext::mustReachable(EId eid, PTRef targetConstraint, std::size_t bound) {
     auto edge = graph.getEdge(eid);
     VId target = edge.to;
-    PTRef edgeLabel = edge.fla.fla;
-    vec<PTRef> bodyComponents{edgeLabel};
-    for (VId source : edge.from) {
-        PTRef mustSummary = getMustSummary(source, bound);
-        bodyComponents.push(mustSummary);
-    }
-    PTRef body = logic.mkAnd(bodyComponents);
-    auto implCheckRes = implies(body, logic.mkNot(targetConstraint));
+    PTRef edgeMustSummary = getEdgeMustSummary(edge, bound);
+    auto implCheckRes = implies(edgeMustSummary, logic.mkNot(targetConstraint));
     MustReachResult res;
     if (implCheckRes.answer == SpacerContext::QueryAnswer::INVALID) {
         assert(implCheckRes.model);
         res.applied = true;
         // eliminate variables from body except variables present in predicate of edge target
         auto predicateVars = TermUtils(logic).getVars(graph.getNextStateVersion(target));
-        PTRef newMustSummary = projectFormula(body, predicateVars, *implCheckRes.model); // TODO: is body OK, or do I need to project also the head?
+        PTRef newMustSummary = projectFormula(edgeMustSummary, predicateVars, *implCheckRes.model); // TODO: is body OK, or do I need to project also the head?
         res.mustSummary = newMustSummary;
     } else {
         res.applied = false;
@@ -432,15 +418,8 @@ SpacerContext::MustReachResult SpacerContext::mustReachable(EId eid, PTRef targe
 
 SpacerContext::MayReachResult SpacerContext::mayReachable(EId eid, PTRef targetConstraint, std::size_t bound) {
     auto edge = graph.getEdge(eid);
-    VId target = edge.to;
-    PTRef edgeLabel = edge.fla.fla;
-    vec<PTRef> bodyComponents{edgeLabel};
-    for (VId source : edge.from) {
-        PTRef maySummary = getMaySummary(source, bound);
-        bodyComponents.push(maySummary);
-    }
-    PTRef body = logic.mkAnd(bodyComponents);
-    auto implCheckRes = interpolatingImplies(body, logic.mkNot(targetConstraint));
+    PTRef maySummary = getEdgeMaySummary(edge, bound);
+    auto implCheckRes = interpolatingImplies(maySummary, logic.mkNot(targetConstraint));
     MayReachResult res;
     if (implCheckRes.answer == SpacerContext::QueryAnswer::VALID) {
         res.blocked = true;
@@ -463,12 +442,7 @@ SpacerContext::InductiveCheckResult SpacerContext::isInductive(std::size_t maxLe
             // encode body as disjunction over all the incoming edges
             vec<PTRef> edgeRepresentations;
             for (EId eid : incomingEdges(vid, graph)) {
-                vec<PTRef> edgeBodyArgs;
-                for (VId source : graph.getSources(eid)) {
-                    edgeBodyArgs.push(getMaySummary(source, level));
-                }
-                edgeBodyArgs.push(graph.getEdgeLabel(eid));
-                edgeRepresentations.push(logic.mkAnd(edgeBodyArgs));
+                edgeRepresentations.push(getEdgeMaySummary(graph.getEdge(eid), level));
 //                std::cout << "Representation of edge " << eid.id << " at level " << level << " is " << logic.printTerm(edgeRepresentations.last()) << std::endl;
             }
             PTRef body = logic.mkOr(edgeRepresentations);
@@ -535,4 +509,38 @@ PTRef SpacerContext::projectFormula(PTRef fla, const vec<PTRef> &toVars, Model &
     PTRef res = mbp.project(fla, toEliminate, model);
 //    std::cout << "\nResult is " << logic.printTerm(res) << std::endl;
     return res;
+}
+
+PTRef SpacerContext::getEdgeMustSummary(const DirectedHyperEdge & edge, std::size_t bound) const {
+    PTRef edgeLabel = edge.fla.fla;
+    vec<PTRef> bodyComponents{edgeLabel};
+    for (VId source : edge.from) {
+        PTRef mustSummary = getMustSummary(source, bound);
+        bodyComponents.push(mustSummary);
+    }
+    return logic.mkAnd(std::move(bodyComponents));
+}
+
+PTRef SpacerContext::getEdgeMaySummary(const DirectedHyperEdge & edge, std::size_t bound) const {
+    PTRef edgeLabel = edge.fla.fla;
+    vec<PTRef> bodyComponents{edgeLabel};
+    for (VId source : edge.from) {
+        PTRef maySummary = getMaySummary(source, bound);
+        bodyComponents.push(maySummary);
+    }
+    return logic.mkAnd(std::move(bodyComponents));
+}
+
+PTRef SpacerContext::getEdgeMixedSummary(const DirectedHyperEdge & edge, std::size_t bound, std::size_t lastMayIndex) const {
+    auto sourceCount = edge.from.size();
+    auto const & sources = edge.from;
+    vec<PTRef> components(sourceCount + 1);
+    for (std::size_t i = 0; i <= lastMayIndex; ++i) {
+        components.push(getMaySummary(sources[i], bound));
+    }
+    for (std::size_t i = lastMayIndex + 1; i < sources.size(); ++i) {
+        components.push(getMustSummary(sources[i], bound));
+    }
+    components.push(edge.fla.fla);
+    return logic.mkAnd(std::move(components));
 }
