@@ -266,36 +266,36 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
             // examine the sources to generate a new proof obligation for this edge
 
             // Find the first source vertex such that under-approximating it (instead of over-approximating it) makes the target unreachable
-            auto const& targets = edge.from;
-            assert(not targets.empty());
+            auto const& sources = edge.from;
+            assert(not sources.empty());
             std::size_t vertexToRefine = 0; // vertex that is the last one to be over-approximated
             auto bound = pob.bound - 1;
             // looking for vertex which is the point where using over-approximation makes the edge feasible
             while(true) {
                 vec<PTRef> components;
                 for (std::size_t i = 0; i <= vertexToRefine; ++i) {
-                    components.push(getMaySummary(targets[i], bound));
+                    components.push(getMaySummary(sources[i], bound));
                 }
-                for (std::size_t i = vertexToRefine + 1; i < targets.size(); ++i) {
-                    components.push(getMustSummary(targets[i], bound));
+                for (std::size_t i = vertexToRefine + 1; i < sources.size(); ++i) {
+                    components.push(getMustSummary(sources[i], bound));
                 }
                 components.push(edge.fla.fla);
                 PTRef body = logic.mkAnd(components);
                 auto res = implies(body, logic.mkNot(pob.constraint));
                 if (res.answer == QueryAnswer::INVALID) {
-                    // When this target is over-approximated and the edge becomes feasible -> extract next proof obligation
-                    VId source = targets[vertexToRefine];
+                    // When this source is over-approximated and the edge becomes feasible -> extract next proof obligation
+                    VId source = sources[vertexToRefine];
                     auto predicateVars = TermUtils(logic).getVars(graph.getStateVersion(source));
                     PTRef newConstraint = projectFormula(logic.mkAnd(body, pob.constraint), predicateVars, res.model.get());
                     PTRef newPob = TimeMachine(logic).sendFlaThroughTime(newConstraint, 1); // ensure POB is next-state fla
-                    newProofObligations.push_back(ProofObligation{targets[vertexToRefine], bound, newPob});
+                    newProofObligations.push_back(ProofObligation{sources[vertexToRefine], bound, newPob});
                     TRACE(2, "New proof obligation generated")
                     break;
                 }
                 if (res.answer == QueryAnswer::VALID) {
                     // Continue with the next vertex to refine
                     ++vertexToRefine;
-                    assert(vertexToRefine < targets.size());
+                    assert(vertexToRefine < sources.size());
                     continue;
                 }
                 assert(false);
