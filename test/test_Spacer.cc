@@ -1,6 +1,8 @@
-//
-// Created by Martin Blicha on 18.01.21.
-//
+/*
+ * Copyright (c) 2021-2022, Martin Blicha <martin.blicha@gmail.com>
+ *
+ * SPDX-License-Identifier: MIT
+ */
 
 #include <gtest/gtest.h>
 #include "engine/Spacer.h"
@@ -16,14 +18,14 @@ TEST(Spacer_test, test_TransitionSystem)
 	PTRef invp = logic.mkUninterpFun(inv_sym, {xp});
 	ChcSystem system;
 	system.addUninterpretedPredicate(inv_sym);
-	system.addClause(
+	system.addClause( // x' = 0 => Inv(x')
 		ChcHead{UninterpretedPredicate{invp}},
 		ChcBody{logic.mkEq(xp, logic.getTerm_NumZero()), {}});
-	system.addClause(
+	system.addClause( // Inv(x) & x' = x + 1 => Inv(x')
 		ChcHead{UninterpretedPredicate{invp}},
 		ChcBody{logic.mkEq(xp, logic.mkNumPlus(x, logic.getTerm_NumOne())), {UninterpretedPredicate{inv}}}
 	);
-	system.addClause(
+	system.addClause( // Inv(x) & x < 0 => false
 		ChcHead{UninterpretedPredicate{logic.getTerm_false()}},
 		ChcBody{logic.mkNumLt(x, logic.getTerm_NumZero()), {UninterpretedPredicate{inv}}}
 	);
