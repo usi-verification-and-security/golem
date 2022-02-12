@@ -6,7 +6,8 @@
 
 #include "Normalizer.h"
 
-NormalizedChcSystem Normalizer::normalize(const ChcSystem & system) {
+NormalizedChcSystem Normalizer::normalize(const ChcSystem & system) && {
+    this->canonicalPredicateRepresentation.addRepresentation(logic.getSym_true(), {});
     std::vector<ChClause> normalized;
     auto const& clauses = system.getClauses();
     for (auto const & clause : clauses) {
@@ -89,30 +90,47 @@ ChClause Normalizer::eliminateRedundantVariables(ChClause && clause) {
     return ChClause{clause.head, ChcBody{newInterpretedBody, clause.body.uninterpretedPart}};
 }
 
+
+ChcHead Normalizer::normalize(ChcHead const& head) {
+    auto predicate = head.predicate.predicate;
+    auto predicateSymbol = logic.getSymRef(predicate);
+    if (not canonicalPredicateRepresentation.hasRepresentationFor(predicateSymbol)) {
+        createUniqueRepresentation(predicate);
+    }
+    assert(canonicalPredicateRepresentation.hasRepresentationFor(predicateSymbol));
+    PTRef targetTerm = canonicalPredicateRepresentation.getTargetTermFor(predicateSymbol);
+    auto size = logic.getPterm(targetTerm).size();
+    assert(size == logic.getPterm(predicate).size());
+    for (int i = 0; i < size; ++i) {
+        PTRef targetVar = logic.getPterm(targetTerm)[i];
+        PTRef arg = logic.getPterm(predicate)[i];
+        topLevelEqualities.push(logic.mkEq(targetVar, arg));
+    }
+    return ChcHead{targetTerm};
+}
+
 ChcBody Normalizer::normalize(const ChcBody & body) {
     // uninterpreted part
     std::vector<UninterpretedPredicate> newUninterpretedPart;
     auto const& uninterpreted = body.uninterpretedPart;
+    auto proxy = canonicalPredicateRepresentation.createCountingProxy();
     for (auto const& predicateWrapper : uninterpreted) {
         PTRef predicate = predicateWrapper.predicate;
         auto predicateSymbol = logic.getSymRef(predicate);
-        if (predicateToUniqVars.count(predicateSymbol) == 0) {
+        if (not canonicalPredicateRepresentation.hasRepresentationFor(predicateSymbol)) {
             createUniqueRepresentation(predicate);
         }
-        assert(predicateToUniqVars.count(predicateSymbol) > 0);
-        auto const& representation = predicateToUniqVars.at(predicateSymbol);
-        assert(representation.size() == logic.getPterm(predicate).size());
-        vec<PTRef> newArgs;
-        for (int i = 0; i < representation.size(); ++i) {
+        assert(canonicalPredicateRepresentation.hasRepresentationFor(predicateSymbol));
+        PTRef sourceTerm = proxy.getSourceTermFor(predicateSymbol);
+        auto size = logic.getPterm(sourceTerm).size();
+        assert(size == logic.getPterm(predicate).size());
+        for (int i = 0; i < size; ++i) {
             PTRef arg = logic.getPterm(predicate)[i];
-            PTRef narg = representation[i];
+            PTRef narg = logic.getPterm(sourceTerm)[i];
             topLevelEqualities.push(logic.mkEq(narg, arg));
-            newArgs.push(narg);
         }
-        PTRef newPredicate = logic.insertTerm(predicateSymbol, newArgs);
-        newUninterpretedPart.push_back(UninterpretedPredicate{newPredicate});
+        newUninterpretedPart.push_back(UninterpretedPredicate{sourceTerm});
     }
-    if (uninterpreted.empty()) { createUniqueRepresentation(logic.getTerm_true()); }
     // interpreted part
     // just add the toplevel equalities collected for this clause; Here we assume 'head' has already been processed
     PTRef newInterpretedPart = logic.mkAnd(body.interpretedPart.fla, logic.mkAnd(topLevelEqualities));

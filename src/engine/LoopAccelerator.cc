@@ -15,10 +15,7 @@ ChcDirectedGraph LoopAccelerator::removeAcceleratedLoops(const ChcDirectedGraph 
                                                          const map<EId, PTRef> & acceleratedLoops) const {
     auto vertices = original.getVertexCopies();
     auto edges = original.getEdgeCopies();
-    CanonicalPredicateRepresentation predicateRepresentation;
-    for (auto vertex : vertices) {
-        predicateRepresentation.addRepresentation(vertex.predicateSymbol, original.getStateVersion(vertex.id), original.getNextStateVersion(vertex.id));
-    }
+    CanonicalPredicateRepresentation predicateRepresentation = original.getPredicateRepresentation();
     auto entry = original.getEntryId();
     auto exit = original.getExitId();
     auto maxId = std::max_element(vertices.begin(), vertices.end(), [](Vertex const & first, Vertex const & second) {
@@ -43,24 +40,20 @@ ChcDirectedGraph LoopAccelerator::removeAcceleratedLoops(const ChcDirectedGraph 
         Vertex duplicate = Vertex{.predicateSymbol = duplicateSymbol, .id = nextId++};
         vertices.push_back(duplicate);
         // add the new symbol to canonical representation
-        vec<PTRef> varargs;
+        std::vector<PTRef> varargs; varargs.reserve(domainSorts.size_());
         for (SRef domainSort : domainSorts) {
             std::string varName = LoopAccelerator::PREFIX + "x#" + std::to_string(varCounter++);
-            varargs.push(logic.mkVar(domainSort, varName.c_str()));
+            varargs.push_back(logic.mkVar(domainSort, varName.c_str()));
         }
-        std::transform(varargs.begin(), varargs.end(), varargs.begin(), [&timeMachine](PTRef var) { return timeMachine.getVarVersionZero(var); });
-        PTRef currentStateRepresentation = logic.insertTerm(duplicateSymbol, varargs);
-        std::transform(varargs.begin(), varargs.end(), varargs.begin(), [&timeMachine](PTRef var) { return timeMachine.sendVarThroughTime(var, 1); });
-        PTRef nextStateRepresentation = logic.insertTerm(duplicateSymbol, varargs);
-        predicateRepresentation.addRepresentation(duplicateSymbol, currentStateRepresentation, nextStateRepresentation);
+        predicateRepresentation.addRepresentation(duplicateSymbol, varargs);
         // update edges and canonical predicate representation
         std::unordered_map<PTRef, PTRef, PTRefHash> varSubstNext;
         std::unordered_map<PTRef, PTRef, PTRefHash> varSubstCurrent;
         TermUtils utils(logic);
-        auto originalVarsNext = utils.getVarsFromPredicateInOrder(predicateRepresentation.getNextStateRepresentation(currentSymbol));
-        auto duplicateVarsNext = utils.getVarsFromPredicateInOrder(predicateRepresentation.getNextStateRepresentation(duplicateSymbol));
-        auto originalVarsCurrent = utils.getVarsFromPredicateInOrder(predicateRepresentation.getStateRepresentation(currentSymbol));
-        auto duplicateVarsCurrent = utils.getVarsFromPredicateInOrder(predicateRepresentation.getStateRepresentation(duplicateSymbol));
+        auto originalVarsNext = utils.getVarsFromPredicateInOrder(predicateRepresentation.getTargetTermFor(currentSymbol));
+        auto duplicateVarsNext = utils.getVarsFromPredicateInOrder(predicateRepresentation.getTargetTermFor(duplicateSymbol));
+        auto originalVarsCurrent = utils.getVarsFromPredicateInOrder(predicateRepresentation.getSourceTermFor(currentSymbol));
+        auto duplicateVarsCurrent = utils.getVarsFromPredicateInOrder(predicateRepresentation.getSourceTermFor(duplicateSymbol));
         for (int i = 0; i < originalVarsCurrent.size(); ++i) {
             varSubstCurrent.insert({originalVarsCurrent[i], duplicateVarsCurrent[i]});
             varSubstNext.insert({originalVarsNext[i], duplicateVarsNext[i]});

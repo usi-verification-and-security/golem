@@ -130,6 +130,8 @@ public:
 
     std::vector<DirectedEdge> getEdgeCopies() const { return edges; }
 
+    CanonicalPredicateRepresentation getPredicateRepresentation() const { return predicates; }
+
     std::vector<VId> getVertices() const {
         std::vector<VId> res;
         std::size_t counter = 0;
@@ -146,9 +148,9 @@ public:
 
     Vertex const & getVertex(VId vid) const { return vertices[vid.id]; }
 
-    PTRef getStateVersion(VId vid) const { return predicates.getStateRepresentation(getVertex(vid).predicateSymbol); }
+    PTRef getStateVersion(VId vid) const { return predicates.getSourceTermFor(getVertex(vid).predicateSymbol); }
 
-    PTRef getNextStateVersion(VId vid) const { return predicates.getNextStateRepresentation(getVertex(vid).predicateSymbol); }
+    PTRef getNextStateVersion(VId vid) const { return predicates.getTargetTermFor(getVertex(vid).predicateSymbol); }
 
     VId getEntryId() const { return entry; }
 
@@ -211,9 +213,9 @@ public:
     }
     Vertex const & getVertex(VId vid) const { return vertices[vid.id]; }
 
-    PTRef getStateVersion(VId vid) const { return predicates.getStateRepresentation(getVertex(vid).predicateSymbol); }
+    PTRef getStateVersion(VId vid, unsigned instance = 0) const { return predicates.getSourceTermFor(getVertex(vid).predicateSymbol, instance); }
 
-    PTRef getNextStateVersion(VId vid) const { return predicates.getNextStateRepresentation(getVertex(vid).predicateSymbol); }
+    PTRef getNextStateVersion(VId vid) const { return predicates.getTargetTermFor(getVertex(vid).predicateSymbol); }
 
     VId getEntryId() const { return entry; }
 

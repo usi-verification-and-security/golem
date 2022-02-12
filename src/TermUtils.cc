@@ -442,3 +442,59 @@ void LATermUtils::simplifyDisjunction(std::vector<PtAsgn> & disjuncts) {
 void LATermUtils::simplifyConjunction(std::vector<PtAsgn> & conjuncts) {
     simplifyJunction<Conjunction>(conjuncts, logic);
 }
+
+
+//********** CANONICAL PREDICATE REPRESENTATION ********************/
+void CanonicalPredicateRepresentation::addRepresentation(SymRef sym, std::vector<PTRef> vars) {
+    assert(not hasRepresentationFor(sym));
+    TimeMachine timeMachine(logic);
+    vec<PTRef> sourceVars(vars.size());
+    std::transform(vars.begin(), vars.end(), sourceVars.begin(), [&timeMachine](PTRef var){
+        return timeMachine.getVarVersionZero(var);
+    });
+    PTRef sourceTerm = logic.insertTerm(sym, std::move(sourceVars));
+    assert(sourceTermsByInstance.size() >= 1);
+    this->sourceTermsByInstance[0].insert({sym, sourceTerm});
+
+    std::vector<PTRef> targetVars; targetVars.reserve(vars.size());
+    std::transform(vars.begin(), vars.end(), std::back_inserter(targetVars), [&timeMachine](PTRef var){
+        return timeMachine.sendVarThroughTime(timeMachine.getVarVersionZero(var), 1);
+    });
+    PTRef targetTerm = logic.insertTerm(sym, vec<PTRef>{targetVars});
+    this->targetTerms.insert({sym, targetTerm});
+
+    this->targetVariables.insert({sym, std::move(targetVars)});
+    this->representation.insert({sym, std::move(vars)});
+}
+
+//const std::vector<PTRef> & CanonicalPredicateRepresentation::getTargetVariablesFor(SymRef sym) const {
+//    assert(targetVariables.count(sym) > 0);
+//    return targetVariables.at(sym);
+//}
+
+PTRef CanonicalPredicateRepresentation::getTargetTermFor(SymRef sym) const {
+    assert(targetTerms.count(sym) > 0);
+    return targetTerms.at(sym);
+}
+
+PTRef CanonicalPredicateRepresentation::getSourceTermFor(SymRef sym, unsigned instanceCount) const {
+    if (instanceCount >= sourceTermsByInstance.size()) {
+        sourceTermsByInstance.resize(instanceCount + 1);
+    }
+    auto & terms = sourceTermsByInstance[instanceCount];
+    auto it = terms.find(sym);
+    if (it != terms.end()) {
+        return it->second;
+    }
+    // Create new representation for this instance
+    auto const & vars = representation.at(sym);
+    vec<PTRef> nVars(vars.size());
+    std::transform(vars.begin(), vars.end(), nVars.begin(), [this, instanceCount](PTRef var){
+        std::string varName = logic.getSymName(var);
+        varName.append("!" + std::to_string(instanceCount));
+        return TimeMachine(logic).getVarVersionZero(logic.mkVar(logic.getSortRef(var), varName.c_str()));
+    });
+    PTRef instanceSourceTerm = logic.insertTerm(sym, std::move(nVars));
+    terms.insert({sym, instanceSourceTerm});
+    return instanceSourceTerm;
+}

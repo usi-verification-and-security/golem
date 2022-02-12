@@ -280,17 +280,41 @@ public:
 };
 
 class CanonicalPredicateRepresentation {
-    using RepreType = std::unordered_map<SymRef, PTRef, SymRefHash>;
-    RepreType stateVersion;
-    RepreType nextVersion;
+    using VariableRepresentation = std::unordered_map<SymRef, std::vector<PTRef>, SymRefHash>;
+    using TermRepresentation = std::unordered_map<SymRef, PTRef, SymRefHash>;
+    VariableRepresentation representation {};
+    VariableRepresentation targetVariables {};
+    TermRepresentation targetTerms {};
+    mutable std::vector<TermRepresentation> sourceTermsByInstance {{}};
+    Logic & logic;
 public:
-    void addRepresentation(SymRef sym, PTRef stateRepre, PTRef nextStateRepre) {
-        stateVersion.insert({sym, stateRepre});
-        nextVersion.insert({sym, nextStateRepre});
+    CanonicalPredicateRepresentation(Logic & logic) : logic(logic) {}
+
+    void addRepresentation(SymRef sym, std::vector<PTRef> vars);
+
+    bool hasRepresentationFor(SymRef sym) const {
+        return representation.count(sym) > 0;
     }
 
-    PTRef getStateRepresentation(SymRef sym) const { return stateVersion.at(sym); }
-    PTRef getNextStateRepresentation(SymRef sym) const { return nextVersion.at(sym); }
+//    std::vector<PTRef> const & getTargetVariablesFor(SymRef sym) const;
+
+    PTRef getTargetTermFor(SymRef sym) const;
+
+    PTRef getSourceTermFor(SymRef sym, unsigned instanceCount = 0) const;
+
+    class CountingProxy {
+        CanonicalPredicateRepresentation & parent;
+        std::unordered_map<SymRef, unsigned, SymRefHash> counts;
+    public:
+        CountingProxy(CanonicalPredicateRepresentation & parent) : parent(parent) {}
+
+        PTRef getSourceTermFor(SymRef sym) {
+            auto count = counts[sym]++;
+            return parent.getSourceTermFor(sym, count);
+        }
+    };
+
+    CountingProxy createCountingProxy() { return CountingProxy(*this); }
 };
 
 class TrivialQuantifierElimination {
