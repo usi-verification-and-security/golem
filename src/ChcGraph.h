@@ -100,7 +100,7 @@ class ChcDirectedGraph {
 
     std::vector<Vertex> vertices;
     std::vector<DirectedEdge> edges;
-    CanonicalPredicateRepresentation predicates;
+    LinearCanonicalPredicateRepresentation predicates;
 
     // graph transformations
     friend class GraphTransformations;
@@ -116,7 +116,7 @@ class ChcDirectedGraph {
     }
 
 public:
-    ChcDirectedGraph(std::vector<Vertex> vertices, std::vector<DirectedEdge> edges, CanonicalPredicateRepresentation predicates, VId entry, VId exit) :
+    ChcDirectedGraph(std::vector<Vertex> vertices, std::vector<DirectedEdge> edges, LinearCanonicalPredicateRepresentation predicates, VId entry, VId exit) :
         vertices(std::move(vertices)), edges(std::move(edges)), predicates(std::move(predicates)), entry(entry), exit(exit)
     {
         assert(entry != exit);
@@ -130,7 +130,7 @@ public:
 
     std::vector<DirectedEdge> getEdgeCopies() const { return edges; }
 
-    CanonicalPredicateRepresentation getPredicateRepresentation() const { return predicates; }
+    LinearCanonicalPredicateRepresentation getPredicateRepresentation() const { return predicates; }
 
     std::vector<VId> getVertices() const {
         std::vector<VId> res;
@@ -183,16 +183,16 @@ class ChcDirectedHyperGraph {
 
     std::vector<Vertex> vertices;
     std::vector<DirectedHyperEdge> edges;
-    CanonicalPredicateRepresentation predicates;
+    NonlinearCanonicalPredicateRepresentation predicates;
 
 public:
     ChcDirectedHyperGraph(std::vector<Vertex> vertices, std::vector<DirectedHyperEdge> edges,
-                          CanonicalPredicateRepresentation predicates, VId entry, VId exit) :
+                          NonlinearCanonicalPredicateRepresentation predicates, VId entry, VId exit) :
         vertices(std::move(vertices)), edges(std::move(edges)), predicates(std::move(predicates)), entry(entry), exit(exit)
     {}
 
     bool isNormalGraph() const;
-    std::unique_ptr<ChcDirectedGraph> toNormalGraph() const;
+    std::unique_ptr<ChcDirectedGraph> toNormalGraph(Logic &) const;
 
     std::vector<Vertex> getVertexCopies() const { return vertices; }
 
@@ -221,7 +221,7 @@ public:
 
     VId getExitId() const { return exit; }
 
-    DirectedHyperEdge getEdge(EId eid) const {
+    DirectedHyperEdge const & getEdge(EId eid) const {
         assert(eid.id < edges.size());
         return edges[eid.id];
     }
@@ -230,7 +230,7 @@ public:
         return getEdge(eid).fla.fla;
     }
 
-    std::vector<VId> getSources(EId eid) const {
+    std::vector<VId> const & getSources(EId eid) const {
         return getEdge(eid).from;
     }
 

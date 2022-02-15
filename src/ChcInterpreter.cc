@@ -303,8 +303,8 @@ void ChcInterpreterContext::interpretCheckSat() {
 //    ChcPrinter(logic).print(*system, std::cout);
     auto normalizedSystem = Normalizer(logic).normalize(*system);
     auto hypergraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
-    if (hypergraph->isNormalGraph()) {
-        auto graph = hypergraph->toNormalGraph();
+    if (hypergraph->isNormalGraph() and opts.getOption(Options::ENGINE) != "spacer") {
+        auto graph = hypergraph->toNormalGraph(logic);
 //        graph->toDot(std::cout, logic);
         auto engine = getEngine();
         bool backwardAnalysis = opts.hasOption(Options::ANALYSIS_FLOW) && opts.getOption(Options::ANALYSIS_FLOW) == "backward";

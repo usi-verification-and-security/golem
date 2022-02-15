@@ -179,8 +179,12 @@ TEST(Spacer_test, test_NonLinearSystem_Bug)
     ChcSystem system;
     system.addUninterpretedPredicate(M);
     system.addUninterpretedPredicate(B);
-    system.addClause( // true => B(b)
-            ChcHead{UninterpretedPredicate{logic.mkUninterpFun(B, {b})}},
+    system.addClause( // true => B(true)
+            ChcHead{UninterpretedPredicate{logic.mkUninterpFun(B, {logic.getTerm_true()})}},
+            ChcBody{InterpretedFla{logic.getTerm_true()}, {}}
+    );
+    system.addClause( // true => B(false)
+            ChcHead{UninterpretedPredicate{logic.mkUninterpFun(B, {logic.getTerm_false()})}},
             ChcBody{InterpretedFla{logic.getTerm_true()}, {}}
     );
     system.addClause( // true => M(0)

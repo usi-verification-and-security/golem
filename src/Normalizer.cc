@@ -13,7 +13,7 @@ NormalizedChcSystem Normalizer::normalize(const ChcSystem & system) && {
     for (auto const & clause : clauses) {
         normalized.push_back(normalize(clause));
     }
-    CanonicalPredicateRepresentation cpr = getCanonicalPredicateRepresentation();
+    NonlinearCanonicalPredicateRepresentation cpr = getCanonicalPredicateRepresentation();
     // build graph out of normalized system
     auto newSystem = std::make_unique<ChcSystem>();
     for (auto const & clause : normalized) {

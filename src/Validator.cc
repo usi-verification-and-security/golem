@@ -221,6 +221,7 @@ bool isInstanceOf(const ChClause & c1, const ChClause & c2, Logic & logic) {
     bool predicatesMatch = std::all_of(upsToProcess.begin(), upsToProcess.end(), hasSameSymbol);
     if (not predicatesMatch) { return false; }
     TimeMachine timeMachine(logic);
+    VersionManager versionManager(logic);
     TermUtils utils(logic);
 
     using subst_map = std::unordered_map<PTRef, PTRef, PTRefHash>;
@@ -228,24 +229,20 @@ bool isInstanceOf(const ChClause & c1, const ChClause & c2, Logic & logic) {
     for (auto const & uppair : upsToProcess) {
         utils.insertVarPairsFromPredicates(uppair.second.predicate, uppair.first.predicate, subst);
     }
-    // c1 and c2 should be the same, up to renaming of the variables
-    // Here we enforce stronger invariant: they have just different version of the variables
-    std::vector<int> versionDiffs;
-    std::transform(subst.begin(), subst.end(), std::back_inserter(versionDiffs),
-                   [&timeMachine](decltype(subst)::value_type const & entry) {
-       int version = timeMachine.getVersionNumber(entry.first); // version in c2
-       return version - timeMachine.getVersionNumber(entry.second); // c2 - c1
+    // c1 is a clause from path, c2 from normalized system
+    // variables from c1 stripped of their version need to match the base form of variables from c2
+    bool varsMatch = std::all_of(subst.begin(), subst.end(), [&](auto const & varPair){
+        PTRef versionedVar = varPair.second;
+        PTRef unversionedVar = timeMachine.getUnversioned(versionedVar);
+        PTRef taggedVar = varPair.first;
+        PTRef baseVar = versionManager.toBase(taggedVar);
+        return unversionedVar == baseVar;
     });
-    if (versionDiffs.empty()) {
-        // ??? What to do in this case?
+    if (not varsMatch) {
         return false;
     }
-    int expectedVersionDiff = versionDiffs[0]; // version diff of (c2 - c1) => c2 = c1 + versionDiff
-    if (std::any_of(versionDiffs.begin(), versionDiffs.end(), [expectedVersionDiff](int diff) { return diff != expectedVersionDiff; })) {
-        return false;
-    }
-    PTRef modified_c1 = timeMachine.sendFlaThroughTime(c1.body.interpretedPart.fla, expectedVersionDiff);
-    return c2.body.interpretedPart.fla == modified_c1;
+    PTRef modified_c2 = utils.varSubstitute(c2.body.interpretedPart.fla, subst);
+    return c1.body.interpretedPart.fla == modified_c2;
 
 }
 }

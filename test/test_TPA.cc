@@ -33,7 +33,7 @@ TEST(TPA_test, test_TPA_simple_safe)
     );
     auto hypergraph = ChcGraphBuilder(logic).buildGraph(Normalizer(logic).normalize(system));
     ASSERT_TRUE(hypergraph->isNormalGraph());
-    auto graph = hypergraph->toNormalGraph();
+    auto graph = hypergraph->toNormalGraph(logic);
     TPAEngine engine(logic, options);
     auto res = engine.solve(*graph);
     auto answer = res.getAnswer();
@@ -73,7 +73,7 @@ TEST(TPA_test, test_TPA_simple_unsafe)
     auto normalizedSystem = Normalizer(logic).normalize(system);
     auto hypergraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
     ASSERT_TRUE(hypergraph->isNormalGraph());
-    auto graph = hypergraph->toNormalGraph();
+    auto graph = hypergraph->toNormalGraph(logic);
     TPAEngine engine(logic, options);
     auto res = engine.solve(*graph);
     auto answer = res.getAnswer();
@@ -112,7 +112,7 @@ TEST(TPA_test, test_TPA_CEX_zero) {
     auto normalizedSystem = Normalizer(logic).normalize(system);
     auto hypergraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
     ASSERT_TRUE(hypergraph->isNormalGraph());
-    auto graph = hypergraph->toNormalGraph();
+    auto graph = hypergraph->toNormalGraph(logic);
     TPAEngine engine(logic, options);
     auto res = engine.solve(*graph);
     auto answer = res.getAnswer();
@@ -150,7 +150,7 @@ TEST(TPA_test, test_TPA_CEX_one) {
     auto normalizedSystem = Normalizer(logic).normalize(system);
     auto hypergraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
     ASSERT_TRUE(hypergraph->isNormalGraph());
-    auto graph = hypergraph->toNormalGraph();
+    auto graph = hypergraph->toNormalGraph(logic);
     TPAEngine engine(logic, options);
     auto res = engine.solve(*graph);
     auto answer = res.getAnswer();
@@ -188,7 +188,7 @@ TEST(TPA_test, test_TPA_CEX_six) {
     auto normalizedSystem = Normalizer(logic).normalize(system);
     auto hypergraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
     ASSERT_TRUE(hypergraph->isNormalGraph());
-    auto graph = hypergraph->toNormalGraph();
+    auto graph = hypergraph->toNormalGraph(logic);
     TPAEngine engine(logic, options);
     auto res = engine.solve(*graph);
     auto answer = res.getAnswer();
@@ -239,7 +239,7 @@ TEST(TPA_test, test_TPA_chain_of_two_unsafe) {
     auto normalizedSystem = Normalizer(logic).normalize(system);
     auto hypergraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
     ASSERT_TRUE(hypergraph->isNormalGraph());
-    auto graph = hypergraph->toNormalGraph();
+    auto graph = hypergraph->toNormalGraph(logic);
     TPAEngine engine(logic, options);
     auto res = engine.solve(*graph);
     ASSERT_EQ(res.getAnswer(), VerificationResult::UNSAFE);
@@ -288,7 +288,7 @@ TEST(TPA_test, test_TPA_chain_of_two_safe) {
     );
     auto hypergraph = ChcGraphBuilder(logic).buildGraph(Normalizer(logic).normalize(system));
     ASSERT_TRUE(hypergraph->isNormalGraph());
-    auto graph = hypergraph->toNormalGraph();
+    auto graph = hypergraph->toNormalGraph(logic);
     TPAEngine engine(logic, options);
     auto res = engine.solve(*graph);
     ASSERT_EQ(res.getAnswer(), VerificationResult::SAFE);
@@ -346,7 +346,7 @@ TEST(TPA_test, test_TPA_chain_regression) {
     );
     auto hypergraph = ChcGraphBuilder(logic).buildGraph(Normalizer(logic).normalize(system));
     ASSERT_TRUE(hypergraph->isNormalGraph());
-    auto graph = hypergraph->toNormalGraph();
+    auto graph = hypergraph->toNormalGraph(logic);
     TPAEngine engine(logic, options);
     auto res = engine.solve(*graph);
     ASSERT_EQ(res.getAnswer(), VerificationResult::SAFE);

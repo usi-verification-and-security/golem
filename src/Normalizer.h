@@ -15,13 +15,13 @@
 
 struct NormalizedChcSystem{
     std::unique_ptr<ChcSystem> normalizedSystem;
-    CanonicalPredicateRepresentation canonicalPredicateRepresentation;
+    NonlinearCanonicalPredicateRepresentation canonicalPredicateRepresentation;
 };
 
 class Normalizer{
     Logic& logic;
     TimeMachine timeMachine;
-    CanonicalPredicateRepresentation canonicalPredicateRepresentation;
+    NonlinearCanonicalPredicateRepresentation canonicalPredicateRepresentation;
     vec<PTRef> topLevelEqualities;
     long long counter = 0;
 
@@ -52,7 +52,7 @@ class Normalizer{
         canonicalPredicateRepresentation.addRepresentation(logic.getSymRef(predicate), std::move(repre));
     }
 
-    CanonicalPredicateRepresentation getCanonicalPredicateRepresentation() const {
+    NonlinearCanonicalPredicateRepresentation getCanonicalPredicateRepresentation() const {
         return canonicalPredicateRepresentation;
     }
 

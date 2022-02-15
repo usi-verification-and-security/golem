@@ -49,12 +49,52 @@ bool ChcDirectedHyperGraph::isNormalGraph() const {
     return std::all_of(edges.begin(), edges.end(), [](const DirectedHyperEdge& edge) { assert(not edge.from.empty()); return edge.from.size() == 1; });
 }
 
-std::unique_ptr<ChcDirectedGraph> ChcDirectedHyperGraph::toNormalGraph() const {
+std::unique_ptr<ChcDirectedGraph> ChcDirectedHyperGraph::toNormalGraph(Logic & logic) const {
+    TimeMachine timeMachine(logic);
+    VersionManager manager(logic);
+    LinearCanonicalPredicateRepresentation newPredicates(logic);
+    for (Vertex v : vertices) {
+        std::vector<PTRef> vars;
+        PTRef originalTerm = predicates.getSourceTermFor(v.predicateSymbol);
+        for (PTRef var : logic.getPterm(originalTerm)) {
+            assert(logic.isVar(var));
+            vars.push_back(var);
+        }
+
+        std::transform(vars.begin(), vars.end(), vars.begin(), [&](PTRef var){
+            return manager.toBase(var);
+        });
+        newPredicates.addRepresentation(v.predicateSymbol, std::move(vars));
+    }
+
     std::vector<DirectedEdge> normalEdges;
-    std::transform(this->edges.begin(), this->edges.end(), std::back_inserter(normalEdges), [](DirectedHyperEdge const& edge) {
-        return DirectedEdge{.from = edge.from[0], .to = edge.to, .fla = edge.fla};
+    std::transform(this->edges.begin(), this->edges.end(), std::back_inserter(normalEdges), [&](DirectedHyperEdge const& edge) {
+        assert(edge.from.size() == 1);
+        VId source = edge.from[0];
+        VId target = edge.to;
+        TermUtils::substitutions_map subst;
+        {
+            PTRef sourceTerm = this->getStateVersion(source);
+            for (unsigned i = 0; i < logic.getPterm(sourceTerm).size(); ++i) {
+                PTRef originalVar = logic.getPterm(sourceTerm)[i];
+                PTRef newVar = timeMachine.getVarVersionZero(manager.toBase(originalVar));
+                subst.insert({originalVar, newVar});
+            }
+        }
+
+        {
+            PTRef targetTerm = this->getNextStateVersion(target);
+            for (unsigned i = 0; i < logic.getPterm(targetTerm).size(); ++i) {
+                PTRef originalVar = logic.getPterm(targetTerm)[i];
+                PTRef newVar = timeMachine.sendVarThroughTime(timeMachine.getVarVersionZero(manager.toBase(originalVar)),1);
+                subst.insert({originalVar, newVar});
+            }
+        }
+
+        PTRef newLabel = TermUtils(logic).varSubstitute(edge.fla.fla, subst);
+        return DirectedEdge{.from = edge.from[0], .to = edge.to, .fla = {newLabel}};
     });
-    return std::unique_ptr<ChcDirectedGraph>( new ChcDirectedGraph(vertices, std::move(normalEdges), predicates, entry, exit));
+    return std::unique_ptr<ChcDirectedGraph>( new ChcDirectedGraph(vertices, std::move(normalEdges), std::move(newPredicates), entry, exit));
 }
 
 void ChcDirectedGraph::toDot(ostream & out, Logic const& logic) const {
@@ -239,9 +279,11 @@ std::optional<EId> AdjacencyListsGraphRepresentation::getSelfLoopFor(VId node) c
 }
 
 std::unique_ptr<ChcDirectedHyperGraph> ChcDirectedGraph::toHyperGraph() const {
-    std::vector<DirectedHyperEdge> hyperEdges;
-    std::transform(this->edges.begin(), this->edges.end(), std::back_inserter(hyperEdges), [](DirectedEdge const& edge) {
-        return DirectedHyperEdge{.from = {edge.from}, .to = edge.to, .fla = edge.fla};
-    });
-    return std::unique_ptr<ChcDirectedHyperGraph>( new ChcDirectedHyperGraph(vertices, std::move(hyperEdges), predicates, entry, exit));
+    // FIXME: Implement the conversion from LinearPredicateRepresentation to NonlinearPredicateRepresentation
+    throw std::logic_error("Not supported at the moment");
+//    std::vector<DirectedHyperEdge> hyperEdges;
+//    std::transform(this->edges.begin(), this->edges.end(), std::back_inserter(hyperEdges), [](DirectedEdge const& edge) {
+//        return DirectedHyperEdge{.from = {edge.from}, .to = edge.to, .fla = edge.fla};
+//    });
+//    return std::unique_ptr<ChcDirectedHyperGraph>( new ChcDirectedHyperGraph(vertices, std::move(hyperEdges), predicates, entry, exit));
 }

@@ -33,7 +33,7 @@ TEST(LAWI_test, test_LAWI_simple)
 	);
 	auto hypergraph = ChcGraphBuilder(logic).buildGraph(Normalizer(logic).normalize(system));
 	ASSERT_TRUE(hypergraph->isNormalGraph());
-	auto graph = hypergraph->toNormalGraph();
+	auto graph = hypergraph->toNormalGraph(logic);
 	Lawi engine(logic, options);
 	auto res = engine.solve(*graph);
 	auto answer = res.getAnswer();
@@ -94,7 +94,7 @@ TEST(LAWI_test, test_LAWI_branch)
 	);
 	auto hypergraph = ChcGraphBuilder(logic).buildGraph(Normalizer(logic).normalize(system));
 	ASSERT_TRUE(hypergraph->isNormalGraph());
-	auto graph = hypergraph->toNormalGraph();
+	auto graph = hypergraph->toNormalGraph(logic);
 //	graph->toDot(std::cout, logic);
 	Lawi engine(logic, options);
 	auto res = engine.solve(*graph);
@@ -150,7 +150,7 @@ TEST(LAWI_test, test_LAWI_unreachable_state)
 	);
 	auto hypergraph = ChcGraphBuilder(logic).buildGraph(Normalizer(logic).normalize(system));
 	ASSERT_TRUE(hypergraph->isNormalGraph());
-	auto graph = hypergraph->toNormalGraph();
+	auto graph = hypergraph->toNormalGraph(logic);
 	Lawi engine(logic, options);
 	auto res = engine.solve(*graph);
 	auto answer = res.getAnswer();
@@ -190,7 +190,7 @@ TEST(LAWI_test, test_LAWI_simple_unsafe)
     auto normalizedSystem = Normalizer(logic).normalize(system);
     auto hypergraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
     ASSERT_TRUE(hypergraph->isNormalGraph());
-    auto graph = hypergraph->toNormalGraph();
+    auto graph = hypergraph->toNormalGraph(logic);
     Lawi engine(logic, options);
     auto res = engine.solve(*graph);
     auto answer = res.getAnswer();
@@ -229,7 +229,7 @@ TEST(LAWI_test, test_LAWI_accelerated_unsafe)
     auto normalizedSystem = Normalizer(logic).normalize(system);
     auto hypergraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
     ASSERT_TRUE(hypergraph->isNormalGraph());
-    auto graph = hypergraph->toNormalGraph();
+    auto graph = hypergraph->toNormalGraph(logic);
     LoopAccelerator engine(logic, std::unique_ptr<Engine>(new Lawi(logic, options)));
     auto res = engine.solve(*graph);
     auto answer = res.getAnswer();

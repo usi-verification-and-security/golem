@@ -249,6 +249,16 @@ public:
         return logic.mkVar(sort, newName.c_str());
     }
 
+    PTRef getUnversioned(PTRef var) {
+        assert(logic.isVar(var));
+        assert(isVersioned(var));
+        SRef sort = logic.getSortRef(var);
+        std::string varName = logic.getSymName(var);
+        auto pos = varName.rfind(versionSeparator);
+        varName.erase(pos);
+        return logic.mkVar(sort, varName.c_str());
+    }
+
     int getVersionNumber(PTRef var) {
         assert(logic.isVar(var));
         assert(isVersioned(var));
@@ -279,16 +289,140 @@ public:
     }
 };
 
-class CanonicalPredicateRepresentation {
+class VersionManager {
+    Logic & logic;
+    inline static const char sourceSuffix = 's';
+    inline static const char targetSuffix = 't';
+    inline static const std::string instanceSeparator = "##";
+    inline static const std::string tagSeparator = "__";
+
+    static void ensureNoVersion(std::string & varName);
+    static void removeTag(std::string & varName);
+
+    template<typename TVarTransform>
+    class VersioningConfig : public DefaultRewriterConfig {
+        Logic const & logic;
+        TVarTransform varTransform;
+    public:
+        VersioningConfig(Logic const & logic, TVarTransform varTransform) : logic(logic), varTransform(varTransform) {}
+
+        PTRef rewrite(PTRef term) override {
+            if (logic.isVar(term)) {
+                return varTransform(term);
+            }
+            return term;
+        }
+    };
+
+    template<typename TVarTransform>
+    class VersioningRewriter : public Rewriter<VersioningConfig<TVarTransform>> {
+    public:
+        VersioningRewriter(Logic & logic, VersioningConfig<TVarTransform> & config) : Rewriter<VersioningConfig<TVarTransform>>(logic, config) {}
+    };
+
+public:
+    VersionManager(Logic & logic) : logic(logic) {}
+
+    PTRef baseFormulaToTarget(PTRef fla) const;
+    PTRef baseFormulaToSource(PTRef fla, unsigned instance = 0) const;
+    PTRef targetFormulaToBase(PTRef fla) const;
+    PTRef sourceFormulaToBase(PTRef fla) const;
+    PTRef sourceFormulaToTarget(PTRef fla) const;
+
+    template<typename TVarTransform>
+    PTRef rewrite(PTRef fla, TVarTransform transform) const {
+        VersioningConfig<TVarTransform> config(logic, transform);
+        return VersioningRewriter(logic, config).rewrite(fla);
+    }
+
+    PTRef toBase(PTRef var) const {
+        assert(logic.isVar(var));
+        std::string varName = logic.getSymName(var);
+        ensureNoVersion(varName);
+        removeTag(varName);
+        return logic.mkVar(logic.getSortRef(var), varName.c_str());
+    }
+
+    PTRef toSource(PTRef var, unsigned instance = 0) const {
+        assert(logic.isVar(var));
+        assert(not isVersioned(var));
+        SRef sort = logic.getSortRef(var);
+        std::stringstream ss;
+        ss << logic.getSymName(var) << tagSeparator << sourceSuffix << instanceSeparator << instance;
+        std::string newName = ss.str();
+        return logic.mkVar(sort, newName.c_str());
+    }
+
+    PTRef toTarget(PTRef var) const {
+        assert(logic.isVar(var));
+        assert(not isVersioned(var));
+        assert(not isTagged(var));
+        SRef sort = logic.getSortRef(var);
+        std::stringstream ss;
+        ss << logic.getSymName(var) << tagSeparator << targetSuffix;
+        std::string newName = ss.str();
+        return logic.mkVar(sort, newName.c_str());
+    }
+
+    static auto versionPosition(std::string const & name) {
+        return name.rfind(instanceSeparator);
+    }
+
+    static auto tagPosition(std::string const & name) {
+        return name.rfind(tagSeparator);
+    }
+
+    static bool isTaggedName(std::string const & name) {
+        return tagPosition(name) != std::string::npos;
+    }
+
+    static bool isVersionedName(std::string const & name) {
+        return versionPosition(name) != std::string::npos;
+    }
+
+    bool isTagged(PTRef var) const {
+        assert(logic.isVar(var));
+        std::string varName = logic.getSymName(var);
+        return isTaggedName(varName);
+    }
+
+    bool isVersioned(PTRef var) const {
+        assert(logic.isVar(var));
+        std::string varName = logic.getSymName(var);
+        return isVersionedName(varName);
+    }
+};
+
+class LinearCanonicalPredicateRepresentation {
     using VariableRepresentation = std::unordered_map<SymRef, std::vector<PTRef>, SymRefHash>;
     using TermRepresentation = std::unordered_map<SymRef, PTRef, SymRefHash>;
     VariableRepresentation representation {};
-    VariableRepresentation targetVariables {};
+    TermRepresentation targetTerms {};
+    TermRepresentation sourceTerms {};
+    Logic & logic;
+public:
+    LinearCanonicalPredicateRepresentation(Logic & logic) : logic(logic) {}
+
+    void addRepresentation(SymRef sym, std::vector<PTRef> vars);
+
+    PTRef getTargetTermFor(SymRef sym) const;
+
+    PTRef getSourceTermFor(SymRef sym) const;
+
+    bool hasRepresentationFor(SymRef sym) const {
+        return representation.count(sym) > 0;
+    }
+};
+
+class NonlinearCanonicalPredicateRepresentation {
+    using VariableRepresentation = std::unordered_map<SymRef, std::vector<PTRef>, SymRefHash>;
+    using TermRepresentation = std::unordered_map<SymRef, PTRef, SymRefHash>;
+    VariableRepresentation representation {};
     TermRepresentation targetTerms {};
     mutable std::vector<TermRepresentation> sourceTermsByInstance {{}};
     Logic & logic;
 public:
-    CanonicalPredicateRepresentation(Logic & logic) : logic(logic) {}
+    NonlinearCanonicalPredicateRepresentation(Logic & logic) : logic(logic) {}
 
     void addRepresentation(SymRef sym, std::vector<PTRef> vars);
 
@@ -296,17 +430,15 @@ public:
         return representation.count(sym) > 0;
     }
 
-//    std::vector<PTRef> const & getTargetVariablesFor(SymRef sym) const;
-
     PTRef getTargetTermFor(SymRef sym) const;
 
     PTRef getSourceTermFor(SymRef sym, unsigned instanceCount = 0) const;
 
     class CountingProxy {
-        CanonicalPredicateRepresentation & parent;
+        NonlinearCanonicalPredicateRepresentation & parent;
         std::unordered_map<SymRef, unsigned, SymRefHash> counts;
     public:
-        CountingProxy(CanonicalPredicateRepresentation & parent) : parent(parent) {}
+        CountingProxy(NonlinearCanonicalPredicateRepresentation & parent) : parent(parent) {}
 
         PTRef getSourceTermFor(SymRef sym) {
             auto count = counts[sym]++;

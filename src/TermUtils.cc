@@ -445,39 +445,33 @@ void LATermUtils::simplifyConjunction(std::vector<PtAsgn> & conjuncts) {
 
 
 //********** CANONICAL PREDICATE REPRESENTATION ********************/
-void CanonicalPredicateRepresentation::addRepresentation(SymRef sym, std::vector<PTRef> vars) {
+void NonlinearCanonicalPredicateRepresentation::addRepresentation(SymRef sym, std::vector<PTRef> vars) {
     assert(not hasRepresentationFor(sym));
-    TimeMachine timeMachine(logic);
+    VersionManager manager(logic);
     vec<PTRef> sourceVars(vars.size());
-    std::transform(vars.begin(), vars.end(), sourceVars.begin(), [&timeMachine](PTRef var){
-        return timeMachine.getVarVersionZero(var);
+    std::transform(vars.begin(), vars.end(), sourceVars.begin(), [&manager](PTRef var){
+        return manager.toSource(var);
     });
     PTRef sourceTerm = logic.insertTerm(sym, std::move(sourceVars));
     assert(sourceTermsByInstance.size() >= 1);
     this->sourceTermsByInstance[0].insert({sym, sourceTerm});
 
-    std::vector<PTRef> targetVars; targetVars.reserve(vars.size());
-    std::transform(vars.begin(), vars.end(), std::back_inserter(targetVars), [&timeMachine](PTRef var){
-        return timeMachine.sendVarThroughTime(timeMachine.getVarVersionZero(var), 1);
+    vec<PTRef> targetVars(vars.size());
+    std::transform(vars.begin(), vars.end(), targetVars.begin(), [&manager](PTRef var){
+        return manager.toTarget(var);
     });
-    PTRef targetTerm = logic.insertTerm(sym, vec<PTRef>{targetVars});
+    PTRef targetTerm = logic.insertTerm(sym, std::move(targetVars));
     this->targetTerms.insert({sym, targetTerm});
 
-    this->targetVariables.insert({sym, std::move(targetVars)});
     this->representation.insert({sym, std::move(vars)});
 }
 
-//const std::vector<PTRef> & CanonicalPredicateRepresentation::getTargetVariablesFor(SymRef sym) const {
-//    assert(targetVariables.count(sym) > 0);
-//    return targetVariables.at(sym);
-//}
-
-PTRef CanonicalPredicateRepresentation::getTargetTermFor(SymRef sym) const {
+PTRef NonlinearCanonicalPredicateRepresentation::getTargetTermFor(SymRef sym) const {
     assert(targetTerms.count(sym) > 0);
     return targetTerms.at(sym);
 }
 
-PTRef CanonicalPredicateRepresentation::getSourceTermFor(SymRef sym, unsigned instanceCount) const {
+PTRef NonlinearCanonicalPredicateRepresentation::getSourceTermFor(SymRef sym, unsigned instanceCount) const {
     if (instanceCount >= sourceTermsByInstance.size()) {
         sourceTermsByInstance.resize(instanceCount + 1);
     }
@@ -490,11 +484,83 @@ PTRef CanonicalPredicateRepresentation::getSourceTermFor(SymRef sym, unsigned in
     auto const & vars = representation.at(sym);
     vec<PTRef> nVars(vars.size());
     std::transform(vars.begin(), vars.end(), nVars.begin(), [this, instanceCount](PTRef var){
-        std::string varName = logic.getSymName(var);
-        varName.append("!" + std::to_string(instanceCount));
-        return TimeMachine(logic).getVarVersionZero(logic.mkVar(logic.getSortRef(var), varName.c_str()));
+        return VersionManager(logic).toSource(var, instanceCount);
     });
     PTRef instanceSourceTerm = logic.insertTerm(sym, std::move(nVars));
     terms.insert({sym, instanceSourceTerm});
     return instanceSourceTerm;
+}
+
+void LinearCanonicalPredicateRepresentation::addRepresentation(SymRef sym, std::vector<PTRef> vars) {
+    assert(not hasRepresentationFor(sym));
+    TimeMachine timeMachine(logic);
+    vec<PTRef> sourceVars(vars.size());
+    std::transform(vars.begin(), vars.end(), sourceVars.begin(), [&timeMachine](PTRef var){
+        return timeMachine.getVarVersionZero(var);
+    });
+    PTRef sourceTerm = logic.insertTerm(sym, std::move(sourceVars));
+    sourceTerms.insert({sym, sourceTerm});
+
+    vec<PTRef> targetVars(vars.size());
+    std::transform(vars.begin(), vars.end(), targetVars.begin(), [&timeMachine](PTRef var){
+        return timeMachine.sendVarThroughTime(timeMachine.getVarVersionZero(var),1);
+    });
+    PTRef targetTerm = logic.insertTerm(sym, std::move(targetVars));
+    this->targetTerms.insert({sym, targetTerm});
+
+    this->representation.insert({sym, std::move(vars)});
+}
+
+PTRef LinearCanonicalPredicateRepresentation::getTargetTermFor(SymRef sym) const {
+    assert(targetTerms.count(sym) > 0);
+    return targetTerms.at(sym);
+}
+
+PTRef LinearCanonicalPredicateRepresentation::getSourceTermFor(SymRef sym) const {
+    assert(sourceTerms.count(sym) > 0);
+    return sourceTerms.at(sym);
+}
+
+void VersionManager::ensureNoVersion(std::string & varName) {
+    auto pos = versionPosition(varName);
+    if (pos == std::string::npos) {
+        return;
+    }
+    varName.erase(pos);
+}
+
+void VersionManager::removeTag(std::string & varName) {
+    auto pos = tagPosition(varName);
+    assert(pos != std::string::npos);
+    varName.erase(pos);
+}
+
+PTRef VersionManager::baseFormulaToSource(PTRef fla, unsigned int instance) const {
+    return rewrite(fla, [instance, this](PTRef var) {
+       return toSource(var, instance);
+    });
+}
+
+PTRef VersionManager::baseFormulaToTarget(PTRef fla) const {
+    return rewrite(fla, [this](PTRef var) {
+        return toTarget(var);
+    });
+}
+
+PTRef VersionManager::sourceFormulaToBase(PTRef fla) const {
+    return rewrite(fla, [this](PTRef var) {
+        return toBase(var);
+    });
+}
+
+PTRef VersionManager::targetFormulaToBase(PTRef fla) const {
+    return rewrite(fla, [this](PTRef var) {
+        return toBase(var);
+    });
+}
+
+PTRef VersionManager::sourceFormulaToTarget(PTRef fla) const {
+    return rewrite(fla, [this](PTRef var) {
+        return toTarget(toBase(var));
+    });
 }

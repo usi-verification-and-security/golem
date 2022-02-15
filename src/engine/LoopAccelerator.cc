@@ -15,7 +15,7 @@ ChcDirectedGraph LoopAccelerator::removeAcceleratedLoops(const ChcDirectedGraph 
                                                          const map<EId, PTRef> & acceleratedLoops) const {
     auto vertices = original.getVertexCopies();
     auto edges = original.getEdgeCopies();
-    CanonicalPredicateRepresentation predicateRepresentation = original.getPredicateRepresentation();
+    LinearCanonicalPredicateRepresentation predicateRepresentation = original.getPredicateRepresentation();
     auto entry = original.getEntryId();
     auto exit = original.getExitId();
     auto maxId = std::max_element(vertices.begin(), vertices.end(), [](Vertex const & first, Vertex const & second) {
