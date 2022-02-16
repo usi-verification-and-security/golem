@@ -209,7 +209,9 @@ GraphVerificationResult SpacerContext::run() {
                     std::unordered_map<PTRef, PTRef, PTRefHash> solution;
                     auto inductiveLevel = inductiveResult.inductiveLevel;
                     for (VId vid : graph.getVertices()) {
-                        PTRef predicate = graph.getStateVersion(vid);
+                        PTRef statePredicate = graph.getStateVersion(vid);
+                        // MB: 0-ary predicate would be treated as variables in VersionManager, not what we want
+                        PTRef predicate = logic.getPterm(statePredicate).size() > 0 ? VersionManager(logic).sourceFormulaToBase(statePredicate) : statePredicate;
                         PTRef invariantSummary = logic.mkAnd(over.getComponents(vid, inductiveLevel));
                         if (logic.isOr(invariantSummary) or logic.isAnd(invariantSummary)) {
                             invariantSummary = simplifyUnderAssignment_Aggressive(invariantSummary, logic);

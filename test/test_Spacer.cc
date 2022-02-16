@@ -6,6 +6,7 @@
 
 #include <gtest/gtest.h>
 #include "engine/Spacer.h"
+#include "Validator.h"
 
 TEST(Spacer_test, test_TransitionSystem)
 {
@@ -29,11 +30,15 @@ TEST(Spacer_test, test_TransitionSystem)
 		ChcHead{UninterpretedPredicate{logic.getTerm_false()}},
 		ChcBody{logic.mkNumLt(x, logic.getTerm_NumZero()), {UninterpretedPredicate{inv}}}
 	);
-	auto hypergraph = ChcGraphBuilder(logic).buildGraph(Normalizer(logic).normalize(system));
+    auto normalizedSystem = Normalizer(logic).normalize(system);
+	auto hypergraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
 	Spacer engine(logic, options);
 	auto res = engine.solve(*hypergraph);
 	auto answer = res.getAnswer();
 	ASSERT_EQ(answer, VerificationResult::SAFE);
+    SystemVerificationResult systemResult(std::move(res));
+    auto validationResult = Validator(logic).validate(*normalizedSystem.normalizedSystem, systemResult);
+    ASSERT_EQ(validationResult, Validator::Result::VALIDATED);
 }
 
 TEST(Spacer_test, test_BasicLinearSystem)
@@ -72,11 +77,15 @@ TEST(Spacer_test, test_BasicLinearSystem)
         ChcBody{logic.mkNumLt(logic.mkNumPlus(x,y), logic.getTerm_NumZero()), {UninterpretedPredicate{inv2}}}
     );
 //    ChcPrinter{logic, std::cout}.print(system);
-    auto hypergraph = ChcGraphBuilder(logic).buildGraph(Normalizer(logic).normalize(system));
+    auto normalizedSystem = Normalizer(logic).normalize(system);
+    auto hypergraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
     Spacer engine(logic, options);
     auto res = engine.solve(*hypergraph);
     auto answer = res.getAnswer();
     ASSERT_EQ(answer, VerificationResult::SAFE);
+    SystemVerificationResult systemResult(std::move(res));
+    auto validationResult = Validator(logic).validate(*normalizedSystem.normalizedSystem, systemResult);
+    ASSERT_EQ(validationResult, Validator::Result::VALIDATED);
 }
 
 TEST(Spacer_test, test_BasicNonLinearSystem_Safe)
@@ -115,11 +124,15 @@ TEST(Spacer_test, test_BasicNonLinearSystem_Safe)
         ChcBody{logic.mkNumLt(logic.mkNumPlus(x,y), logic.getTerm_NumZero()), {UninterpretedPredicate{invx}, UninterpretedPredicate{invy}}}
     );
 //    ChcPrinter{logic, std::cout}.print(system);
-    auto hypergraph = ChcGraphBuilder(logic).buildGraph(Normalizer(logic).normalize(system));
+    auto normalizedSystem = Normalizer(logic).normalize(system);
+    auto hypergraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
     Spacer engine(logic, options);
     auto res = engine.solve(*hypergraph);
     auto answer = res.getAnswer();
     ASSERT_EQ(answer, VerificationResult::SAFE);
+    SystemVerificationResult systemResult(std::move(res));
+    auto validationResult = Validator(logic).validate(*normalizedSystem.normalizedSystem, systemResult);
+    ASSERT_EQ(validationResult, Validator::Result::VALIDATED);
 }
 
 TEST(Spacer_test, test_BasicNonLinearSystem_Unsafe)
