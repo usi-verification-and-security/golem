@@ -5,6 +5,7 @@
 #include "ChcGraph.h"
 
 #include <iostream>
+#include <map>
 
 std::unique_ptr<ChcDirectedHyperGraph> ChcGraphBuilder::buildGraph(NormalizedChcSystem const & system) {
     std::vector<Vertex> vertices;
@@ -97,9 +98,9 @@ std::unique_ptr<ChcDirectedGraph> ChcDirectedHyperGraph::toNormalGraph(Logic & l
     return std::unique_ptr<ChcDirectedGraph>( new ChcDirectedGraph(vertices, std::move(normalEdges), std::move(newPredicates), entry, exit));
 }
 
-void ChcDirectedGraph::toDot(ostream & out, Logic const& logic) const {
+void ChcDirectedGraph::toDot(std::ostream & out, Logic const& logic) const {
 
-    out << "digraph proof {" << endl;
+    out << "digraph proof {" << '\n';
 
     std::map<VId, std::string> dotIds;
 

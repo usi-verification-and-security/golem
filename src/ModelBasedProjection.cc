@@ -18,15 +18,15 @@ namespace{
         bool strict;
     };
 
-    PTRef substituteBound(Bound const& what, Bound const& where, LALogic & logic) {
+    PTRef substituteBound(Bound const& what, Bound const& where, ArithLogic & logic) {
         if (what.type == BoundType::UPPER and where.type == BoundType::UPPER) {
             throw std::invalid_argument("Not implemented yet for two upper bounds");
         }
         if (where.type == BoundType::LOWER and what.type == BoundType::LOWER) {
             if (where.strict and not what.strict) {
-                return logic.mkNumLt(where.val, what.val);
+                return logic.mkLt(where.val, what.val);
             } else {
-                return logic.mkNumLeq(where.val, what.val);
+                return logic.mkLeq(where.val, what.val);
             }
         } else {
             assert(where.type == BoundType::UPPER or what.type == BoundType::UPPER);
@@ -34,14 +34,14 @@ namespace{
             auto const & upper = where.type == BoundType::UPPER ? where : what;
             auto const & lower = where.type == BoundType::UPPER ? what : where;
             if (upper.strict or lower.strict) {
-                return logic.mkNumLt(lower.val, upper.val);
+                return logic.mkLt(lower.val, upper.val);
             } else {
-                return logic.mkNumLeq(lower.val, upper.val);
+                return logic.mkLeq(lower.val, upper.val);
             }
         }
     }
 
-    vec<PTRef> substituteBound(Bound const& what, std::vector<Bound> const& where, LALogic & logic) {
+    vec<PTRef> substituteBound(Bound const& what, std::vector<Bound> const& where, ArithLogic & logic) {
         vec<PTRef> res;
         for (Bound const & bound : where) {
             PTRef subResult = substituteBound(what, bound, logic);
@@ -60,14 +60,13 @@ namespace{
         PTRef coeff;
     };
 
-    LinearFactor splitLinearFactorToVarAndConst(PTRef tr, LALogic const & logic) {
+    LinearFactor splitLinearFactorToVarAndConst(PTRef tr, ArithLogic const & logic) {
         assert(logic.isLinearFactor(tr));
-        LinearFactor res;
-        logic.splitTermToVarAndConst(tr, res.var, res.coeff);
-        return res;
+        auto [var, coeff] = logic.splitTermToVarAndConst(tr);
+        return {var, coeff};
     }
 
-    std::vector<LinearFactor> splitLinearTermToFactors(PTRef tr, LALogic const & logic ) {
+    std::vector<LinearFactor> splitLinearTermToFactors(PTRef tr, ArithLogic const & logic ) {
         std::vector<LinearFactor> factors;
         assert(logic.isLinearTerm(tr));
         if (logic.isLinearFactor(tr)) { return {splitLinearFactorToVarAndConst(tr, logic)}; }
@@ -79,7 +78,7 @@ namespace{
         return factors;
     }
 
-    std::pair<LinearFactor, PTRef> separateVarFromTerm(PTRef var, PTRef term, LIALogic & logic) {
+    std::pair<LinearFactor, PTRef> separateVarFromTerm(PTRef var, PTRef term, ArithLogic & logic) {
         assert(logic.isVar(var) and logic.isLinearTerm(term));
         auto factors = splitLinearTermToFactors(term, logic);
         LinearFactor const * varFactor = nullptr;
@@ -89,30 +88,31 @@ namespace{
                 assert(varFactor == nullptr);
                 varFactor = &factor;
             } else {
-                args.push(factor.var == PTRef_Undef ? factor.coeff : logic.mkNumTimes(factor.coeff, factor.var));
+                args.push(factor.var == PTRef_Undef ? factor.coeff : logic.mkTimes(factor.coeff, factor.var));
             }
         }
         assert(varFactor);
-        return {*varFactor, logic.mkNumPlus(args)};
+        return {*varFactor, args.size_() == 0 ? logic.getZeroForSort(logic.getSortRef(var)) : logic.mkPlus(args)};
     }
 
     template<typename TIt>
-    void normalizeEqualities(TIt begin, TIt end, LALogic & logic) {
+    void normalizeEqualities(TIt begin, TIt end, ArithLogic & logic) {
         std::for_each(begin, end, [&logic](PtAsgn & lit) {
             if (logic.isEquality(lit.tr)) {
                 PTRef lhs = logic.getPterm(lit.tr)[0];
                 PTRef rhs = logic.getPterm(lit.tr)[1];
-                if (lhs == logic.getTerm_NumZero() or rhs == logic.getTerm_NumZero() or logic.isNumConst(lhs) or logic.isNumConst(rhs)) {
+                PTRef zero = logic.getZeroForSort(logic.getSortRef(lhs));
+                if (lhs == zero or rhs == zero or logic.isNumConst(lhs) or logic.isNumConst(rhs)) {
                     // already normalized
                     return;
                 }
-                lit.tr = logic.mkEq(logic.mkNumMinus(lhs, rhs), logic.getTerm_NumZero());
+                lit.tr = logic.mkEq(logic.mkMinus(lhs, rhs), zero);
             }
         });
     }
 }
 
-void ModelBasedProjection::postprocess(implicant_t & literals, LALogic & lalogic) {
+void ModelBasedProjection::postprocess(implicant_t & literals, ArithLogic & lalogic) {
     LATermUtils(lalogic).simplifyConjunction(literals);
 }
 
@@ -128,7 +128,7 @@ ModelBasedProjection::implicant_t ModelBasedProjection::projectSingleVar(PTRef v
         }
         return std::move(implicant);
     }
-    LALogic * lalogic = dynamic_cast<LALogic *>(&logic);
+    ArithLogic * lalogic = dynamic_cast<ArithLogic *>(&logic);
     if (not lalogic or not lalogic->isNumVar(var)) {
         throw std::logic_error("Projection for other than Reals or Ints not supported");
     }
@@ -154,7 +154,7 @@ ModelBasedProjection::implicant_t ModelBasedProjection::projectSingleVar(PTRef v
             if (lit.sgn == l_True) { // if equality is present, we just use it to substitute the variable away
                 assert(model.evaluate(lit.tr) == logic.getTerm_true());
                 // express variable and substitute in the rest of literals
-                PTRef zeroTerm = lalogic->mkNumMinus(lhs, rhs);
+                PTRef zeroTerm = lalogic->mkMinus(lhs, rhs);
                 PTRef substitutionTerm = utils.expressZeroTermFor(zeroTerm, var);
                 MapWithKeys<PTRef, PTRef, PTRefHash> subst;
                 subst.insert(var, substitutionTerm);
@@ -180,8 +180,8 @@ ModelBasedProjection::implicant_t ModelBasedProjection::projectSingleVar(PTRef v
             } else {
                 assert(lit.sgn == l_False);
                 // replace the non-equality with the strict inequality that is true in the model
-                PTRef lt = lalogic->mkNumLt(lhs, rhs);
-                PTRef replacement = model.evaluate(lt) == logic.getTerm_true() ? lt : lalogic->mkNumLt(rhs, lhs);
+                PTRef lt = lalogic->mkLt(lhs, rhs);
+                PTRef replacement = model.evaluate(lt) == logic.getTerm_true() ? lt : lalogic->mkLt(rhs, lhs);
                 if (replacement == logic.getTerm_true()) {
                     // This could happen if the original inequality is like "x != x + 1"
                     it->tr = logic.getTerm_true();
@@ -229,17 +229,18 @@ ModelBasedProjection::implicant_t ModelBasedProjection::projectSingleVar(PTRef v
         if (coeff.sign() < 0) {
             isLower = !isLower;
         }
-        PTRef newConstant = lalogic->mkConst(lalogic->getNumConst(constant) / coeff);
+        SRef sortRef = logic.getSortRef(constant);
+        PTRef newConstant = lalogic->mkConst(sortRef, lalogic->getNumConst(constant) / coeff);
         coeff.negate();
         // update the coefficients in the factor
         vec<PTRef> boundArgs;
         for (auto & factor : factors) { // in place update
             auto newCoeff = lalogic->getNumConst(factor.coeff) / coeff;
-            factor.coeff = lalogic->mkConst(newCoeff);
-            boundArgs.push(lalogic->mkNumTimes(factor.var, factor.coeff)); // MB: no simplification, could be insertTermHash directly
+            factor.coeff = lalogic->mkConst(sortRef, newCoeff);
+            boundArgs.push(lalogic->mkTimes(factor.var, factor.coeff)); // MB: no simplification, could be insertTermHash directly
         }
         boundArgs.push(newConstant);
-        PTRef bound = lalogic->mkNumPlus(boundArgs); // MB: no simplification should happen, could be insertTermHash
+        PTRef bound = lalogic->mkPlus(boundArgs); // MB: no simplification should happen, could be insertTermHash
         // Remember the bound
         auto boundType = isLower ? BoundType::LOWER : BoundType::UPPER;
         bounds.push_back(Bound{.type = boundType, .val = bound, .strict = isStrict});
@@ -470,7 +471,7 @@ PTRef ModelBasedProjection::project(PTRef fla, const vec<PTRef> & varsToEliminat
 
 //    dumpImplicant(std::cout, implicant);
     checkImplicant(implicant, logic, model);
-    if (dynamic_cast<LIALogic*>(&logic)) {
+    if (logic.hasIntegers()) {
         PTRef projection = projectIntegerVars(boolEndIt, tmp.end(), std::move(implicant), model);
         tmp.clear();
         for (PtAsgn literal : withoutVarsToEliminate) {
@@ -487,7 +488,7 @@ PTRef ModelBasedProjection::project(PTRef fla, const vec<PTRef> & varsToEliminat
         checkImplicant(implicant, logic, model);
     }
     implicant.insert(implicant.end(), withoutVarsToEliminate.begin(), withoutVarsToEliminate.end());
-    postprocess(implicant, dynamic_cast<LALogic&>(logic));
+    postprocess(implicant, dynamic_cast<ArithLogic&>(logic));
     tmp.clear();
     for (PtAsgn literal : implicant) {
         tmp.push(literal.sgn == l_True ? literal.tr : logic.mkNot(literal.tr));
@@ -502,13 +503,14 @@ void ModelBasedProjection::dumpImplicant(std::ostream & out, implicant_t const& 
 }
 
 PTRef ModelBasedProjection::projectIntegerVars(PTRef * beg, PTRef * end, implicant_t implicant, Model & model) {
-    LIALogic & lialogic = dynamic_cast<LIALogic&>(logic);
+    auto & lialogic = dynamic_cast<ArithLogic&>(logic);
+    assert(lialogic.hasIntegers());
     div_constraints_t divConstraints;
     auto isDivisibilityConstraint = [&lialogic](PtAsgn lit) {
         if (lialogic.isNumEq(lit.tr)) {
             PTRef lhs = lialogic.getPterm(lit.tr)[0];
             PTRef rhs = lialogic.getPterm(lit.tr)[1];
-            if (lialogic.isIntMod(lialogic.getSymRef(lhs)) or lialogic.isIntMod(lialogic.getSymRef(rhs))) {
+            if (lialogic.isMod(lialogic.getSymRef(lhs)) or lialogic.isMod(lialogic.getSymRef(rhs))) {
                 return lit.sgn == l_True;
             }
         }
@@ -521,8 +523,8 @@ PTRef ModelBasedProjection::projectIntegerVars(PTRef * beg, PTRef * end, implica
         PTRef rhs = lialogic.getPterm(lit.tr)[1];
         PTRef val = lialogic.isNumConst(lhs) ? lhs : rhs;
         PTRef mod = lialogic.isNumConst(lhs) ? rhs : lhs;
-        assert(val == lialogic.getTerm_NumZero());
-        assert(lialogic.isIntMod(lialogic.getSymRef(mod)));
+        assert(val == lialogic.getTerm_IntZero());
+        assert(lialogic.isMod(lialogic.getSymRef(mod)));
         PTRef term = lialogic.getPterm(mod)[0];
         PTRef constant = lialogic.getPterm(mod)[1];
         assert(lialogic.isNumConst(constant));
@@ -535,7 +537,7 @@ PTRef ModelBasedProjection::projectIntegerVars(PTRef * beg, PTRef * end, implica
     implicant.erase(divConstraintsBeg, implicant.end());
     for (PTRef * it = beg; it != end; ++it) {
         PTRef var = *it;
-        if (not lialogic.isIntVar(lialogic.getSymRef(var))) {
+        if (not (lialogic.isNumVar(lialogic.getSymRef(var)) and lialogic.getSortRef(var) == lialogic.getSort_int())) {
             throw std::logic_error("Non-integer variable encountered in MBP for integers!");
         }
         if (not divConstraints.empty()) {
@@ -552,8 +554,8 @@ PTRef ModelBasedProjection::projectIntegerVars(PTRef * beg, PTRef * end, implica
     if (not divConstraints.empty()) {
         for (auto const & constraint : divConstraints) {
             assert(lialogic.isConstant(constraint.constant));
-            PTRef mod = lialogic.mkIntMod(constraint.term, constraint.constant);
-            tmp.push(logic.mkEq(mod, lialogic.getTerm_NumZero()));
+            PTRef mod = lialogic.mkMod(constraint.term, constraint.constant);
+            tmp.push(logic.mkEq(mod, lialogic.getTerm_IntZero()));
         }
     }
     return logic.mkAnd(tmp);
@@ -590,7 +592,8 @@ std::unique_ptr<Model> extendModel(Model & model, ModelBasedProjection::implican
  * Bjorner & Janota, Playing with Quantified Satisfaction, LPAR-20, 2015
  */
 void ModelBasedProjection::processDivConstraints(PTRef var, div_constraints_t & divConstraints, implicant_t & implicant, Model & model) {
-    LIALogic & lialogic = dynamic_cast<LIALogic&>(logic);
+    auto & lialogic = dynamic_cast<ArithLogic&>(logic);
+    assert(lialogic.hasIntegers());
     LATermUtils utils(lialogic);
     auto itInterestingEnd = std::partition(divConstraints.begin(), divConstraints.end(), [&](DivisibilityConstraint const& c) {
         return utils.termContainsVar(c.term, var);
@@ -618,21 +621,21 @@ void ModelBasedProjection::processDivConstraints(PTRef var, div_constraints_t & 
         // update divisibility constraints by substituting u for x
         // TODO: make this more efficient
         TermUtils::substitutions_map subst;
-        subst.insert({var, lialogic.mkConst(u)});
+        subst.insert({var, lialogic.mkIntConst(u)});
         TermUtils tutils(logic);
         std::for_each(beg, end, [&tutils, &subst](DivisibilityConstraint & constraint) {
             constraint.term = tutils.varSubstitute(constraint.term, subst);
         });
 
         // update the classic constraints and the variable that needs to be eliminated
-        PTRef replacementVar = lialogic.mkNumVar("MBP_LIA_tmp");
+        PTRef replacementVar = lialogic.mkIntVar("MBP_LIA_tmp");
         subst.clear();
         // v -> u + d * v_tmp
-        subst.insert({var, lialogic.mkNumPlus(lialogic.mkConst(u), lialogic.mkNumTimes(lialogic.mkConst(d), replacementVar))});
+        subst.insert({var, lialogic.mkPlus(lialogic.mkIntConst(u), lialogic.mkTimes(lialogic.mkIntConst(d), replacementVar))});
         // Before substitutions, compute the extended model
         FastRational replacementVarVal = (lialogic.getNumConst(model.evaluate(var)) - u) / d;
         assert(replacementVarVal.isInteger());
-        auto extendedModel = extendModel(model, implicant, {replacementVar, lialogic.mkConst(replacementVarVal)}, lialogic);
+        auto extendedModel = extendModel(model, implicant, {replacementVar, lialogic.mkIntConst(replacementVarVal)}, lialogic);
         // Now we can substitute
         // TODO: only for those that contain the variable?
         std::for_each(implicant.begin(), implicant.end(), [&](PtAsgn & lit){
@@ -651,7 +654,8 @@ void ModelBasedProjection::processDivConstraints(PTRef var, div_constraints_t & 
  * These literals might still contain equalities, disequalities or strict inequalities (TODO: verify?)
  */
 void ModelBasedProjection::processClassicLiterals(PTRef var, div_constraints_t & divConstraints, implicant_t & implicant, Model & model) {
-    LIALogic & lialogic = dynamic_cast<LIALogic&>(logic);
+    auto & lialogic = dynamic_cast<ArithLogic &>(logic);
+    assert(lialogic.hasIntegers());
     assert(lialogic.isNumVar(var));
 
     // Normalizing is necessary to avoid equalities like "x = x + y" in further analysis.
@@ -676,20 +680,20 @@ void ModelBasedProjection::processClassicLiterals(PTRef var, div_constraints_t &
             PTRef rhs = lialogic.getPterm(literal.tr)[1];
             if (literal.sgn == l_True) {
                 // Express as "ax = t" where "a > 0"
-                PTRef zeroTerm = lialogic.mkNumMinus(lhs, rhs);
+                PTRef zeroTerm = lialogic.mkMinus(lhs, rhs);
                 auto res = separateVarFromTerm(var, zeroTerm, lialogic);
                 LinearFactor factor = res.first;
                 FastRational const& coeff = lialogic.getNumConst(factor.coeff);
                 if (coeff.sign() < 0) {
-                    equal.push_back(LIABound{.term = res.second, .coeff = lialogic.mkConst(-coeff)});
+                    equal.push_back(LIABound{.term = res.second, .coeff = lialogic.mkIntConst(-coeff)});
                 } else {
                     assert(coeff.sign() > 0);
-                    equal.push_back(LIABound{.term = lialogic.mkNumNeg(res.second), .coeff = factor.coeff});
+                    equal.push_back(LIABound{.term = lialogic.mkNeg(res.second), .coeff = factor.coeff});
                 }
             } else {
                 assert(literal.sgn == l_False);
                 // replace the non-equality with the inequality that is true in the model
-                PTRef zeroTerm = lialogic.mkNumMinus(lhs, rhs);
+                PTRef zeroTerm = lialogic.mkMinus(lhs, rhs);
                 PTRef valterm = model.evaluate(zeroTerm);
                 assert(lialogic.getNumConst(valterm) >= 1 or lialogic.getNumConst(valterm) <= -1);
                 FastRational const& val = lialogic.getNumConst(valterm);
@@ -698,37 +702,37 @@ void ModelBasedProjection::processClassicLiterals(PTRef var, div_constraints_t &
                 FastRational const& coeff = lialogic.getNumConst(factor.coeff);
                 if (val.sign() > 0) {
                     if (coeff.sign() > 0) {
-                        lower.push_back(LIABoundLower{.term = lialogic.mkNumPlus(lialogic.getTerm_NumOne(), lialogic.mkNumNeg(res.second)), .coeff = factor.coeff});
+                        lower.push_back(LIABoundLower{.term = lialogic.mkPlus(lialogic.getTerm_IntOne(), lialogic.mkNeg(res.second)), .coeff = factor.coeff});
                     } else {
-                        upper.push_back(LIABoundUpper{.term = lialogic.mkNumPlus(lialogic.getTerm_NumMinusOne(), res.second), .coeff = lialogic.mkConst(-coeff)});
+                        upper.push_back(LIABoundUpper{.term = lialogic.mkPlus(lialogic.getTerm_IntMinusOne(), res.second), .coeff = lialogic.mkIntConst(-coeff)});
                     }
                 } else {
                     assert(val.sign() < 0);
                     if (coeff.sign() > 0) {
-                        upper.push_back(LIABoundUpper{.term = lialogic.mkNumPlus(lialogic.getTerm_NumMinusOne(), lialogic.mkNumNeg(res.second)), .coeff = factor.coeff});
+                        upper.push_back(LIABoundUpper{.term = lialogic.mkPlus(lialogic.getTerm_IntMinusOne(), lialogic.mkNeg(res.second)), .coeff = factor.coeff});
                     } else {
-                        lower.push_back(LIABoundLower{.term = lialogic.mkNumPlus(lialogic.getTerm_NumOne(), res.second), .coeff = lialogic.mkConst(-coeff)});
+                        lower.push_back(LIABoundLower{.term = lialogic.mkPlus(lialogic.getTerm_IntOne(), res.second), .coeff = lialogic.mkIntConst(-coeff)});
                     }
                 }
             }
         } else {
-            assert(lialogic.isNumLeq(literal.tr));
+            assert(lialogic.isLeq(literal.tr));
             if (literal.sgn == l_False) { // not (c <= t) <=> c > t <=> c - 1 >= t
                 literal.sgn = l_True;
                 auto sides = lialogic.leqToConstantAndTerm(literal.tr);
                 assert(lialogic.isNumConst(sides.first));
-                literal.tr = lialogic.mkNumGeq(lialogic.mkConst(lialogic.getNumConst(sides.first) - 1), sides.second);
+                literal.tr = lialogic.mkGeq(lialogic.mkIntConst(lialogic.getNumConst(sides.first) - 1), sides.second);
             }
             assert(literal.sgn == l_True);
             auto sides = lialogic.leqToConstantAndTerm(literal.tr);
-            PTRef zeroTerm = lialogic.mkNumMinus(sides.second, sides.first);
+            PTRef zeroTerm = lialogic.mkMinus(sides.second, sides.first);
             auto res = separateVarFromTerm(var, zeroTerm, lialogic);
             LinearFactor factor = res.first;
             FastRational const& coeff = lialogic.getNumConst(factor.coeff);
             if (coeff.sign() > 0) {
-                lower.push_back(LIABoundLower{.term = lialogic.mkNumNeg(res.second), .coeff = factor.coeff});
+                lower.push_back(LIABoundLower{.term = lialogic.mkNeg(res.second), .coeff = factor.coeff});
             } else {
-                upper.push_back(LIABoundUpper{.term = res.second, .coeff = lialogic.mkConst(-coeff)});
+                upper.push_back(LIABoundUpper{.term = res.second, .coeff = lialogic.mkIntConst(-coeff)});
             }
         }
     }
@@ -759,9 +763,9 @@ void ModelBasedProjection::processClassicLiterals(PTRef var, div_constraints_t &
         // handle lower bounds
         for (auto const& bound : lower) {
             if (&bound == greatestLowerBound) { continue; }
-            PTRef lhs = glbCoeff.isOne() ? bound.term : lialogic.mkNumTimes(bound.term, greatestLowerBound->coeff);
-            PTRef rhs = lialogic.getNumConst(bound.coeff).isOne() ? greatestLowerBound->term : lialogic.mkNumTimes(greatestLowerBound->term, bound.coeff);
-            PTRef nBound = lialogic.mkNumLeq(lhs, rhs);
+            PTRef lhs = glbCoeff.isOne() ? bound.term : lialogic.mkTimes(bound.term, greatestLowerBound->coeff);
+            PTRef rhs = lialogic.getNumConst(bound.coeff).isOne() ? greatestLowerBound->term : lialogic.mkTimes(greatestLowerBound->term, bound.coeff);
+            PTRef nBound = lialogic.mkLeq(lhs, rhs);
             if (nBound != lialogic.getTerm_true()) { // This can happen when we have a stronger and weaker bound on the same term
                 newLiterals.push_back(PtAsgn(nBound, l_True));
             }
@@ -791,8 +795,8 @@ void ModelBasedProjection::processClassicLiterals(PTRef var, div_constraints_t &
             // ax = t; bx = s => as = bt
             LIABound const & otherBound = *it;
             assert(lialogic.getNumConst(otherBound.coeff).sign() > 0 and lialogic.getNumConst(otherBound.coeff).isInteger());
-            PTRef lhs = lialogic.mkNumTimes(otherBound.term, eqBound.coeff);
-            PTRef rhs = lialogic.mkNumTimes(eqBound.term, otherBound.coeff);
+            PTRef lhs = lialogic.mkTimes(otherBound.term, eqBound.coeff);
+            PTRef rhs = lialogic.mkTimes(eqBound.term, otherBound.coeff);
             PTRef newLit = lialogic.mkEq(lhs, rhs);
             if (newLit != lialogic.getTerm_true()) {
                 newLiterals.push_back(PtAsgn(newLit, l_True));
@@ -802,9 +806,9 @@ void ModelBasedProjection::processClassicLiterals(PTRef var, div_constraints_t &
         for (auto const & lowerBound : lower) {
             assert(lialogic.getNumConst(lowerBound.coeff).sign() > 0 and lialogic.getNumConst(lowerBound.coeff).isInteger());
             // ax = t; s <= bx => as <= bt
-            PTRef lhs = lialogic.mkNumTimes(lowerBound.term, eqBound.coeff);
-            PTRef rhs = lialogic.mkNumTimes(eqBound.term, lowerBound.coeff);
-            PTRef newLit = lialogic.mkNumLeq(lhs, rhs);
+            PTRef lhs = lialogic.mkTimes(lowerBound.term, eqBound.coeff);
+            PTRef rhs = lialogic.mkTimes(eqBound.term, lowerBound.coeff);
+            PTRef newLit = lialogic.mkLeq(lhs, rhs);
             if (newLit != lialogic.getTerm_true()) {
                 newLiterals.push_back(PtAsgn(newLit, l_True));
             }
@@ -813,16 +817,16 @@ void ModelBasedProjection::processClassicLiterals(PTRef var, div_constraints_t &
         for (auto const & upperBound : upper) {
             assert(lialogic.getNumConst(upperBound.coeff).sign() > 0 and lialogic.getNumConst(upperBound.coeff).isInteger());
             // ax = t; s >= bx => as >= bt
-            PTRef lhs = lialogic.mkNumTimes(upperBound.term, eqBound.coeff);
-            PTRef rhs = lialogic.mkNumTimes(eqBound.term, upperBound.coeff);
-            PTRef newLit = lialogic.mkNumGeq(lhs, rhs);
+            PTRef lhs = lialogic.mkTimes(upperBound.term, eqBound.coeff);
+            PTRef rhs = lialogic.mkTimes(eqBound.term, upperBound.coeff);
+            PTRef newLit = lialogic.mkGeq(lhs, rhs);
             if (newLit != lialogic.getTerm_true()) {
                 newLiterals.push_back(PtAsgn(newLit, l_True));
             }
         }
         // From the equality ax = t it also follows that t must be divisible by a
         assert(lialogic.getNumConst(eqBound.coeff).sign() > 0);
-        if (eqBound.coeff != lialogic.getTerm_NumOne()) {
+        if (eqBound.coeff != lialogic.getTerm_IntOne()) {
             divConstraints.push_back(DivisibilityConstraint{.constant = eqBound.coeff, .term = eqBound.term});
         }
         // add literals not containing the variable
@@ -842,7 +846,8 @@ void ModelBasedProjection::processClassicLiterals(PTRef var, div_constraints_t &
  * 2. as <= bt and a(s+d) <= bt and b|(s+d)             elif a>=b and d:=M(-s) mod b
  * 3. as <= bt and as <= b(t-d) and a|(t-d)             else b>a and d:=M(t) mod a
  * */
-ModelBasedProjection::ResolveResult ModelBasedProjection::resolve(LIABoundLower const & lower, LIABoundUpper const & upper, Model & model, LIALogic & lialogic) {
+ModelBasedProjection::ResolveResult ModelBasedProjection::resolve(LIABoundLower const & lower, LIABoundUpper const & upper, Model & model, ArithLogic & lialogic) {
+    assert(logic.hasIntegers());
     ResolveResult result;
     PTRef a_term = upper.coeff;
     PTRef b_term = lower.coeff;
@@ -852,15 +857,15 @@ ModelBasedProjection::ResolveResult ModelBasedProjection::resolve(LIABoundLower 
     assert(a.sign() > 0 and b.sign() > 0);
     PTRef t_term = upper.term;
     PTRef s_term = lower.term;
-    PTRef as_term = lialogic.mkNumTimes(a_term, s_term);
-    PTRef bt_term = lialogic.mkNumTimes(b_term, t_term);
+    PTRef as_term = lialogic.mkTimes(a_term, s_term);
+    PTRef bt_term = lialogic.mkTimes(b_term, t_term);
     auto const& t = lialogic.getNumConst(model.evaluate(t_term));
     auto const& s = lialogic.getNumConst(model.evaluate(s_term));
 
     FastRational mul = (a-1)*(b-1);
     if (mul <= (b*t - a*s)) {
         // case 1
-        PTRef nBound = lialogic.mkNumLeq(lialogic.mkNumPlus(as_term, lialogic.mkConst(mul)), bt_term);
+        PTRef nBound = lialogic.mkLeq(lialogic.mkPlus(as_term, lialogic.mkIntConst(mul)), bt_term);
         if (nBound != lialogic.getTerm_true()) {
             result.bounds.push_back(nBound);
         }
@@ -868,7 +873,7 @@ ModelBasedProjection::ResolveResult ModelBasedProjection::resolve(LIABoundLower 
         return result;
     }
 
-    PTRef firstBound = lialogic.mkNumLeq(as_term, bt_term);
+    PTRef firstBound = lialogic.mkLeq(as_term, bt_term);
     if (firstBound != lialogic.getTerm_true()) {
         result.bounds.push_back(firstBound);
     }
@@ -876,9 +881,9 @@ ModelBasedProjection::ResolveResult ModelBasedProjection::resolve(LIABoundLower 
         // case 2
         FastRational d = mbp_fastrat_fdiv_r(-s, b);
         assert(d.isInteger());
-        PTRef modified = lialogic.mkNumPlus(s_term, lialogic.mkConst(d));
+        PTRef modified = lialogic.mkPlus(s_term, lialogic.mkIntConst(d));
         if (not d.isZero()) {
-            PTRef secondBound = lialogic.mkNumLeq(lialogic.mkNumTimes(a_term, modified), bt_term);
+            PTRef secondBound = lialogic.mkLeq(lialogic.mkTimes(a_term, modified), bt_term);
             if (secondBound != lialogic.getTerm_true()) {
                 result.bounds.push_back(secondBound);
             }
@@ -890,9 +895,9 @@ ModelBasedProjection::ResolveResult ModelBasedProjection::resolve(LIABoundLower 
         // case 3
         FastRational d = mbp_fastrat_fdiv_r(t, a);
         assert(d.isInteger());
-        PTRef modified = lialogic.mkNumMinus(t_term, lialogic.mkConst(d));
+        PTRef modified = lialogic.mkMinus(t_term, lialogic.mkIntConst(d));
         if (not d.isZero()) {
-            PTRef secondBound = lialogic.mkNumLeq(as_term, lialogic.mkNumTimes(b_term, modified));
+            PTRef secondBound = lialogic.mkLeq(as_term, lialogic.mkTimes(b_term, modified));
             assert(secondBound != lialogic.getTerm_true());
             result.bounds.push_back(secondBound);
         }

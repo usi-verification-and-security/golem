@@ -113,7 +113,7 @@ SystemInvalidityWitness graphToSystemInvalidityWitness(InvalidityWitness const &
 //    return flas;
 //}
 
-void SystemInvalidityWitness::print(ostream & out, Logic & logic) const {
+void SystemInvalidityWitness::print(std::ostream & out, Logic & logic) const {
     auto derivationSize = derivation.size();
     ChcPrinter printer(logic, out);
     for (std::size_t i = 0; i < derivationSize; ++i) {

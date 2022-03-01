@@ -569,7 +569,7 @@ vec<PTRef> LawiContext::getPathInterpolants(MainSolver & solver, ArtPath const &
     // Create the partitions manually, TODO: fix the OpenSMT interface so that calling just getPathInterpolants would work correctly
     ipartitions_t mask = 0;
     for (std::size_t i = 0; i < pathSize - 1; ++i) {
-        setbit(mask, i);
+        opensmt::setbit(mask, i);
         itpContext->getSingleInterpolant(pathInterpolants, mask);
     }
     assert(pathInterpolants.size() == pathSize - 1);

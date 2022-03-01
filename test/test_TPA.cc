@@ -8,28 +8,28 @@
 
 TEST(TPA_test, test_TPA_simple_safe)
 {
-    LIALogic logic;
+    ArithLogic logic {opensmt::Logic_t::QF_LIA};
     Options options;
     options.addOption(Options::LOGIC, "QF_LIA");
     options.addOption(Options::COMPUTE_WITNESS, "true");
     options.addOption(Options::ENGINE, "tpa-split");
-    SymRef s1 = logic.declareFun("s1", logic.getSort_bool(), {logic.getSort_num()}, nullptr, false);
-    PTRef x = logic.mkNumVar("x");
-    PTRef xp = logic.mkNumVar("xp");
+    SymRef s1 = logic.declareFun("s1", logic.getSort_bool(), {logic.getSort_int()});
+    PTRef x = logic.mkIntVar("x");
+    PTRef xp = logic.mkIntVar("xp");
     PTRef current = logic.mkUninterpFun(s1, {x});
     PTRef next = logic.mkUninterpFun(s1, {xp});
     ChcSystem system;
     system.addUninterpretedPredicate(s1);
     system.addClause(
             ChcHead{UninterpretedPredicate{next}},
-            ChcBody{logic.mkEq(xp, logic.getTerm_NumZero()), {}});
+            ChcBody{logic.mkEq(xp, logic.getTerm_IntZero()), {}});
     system.addClause(
             ChcHead{UninterpretedPredicate{next}},
-            ChcBody{logic.mkEq(xp, logic.mkNumPlus(x, logic.getTerm_NumOne())), {UninterpretedPredicate{current}}}
+            ChcBody{logic.mkEq(xp, logic.mkPlus(x, logic.getTerm_IntOne())), {UninterpretedPredicate{current}}}
     );
     system.addClause(
             ChcHead{UninterpretedPredicate{logic.getTerm_false()}},
-            ChcBody{logic.mkNumLt(x, logic.getTerm_NumZero()), {UninterpretedPredicate{current}}}
+            ChcBody{logic.mkLt(x, logic.getTerm_IntZero()), {UninterpretedPredicate{current}}}
     );
     auto hypergraph = ChcGraphBuilder(logic).buildGraph(Normalizer(logic).normalize(system));
     ASSERT_TRUE(hypergraph->isNormalGraph());
@@ -47,28 +47,28 @@ TEST(TPA_test, test_TPA_simple_safe)
 
 TEST(TPA_test, test_TPA_simple_unsafe)
 {
-    LIALogic logic;
+    ArithLogic logic {opensmt::Logic_t::QF_LIA};
     Options options;
     options.addOption(Options::LOGIC, "QF_LIA");
     options.addOption(Options::COMPUTE_WITNESS, "true");
     options.addOption(Options::ENGINE, "tpa-split");
-    SymRef s1 = logic.declareFun("s1", logic.getSort_bool(), {logic.getSort_num()}, nullptr, false);
-    PTRef x = logic.mkNumVar("x");
-    PTRef xp = logic.mkNumVar("xp");
+    SymRef s1 = logic.declareFun("s1", logic.getSort_bool(), {logic.getSort_int()});
+    PTRef x = logic.mkIntVar("x");
+    PTRef xp = logic.mkIntVar("xp");
     PTRef current = logic.mkUninterpFun(s1, {x});
     PTRef next = logic.mkUninterpFun(s1, {xp});
     ChcSystem system;
     system.addUninterpretedPredicate(s1);
     system.addClause(
             ChcHead{UninterpretedPredicate{next}},
-            ChcBody{logic.mkEq(xp, logic.getTerm_NumZero()), {}});
+            ChcBody{logic.mkEq(xp, logic.getTerm_IntZero()), {}});
     system.addClause(
             ChcHead{UninterpretedPredicate{next}},
-            ChcBody{logic.mkEq(xp, logic.mkNumPlus(x, logic.getTerm_NumOne())), {UninterpretedPredicate{current}}}
+            ChcBody{logic.mkEq(xp, logic.mkPlus(x, logic.getTerm_IntOne())), {UninterpretedPredicate{current}}}
     );
     system.addClause(
             ChcHead{UninterpretedPredicate{logic.getTerm_false()}},
-            ChcBody{logic.mkNumGt(x, logic.getTerm_NumOne()), {UninterpretedPredicate{current}}}
+            ChcBody{logic.mkGt(x, logic.getTerm_IntOne()), {UninterpretedPredicate{current}}}
     );
     auto normalizedSystem = Normalizer(logic).normalize(system);
     auto hypergraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
@@ -86,28 +86,28 @@ TEST(TPA_test, test_TPA_simple_unsafe)
 }
 
 TEST(TPA_test, test_TPA_CEX_zero) {
-    LIALogic logic;
+    ArithLogic logic {opensmt::Logic_t::QF_LIA};
     Options options;
     options.addOption(Options::LOGIC, "QF_LIA");
     options.addOption(Options::COMPUTE_WITNESS, "true");
     options.addOption(Options::ENGINE, "tpa");
-    SymRef s1 = logic.declareFun("s1", logic.getSort_bool(), {logic.getSort_num()}, nullptr, false);
-    PTRef x = logic.mkNumVar("x");
-    PTRef xp = logic.mkNumVar("xp");
+    SymRef s1 = logic.declareFun("s1", logic.getSort_bool(), {logic.getSort_int()});
+    PTRef x = logic.mkIntVar("x");
+    PTRef xp = logic.mkIntVar("xp");
     PTRef current = logic.mkUninterpFun(s1, {x});
     PTRef next = logic.mkUninterpFun(s1, {xp});
     ChcSystem system;
     system.addUninterpretedPredicate(s1);
     system.addClause( // x' = 0 => S1(x')
             ChcHead{UninterpretedPredicate{next}},
-            ChcBody{logic.mkEq(xp, logic.getTerm_NumZero()), {}});
+            ChcBody{logic.mkEq(xp, logic.getTerm_IntZero()), {}});
     system.addClause( // S1(x) and x' = x + 1 => S1(x')
             ChcHead{UninterpretedPredicate{next}},
-            ChcBody{logic.mkEq(xp, logic.mkNumPlus(x, logic.getTerm_NumOne())), {UninterpretedPredicate{current}}}
+            ChcBody{logic.mkEq(xp, logic.mkPlus(x, logic.getTerm_IntOne())), {UninterpretedPredicate{current}}}
     );
     system.addClause( // S1(x) and x = 0 => false
             ChcHead{UninterpretedPredicate{logic.getTerm_false()}},
-            ChcBody{logic.mkEq(x, logic.getTerm_NumZero()), {UninterpretedPredicate{current}}}
+            ChcBody{logic.mkEq(x, logic.getTerm_IntZero()), {UninterpretedPredicate{current}}}
     );
     auto normalizedSystem = Normalizer(logic).normalize(system);
     auto hypergraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
@@ -124,28 +124,28 @@ TEST(TPA_test, test_TPA_CEX_zero) {
 }
 
 TEST(TPA_test, test_TPA_CEX_one) {
-    LIALogic logic;
+    ArithLogic logic {opensmt::Logic_t::QF_LIA};
     Options options;
     options.addOption(Options::LOGIC, "QF_LIA");
     options.addOption(Options::COMPUTE_WITNESS, "true");
     options.addOption(Options::ENGINE, "tpa");
-    SymRef s1 = logic.declareFun("s1", logic.getSort_bool(), {logic.getSort_num()}, nullptr, false);
-    PTRef x = logic.mkNumVar("x");
-    PTRef xp = logic.mkNumVar("xp");
+    SymRef s1 = logic.declareFun("s1", logic.getSort_bool(), {logic.getSort_int()});
+    PTRef x = logic.mkIntVar("x");
+    PTRef xp = logic.mkIntVar("xp");
     PTRef current = logic.mkUninterpFun(s1, {x});
     PTRef next = logic.mkUninterpFun(s1, {xp});
     ChcSystem system;
     system.addUninterpretedPredicate(s1);
     system.addClause( // x' = 0 => S1(x')
             ChcHead{UninterpretedPredicate{next}},
-            ChcBody{logic.mkEq(xp, logic.getTerm_NumZero()), {}});
+            ChcBody{logic.mkEq(xp, logic.getTerm_IntZero()), {}});
     system.addClause( // S1(x) and x' = x + 1 => S1(x')
             ChcHead{UninterpretedPredicate{next}},
-            ChcBody{logic.mkEq(xp, logic.mkNumPlus(x, logic.getTerm_NumOne())), {UninterpretedPredicate{current}}}
+            ChcBody{logic.mkEq(xp, logic.mkPlus(x, logic.getTerm_IntOne())), {UninterpretedPredicate{current}}}
     );
     system.addClause( // S1(x) and x = 1 => false
             ChcHead{UninterpretedPredicate{logic.getTerm_false()}},
-            ChcBody{logic.mkEq(x, logic.getTerm_NumOne()), {UninterpretedPredicate{current}}}
+            ChcBody{logic.mkEq(x, logic.getTerm_IntOne()), {UninterpretedPredicate{current}}}
     );
     auto normalizedSystem = Normalizer(logic).normalize(system);
     auto hypergraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
@@ -162,28 +162,28 @@ TEST(TPA_test, test_TPA_CEX_one) {
 }
 
 TEST(TPA_test, test_TPA_CEX_six) {
-    LIALogic logic;
+    ArithLogic logic {opensmt::Logic_t::QF_LIA};
     Options options;
     options.addOption(Options::LOGIC, "QF_LIA");
     options.addOption(Options::COMPUTE_WITNESS, "true");
     options.addOption(Options::ENGINE, "tpa");
-    SymRef s1 = logic.declareFun("s1", logic.getSort_bool(), {logic.getSort_num()}, nullptr, false);
-    PTRef x = logic.mkNumVar("x");
-    PTRef xp = logic.mkNumVar("xp");
+    SymRef s1 = logic.declareFun("s1", logic.getSort_bool(), {logic.getSort_int()});
+    PTRef x = logic.mkIntVar("x");
+    PTRef xp = logic.mkIntVar("xp");
     PTRef current = logic.mkUninterpFun(s1, {x});
     PTRef next = logic.mkUninterpFun(s1, {xp});
     ChcSystem system;
     system.addUninterpretedPredicate(s1);
     system.addClause( // x' = 0 => S1(x')
             ChcHead{UninterpretedPredicate{next}},
-            ChcBody{logic.mkEq(xp, logic.getTerm_NumZero()), {}});
+            ChcBody{logic.mkEq(xp, logic.getTerm_IntZero()), {}});
     system.addClause( // S1(x) and x' = x + 1 => S1(x')
             ChcHead{UninterpretedPredicate{next}},
-            ChcBody{logic.mkEq(xp, logic.mkNumPlus(x, logic.getTerm_NumOne())), {UninterpretedPredicate{current}}}
+            ChcBody{logic.mkEq(xp, logic.mkPlus(x, logic.getTerm_IntOne())), {UninterpretedPredicate{current}}}
     );
     system.addClause( // S1(x) and x = 6 => false
             ChcHead{UninterpretedPredicate{logic.getTerm_false()}},
-            ChcBody{logic.mkEq(x, logic.mkConst(6)), {UninterpretedPredicate{current}}}
+            ChcBody{logic.mkEq(x, logic.mkIntConst(6)), {UninterpretedPredicate{current}}}
     );
     auto normalizedSystem = Normalizer(logic).normalize(system);
     auto hypergraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
@@ -200,15 +200,15 @@ TEST(TPA_test, test_TPA_CEX_six) {
 }
 
 TEST(TPA_test, test_TPA_chain_of_two_unsafe) {
-    LIALogic logic;
+    ArithLogic logic {opensmt::Logic_t::QF_LIA};
     Options options;
     options.addOption(Options::LOGIC, "QF_LIA");
     options.addOption(Options::COMPUTE_WITNESS, "true");
     options.addOption(Options::ENGINE, "tpa-split");
-    SymRef s1 = logic.declareFun("s1", logic.getSort_bool(), {logic.getSort_num()}, nullptr, false);
-    SymRef s2 = logic.declareFun("s2", logic.getSort_bool(), {logic.getSort_num()}, nullptr, false);
-    PTRef x = logic.mkNumVar("x");
-    PTRef xp = logic.mkNumVar("xp");
+    SymRef s1 = logic.declareFun("s1", logic.getSort_bool(), {logic.getSort_int()});
+    SymRef s2 = logic.declareFun("s2", logic.getSort_bool(), {logic.getSort_int()});
+    PTRef x = logic.mkIntVar("x");
+    PTRef xp = logic.mkIntVar("xp");
     PTRef predS1Current = logic.mkUninterpFun(s1, {x});
     PTRef predS1Next = logic.mkUninterpFun(s1, {xp});
     PTRef predS2Current = logic.mkUninterpFun(s2, {x});
@@ -218,10 +218,10 @@ TEST(TPA_test, test_TPA_chain_of_two_unsafe) {
     system.addUninterpretedPredicate(s2);
     system.addClause(
             ChcHead{UninterpretedPredicate{predS1Next}},
-            ChcBody{logic.mkEq(xp, logic.getTerm_NumZero()), {}});
+            ChcBody{logic.mkEq(xp, logic.getTerm_IntZero()), {}});
     system.addClause(
             ChcHead{UninterpretedPredicate{predS1Next}},
-            ChcBody{logic.mkEq(xp, logic.mkNumPlus(x, logic.getTerm_NumOne())), {UninterpretedPredicate{predS1Current}}}
+            ChcBody{logic.mkEq(xp, logic.mkPlus(x, logic.getTerm_IntOne())), {UninterpretedPredicate{predS1Current}}}
     );
     system.addClause(
             ChcHead{UninterpretedPredicate{predS2Current}},
@@ -229,12 +229,12 @@ TEST(TPA_test, test_TPA_chain_of_two_unsafe) {
     );
     system.addClause(
             ChcHead{UninterpretedPredicate{predS2Next}},
-            ChcBody{logic.mkEq(xp, logic.mkNumMinus(x, logic.getTerm_NumOne())),
+            ChcBody{logic.mkEq(xp, logic.mkMinus(x, logic.getTerm_IntOne())),
                     {UninterpretedPredicate{predS2Current}}}
     );
     system.addClause(
             ChcHead{UninterpretedPredicate{logic.getTerm_false()}},
-            ChcBody{logic.mkNumLt(x, logic.getTerm_NumZero()), {UninterpretedPredicate{predS2Current}}}
+            ChcBody{logic.mkLt(x, logic.getTerm_IntZero()), {UninterpretedPredicate{predS2Current}}}
     );
     auto normalizedSystem = Normalizer(logic).normalize(system);
     auto hypergraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
@@ -250,15 +250,15 @@ TEST(TPA_test, test_TPA_chain_of_two_unsafe) {
 }
 
 TEST(TPA_test, test_TPA_chain_of_two_safe) {
-    LIALogic logic;
+    ArithLogic logic {opensmt::Logic_t::QF_LIA};
     Options options;
     options.addOption(Options::LOGIC, "QF_LIA");
     options.addOption(Options::COMPUTE_WITNESS, "true");
     options.addOption(Options::ENGINE, "tpa-split");
-    SymRef s1 = logic.declareFun("s1", logic.getSort_bool(), {logic.getSort_num()}, nullptr, false);
-    SymRef s2 = logic.declareFun("s2", logic.getSort_bool(), {logic.getSort_num()}, nullptr, false);
-    PTRef x = logic.mkNumVar("x");
-    PTRef xp = logic.mkNumVar("xp");
+    SymRef s1 = logic.declareFun("s1", logic.getSort_bool(), {logic.getSort_int()});
+    SymRef s2 = logic.declareFun("s2", logic.getSort_bool(), {logic.getSort_int()});
+    PTRef x = logic.mkIntVar("x");
+    PTRef xp = logic.mkIntVar("xp");
     PTRef predS1Current = logic.mkUninterpFun(s1, {x});
     PTRef predS1Next = logic.mkUninterpFun(s1, {xp});
     PTRef predS2Current = logic.mkUninterpFun(s2, {x});
@@ -268,10 +268,10 @@ TEST(TPA_test, test_TPA_chain_of_two_safe) {
     system.addUninterpretedPredicate(s2);
     system.addClause( // x = 0 => S1(x)
             ChcHead{UninterpretedPredicate{predS1Next}},
-            ChcBody{logic.mkEq(xp, logic.getTerm_NumZero()), {}});
+            ChcBody{logic.mkEq(xp, logic.getTerm_IntZero()), {}});
     system.addClause( // S1(x) & x' = x + 1 => S1(x')
             ChcHead{UninterpretedPredicate{predS1Next}},
-            ChcBody{logic.mkEq(xp, logic.mkNumPlus(x, logic.getTerm_NumOne())), {UninterpretedPredicate{predS1Current}}}
+            ChcBody{logic.mkEq(xp, logic.mkPlus(x, logic.getTerm_IntOne())), {UninterpretedPredicate{predS1Current}}}
     );
     system.addClause( // S1(x) => S2(x)
             ChcHead{UninterpretedPredicate{predS2Current}},
@@ -279,12 +279,12 @@ TEST(TPA_test, test_TPA_chain_of_two_safe) {
     );
     system.addClause( // S2(x) & x' = x + 2 => S2(x')
             ChcHead{UninterpretedPredicate{predS2Next}},
-            ChcBody{logic.mkEq(xp, logic.mkNumPlus(x, logic.mkConst(FastRational(2)))),
+            ChcBody{logic.mkEq(xp, logic.mkPlus(x, logic.mkIntConst(FastRational(2)))),
                     {UninterpretedPredicate{predS2Current}}}
     );
     system.addClause( // S2(x) & x < 0 => false
             ChcHead{UninterpretedPredicate{logic.getTerm_false()}},
-            ChcBody{logic.mkNumLt(x, logic.getTerm_NumZero()), {UninterpretedPredicate{predS2Current}}}
+            ChcBody{logic.mkLt(x, logic.getTerm_IntZero()), {UninterpretedPredicate{predS2Current}}}
     );
     auto hypergraph = ChcGraphBuilder(logic).buildGraph(Normalizer(logic).normalize(system));
     ASSERT_TRUE(hypergraph->isNormalGraph());
@@ -295,48 +295,48 @@ TEST(TPA_test, test_TPA_chain_of_two_safe) {
 }
 
 TEST(TPA_test, test_TPA_chain_regression) {
-    LIALogic logic;
+    ArithLogic logic {opensmt::Logic_t::QF_LIA};
     Options options;
     options.addOption(Options::LOGIC, "QF_LIA");
 //    options.addOption(Options::COMPUTE_WITNESS, "true");
     options.addOption(Options::ENGINE, "tpa-split");
-    SymRef s1 = logic.declareFun("inv1", logic.getSort_bool(), {logic.getSort_num(), logic.getSort_num()}, nullptr, false);
-    SymRef s2 = logic.declareFun("inv2", logic.getSort_bool(), {logic.getSort_num(), logic.getSort_num()}, nullptr, false);
-    PTRef x = logic.mkNumVar("x");
-    PTRef xp = logic.mkNumVar("xp");
-    PTRef y = logic.mkNumVar("y");
-    PTRef yp = logic.mkNumVar("yp");
+    SymRef s1 = logic.declareFun("inv1", logic.getSort_bool(), {logic.getSort_int(), logic.getSort_int()});
+    SymRef s2 = logic.declareFun("inv2", logic.getSort_bool(), {logic.getSort_int(), logic.getSort_int()});
+    PTRef x = logic.mkIntVar("x");
+    PTRef xp = logic.mkIntVar("xp");
+    PTRef y = logic.mkIntVar("y");
+    PTRef yp = logic.mkIntVar("yp");
     PTRef predS1Current = logic.mkUninterpFun(s1, {x, y});
     PTRef predS1Next = logic.mkUninterpFun(s1, {xp, yp});
     PTRef predS2Current = logic.mkUninterpFun(s2, {x, y});
     PTRef predS2Next = logic.mkUninterpFun(s2, {xp, yp});
-    PTRef val = logic.mkConst(FastRational(5));
-    PTRef doubleVal = logic.mkConst(FastRational(10));
+    PTRef val = logic.mkIntConst(FastRational(5));
+    PTRef doubleVal = logic.mkIntConst(FastRational(10));
     ChcSystem system;
     system.addUninterpretedPredicate(s1);
     system.addUninterpretedPredicate(s2);
     system.addClause(
             ChcHead{UninterpretedPredicate{predS1Next}},
-            ChcBody{logic.mkAnd(logic.mkEq(xp, logic.getTerm_NumZero()), logic.mkEq(yp, val)), {}});
+            ChcBody{logic.mkAnd(logic.mkEq(xp, logic.getTerm_IntZero()), logic.mkEq(yp, val)), {}});
     system.addClause(
             ChcHead{UninterpretedPredicate{predS1Next}},
             ChcBody{logic.mkAnd({
-                logic.mkEq(xp, logic.mkNumPlus(x, logic.getTerm_NumOne())),
+                logic.mkEq(xp, logic.mkPlus(x, logic.getTerm_IntOne())),
                 logic.mkEq(yp, y),
-                logic.mkNumLt(x, val)
+                logic.mkLt(x, val)
                 }),
                 {UninterpretedPredicate{predS1Current}}
             }
     );
     system.addClause(
             ChcHead{UninterpretedPredicate{predS2Current}},
-            ChcBody{logic.mkNumGeq(x, val), {UninterpretedPredicate{predS1Current}}}
+            ChcBody{logic.mkGeq(x, val), {UninterpretedPredicate{predS1Current}}}
     );
     system.addClause(
             ChcHead{UninterpretedPredicate{predS2Next}},
             ChcBody{logic.mkAnd(
-                        logic.mkEq(xp, logic.mkNumPlus(x, logic.getTerm_NumOne())),
-                        logic.mkEq(yp, logic.mkNumPlus(y, logic.getTerm_NumOne()))
+                        logic.mkEq(xp, logic.mkPlus(x, logic.getTerm_IntOne())),
+                        logic.mkEq(yp, logic.mkPlus(y, logic.getTerm_IntOne()))
                         ),
                     {UninterpretedPredicate{predS2Current}}}
     );

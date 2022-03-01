@@ -15,6 +15,8 @@
 #include "Validator.h"
 #include "Normalizer.h"
 
+using namespace osmttokens;
+
 namespace {
 bool addLetFrame(const vec<char *> & names, vec<PTRef> const& args, Logic & logic, LetRecords& letRecords) {
     assert(names.size() == args.size());
@@ -106,23 +108,41 @@ void ChcInterpreterContext::interpretCommand(ASTNode & node) {
     }
 }
 
-SRef ChcInterpreterContext::getSort(ASTNode & sortNode) {
-    assert(sortNode.getType() == ID_T);
-    auto buildSortName = [](ASTNode const & node) {
-        auto it = node.children->begin();
-        char* canon_name;
-        int written = asprintf(&canon_name, "%s", (**it).getValue());
-        assert(written >= 0); (void)written;
-        return canon_name;
-    };
-
-    SRef res = SRef_Undef;
-    char * name = buildSortName(sortNode);
-    if (logic.containsSort(name)) {
-        res = logic.getSortRef(name);
+SRef ChcInterpreterContext::sortFromASTNode(ASTNode const & node) const {
+    if (node.getType() == SYM_T) {
+        SortSymbol symbol(node.getValue(), 0);
+        SSymRef symRef;
+        bool known = logic.peekSortSymbol(symbol, symRef);
+        if (not known) { return SRef_Undef; }
+        return logic.getSort(symRef, {});
+    } else {
+        assert(node.getType() == LID_T and node.children and not node.children->empty());
+        ASTNode const & name = **(node.children->begin());
+        SortSymbol symbol(name.getValue(), node.children->size() - 1);
+        SSymRef symRef;
+        bool known = logic.peekSortSymbol(symbol, symRef);
+        if (not known) { return SRef_Undef; }
+        vec<SRef> args;
+        for (auto it = node.children->begin() + 1; it != node.children->end(); ++it) {
+            SRef argSortRef = sortFromASTNode(**it);
+            if (argSortRef == SRef_Undef) { return SRef_Undef; }
+            args.push(argSortRef);
+        }
+        return logic.getSort(symRef, std::move(args));
     }
-    free(name);
-    return res;
+    assert(node.getType() == LID_T and node.children and not node.children->empty());
+    ASTNode const & name = **(node.children->begin());
+    SortSymbol symbol(name.getValue(), node.children->size() - 1);
+    SSymRef symRef;
+    bool known = logic.peekSortSymbol(symbol, symRef);
+    if (not known) { return SRef_Undef; }
+    vec<SRef> args;
+    for (auto it = node.children->begin() + 1; it != node.children->end(); ++it) {
+        SRef argSortRef = sortFromASTNode(**it);
+        if (argSortRef == SRef_Undef) { return SRef_Undef; }
+        args.push(argSortRef);
+    }
+    return logic.getSort(symRef, std::move(args));
 }
 
 void ChcInterpreterContext::interpretDeclareFun(ASTNode & node) {
@@ -141,7 +161,7 @@ void ChcInterpreterContext::interpretDeclareFun(ASTNode & node) {
         return canon_name;
     };
 
-    SRef codomainSort = getSort(ret_node);
+    SRef codomainSort = sortFromASTNode(ret_node);
 
     if (codomainSort == SRef_Undef) {
         reportError("Unknown return sort of " +  std::string(fname));
@@ -154,8 +174,8 @@ void ChcInterpreterContext::interpretDeclareFun(ASTNode & node) {
 
     // domain sorts
     vec<SRef> args;
-    for (auto it2 = args_node.children->begin(); it2 != args_node.children->end(); it2++) {
-        SRef argSort = getSort(**it2);
+    for (auto childNode : *(args_node.children)) {
+        SRef argSort = sortFromASTNode(*childNode);
         if (argSort != SRef_Undef) {
             args.push(argSort);
         } else {
@@ -163,8 +183,7 @@ void ChcInterpreterContext::interpretDeclareFun(ASTNode & node) {
             return;
         }
     }
-    char* msg;
-    SymRef rval = logic.declareFun(fname, codomainSort, args, &msg);
+    SymRef rval = logic.declareFun(fname, codomainSort, args);
 
     if (rval == SymRef_Undef) {
         reportError("While declare-fun " + std::string(fname));
@@ -186,8 +205,7 @@ PTRef ChcInterpreterContext::parseTerm(const ASTNode & termNode) {
     ASTType t = termNode.getType();
     if (t == TERM_T) {
         const char* name = (**(termNode.children->begin())).getValue();
-        const char* msg;
-        return logic.mkConst(name, &msg);
+        return logic.mkConst(name);
     }
     else if (t == FORALL_T) { // Forall has two children: sorted_var_list and term
         auto it = termNode.children->begin();
@@ -215,8 +233,7 @@ PTRef ChcInterpreterContext::parseTerm(const ASTNode & termNode) {
             assert(var && var->getType() == SV_T);
             // make sure the term store know about these variables
             const char* name = var->getValue();
-            char* msg;
-            SRef sort = getSort(**var->children->begin());
+            SRef sort = sortFromASTNode(**var->children->begin());
             PTRef varTerm = logic.mkVar(sort, name);
             quantifierHack.addBinding(name, varTerm);
 //            std::cout << var->getValue() << std::endl; // name of the variable
@@ -233,7 +250,7 @@ PTRef ChcInterpreterContext::parseTerm(const ASTNode & termNode) {
             return tr;
         }
         char* msg = nullptr;
-        tr = logic.resolveTerm(name, {}, &msg);
+        tr = logic.resolveTerm(name, {});
         assert(tr != PTRef_Undef);
         return tr;
     }
@@ -254,7 +271,7 @@ PTRef ChcInterpreterContext::parseTerm(const ASTNode & termNode) {
         assert(args.size() > 0);
         char* msg = nullptr;
         PTRef tr = PTRef_Undef;
-        tr = logic.resolveTerm(name, std::move(args), &msg);
+        tr = logic.resolveTerm(name, std::move(args));
         assert(tr != PTRef_Undef);
         return tr;
     }
@@ -314,8 +331,8 @@ void ChcInterpreterContext::interpretCheckSat() {
         bool tryAccelerateLoops = opts.hasOption(Options::ACCELERATE_LOOPS);
         if (tryAccelerateLoops) {
             assert(opts.getOption(Options::ACCELERATE_LOOPS) == "true");
-            LALogic * laLogic = dynamic_cast<LALogic*>(&logic);
-            if (laLogic) {
+            auto * laLogic = dynamic_cast<ArithLogic*>(&logic);
+            if (laLogic and laLogic->hasIntegers()) {
                 engine = std::unique_ptr<Engine>(new LoopAccelerator(*laLogic, std::move(engine)));
             } else {
                 std::cerr << "Loops can be accelerated only for arithmetic problems, skipping this preprocessing\n";

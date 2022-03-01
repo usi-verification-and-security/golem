@@ -141,9 +141,9 @@ ChcBody Normalizer::normalize(const ChcBody & body) {
 }
 
 PTRef Normalizer::eliminateDivMod(PTRef fla) {
-    LIALogic * lialogic = dynamic_cast<LIALogic *>(&logic);
-    if (lialogic) {
-        return DivModRewriter(*lialogic).rewrite(fla);
+    ArithLogic * lalogic = dynamic_cast<ArithLogic *>(&logic);
+    if (lalogic and lalogic->hasIntegers()) {
+        return DivModRewriter(*lalogic).rewrite(fla);
     }
     return fla;
 }

@@ -13,7 +13,7 @@
 #include <unordered_set>
 #include <iosfwd>
 class Logic;
-class LALogic;
+class ArithLogic;
 
 class ModelBasedProjection {
 private:
@@ -34,9 +34,9 @@ private:
 
     implicant_t getImplicant(PTRef var, Model & model, VarsInfo const&);
 
-    void dumpImplicant(ostream& out, implicant_t const & implicant);
+    void dumpImplicant(std::ostream& out, implicant_t const & implicant);
 
-    void postprocess(implicant_t & literals, LALogic & logic);
+    void postprocess(implicant_t & literals, ArithLogic & logic);
 
     // LIA version
 
@@ -73,5 +73,5 @@ private:
         bool hasDivConstraint;
     };
 
-    ResolveResult resolve(LIABoundLower const& lower, LIABoundUpper const& upper, Model & model, LIALogic & lialogic);
+    ResolveResult resolve(LIABoundLower const& lower, LIABoundUpper const& upper, Model & model, ArithLogic & lialogic);
 };

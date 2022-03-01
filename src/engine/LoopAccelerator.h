@@ -12,14 +12,14 @@
 #include <memory>
 
 class LoopAccelerator : public Engine {
-    LALogic & logic;
+    ArithLogic & logic;
     std::unique_ptr<Engine> delegate;
     static const std::string PREFIX;
     static const std::string LOOP_COUNTER_PREFIX;
     mutable long long varCounter = 0;
     mutable long long loopCounter = 0;
 public:
-    LoopAccelerator(LALogic & logic, std::unique_ptr<Engine> delegate) : logic(logic), delegate(std::move(delegate)) {}
+    LoopAccelerator(ArithLogic & logic, std::unique_ptr<Engine> delegate) : logic(logic), delegate(std::move(delegate)) {}
 
     GraphVerificationResult solve(const ChcDirectedGraph & graph) override;
 private:
@@ -38,7 +38,7 @@ private:
 
     PTRef getLoopCounterVar() const {
         std::string varName = LOOP_COUNTER_PREFIX + std::to_string(loopCounter++);
-        PTRef loopCounterVar = logic.mkNumVar(varName.c_str());
+        PTRef loopCounterVar = logic.mkIntVar(varName.c_str());
         return TimeMachine(logic).getVarVersionZero(loopCounterVar);
     }
 

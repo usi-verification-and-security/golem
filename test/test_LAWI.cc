@@ -9,27 +9,27 @@
 
 TEST(LAWI_test, test_LAWI_simple)
 {
-	LRALogic logic;
+	ArithLogic logic {opensmt::Logic_t::QF_LRA};
 	Options options;
 	options.addOption(Options::LOGIC, "QF_LRA");
 	options.addOption(Options::COMPUTE_WITNESS, "true");
-	SymRef s1 = logic.declareFun("s1", logic.getSort_bool(), {logic.getSort_num()}, nullptr, false);
-	PTRef x = logic.mkNumVar("x");
-	PTRef xp = logic.mkNumVar("xp");
+	SymRef s1 = logic.declareFun("s1", logic.getSort_bool(), {logic.getSort_real()});
+	PTRef x = logic.mkRealVar("x");
+	PTRef xp = logic.mkRealVar("xp");
 	PTRef current = logic.mkUninterpFun(s1, {x});
 	PTRef next = logic.mkUninterpFun(s1, {xp});
 	ChcSystem system;
 	system.addUninterpretedPredicate(s1);
 	system.addClause(
 		ChcHead{UninterpretedPredicate{next}},
-		ChcBody{logic.mkEq(xp, logic.getTerm_NumZero()), {}});
+		ChcBody{logic.mkEq(xp, logic.getTerm_RealZero()), {}});
 	system.addClause(
 		ChcHead{UninterpretedPredicate{next}},
-		ChcBody{logic.mkEq(xp, logic.mkNumPlus(x, logic.getTerm_NumOne())), {UninterpretedPredicate{current}}}
+		ChcBody{logic.mkEq(xp, logic.mkPlus(x, logic.getTerm_RealOne())), {UninterpretedPredicate{current}}}
 		);
 	system.addClause(
 		ChcHead{UninterpretedPredicate{logic.getTerm_false()}},
-		ChcBody{logic.mkNumLt(x, logic.getTerm_NumZero()), {UninterpretedPredicate{current}}}
+		ChcBody{logic.mkLt(x, logic.getTerm_RealZero()), {UninterpretedPredicate{current}}}
 	);
 	auto hypergraph = ChcGraphBuilder(logic).buildGraph(Normalizer(logic).normalize(system));
 	ASSERT_TRUE(hypergraph->isNormalGraph());
@@ -47,16 +47,16 @@ TEST(LAWI_test, test_LAWI_simple)
 
 TEST(LAWI_test, test_LAWI_branch)
 {
-	LRALogic logic;
+	ArithLogic logic {opensmt::Logic_t::QF_LRA};
 	Options options;
 	options.addOption(Options::LOGIC, "QF_LRA");
 	options.addOption(Options::COMPUTE_WITNESS, "true");
-	SymRef first = logic.declareFun("s1", logic.getSort_bool(), {logic.getSort_num(), logic.getSort_num()}, nullptr, false);
-	SymRef second = logic.declareFun("s2", logic.getSort_bool(), {logic.getSort_num(), logic.getSort_num()}, nullptr, false);
-	PTRef x = logic.mkNumVar("x");
-	PTRef xp = logic.mkNumVar("xp");
-	PTRef y = logic.mkNumVar("y");
-	PTRef yp = logic.mkNumVar("yp");
+	SymRef first = logic.declareFun("s1", logic.getSort_bool(), {logic.getSort_real(), logic.getSort_real()});
+	SymRef second = logic.declareFun("s2", logic.getSort_bool(), {logic.getSort_real(), logic.getSort_real()});
+	PTRef x = logic.mkRealVar("x");
+	PTRef xp = logic.mkRealVar("xp");
+	PTRef y = logic.mkRealVar("y");
+	PTRef yp = logic.mkRealVar("yp");
 	PTRef s1 = logic.mkUninterpFun(first, {x,y});
 	PTRef s1p = logic.mkUninterpFun(first, {xp, yp});
 	PTRef s2 = logic.mkUninterpFun(second, {x,y});
@@ -66,31 +66,31 @@ TEST(LAWI_test, test_LAWI_branch)
 	system.addUninterpretedPredicate(second);
 	system.addClause(
 		ChcHead{UninterpretedPredicate{s1p}},
-		ChcBody{logic.mkEq(xp, logic.getTerm_NumZero()), {}});
+		ChcBody{logic.mkEq(xp, logic.getTerm_RealZero()), {}});
 	system.addClause(
 		ChcHead{UninterpretedPredicate{s1p}},
-		ChcBody{logic.mkEq(xp, logic.mkNumPlus(x, logic.getTerm_NumOne())), {UninterpretedPredicate{s1}}}
+		ChcBody{logic.mkEq(xp, logic.mkPlus(x, logic.getTerm_RealOne())), {UninterpretedPredicate{s1}}}
 	);
 	system.addClause(
 		ChcHead{UninterpretedPredicate{s2}},
-		ChcBody{logic.mkNumLt(y, logic.getTerm_NumZero()), {UninterpretedPredicate{s1}}}
+		ChcBody{logic.mkLt(y, logic.getTerm_RealZero()), {UninterpretedPredicate{s1}}}
 	);
 	system.addClause(
 		ChcHead{UninterpretedPredicate{s2}},
-		ChcBody{logic.mkNumGeq(y, logic.getTerm_NumZero()), {UninterpretedPredicate{s1}}}
+		ChcBody{logic.mkGeq(y, logic.getTerm_RealZero()), {UninterpretedPredicate{s1}}}
 	);
 	system.addClause(
 		ChcHead{UninterpretedPredicate{s2p}},
 		ChcBody{
 			logic.mkAnd(
-				logic.mkEq(yp, logic.mkNumPlus(y, logic.getTerm_NumOne())),
+				logic.mkEq(yp, logic.mkPlus(y, logic.getTerm_RealOne())),
 				logic.mkEq(xp, x)
 				),
 			{UninterpretedPredicate{s2}}}
 	);
 	system.addClause(
 		ChcHead{UninterpretedPredicate{logic.getTerm_false()}},
-		ChcBody{logic.mkNumLt(x, logic.getTerm_NumZero()), {UninterpretedPredicate{s2}}}
+		ChcBody{logic.mkLt(x, logic.getTerm_RealZero()), {UninterpretedPredicate{s2}}}
 	);
 	auto hypergraph = ChcGraphBuilder(logic).buildGraph(Normalizer(logic).normalize(system));
 	ASSERT_TRUE(hypergraph->isNormalGraph());
@@ -109,14 +109,14 @@ TEST(LAWI_test, test_LAWI_branch)
 
 TEST(LAWI_test, test_LAWI_unreachable_state)
 {
-	LRALogic logic;
+	ArithLogic logic {opensmt::Logic_t::QF_LRA};
 	Options options;
 	options.addOption(Options::LOGIC, "QF_LRA");
 	options.addOption(Options::COMPUTE_WITNESS, "true");
-	SymRef s1 = logic.declareFun("s1", logic.getSort_bool(), {logic.getSort_num()}, nullptr, false);
-	SymRef bin = logic.declareFun("bin", logic.getSort_bool(), {logic.getSort_num()}, nullptr, false);
-	PTRef x = logic.mkNumVar("x");
-	PTRef xp = logic.mkNumVar("xp");
+	SymRef s1 = logic.declareFun("s1", logic.getSort_bool(), {logic.getSort_real()});
+	SymRef bin = logic.declareFun("bin", logic.getSort_bool(), {logic.getSort_real()});
+	PTRef x = logic.mkRealVar("x");
+	PTRef xp = logic.mkRealVar("xp");
 	PTRef current = logic.mkUninterpFun(s1, {x});
 	PTRef next = logic.mkUninterpFun(s1, {xp});
 	PTRef binCurrent = logic.mkUninterpFun(bin, {x});
@@ -125,25 +125,25 @@ TEST(LAWI_test, test_LAWI_unreachable_state)
 	system.addUninterpretedPredicate(s1);
 	system.addClause(
 		ChcHead{UninterpretedPredicate{next}},
-		ChcBody{logic.mkEq(xp, logic.getTerm_NumZero()), {}});
+		ChcBody{logic.mkEq(xp, logic.getTerm_RealZero()), {}});
 	system.addClause(
 		ChcHead{UninterpretedPredicate{next}},
-		ChcBody{logic.mkEq(xp, logic.mkNumPlus(x, logic.getTerm_NumOne())), {UninterpretedPredicate{current}}}
+		ChcBody{logic.mkEq(xp, logic.mkPlus(x, logic.getTerm_RealOne())), {UninterpretedPredicate{current}}}
 	);
 	system.addClause(
 		ChcHead{UninterpretedPredicate{logic.getTerm_false()}},
-		ChcBody{logic.mkNumLt(x, logic.getTerm_NumZero()), {UninterpretedPredicate{current}}}
+		ChcBody{logic.mkLt(x, logic.getTerm_RealZero()), {UninterpretedPredicate{current}}}
 	);
 	system.addClause(
 		ChcHead{UninterpretedPredicate{binNext}},
-		ChcBody{logic.mkEq(xp, logic.mkNumPlus(x, logic.getTerm_NumOne())), {UninterpretedPredicate{binCurrent}}}
+		ChcBody{logic.mkEq(xp, logic.mkPlus(x, logic.getTerm_RealOne())), {UninterpretedPredicate{binCurrent}}}
 	);
 	system.addClause(
 		ChcHead{UninterpretedPredicate{next}},
 		ChcBody{
 			logic.mkAnd(
 				logic.mkEq(xp, x),
-				logic.mkNumLt(x, logic.getTerm_NumZero())
+				logic.mkLt(x, logic.getTerm_RealZero())
 			),
 			{UninterpretedPredicate{binCurrent}}
 		}
@@ -165,27 +165,27 @@ TEST(LAWI_test, test_LAWI_unreachable_state)
 
 TEST(LAWI_test, test_LAWI_simple_unsafe)
 {
-    LRALogic logic;
+    ArithLogic logic {opensmt::Logic_t::QF_LRA};
     Options options;
     options.addOption(Options::LOGIC, "QF_LRA");
     options.addOption(Options::COMPUTE_WITNESS, "true");
-    SymRef s1 = logic.declareFun("s1", logic.getSort_bool(), {logic.getSort_num()}, nullptr, false);
-    PTRef x = logic.mkNumVar("x");
-    PTRef xp = logic.mkNumVar("xp");
+    SymRef s1 = logic.declareFun("s1", logic.getSort_bool(), {logic.getSort_real()});
+    PTRef x = logic.mkRealVar("x");
+    PTRef xp = logic.mkRealVar("xp");
     PTRef current = logic.mkUninterpFun(s1, {x});
     PTRef next = logic.mkUninterpFun(s1, {xp});
     ChcSystem system;
     system.addUninterpretedPredicate(s1);
     system.addClause(
         ChcHead{UninterpretedPredicate{next}},
-        ChcBody{logic.mkEq(xp, logic.getTerm_NumZero()), {}});
+        ChcBody{logic.mkEq(xp, logic.getTerm_RealZero()), {}});
     system.addClause(
         ChcHead{UninterpretedPredicate{next}},
-        ChcBody{logic.mkEq(xp, logic.mkNumPlus(x, logic.getTerm_NumOne())), {UninterpretedPredicate{current}}}
+        ChcBody{logic.mkEq(xp, logic.mkPlus(x, logic.getTerm_RealOne())), {UninterpretedPredicate{current}}}
     );
     system.addClause(
         ChcHead{UninterpretedPredicate{logic.getTerm_false()}},
-        ChcBody{logic.mkEq(x, logic.mkConst(FastRational(1))), {UninterpretedPredicate{current}}}
+        ChcBody{logic.mkEq(x, logic.mkRealConst(FastRational(1))), {UninterpretedPredicate{current}}}
     );
     auto normalizedSystem = Normalizer(logic).normalize(system);
     auto hypergraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
@@ -204,27 +204,26 @@ TEST(LAWI_test, test_LAWI_simple_unsafe)
 
 TEST(LAWI_test, test_LAWI_accelerated_unsafe)
 {
-    LRALogic logic;
+    ArithLogic logic {opensmt::Logic_t::QF_LIA};
     Options options;
-    options.addOption(Options::LOGIC, "QF_LRA");
     options.addOption(Options::COMPUTE_WITNESS, "true");
-    SymRef s1 = logic.declareFun("s1", logic.getSort_bool(), {logic.getSort_num()}, nullptr, false);
-    PTRef x = logic.mkNumVar("x");
-    PTRef xp = logic.mkNumVar("xp");
+    SymRef s1 = logic.declareFun("s1", logic.getSort_bool(), {logic.getSort_int()});
+    PTRef x = logic.mkIntVar("x");
+    PTRef xp = logic.mkIntVar("xp");
     PTRef current = logic.mkUninterpFun(s1, {x});
     PTRef next = logic.mkUninterpFun(s1, {xp});
     ChcSystem system;
     system.addUninterpretedPredicate(s1);
     system.addClause(
         ChcHead{UninterpretedPredicate{next}},
-        ChcBody{logic.mkEq(xp, logic.getTerm_NumZero()), {}});
+        ChcBody{logic.mkEq(xp, logic.getTerm_IntZero()), {}});
     system.addClause(
         ChcHead{UninterpretedPredicate{next}},
-        ChcBody{logic.mkEq(xp, logic.mkNumPlus(x, logic.getTerm_NumOne())), {UninterpretedPredicate{current}}}
+        ChcBody{logic.mkEq(xp, logic.mkPlus(x, logic.getTerm_IntOne())), {UninterpretedPredicate{current}}}
     );
     system.addClause(
         ChcHead{UninterpretedPredicate{logic.getTerm_false()}},
-        ChcBody{logic.mkEq(x, logic.mkConst(FastRational(100))), {UninterpretedPredicate{current}}}
+        ChcBody{logic.mkEq(x, logic.mkIntConst(FastRational(100))), {UninterpretedPredicate{current}}}
     );
     auto normalizedSystem = Normalizer(logic).normalize(system);
     auto hypergraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);

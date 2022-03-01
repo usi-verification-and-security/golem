@@ -7,29 +7,29 @@
 
 class NNFTest : public ::testing::Test {
 protected:
-    LRALogic logic;
+    ArithLogic logic {opensmt::Logic_t::QF_LRA};
     PTRef x;
     PTRef b;
     PTRef a;
     PTRef zero;
     PTRef one;
     NNFTest() {
-        x = logic.mkNumVar("x");
+        x = logic.mkRealVar("x");
         a = logic.mkBoolVar("a");
         b = logic.mkBoolVar("b");
-        zero = logic.getTerm_NumZero();
-        one = logic.getTerm_NumOne();
+        zero = logic.getTerm_RealZero();
+        one = logic.getTerm_RealOne();
     }
 };
 
 TEST_F(NNFTest, test_Atom) {
-    PTRef atom = logic.mkNumLeq(x, zero);
+    PTRef atom = logic.mkLeq(x, zero);
     PTRef nnf = TermUtils(logic).toNNF(atom);
     ASSERT_EQ(atom, nnf);
 }
 
 TEST_F(NNFTest, test_NegatedConjunction) {
-    PTRef atom = logic.mkNumLeq(x, zero);
+    PTRef atom = logic.mkLeq(x, zero);
     PTRef conj = logic.mkAnd(atom, b);
     PTRef fla = logic.mkNot(conj);
     PTRef nnf = TermUtils(logic).toNNF(fla);
@@ -37,7 +37,7 @@ TEST_F(NNFTest, test_NegatedConjunction) {
 }
 
 TEST_F(NNFTest, test_NegatedDisjunction) {
-    PTRef atom = logic.mkNumLeq(x, zero);
+    PTRef atom = logic.mkLeq(x, zero);
     PTRef disj = logic.mkOr(atom, b);
     PTRef fla = logic.mkNot(disj);
     PTRef nnf = TermUtils(logic).toNNF(fla);

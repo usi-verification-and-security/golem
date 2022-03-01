@@ -10,17 +10,17 @@
 #include "ChcGraph.h"
 
 TEST(NormalizerTest, test_boolean_equal_to_constant) {
-    LIALogic logic;
+    ArithLogic logic {opensmt::Logic_t::QF_LIA};
 
-    SymRef s1 = logic.declareFun("s1", logic.getSort_bool(), {logic.getSort_num(), logic.getSort_bool()}, nullptr, false);
-    PTRef x = logic.mkNumVar("x");
-    PTRef xp = logic.mkNumVar("xp");
+    SymRef s1 = logic.declareFun("s1", logic.getSort_bool(), {logic.getSort_int(), logic.getSort_bool()});
+    PTRef x = logic.mkIntVar("x");
+    PTRef xp = logic.mkIntVar("xp");
     PTRef b = logic.mkBoolVar("b");
     ChcSystem system;
     system.addUninterpretedPredicate(s1);
 
     system.addClause(
-            ChcHead{UninterpretedPredicate{logic.mkUninterpFun(s1, {logic.getTerm_NumZero(), logic.getTerm_false()})}},
+            ChcHead{UninterpretedPredicate{logic.mkUninterpFun(s1, {logic.getTerm_IntZero(), logic.getTerm_false()})}},
             ChcBody{logic.getTerm_true()}
     );
 
@@ -31,7 +31,7 @@ TEST(NormalizerTest, test_boolean_equal_to_constant) {
 
     system.addClause(
             ChcHead{logic.getTerm_false()},
-            ChcBody{InterpretedFla{}, {UninterpretedPredicate{logic.mkUninterpFun(s1, {logic.getTerm_NumZero(), logic.getTerm_true()})}}}
+            ChcBody{InterpretedFla{}, {UninterpretedPredicate{logic.mkUninterpFun(s1, {logic.getTerm_IntZero(), logic.getTerm_true()})}}}
     );
     ChcPrinter(logic, std::cout).print(system);
     auto normalizedSystem = Normalizer(logic).normalize(system);

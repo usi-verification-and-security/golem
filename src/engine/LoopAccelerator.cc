@@ -12,7 +12,7 @@ const std::string LoopAccelerator::LOOP_COUNTER_PREFIX = "loop#";
 
 
 ChcDirectedGraph LoopAccelerator::removeAcceleratedLoops(const ChcDirectedGraph & original,
-                                                         const map<EId, PTRef> & acceleratedLoops) const {
+                                                         std::map<EId, PTRef> const & acceleratedLoops) const {
     auto vertices = original.getVertexCopies();
     auto edges = original.getEdgeCopies();
     LinearCanonicalPredicateRepresentation predicateRepresentation = original.getPredicateRepresentation();
@@ -36,7 +36,7 @@ ChcDirectedGraph LoopAccelerator::removeAcceleratedLoops(const ChcDirectedGraph 
             domainSorts.push(logic.getSym(currentSymbol)[i]);
         }
         char* msg;
-        SymRef duplicateSymbol = logic.declareFun(duplicateName.c_str(), logic.getSortRef(current.predicateSymbol), domainSorts, &msg);
+        SymRef duplicateSymbol = logic.declareFun(duplicateName, logic.getSortRef(current.predicateSymbol), domainSorts);
         Vertex duplicate = Vertex{.predicateSymbol = duplicateSymbol, .id = nextId++};
         vertices.push_back(duplicate);
         // add the new symbol to canonical representation
@@ -103,15 +103,15 @@ std::map<EId, PTRef> LoopAccelerator::getAcceleratedLoops(std::vector<EId> selfL
             // reformulate the equality as 'next = f(current)'
             PTRef lhs = logic.getPterm(conjunct)[0];
             PTRef rhs = logic.getPterm(conjunct)[1];
-            if (logic.getSortRef(lhs) != logic.getSort_num()) { break; }
-            PTRef zeroTerm = logic.mkNumMinus(lhs, rhs);
+            if (not logic.isSortNum(logic.getSortRef(lhs))) { break; }
+            PTRef zeroTerm = logic.mkMinus(lhs, rhs);
             PTRef nextStateDef = LATermUtils(logic).expressZeroTermFor(zeroTerm, nextState);
             // we can accelerate if 'f(current) = current + c' for some constant c
             PTRef acceleratedDefinition = PTRef_Undef;
             if (logic.isNumConst(nextStateDef) or logic.isNumVar(nextStateDef)) {
                 // f(current) = c or f(current) = current => no change for any number of iterations
                 acceleratedDefinition = nextStateDef;
-            } else if (logic.isNumPlus(nextStateDef)) {
+            } else if (logic.isPlus(nextStateDef)) {
                 auto size = logic.getPterm(nextStateDef).size();
                 if (size == 2) { // with ITEs, there may be many arguments in the sum
                     PTRef var = logic.getPterm(nextStateDef)[0];
@@ -120,9 +120,9 @@ std::map<EId, PTRef> LoopAccelerator::getAcceleratedLoops(std::vector<EId> selfL
                         std::swap(var, constant);
                     }
                     assert(logic.isConstant(constant));
-                    assert(logic.isVar(var) || logic.isNumTimes(var) || logic.isIte(var));
+                    assert(logic.isVar(var) || logic.isTimes(var) || logic.isIte(var));
                     if (logic.isVar(var)) {
-                        acceleratedDefinition = logic.mkNumPlus(var, logic.mkNumTimes(constant, loopCounterVar));
+                        acceleratedDefinition = logic.mkPlus(var, logic.mkTimes(constant, loopCounterVar));
                     }
                 }
             }
@@ -135,7 +135,7 @@ std::map<EId, PTRef> LoopAccelerator::getAcceleratedLoops(std::vector<EId> selfL
             }
         }
         if (success) {
-            varDefs.push(logic.mkNumGeq(loopCounterVar, logic.getTerm_NumZero()));
+            varDefs.push(logic.mkGeq(loopCounterVar, logic.getTerm_IntZero()));
             acceleratedDefs.insert({eid, logic.mkAnd(varDefs)});
         }
     }

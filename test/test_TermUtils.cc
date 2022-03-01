@@ -14,8 +14,8 @@ bool contains(vec<PTRef> const & v, PTRef p) {
 
 class TermUtils_Test : public ::testing::Test {
 protected:
-    Logic logic;
-    TermUtils utils;
+    ArithLogic logic {opensmt::Logic_t::QF_LRA};
+    TermUtils utils {logic};
     PTRef a;
     PTRef b;
     PTRef c;
@@ -23,7 +23,7 @@ protected:
     PTRef nb;
     PTRef nc;
 
-    TermUtils_Test() : logic{}, utils{logic} {
+    TermUtils_Test() {
         a = logic.mkBoolVar("a");
         b = logic.mkBoolVar("b");
         c = logic.mkBoolVar("c");

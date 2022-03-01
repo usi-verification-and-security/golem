@@ -8,6 +8,8 @@
 #include "osmt_terms.h"
 
 #include <algorithm>
+#include <iostream>
+#include <sstream>
 
 class TermUtils {
     Logic & logic;
@@ -147,7 +149,7 @@ public:
         }
     }
 
-    void printTermWithLets(ostream & out, PTRef term);
+    void printTermWithLets(std::ostream & out, PTRef term);
 
     PTRef simplifyMax(PTRef root) {
         if (logic.isAnd(root) or logic.isOr(root)) {
@@ -161,9 +163,9 @@ public:
 };
 
 class LATermUtils {
-    LALogic & logic;
+    ArithLogic & logic;
 public:
-    LATermUtils(LALogic & logic) : logic(logic) {}
+    LATermUtils(ArithLogic & logic) : logic(logic) {}
 
 
     /**

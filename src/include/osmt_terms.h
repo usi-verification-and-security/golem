@@ -6,8 +6,7 @@
 #define GOLEM_OSMT_TERMS_H
 
 #ifdef OPENSMT_LOCAL_BUILD
-#include "LRALogic.h"
-#include "LIALogic.h"
+#include "ArithLogic.h"
 #include "PTRef.h"
 #include "SymRef.h"
 #include "TreeOps.h"
@@ -16,8 +15,7 @@
 #include "DivModRewriter.h"
 #include "IteHandler.h"
 #else
-#include "opensmt/LRALogic.h"
-#include "opensmt/LIALogic.h"
+#include "opensmt/ArithLogic.h"
 #include "opensmt/PTRef.h"
 #include "opensmt/SymRef.h"
 #include "opensmt/TreeOps.h"

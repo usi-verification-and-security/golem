@@ -13,7 +13,7 @@ void ChcPrinter::print(const ChcSystem & system, std::ostream & out) const {
     }
 }
 
-void ChcPrinter::print(const ChClause & clause, ostream & out) const {
+void ChcPrinter::print(const ChClause & clause, std::ostream & out) const {
     auto const & head = clause.head;
     std::string headStr = logic.printTerm(head.predicate.predicate);
     out << headStr << " :- " << '\n';

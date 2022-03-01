@@ -100,7 +100,7 @@ private:
 
     void reportError(std::string msg);
 
-    SRef getSort(ASTNode& sortNode);
+    SRef sortFromASTNode(ASTNode const & node) const;
 
     PTRef parseTerm(ASTNode const& node);
 

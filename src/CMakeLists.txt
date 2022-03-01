@@ -2,14 +2,14 @@ include(FetchContent)
 
 # Find OpenSMT2
 SET(OPENSMT_HOME CACHE STRING "OpenSMT installation directory")
-find_package(OpenSMT 2.2.0 EXACT CONFIG PATHS ${OPENSMT_HOME} NO_DEFAULT_PATH)
+find_package(OpenSMT 2.3.0 EXACT CONFIG PATHS ${OPENSMT_HOME} NO_DEFAULT_PATH)
 
 if (OpenSMT_FOUND)
 else(OpenSMT_FOUND)
     FetchContent_Declare(
         OpenSMT
         GIT_REPOSITORY https://github.com/usi-verification-and-security/opensmt.git
-        GIT_TAG 63d6cbc382137524e815858c16f19b2d72bc173e # v2.2.0
+        GIT_TAG 82c360a5f0bf7c2ec9026acc4e423dfc73775693 # v2.3.0
         GIT_SHALLOW true
         GIT_PROGRESS true
     )
@@ -81,6 +81,7 @@ if (NOT OpenSMT_FOUND)
     ${opensmt_SOURCE_DIR}/src/proof
     ${opensmt_SOURCE_DIR}/src/models
     ${opensmt_SOURCE_DIR}/src/itehandler
+    ${opensmt_SOURCE_DIR}/src/interpolation
     )
     #message("GMP dirs:${GMP_INCLUDE_DIR}")
     target_include_directories(golem_lib PUBLIC ${GMP_INCLUDE_DIR})

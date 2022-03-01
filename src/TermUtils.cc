@@ -23,7 +23,7 @@ PTRef TrivialQuantifierElimination::tryGetSubstitutionFromEquality(PTRef var, PT
         return PTRef_Undef;
     }
     if (logic.getLogic() == opensmt::Logic_t::QF_LIA || logic.getLogic() == opensmt::Logic_t::QF_LRA) {
-        LALogic & lalogic = dynamic_cast<LALogic &>(logic);
+        auto & lalogic = dynamic_cast<ArithLogic &>(logic);
         if (not lalogic.isNumVar(var)) {
             return PTRef_Undef;
         }
@@ -31,14 +31,13 @@ PTRef TrivialQuantifierElimination::tryGetSubstitutionFromEquality(PTRef var, PT
             assert(logic.hasSortBool(rhs));
             return PTRef_Undef;
         }
-        PTRef zeroTerm = lalogic.mkNumMinus(lhs, rhs);
+        PTRef zeroTerm = lalogic.mkMinus(lhs, rhs);
         PTRef substitutionTerm = LATermUtils(lalogic).expressZeroTermFor(zeroTerm, var);
         // For LIA we should most likely check the coefficients in the result are Integers
         if (lalogic.getLogic() == opensmt::Logic_t::QF_LIA) {
             auto hasIntegerCoeff = [&lalogic](PTRef factor) {
                 assert(lalogic.isLinearFactor(factor));
-                PTRef v, c;
-                lalogic.splitTermToVarAndConst(factor, v, c);
+                auto [v,c] = lalogic.splitTermToVarAndConst(factor);
                 return lalogic.getNumConst(c).isInteger();
             };
             if (lalogic.isLinearFactor(substitutionTerm)) {
@@ -64,21 +63,20 @@ PTRef TrivialQuantifierElimination::tryGetSubstitutionFromEquality(PTRef var, PT
 PTRef LATermUtils::expressZeroTermFor(PTRef zeroTerm, PTRef var) {
     assert(logic.isLinearTerm(zeroTerm) and logic.isNumVar(var));
     assert(termContainsVar(zeroTerm, var));
+    SRef sortRef = logic.getSortRef(zeroTerm);
     // split the zeroTerm to the factor with the variable 'var' and rest
     if (logic.isLinearFactor(zeroTerm)) {
         // simple case of 'c * v = 0', the resulting term is simply zero
-        return logic.getTerm_NumZero();
+        return logic.getZeroForSort(sortRef);
     } else {
-        assert(logic.isNumPlus(zeroTerm));
+        assert(logic.isPlus(zeroTerm));
         PTRef varCoeff = PTRef_Undef;
         vec<PTRef> otherFactors;
         auto size = logic.getPterm(zeroTerm).size();
         for (int i = 0; i < size; ++i) {
             PTRef factor = logic.getPterm(zeroTerm)[i];
             assert(logic.isLinearFactor(factor));
-            PTRef factorVar;
-            PTRef coeff;
-            logic.splitTermToVarAndConst(factor, factorVar, coeff);
+            auto [factorVar, coeff] = logic.splitTermToVarAndConst(factor);
             if (factorVar == var) {
                 varCoeff = coeff;
             } else {
@@ -86,13 +84,13 @@ PTRef LATermUtils::expressZeroTermFor(PTRef zeroTerm, PTRef var) {
             }
         }
         assert(varCoeff != PTRef_Undef);
-        // now we have 't = 0' where 't = c * var + t1' => 'var = t1/-c'
-        PTRef res = logic.mkNumTimes(logic.mkNumPlus(otherFactors), logic.mkConst(FastRational(-1) / logic.getNumConst(varCoeff)));
+        // now we have 't = 0' where 't = c * var + t1' => 'var = t1/-c'logic.mkC
+        PTRef res = logic.mkTimes(logic.mkPlus(otherFactors), logic.mkConst(sortRef, FastRational(-1) / logic.getNumConst(varCoeff)));
         return res;
     }
 }
 
-void TermUtils::printTermWithLets(ostream & out, PTRef root) {
+void TermUtils::printTermWithLets(std::ostream & out, PTRef root) {
     // collect mapping of id to let expressions
     auto toLetId = [](PTRef x) -> std::string { return "l" + std::to_string(x.x); };
     std::vector<PTRef> dfsOrder;
@@ -121,11 +119,9 @@ void TermUtils::printTermWithLets(ostream & out, PTRef root) {
 
     auto toStr = [this, &strRepr](PTRef ref) -> std::string {
         Pterm const & pterm = logic.getPterm(ref);
-        char * symbol = logic.printSym(pterm.symb());
+        auto symbol = logic.printSym(pterm.symb());
         if (pterm.size() == 0) {
-            std::string res(symbol);
-            free(symbol);
-            return res;
+            return symbol;
         }
         std::stringstream ss;
         ss << '(' << symbol << ' ';
@@ -133,7 +129,6 @@ void TermUtils::printTermWithLets(ostream & out, PTRef root) {
             ss << strRepr.at(pterm[i]) << ' ';
         }
         ss << ')';
-        free(symbol);
         return ss.str();
     };
 
@@ -289,14 +284,13 @@ PTRef TermUtils::conjoin(PTRef what, PTRef to) {
 bool LATermUtils::termContainsVar(PTRef term, PTRef var) {
     assert(logic.isLinearTerm(term));
     auto getVarFromFactor = [this](PTRef factor) {
-        PTRef fvar, constant;
-        logic.splitTermToVarAndConst(factor, fvar, constant);
+        auto [fvar, constant] = logic.splitTermToVarAndConst(factor);
         return fvar;
     };
     if (logic.isLinearFactor(term)) {
         return getVarFromFactor(term) == var;
     } else {
-        assert(logic.isNumPlus(term));
+        assert(logic.isPlus(term));
         for (int i = 0; i < logic.getPterm(term).size(); ++i) {
             PTRef factor = logic.getPterm(term)[i];
             PTRef factorVar = getVarFromFactor(factor);
@@ -308,7 +302,7 @@ bool LATermUtils::termContainsVar(PTRef term, PTRef var) {
 
 bool LATermUtils::atomContainsVar(PTRef atom, PTRef var) {
     if (logic.isBoolAtom(atom) or logic.isConstant(atom)) { return false;}
-    assert(logic.isNumLeq(atom) || logic.isNumEq(atom));
+    assert(logic.isLeq(atom) || logic.isNumEq(atom));
     if (logic.isNumEq(atom)) {
         PTRef lhs = logic.getPterm(atom)[0];
         PTRef rhs = logic.getPterm(atom)[1];
@@ -392,14 +386,14 @@ struct JunctionTraits<Disjunction> {
 
 
 template<typename T>
-void simplifyJunction(std::vector<PtAsgn> & juncts, LALogic & logic) {
+void simplifyJunction(std::vector<PtAsgn> & juncts, ArithLogic & logic) {
     std::vector<PtAsgn> tmp;
     tmp.reserve(juncts.size());
     MapWithKeys<PtAsgn, PTRef, PtAsgnHash> bounds;
     for (PtAsgn literal : juncts) {
         auto sign = literal.sgn;
         PTRef ineq = literal.tr;
-        if (not logic.isNumLeq(ineq)) {
+        if (not logic.isLeq(ineq)) {
             tmp.push_back(literal);
             continue;
         }
@@ -428,7 +422,7 @@ void simplifyJunction(std::vector<PtAsgn> & juncts, LALogic & logic) {
     auto const & keys = bounds.getKeys();
     if (keys.size() + tmp.size() < juncts.size()) { // something actually changed
         for (PtAsgn key : keys) {
-            tmp.push_back(PtAsgn(logic.mkNumLeq(bounds[key], key.tr), key.sgn));
+            tmp.push_back(PtAsgn(logic.mkLeq(bounds[key], key.tr), key.sgn));
         }
         juncts = std::move(tmp);
     }

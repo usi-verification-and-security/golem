@@ -5,8 +5,10 @@
  */
 
 #include "Spacer.h"
+
 #include "ModelBasedProjection.h"
 
+#include <queue>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -392,8 +394,7 @@ SpacerContext::ItpQueryResult SpacerContext::interpolatingImplies(PTRef antecede
         qres.answer = QueryAnswer::VALID;
         auto itpCtx = solver.getInterpolationContext();
         std::vector<PTRef> itps;
-        ipartitions_t mask = 0;
-        setbit(mask, 0);
+        ipartitions_t mask = 1;
         itpCtx->getSingleInterpolant(itps, mask);
         qres.interpolant = itps[0];
     }

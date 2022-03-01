@@ -719,7 +719,7 @@ TPASplit::QueryResult TPASplit::reachabilityQueryLessThan(PTRef from, PTRef to, 
 
 
 PTRef TPABase::simplifyInterpolant(PTRef itp) {
-    auto & laLogic = dynamic_cast<LALogic&>(logic);
+    auto & laLogic = dynamic_cast<ArithLogic&>(logic);
     LATermUtils utils(laLogic);
     if (logic.isOr(itp)) {
         PTRef simplified = utils.simplifyDisjunction(itp);
