@@ -1,6 +1,8 @@
-//
-// Created by Martin Blicha on 21.08.20.
-//
+/*
+ * Copyright (c) 2020 - 2022, Martin Blicha <martin.blicha@gmail.com>
+ *
+ * SPDX-License-Identifier: MIT
+ */
 
 #include "Validator.h"
 
@@ -243,13 +245,55 @@ bool isInstanceOf(const ChClause & c1, const ChClause & c2, Logic & logic) {
     }
     PTRef modified_c2 = utils.varSubstitute(c2.body.interpretedPart.fla, subst);
     return c1.body.interpretedPart.fla == modified_c2;
+}
 
+ChClause toZeroStepVersion(Logic & logic, ChClause clause) {
+    std::optional<int> versionDiff {};
+    TimeMachine timeMachine(logic);
+    PTRef headPredicate = clause.head.predicate.predicate;
+    if (logic.getPterm(headPredicate).nargs() > 0) {
+        auto vars = TermUtils(logic).getVarsFromPredicateInOrder(headPredicate);
+        assert(not vars.empty());
+        auto version = timeMachine.getVersionNumber(vars[0]);
+        assert(std::all_of(vars.begin(), vars.end(), [version, &timeMachine](PTRef var) {
+            return timeMachine.getVersionNumber(var) == version;
+        }));
+        versionDiff = version - 1; // Version in head is version in body + 1
+    }
+    auto const & bodyPredicates = clause.body.uninterpretedPart;
+    if (not bodyPredicates.empty()) {
+        if (bodyPredicates.size() > 1) { throw ValidationException("Cannot validate InvalidityWitness for non-linear clauses yet!"); }
+        PTRef bodyPredicate = bodyPredicates[0].predicate;
+        if (logic.getPterm(bodyPredicate).nargs() > 0) {
+            auto vars = TermUtils(logic).getVarsFromPredicateInOrder(bodyPredicate);
+            assert(not vars.empty());
+            auto version = timeMachine.getVersionNumber(vars[0]);
+            assert(std::all_of(vars.begin(), vars.end(), [version, &timeMachine](PTRef var) {
+                return timeMachine.getVersionNumber(var) == version;
+            }));
+            if (versionDiff.has_value()) {
+                if (versionDiff.value() != version) { throw ValidationException("Unexpected version difference in head and body of a clause!"); }
+            } else {
+                versionDiff = version;
+            }
+        }
+    }
+    if (not versionDiff.has_value()) { throw ValidationException("Clause with empty head and body encountered?!"); }
+    auto timeSteps = -versionDiff.value();
+
+    clause.head.predicate.predicate = timeMachine.sendFlaThroughTime(headPredicate, timeSteps);
+    clause.body.interpretedPart.fla = timeMachine.sendFlaThroughTime(clause.body.interpretedPart.fla, timeSteps);
+    std::for_each(clause.body.uninterpretedPart.begin(), clause.body.uninterpretedPart.end(), [&timeMachine, timeSteps](auto & predicate) {
+        predicate.predicate = timeMachine.sendFlaThroughTime(predicate.predicate, timeSteps);
+    });
+    return clause;
 }
 }
 
 bool Validator::isPresentInSystem(const ChClause & clause, const ChcSystem & system) const {
+    ChClause zeroStepVersionClause = toZeroStepVersion(logic, clause);
     for (auto const systemClause : system.getClauses()) {
-        if (isInstanceOf(clause, systemClause, logic)) { return true; }
+        if (isInstanceOf(zeroStepVersionClause, systemClause, logic)) { return true; }
     }
     return false;
 }

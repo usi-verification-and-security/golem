@@ -1,6 +1,8 @@
-//
-// Created by Martin Blicha on 21.08.20.
-//
+/*
+ * Copyright (c) 2020 - 2022, Martin Blicha <martin.blicha@gmail.com>
+ *
+ * SPDX-License-Identifier: MIT
+ */
 
 #ifndef OPENSMT_VALIDATOR_H
 #define OPENSMT_VALIDATOR_H
@@ -8,6 +10,12 @@
 
 #include "engine/Engine.h"
 #include "ChcGraph.h"
+
+struct ValidationException : public std::runtime_error {
+public:
+    ValidationException(const std::string & msg) : std::runtime_error(msg) {}
+    ValidationException(const char * msg) : std::runtime_error(msg) {}
+};
 
 class Validator {
     Logic & logic;
