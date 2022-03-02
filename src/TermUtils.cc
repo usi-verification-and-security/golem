@@ -4,60 +4,42 @@
 
 #include "TermUtils.h"
 
-/** Given an equality 'eq' containing variable 'var', try to derive a definition of 'var' from 'eq'.
-    Returns the derived definition or PTRef_Undef is no definition could be derived
- */
-PTRef TrivialQuantifierElimination::tryGetSubstitutionFromEquality(PTRef var, PTRef eq) const {
-    assert(logic.isVar(var) and logic.isEquality(eq));
-    PTRef lhs = logic.getPterm(eq)[0];
-    PTRef rhs = logic.getPterm(eq)[1];
-    if (logic.hasSortBool(var)) {
-        // the only possibility how to get definition here is if one side of 'eq' is 'not var'
-        PTRef varNeg = logic.mkNot(var);
-        if (lhs == varNeg) {
-            return logic.mkNot(rhs);
-        }
-        if (rhs == varNeg) {
-            return logic.mkNot(lhs);
-        }
-        return PTRef_Undef;
-    }
-    if (logic.getLogic() == opensmt::Logic_t::QF_LIA || logic.getLogic() == opensmt::Logic_t::QF_LRA) {
-        auto & lalogic = dynamic_cast<ArithLogic &>(logic);
-        if (not lalogic.isNumVar(var)) {
-            return PTRef_Undef;
-        }
-        if (logic.hasSortBool(lhs)) {
-            assert(logic.hasSortBool(rhs));
-            return PTRef_Undef;
-        }
-        PTRef zeroTerm = lalogic.mkMinus(lhs, rhs);
-        PTRef substitutionTerm = LATermUtils(lalogic).expressZeroTermFor(zeroTerm, var);
-        // For LIA we should most likely check the coefficients in the result are Integers
-        if (lalogic.getLogic() == opensmt::Logic_t::QF_LIA) {
-            auto hasIntegerCoeff = [&lalogic](PTRef factor) {
-                assert(lalogic.isLinearFactor(factor));
-                auto [v,c] = lalogic.splitTermToVarAndConst(factor);
-                return lalogic.getNumConst(c).isInteger();
-            };
-            if (lalogic.isLinearFactor(substitutionTerm)) {
-                if (not hasIntegerCoeff(substitutionTerm)) {
-                    return PTRef_Undef;
-                }
+PTRef TrivialQuantifierElimination::tryEliminateVars(vec<PTRef> const & vars, PTRef fla) const {
+    if (vars.size() == 0) { return fla; }
+    auto res = TermUtils(logic).extractSubstitutionsAndSimplify(fla);
+    PTRef simplifiedFormula = res.result;
+    auto & substitutions = res.substitutionsUsed;
+    logic.substitutionsTransitiveClosure(substitutions);
+    // Substitutions where key is TBE (to be eliminated) var can be simply dropped.
+    // Others need to be brought back.
+    // If there is a TBE variable on RHS, we should revert the substitution so that this TBE var is eliminated instead.
+    // For now we only revert if RHS is exactly TBE var
+    Logic::SubstMap revertedSubs;
+    vec<PTRef> equalitiesToRestore;
+//    std::cout << "====================================\n";
+    for (auto const & key : substitutions.getKeys()) {
+//        std::cout << logic.pp(key) << " -> " << logic.pp(substitutions[key]) << std::endl;
+        assert(logic.isVar(key));
+        if (std::find(vars.begin(), vars.end(), key) == vars.end()) {
+            // If it is not a variable we wanted to eliminate, we need to insert back the equality
+            // Unless we can extract TBE var from the RHS
+            PTRef rhs = substitutions[key];
+            if (logic.isVar(rhs) and std::find(vars.begin(), vars.end(), rhs) != vars.end() and not revertedSubs.has(rhs)) {
+                revertedSubs.insert(rhs, key);
             } else {
-                auto argsCount = lalogic.getPterm(substitutionTerm).size();
-                for (int i = 0; i < argsCount; ++i) {
-                    PTRef factor = lalogic.getPterm(substitutionTerm)[i];
-                    if (not hasIntegerCoeff(factor)) {
-                        return PTRef_Undef;
-                    }
-                }
+                equalitiesToRestore.push(logic.mkEq(key, rhs));
             }
         }
-        return substitutionTerm;
-
     }
-    return PTRef_Undef;
+//    std::cout << "====================================\n";
+    if (equalitiesToRestore.size() > 0) {
+        equalitiesToRestore.push(simplifiedFormula);
+        simplifiedFormula = logic.mkAnd(std::move(equalitiesToRestore));
+    }
+    if (revertedSubs.getSize() > 0) {
+        simplifiedFormula = Substitutor(logic, revertedSubs).rewrite(simplifiedFormula);
+    }
+    return simplifiedFormula;
 }
 
 PTRef LATermUtils::expressZeroTermFor(PTRef zeroTerm, PTRef var) {
@@ -147,6 +129,46 @@ void TermUtils::printTermWithLets(std::ostream & out, PTRef root) {
     }
 
     out << strRepr.at(root) << std::string(letCount, ')');
+}
+
+// TODO: Make this available in OpenSMT?
+TermUtils::SimplificationResult TermUtils::extractSubstitutionsAndSimplify(PTRef fla) {
+    SimplificationResult result;
+    PTRef root = fla;
+    Logic::SubstMap allsubsts;
+    while (true) {
+        PTRef simp_formula = root;
+        MapWithKeys<PTRef, lbool, PTRefHash> new_units;
+        vec<PtAsgn> current_units_vec;
+        logic.getNewFacts(simp_formula, new_units);
+        const auto & new_units_vec = new_units.getKeys();
+        for (PTRef key: new_units_vec) {
+            current_units_vec.push(PtAsgn{key, new_units[key]});
+        }
+
+        auto[res, newsubsts] = logic.retrieveSubstitutions(current_units_vec);
+        logic.substitutionsTransitiveClosure(newsubsts);
+
+        for (PTRef key: newsubsts.getKeys()) {
+            if (!allsubsts.has(key)) {
+                const auto target = newsubsts[key];
+                allsubsts.insert(key, target);
+            }
+        }
+
+        if (res != l_Undef)
+            root = (res == l_True ? logic.getTerm_true() : logic.getTerm_false());
+
+        PTRef new_root = Substitutor(logic, newsubsts).rewrite(root);
+
+        bool cont = new_root != root;
+        root = new_root;
+        if (!cont) break;
+    }
+
+    result.result = root;
+    result.substitutionsUsed = std::move(allsubsts);
+    return result;
 }
 
 class NNFTransformer {

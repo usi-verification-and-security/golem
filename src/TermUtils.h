@@ -160,6 +160,12 @@ public:
     }
 
     PTRef toNNF(PTRef fla);
+
+    struct SimplificationResult {
+        Logic::SubstMap substitutionsUsed;
+        PTRef result;
+    };
+    SimplificationResult extractSubstitutionsAndSimplify(PTRef fla);
 };
 
 class LATermUtils {
@@ -453,45 +459,10 @@ public:
 
 class TrivialQuantifierElimination {
     Logic & logic;
-
-    PTRef tryGetSubstitutionFromEquality(PTRef var, PTRef eq) const;
 public:
     TrivialQuantifierElimination(Logic & logic) : logic(logic) {}
 
-    PTRef tryEliminateVars(vec<PTRef> const & vars, PTRef fla) const {
-        if (vars.size() == 0) { return fla; }
-        TermUtils::substitutions_map substMap;
-        std::unordered_set<PTRef, PTRefHash> forbiddenVars;
-        TermUtils utils(logic);
-        auto topLevelEqualities = utils.getTopLevelConjuncts(fla, [&](PTRef conjunct) { return logic.isEquality(conjunct); });
-
-        for (PTRef var : vars) {
-            assert(logic.isVar(var));
-            if (not logic.isVar(var)) {
-                throw std::invalid_argument("Quantifier elimination error: " + std::string(logic.printTerm(var)) + " is not a var!");
-            }
-            if (forbiddenVars.count(var) != 0) { continue; }
-            for (PTRef equality : topLevelEqualities) {
-                auto eqVars = utils.getVars(equality);
-                auto it = std::find(eqVars.begin(), eqVars.end(), var);
-                if (it != eqVars.end()) {
-                    PTRef subst = tryGetSubstitutionFromEquality(var, equality);
-                    if (subst != PTRef_Undef) {
-                        substMap.insert({var, subst});
-                        forbiddenVars.insert(eqVars.begin(), eqVars.end());
-                        break;
-                    }
-                }
-            }
-        }
-
-        if (substMap.empty()) {
-            return fla;
-        }
-        utils.transitiveClosure(substMap);
-        PTRef res = utils.varSubstitute(fla, substMap);
-        return res;
-    }
+    PTRef tryEliminateVars(vec<PTRef> const & vars, PTRef fla) const;
 };
 
 
