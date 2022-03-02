@@ -236,18 +236,20 @@ protected:
 
     auto getAcceleratedEngine() { return std::make_unique<LoopAccelerator>(logic, getBasicEngine()); }
 
-    void solveSystem(std::vector<ChClause> const & clauses, Engine & engine, bool validate) {
+    void solveSystem(std::vector<ChClause> const & clauses, Engine & engine, VerificationResult expectedResult, bool validate) {
         options.addOption(Options::COMPUTE_WITNESS, std::to_string(validate));
 
         for (auto const & clause : clauses) { system.addClause(clause); }
 
+//        ChcPrinter(logic, std::cout).print(system);
         auto normalizedSystem = Normalizer(logic).normalize(system);
+//        ChcPrinter(logic, std::cout).print(*normalizedSystem.normalizedSystem);
         auto hypergraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
         ASSERT_TRUE(hypergraph->isNormalGraph());
         auto graph = hypergraph->toNormalGraph(logic);
         auto res = engine.solve(*graph);
         auto answer = res.getAnswer();
-        ASSERT_EQ(answer, VerificationResult::UNSAFE);
+        ASSERT_EQ(answer, expectedResult);
 
         ChcGraphContext ctx(*graph, logic);
         SystemVerificationResult systemResult(std::move(res), ctx);
@@ -275,7 +277,7 @@ TEST_F(LAWIIntTest, test_LAWI_accelerated_unsafe) {
             ChcBody{logic.mkEq(x, logic.mkIntConst(FastRational(100))), {UninterpretedPredicate{current}}}
         }
     };
-    solveSystem(clauses, *getAcceleratedEngine(), true);
+    solveSystem(clauses, *getAcceleratedEngine(), VerificationResult::UNSAFE, true);
 }
 
 TEST_F(LAWIIntTest, test_LAWI_auxiliaryVar) {
@@ -297,5 +299,27 @@ TEST_F(LAWIIntTest, test_LAWI_auxiliaryVar) {
             ChcBody{logic.mkEq(x, two), {UninterpretedPredicate{current}}}
         }
     };
-    solveSystem(clauses, *getAcceleratedEngine(), true);
+    solveSystem(clauses, *getBasicEngine(), VerificationResult::UNSAFE, true);
+}
+
+TEST_F(LAWIIntTest, test_LAWI_auxiliaryVarElimination) {
+    SymRef s = mkPredicateSymbol("s", {boolSort()});
+    PTRef b = mkBoolVar("b");
+    PTRef c = mkBoolVar("c");
+    PTRef d = mkBoolVar("d");
+    PTRef x = mkBoolVar("x");
+    PTRef xp = mkBoolVar("xp");
+    PTRef current = instantiatePredicate(s, {x});
+    PTRef next = instantiatePredicate(s, {xp});
+    std::vector<ChClause> clauses{
+        // ~b and b = c and c = d and ~d = xp => S(xp)
+        {ChcHead{UninterpretedPredicate{next}}, ChcBody{logic.mkAnd({
+            logic.mkEq(xp, logic.mkNot(d)), logic.mkEq(c,d), logic.mkEq(b,c), logic.mkNot(b)}), {}
+        }},
+        { // S(x) and x = false => false
+            ChcHead{UninterpretedPredicate{logic.getTerm_false()}},
+            ChcBody{logic.mkEq(x, logic.getTerm_false()), {UninterpretedPredicate{current}}}
+        }
+    };
+    solveSystem(clauses, *getBasicEngine(), VerificationResult::SAFE, true);
 }
