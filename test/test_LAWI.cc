@@ -1,6 +1,8 @@
-//
-// Created by Martin Blicha on 18.01.21.
-//
+/*
+ * Copyright (c) 2021-2022, Martin Blicha <martin.blicha@gmail.com>
+ *
+ * SPDX-License-Identifier: MIT
+ */
 
 #include <gtest/gtest.h>
 #include "engine/Lawi.h"
@@ -202,40 +204,89 @@ TEST(LAWI_test, test_LAWI_simple_unsafe)
     ASSERT_EQ(validationResult, Validator::Result::VALIDATED);
 }
 
-TEST(LAWI_test, test_LAWI_accelerated_unsafe)
-{
+class LAWIIntTest : public ::testing::Test {
+protected:
     ArithLogic logic {opensmt::Logic_t::QF_LIA};
     Options options;
-    options.addOption(Options::COMPUTE_WITNESS, "true");
-    SymRef s1 = logic.declareFun("s1", logic.getSort_bool(), {logic.getSort_int()});
-    PTRef x = logic.mkIntVar("x");
-    PTRef xp = logic.mkIntVar("xp");
-    PTRef current = logic.mkUninterpFun(s1, {x});
-    PTRef next = logic.mkUninterpFun(s1, {xp});
     ChcSystem system;
-    system.addUninterpretedPredicate(s1);
-    system.addClause(
-        ChcHead{UninterpretedPredicate{next}},
-        ChcBody{logic.mkEq(xp, logic.getTerm_IntZero()), {}});
-    system.addClause(
-        ChcHead{UninterpretedPredicate{next}},
-        ChcBody{logic.mkEq(xp, logic.mkPlus(x, logic.getTerm_IntOne())), {UninterpretedPredicate{current}}}
-    );
-    system.addClause(
-        ChcHead{UninterpretedPredicate{logic.getTerm_false()}},
-        ChcBody{logic.mkEq(x, logic.mkIntConst(FastRational(100))), {UninterpretedPredicate{current}}}
-    );
-    auto normalizedSystem = Normalizer(logic).normalize(system);
-    auto hypergraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
-    ASSERT_TRUE(hypergraph->isNormalGraph());
-    auto graph = hypergraph->toNormalGraph(logic);
-    LoopAccelerator engine(logic, std::unique_ptr<Engine>(new Lawi(logic, options)));
-    auto res = engine.solve(*graph);
-    auto answer = res.getAnswer();
-    ASSERT_EQ(answer, VerificationResult::UNSAFE);
+    PTRef zero;
+    PTRef one;
+    PTRef two;
+    LAWIIntTest() {
+        zero = logic.getTerm_IntZero();
+        one = logic.getTerm_IntOne();
+        two = logic.mkIntConst(2);
+    }
 
-    ChcGraphContext ctx(*graph, logic);
-    SystemVerificationResult systemResult (std::move(res), ctx);
-    auto validationResult = Validator(logic).validate(*normalizedSystem.normalizedSystem, systemResult);
-    ASSERT_EQ(validationResult, Validator::Result::VALIDATED);
+    PTRef mkIntVar(char const * const name) { return logic.mkIntVar(name); }
+    PTRef mkBoolVar(char const * const name) { return logic.mkBoolVar(name); }
+    SRef boolSort() const { return logic.getSort_bool(); }
+    SRef intSort() const { return logic.getSort_int(); }
+
+    SymRef mkPredicateSymbol(std::string const & name, vec<SRef> const & argSorts) {
+        SymRef sym = logic.declareFun(name, boolSort(), argSorts);
+        system.addUninterpretedPredicate(sym);
+        return sym;
+    }
+
+    PTRef instantiatePredicate(SymRef symbol, vec<PTRef> const & args) { return logic.mkUninterpFun(symbol, args); }
+
+    auto getBasicEngine() { return std::make_unique<Lawi>(logic, options); }
+
+    auto getAcceleratedEngine() { return std::make_unique<LoopAccelerator>(logic, getBasicEngine()); }
+
+    void solveSystem(std::vector<ChClause> const & clauses, Engine & engine, bool validate) {
+        options.addOption(Options::COMPUTE_WITNESS, std::to_string(validate));
+
+        for (auto const & clause : clauses) { system.addClause(clause); }
+
+        auto normalizedSystem = Normalizer(logic).normalize(system);
+        auto hypergraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
+        ASSERT_TRUE(hypergraph->isNormalGraph());
+        auto graph = hypergraph->toNormalGraph(logic);
+        auto res = engine.solve(*graph);
+        auto answer = res.getAnswer();
+        ASSERT_EQ(answer, VerificationResult::UNSAFE);
+
+        ChcGraphContext ctx(*graph, logic);
+        SystemVerificationResult systemResult (std::move(res), ctx);
+        auto validationResult = Validator(logic).validate(*normalizedSystem.normalizedSystem, systemResult);
+        ASSERT_EQ(validationResult, Validator::Result::VALIDATED);
+    }
+
+};
+
+TEST_F(LAWIIntTest, test_LAWI_accelerated_unsafe) {
+    SymRef s = mkPredicateSymbol("s", {intSort()});
+    PTRef x = mkIntVar("x");
+    PTRef xp = mkIntVar("xp");
+    PTRef current = instantiatePredicate(s, {x});
+    PTRef next = instantiatePredicate(s, {xp});
+    std::vector<ChClause> clauses {
+            // x' = 0 => S(x')
+            {ChcHead{UninterpretedPredicate{next}}, ChcBody{logic.mkEq(xp, zero), {}}},
+            // S(x) and x' = x + 1 => S(x')
+            {ChcHead{UninterpretedPredicate{next}}, ChcBody{logic.mkEq(xp, logic.mkPlus(x, one)), {UninterpretedPredicate{current}}}},
+            // S(x) and x = 100 => false
+            {ChcHead{UninterpretedPredicate{logic.getTerm_false()}}, ChcBody{logic.mkEq(x, logic.mkIntConst(FastRational(100))), {UninterpretedPredicate{current}}}}
+    };
+    solveSystem(clauses, *getAcceleratedEngine(), true);
+}
+
+TEST_F(LAWIIntTest, test_LAWI_auxiliaryVar) {
+    SymRef s = mkPredicateSymbol("s", {intSort()});
+    PTRef x = mkIntVar("x");
+    PTRef xp = mkIntVar("xp");
+    PTRef b = mkBoolVar("b");
+    PTRef current = instantiatePredicate(s, {x});
+    PTRef next = instantiatePredicate(s, {xp});
+    std::vector<ChClause> clauses {
+            // x' = 0 => S(x')
+            {ChcHead{UninterpretedPredicate{next}}, ChcBody{logic.mkEq(xp, zero), {}}},
+            // S(x) and x' = ite(b, x, x + 1) => S(x')
+            {ChcHead{UninterpretedPredicate{next}}, ChcBody{logic.mkEq(xp, logic.mkIte(b, x, logic.mkPlus(x, one))), {UninterpretedPredicate{current}}}},
+            // S(x) and x = 2 => false
+            {ChcHead{UninterpretedPredicate{logic.getTerm_false()}}, ChcBody{logic.mkEq(x, two), {UninterpretedPredicate{current}}}}
+    };
+    solveSystem(clauses, *getAcceleratedEngine(), true);
 }
