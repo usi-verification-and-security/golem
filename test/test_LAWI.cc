@@ -94,7 +94,8 @@ TEST(LAWI_test, test_LAWI_branch)
 		ChcHead{UninterpretedPredicate{logic.getTerm_false()}},
 		ChcBody{logic.mkLt(x, logic.getTerm_RealZero()), {UninterpretedPredicate{s2}}}
 	);
-	auto hypergraph = ChcGraphBuilder(logic).buildGraph(Normalizer(logic).normalize(system));
+	auto normalizedSystem = Normalizer(logic).normalize(system);
+	auto hypergraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
 	ASSERT_TRUE(hypergraph->isNormalGraph());
 	auto graph = hypergraph->toNormalGraph(logic);
 //	graph->toDot(std::cout, logic);

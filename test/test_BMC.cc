@@ -1,6 +1,8 @@
-//
-// Created by Martin Blicha on 06.12.21.
-//
+/*
+ * Copyright (c) 2021-2022, Martin Blicha <martin.blicha@gmail.com>
+ *
+ * SPDX-License-Identifier: MIT
+ */
 
 #include <gtest/gtest.h>
 #include "engine/Bmc.h"
@@ -29,7 +31,8 @@ TEST(BMC_test, test_BMC_simple) {
             ChcHead{UninterpretedPredicate{logic.getTerm_false()}},
             ChcBody{logic.mkGt(x, logic.getTerm_IntOne()), {UninterpretedPredicate{current}}}
     );
-    auto hypergraph = ChcGraphBuilder(logic).buildGraph(Normalizer(logic).normalize(system));
+    auto normalizedSystem = Normalizer(logic).normalize(system);
+    auto hypergraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
     ASSERT_TRUE(hypergraph->isNormalGraph());
     auto graph = hypergraph->toNormalGraph(logic);
     BMC bmc(logic, options);

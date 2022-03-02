@@ -78,6 +78,7 @@ TEST(Spacer_test, test_BasicLinearSystem)
     );
 //    ChcPrinter{logic, std::cout}.print(system);
     auto normalizedSystem = Normalizer(logic).normalize(system);
+//    ChcPrinter{logic, std::cout}.print(*normalizedSystem.normalizedSystem);
     auto hypergraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
     Spacer engine(logic, options);
     auto res = engine.solve(*hypergraph);
