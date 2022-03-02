@@ -197,6 +197,7 @@ void ChcInterpreterContext::interpretAssert(ASTNode & node) {
     PTRef term = parseTerm(termNode);
     assert(term != PTRef_Undef);
 //    std::cout << backgroundTheory->getLogic().printTerm(term) << std::endl;
+    if (logic.getTerm_true() == term) { return; }
     auto chclause = chclauseFromPTRef(term);
     system->addClause(std::move(chclause));
 }
