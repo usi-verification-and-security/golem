@@ -6,6 +6,7 @@
 
 PTRef TrivialQuantifierElimination::tryEliminateVars(vec<PTRef> const & vars, PTRef fla) const {
     if (vars.size() == 0) { return fla; }
+    ArithLogic & arithLogic = dynamic_cast<ArithLogic&>(logic);
     auto res = TermUtils(logic).extractSubstitutionsAndSimplify(fla);
     PTRef simplifiedFormula = res.result;
     auto & substitutions = res.substitutionsUsed;
@@ -29,6 +30,20 @@ PTRef TrivialQuantifierElimination::tryEliminateVars(vec<PTRef> const & vars, PT
             } else {
                 equalitiesToRestore.push(logic.mkEq(key, rhs));
             }
+        } else { // Substitution of TBE var. Can ignore if Bool or Real var
+            if (arithLogic.yieldsSortInt(key)) {
+                // MB: Integer equalities can bear information about divisibility constraints
+                //     We need to keep this information
+                PTRef rhs = substitutions[key];
+                Pterm const & term = logic.getPterm(rhs);
+                if (std::any_of(term.begin(), term.end(), [&](PTRef arg){
+                    auto [var, constant] = arithLogic.splitTermToVarAndConst(arg);
+                    return not arithLogic.getNumConst(constant).isInteger();
+                })) { // There are some fractions on the RHS, better keep this substitution, just in case
+                    equalitiesToRestore.push(logic.mkEq(key, rhs));
+                }
+
+            }
         }
     }
 //    std::cout << "====================================\n";
@@ -39,6 +54,7 @@ PTRef TrivialQuantifierElimination::tryEliminateVars(vec<PTRef> const & vars, PT
     if (revertedSubs.getSize() > 0) {
         simplifiedFormula = Substitutor(logic, revertedSubs).rewrite(simplifiedFormula);
     }
+//    std::cout << logic.pp(simplifiedFormula) << std::endl;
     return simplifiedFormula;
 }
 
