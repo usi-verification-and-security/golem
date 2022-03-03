@@ -52,3 +52,18 @@ void GraphTransformations::removeAlwaysValidClauses(ChcDirectedGraph & graph) {
 void GraphTransformations::mergeMultiEdges(ChcDirectedGraph & graph) {
     graph.mergeMultiEdges(logic);
 }
+
+void GraphTransformations::eliminateSimpleNodes(ChcDirectedGraph & graph) {
+//    std::cout << graph.getVertices().size() << std::endl;
+    while(true) {
+        AdjacencyListsGraphRepresentation adjacencyList = AdjacencyListsGraphRepresentation::from(graph);
+        auto vertices = graph.getVertices();
+        vertices.erase(std::remove_if(vertices.begin(), vertices.end(), [&](VId vid) {
+            return not((adjacencyList.getIncomingEdgesFor(vid).size() == 1 and adjacencyList.getOutgoingEdgesFor(vid).size() >= 1)
+            or (adjacencyList.getIncomingEdgesFor(vid).size() >= 1 and adjacencyList.getOutgoingEdgesFor(vid).size() == 1));
+        }), vertices.end());
+        if (vertices.empty()) { break; }
+        graph.contractVertex(vertices[0], logic);
+    }
+//    std::cout << graph.getVertices().size() << std::endl;
+}
