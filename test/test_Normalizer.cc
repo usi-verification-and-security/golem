@@ -39,3 +39,31 @@ TEST(NormalizerTest, test_boolean_equal_to_constant) {
     auto graph = ChcGraphBuilder(logic).buildGraph(normalizedSystem)->toNormalGraph(logic);
     graph->toDot(std::cout, logic);
 }
+
+TEST(NormalizerTest, test_ModConstraint) {
+    ArithLogic logic {opensmt::Logic_t::QF_LIA};
+
+    SymRef s1 = logic.declareFun("s1", logic.getSort_bool(), {logic.getSort_int()});
+    PTRef x = logic.mkIntVar("x");
+    PTRef c = logic.mkIntVar("c");
+    PTRef d = logic.mkIntVar("d");
+    PTRef zero = logic.getTerm_IntZero();
+    ChcSystem system;
+    system.addUninterpretedPredicate(s1);
+
+    system.addClause(
+        ChcHead{UninterpretedPredicate{logic.mkUninterpFun(s1, {x})}},
+        ChcBody{logic.mkAnd(logic.mkEq(c, zero), logic.mkEq(x, logic.mkPlus(c,logic.mkTimes(d, logic.mkIntConst(3))))), {}}
+    );
+    system.addClause(
+        ChcHead{UninterpretedPredicate{logic.getTerm_false()}},
+        ChcBody{logic.mkEq(zero, logic.mkMod(x,logic.mkIntConst(2))), {UninterpretedPredicate{logic.mkUninterpFun(s1, {x})}}}
+    );
+    ChcPrinter(logic, std::cout).print(system);
+    auto normalizedSystem = Normalizer(logic).normalize(system);
+    auto const & clauses = normalizedSystem.normalizedSystem->getClauses();
+    ChcPrinter(logic, std::cout).print(*normalizedSystem.normalizedSystem);
+    ASSERT_NE(clauses[0].body.interpretedPart.fla, logic.getTerm_true());
+//    auto graph = ChcGraphBuilder(logic).buildGraph(normalizedSystem)->toNormalGraph(logic);
+//    graph->toDot(std::cout, logic);
+}

@@ -323,3 +323,22 @@ TEST_F(LAWIIntTest, test_LAWI_auxiliaryVarElimination) {
     };
     solveSystem(clauses, *getBasicEngine(), VerificationResult::SAFE, true);
 }
+
+TEST_F(LAWIIntTest, test_LAWI_auxiliaryVarElimination2) {
+    SymRef s = mkPredicateSymbol("s", {intSort()});
+    PTRef x = mkIntVar("x");
+    PTRef y = mkIntVar("y");
+    PTRef z = mkIntVar("z");
+    PTRef current = instantiatePredicate(s, {x});
+    std::vector<ChClause> clauses{
+        { //  z = 0 and x = 3y + z => S(x)
+            ChcHead{UninterpretedPredicate{current}},
+            ChcBody{logic.mkAnd(logic.mkEq(z, zero), logic.mkEq(x, logic.mkPlus(z, logic.mkTimes(y, logic.mkIntConst(3))))),{}}
+        },
+        { // S(x) and x = 32 => false
+        ChcHead{UninterpretedPredicate{logic.getTerm_false()}},
+        ChcBody{logic.mkEq(x, logic.mkIntConst(32)), {UninterpretedPredicate{current}}}
+        }
+    };
+    solveSystem(clauses, *getBasicEngine(), VerificationResult::SAFE, true);
+}
