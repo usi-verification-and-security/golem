@@ -176,7 +176,7 @@ PTRef ChcDirectedGraph::mergeLabels(const DirectedEdge & incoming, const Directe
 void ChcDirectedGraph::mergeEdges(EId incomingId, EId outgoingId, Logic & logic) {
     auto const & incoming = getEdge(incomingId);
     auto const & outgoing = getEdge(outgoingId);
-    if (incoming.to != outgoing.from) { throw std::logic_error("ChcDirectedGraph::mergeEdges: Trying to merge edges without comming node!\n"); }
+    if (incoming.to != outgoing.from) { throw std::logic_error("ChcDirectedGraph::mergeEdges: Trying to merge edges without common node!\n"); }
 
     VId source = incoming.from;
     VId target = outgoing.to;
@@ -209,7 +209,7 @@ void ChcDirectedGraph::mergeMultiEdges(Logic & logic) {
 
 void ChcDirectedGraph::deleteNode(VId vid) {
     assert(vid != getEntryId() and vid != getExitId());
-    edges.erase(std::remove_if(edges.begin(), edges.end(), [this, vid](DirectedEdge const & edge) {
+    edges.erase(std::remove_if(edges.begin(), edges.end(), [vid](DirectedEdge const & edge) {
         return edge.from == vid or edge.to == vid;
     }), edges.end());
 
@@ -268,6 +268,12 @@ std::vector<VId> AdjacencyListsGraphRepresentation::reversePostOrder() const {
     std::vector<VId> order;
     DFS().run([](VId){}, [&order](VId v){ order.push_back(v); }, *this);
     std::reverse(order.begin(), order.end());
+    return order;
+}
+
+std::vector<VId> AdjacencyListsGraphRepresentation::postOrder() const {
+    std::vector<VId> order;
+    DFS().run([](VId){}, [&order](VId v){ order.push_back(v); }, *this);
     return order;
 }
 

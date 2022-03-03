@@ -68,6 +68,7 @@ public:
     std::size_t getVertexNum() const { return incomingEdges.size(); }
 	DirectedEdge getEdge(EId e) const { return edgeGetter(e); }
     std::vector<VId> reversePostOrder() const;
+    std::vector<VId> postOrder() const;
 
     std::optional<EId> getSelfLoopFor(VId) const;
 };
