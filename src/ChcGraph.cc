@@ -164,13 +164,19 @@ void ChcDirectedGraph::contractVertex(VId vid, Logic & logic) {
 }
 
 PTRef ChcDirectedGraph::mergeLabels(const DirectedEdge & incoming, const DirectedEdge & outgoing, Logic & logic) {
+    assert(incoming.to == outgoing.from);
     PTRef incomingLabel = incoming.fla.fla;
     PTRef outgoingLabel = outgoing.fla.fla;
     TermUtils utils(logic);
     TermUtils::substitutions_map subMap;
     utils.insertVarPairsFromPredicates(getNextStateVersion(incoming.to), getStateVersion(outgoing.from), subMap);
     PTRef updatedIncomingLabel = utils.varSubstitute(incomingLabel, subMap);
-    return logic.mkAnd(updatedIncomingLabel, outgoingLabel);
+    PTRef combinedLabel = logic.mkAnd(updatedIncomingLabel, outgoingLabel);
+//    std::cout << logic.pp(combinedLabel) << '\n';
+    PTRef simplifiedLabel = TrivialQuantifierElimination(logic).tryEliminateVars(utils.getVarsFromPredicateInOrder(
+        getStateVersion(outgoing.from)), combinedLabel);
+//    std::cout << logic.pp(simplifiedLabel) << '\n';
+    return simplifiedLabel;
 }
 
 void ChcDirectedGraph::mergeEdges(EId incomingId, EId outgoingId, Logic & logic) {
