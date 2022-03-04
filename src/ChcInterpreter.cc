@@ -12,6 +12,7 @@
 #include <engine/LoopAccelerator.h>
 #include "ChcInterpreter.h"
 #include "ChcGraph.h"
+#include "graph/GraphTransformations.h"
 #include "Validator.h"
 #include "Normalizer.h"
 
@@ -324,6 +325,7 @@ void ChcInterpreterContext::interpretCheckSat() {
     if (hypergraph->isNormalGraph() and opts.getOption(Options::ENGINE) != "spacer") {
         auto graph = hypergraph->toNormalGraph(logic);
 //        graph->toDot(std::cout, logic);
+        GraphTransformations(logic).eliminateSimpleNodes(*graph);
         auto engine = getEngine();
         bool backwardAnalysis = opts.hasOption(Options::ANALYSIS_FLOW) && opts.getOption(Options::ANALYSIS_FLOW) == "backward";
         if (backwardAnalysis) {
