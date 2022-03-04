@@ -174,7 +174,7 @@ public:
 		return getEdge(eid).to;
 	}
 
-    std::unique_ptr<ChcDirectedHyperGraph> toHyperGraph() const;
+    std::unique_ptr<ChcDirectedHyperGraph> toHyperGraph(Logic & logic) const;
 };
 
 

@@ -192,7 +192,7 @@ GraphVerificationResult Spacer::solve(ChcDirectedHyperGraph & system) {
 }
 
 GraphVerificationResult Spacer::solve(const ChcDirectedGraph & system) {
-    auto hyperGraph = system.toHyperGraph();
+    auto hyperGraph = system.toHyperGraph(logic);
     return SpacerContext(logic, *hyperGraph).run();
 }
 

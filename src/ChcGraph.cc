@@ -53,6 +53,7 @@ bool ChcDirectedHyperGraph::isNormalGraph() const {
 std::unique_ptr<ChcDirectedGraph> ChcDirectedHyperGraph::toNormalGraph(Logic & logic) const {
     TimeMachine timeMachine(logic);
     VersionManager manager(logic);
+    TermUtils utils(logic);
     LinearCanonicalPredicateRepresentation newPredicates(logic);
     for (Vertex v : vertices) {
         std::vector<PTRef> vars;
@@ -61,7 +62,6 @@ std::unique_ptr<ChcDirectedGraph> ChcDirectedHyperGraph::toNormalGraph(Logic & l
             assert(logic.isVar(var));
             vars.push_back(var);
         }
-
         std::transform(vars.begin(), vars.end(), vars.begin(), [&](PTRef var){
             return manager.toBase(var);
         });
@@ -75,20 +75,17 @@ std::unique_ptr<ChcDirectedGraph> ChcDirectedHyperGraph::toNormalGraph(Logic & l
         VId target = edge.to;
         TermUtils::substitutions_map subst;
         {
-            PTRef sourceTerm = this->getStateVersion(source);
-            for (unsigned i = 0; i < logic.getPterm(sourceTerm).size(); ++i) {
-                PTRef originalVar = logic.getPterm(sourceTerm)[i];
-                PTRef newVar = timeMachine.getVarVersionZero(manager.toBase(originalVar));
-                subst.insert({originalVar, newVar});
+            auto sourceVars = utils.getVarsFromPredicateInOrder(getStateVersion(source));
+            for (PTRef sourceVar : sourceVars) {
+                PTRef newVar = timeMachine.getVarVersionZero(manager.toBase(sourceVar));
+                subst.insert({sourceVar, newVar});
             }
         }
-
         {
-            PTRef targetTerm = this->getNextStateVersion(target);
-            for (unsigned i = 0; i < logic.getPterm(targetTerm).size(); ++i) {
-                PTRef originalVar = logic.getPterm(targetTerm)[i];
-                PTRef newVar = timeMachine.sendVarThroughTime(timeMachine.getVarVersionZero(manager.toBase(originalVar)),1);
-                subst.insert({originalVar, newVar});
+            auto targetVars = utils.getVarsFromPredicateInOrder(getNextStateVersion(target));
+            for (PTRef targetVar : targetVars) {
+                PTRef newVar = timeMachine.sendVarThroughTime(timeMachine.getVarVersionZero(manager.toBase(targetVar)), 1);
+                subst.insert({targetVar, newVar});
             }
         }
 
@@ -291,12 +288,44 @@ std::optional<EId> AdjacencyListsGraphRepresentation::getSelfLoopFor(VId node) c
     return it != outEdges.end() ? *it : std::optional<EId>{};
 }
 
-std::unique_ptr<ChcDirectedHyperGraph> ChcDirectedGraph::toHyperGraph() const {
-    // FIXME: Implement the conversion from LinearPredicateRepresentation to NonlinearPredicateRepresentation
-    throw std::logic_error("Not supported at the moment");
-//    std::vector<DirectedHyperEdge> hyperEdges;
-//    std::transform(this->edges.begin(), this->edges.end(), std::back_inserter(hyperEdges), [](DirectedEdge const& edge) {
-//        return DirectedHyperEdge{.from = {edge.from}, .to = edge.to, .fla = edge.fla};
-//    });
-//    return std::unique_ptr<ChcDirectedHyperGraph>( new ChcDirectedHyperGraph(vertices, std::move(hyperEdges), predicates, entry, exit));
+std::unique_ptr<ChcDirectedHyperGraph> ChcDirectedGraph::toHyperGraph(Logic & logic) const {
+    TimeMachine timeMachine(logic);
+    VersionManager manager(logic);
+    TermUtils utils(logic);
+    NonlinearCanonicalPredicateRepresentation newPredicates(logic);
+    for (Vertex v : vertices) {
+        PTRef originalTerm = predicates.getSourceTermFor(v.predicateSymbol);
+        std::vector<PTRef> vars = utils.getVarsFromPredicateInOrder(originalTerm);
+        std::transform(vars.begin(), vars.end(), vars.begin(), [&](PTRef var){
+            return timeMachine.getUnversioned(var);
+        });
+        newPredicates.addRepresentation(v.predicateSymbol, std::move(vars));
+    }
+
+    std::vector<DirectedHyperEdge> newEdges;
+    std::transform(this->edges.begin(), this->edges.end(), std::back_inserter(newEdges), [&](DirectedEdge const & edge) {
+        VId source = edge.from;
+        VId target = edge.to;
+        TermUtils::substitutions_map subst;
+        {
+            auto sourceVars = utils.getVarsFromPredicateInOrder(getStateVersion(source));
+            for (PTRef sourceVar : sourceVars) {
+                assert(timeMachine.isVersioned(sourceVar));
+                PTRef newVar = manager.toSource(timeMachine.getUnversioned(sourceVar));
+                subst.insert({sourceVar, newVar});
+            }
+        }
+        {
+            auto targetVars = utils.getVarsFromPredicateInOrder(getNextStateVersion(target));
+            for (PTRef targetVar : targetVars) {
+                assert(timeMachine.isVersioned(targetVar));
+                PTRef newVar = manager.toTarget(timeMachine.getUnversioned(targetVar));
+                subst.insert({targetVar, newVar});
+            }
+        }
+
+        PTRef newLabel = TermUtils(logic).varSubstitute(edge.fla.fla, subst);
+        return DirectedHyperEdge{.from = {edge.from}, .to = edge.to, .fla = {newLabel}};
+    });
+    return std::unique_ptr<ChcDirectedHyperGraph>( new ChcDirectedHyperGraph(vertices, std::move(newEdges), std::move(newPredicates), entry, exit));
 }
