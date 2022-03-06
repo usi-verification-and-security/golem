@@ -342,3 +342,41 @@ TEST_F(LAWIIntTest, test_LAWI_auxiliaryVarElimination2) {
     };
     solveSystem(clauses, *getBasicEngine(), VerificationResult::SAFE, true);
 }
+
+TEST_F(LAWIIntTest, test_LAWI_bug) {
+    SymRef s = mkPredicateSymbol("s", {intSort(), intSort(), intSort()});
+    PTRef x = mkIntVar("x");
+    PTRef y = mkIntVar("y");
+    PTRef z = mkIntVar("z");
+    PTRef xp = mkIntVar("xp");
+    PTRef yp = mkIntVar("yp");
+    PTRef zp = mkIntVar("zp");
+    PTRef current = instantiatePredicate(s, {x, y, z});
+    PTRef next = instantiatePredicate(s, {xp, yp, zp});
+    std::vector<ChClause> clauses{
+        { //  S(x,y,z) and x = 1 and y = 1 and z = 0 and xp = 0 and yp = 0 and zp = 1 => S(xp,yp,zp)
+            ChcHead{UninterpretedPredicate{next}},
+            ChcBody{logic.mkAnd({
+                logic.mkEq(z, zero), logic.mkEq(x, one), logic.mkEq(y, one),
+                logic.mkEq(zp, one), logic.mkEq(xp, zero), logic.mkEq(yp, zero)
+            }),{UninterpretedPredicate{current}}}
+        },
+        { //  x = 0 and y = 0 and z = 0 => S(x,y,z)
+            ChcHead{UninterpretedPredicate{current}},
+            ChcBody{logic.mkAnd({logic.mkEq(z, zero), logic.mkEq(x, zero), logic.mkEq(y, zero)}),{}}
+        },
+        { //  x = 1 and y = 1 and z = 0 => S(x,y,z)
+            ChcHead{UninterpretedPredicate{current}},
+            ChcBody{logic.mkAnd({logic.mkEq(z, zero), logic.mkEq(x, one), logic.mkEq(y, one)}),{}}
+        },
+        { // S(x,y,z) and x = 0 and y = 0 and z = 1 => false
+            ChcHead{UninterpretedPredicate{logic.getTerm_false()}},
+            ChcBody{logic.mkAnd({logic.mkEq(x, zero), logic.mkEq(y, zero), logic.mkEq(z, one)}), {UninterpretedPredicate{current}}}
+        },
+        { // S(x,y,z) and x = 1 and y = 1 and z = 1 => false
+            ChcHead{UninterpretedPredicate{logic.getTerm_false()}},
+                ChcBody{logic.mkAnd({logic.mkEq(x, one), logic.mkEq(y, one), logic.mkEq(z, one)}), {UninterpretedPredicate{current}}}
+        }
+    };
+    solveSystem(clauses, *getBasicEngine(), VerificationResult::UNSAFE, true);
+}

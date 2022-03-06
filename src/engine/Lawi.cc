@@ -552,8 +552,6 @@ LawiContext::RefinementResult LawiContext::refine(VId errVertex) {
         vec<PTRef> pathInterpolants = getPathInterpolants(solver, path);
         vec<PTRef> normalizedInterpolants = normalizeInterpolants(pathInterpolants);
         auto strengthened = strengthenLabelsAlongPath(path, normalizedInterpolants);
-        // don't forget to set the label of error location to false
-        labels.replaceLabel(art.getTarget(edges.back()), logic.getTerm_false());
         // this vertex does not have to be considered anymore
         removeLeaf(errVertex);
         return RefinementResult{VerificationResult::UNKNOWN, std::move(strengthened)};
@@ -572,7 +570,9 @@ vec<PTRef> LawiContext::getPathInterpolants(MainSolver & solver, ArtPath const &
         opensmt::setbit(mask, i);
         itpContext->getSingleInterpolant(pathInterpolants, mask);
     }
-    assert(pathInterpolants.size() == pathSize - 1);
+    // MB: Last interpolant must be always false
+    pathInterpolants.push(logic.getTerm_false());
+    assert(pathInterpolants.size() == pathSize);
     return pathInterpolants;
 }
 
@@ -814,7 +814,7 @@ vec<PTRef> LawiContext::normalizeInterpolants(const vec<PTRef> & itps) const {
 
 std::vector<VId> LawiContext::strengthenLabelsAlongPath(const ArtPath & path, const vec<PTRef> & itps) {
     auto vertices = art.getPathVertices(path);
-    assert(vertices.size() == itps.size() + 2);
+    assert(vertices.size() == itps.size() + 1);
     std::vector<VId> refinedVertices;
     for (int i = 0; i < itps.size(); ++i) {
         VId vertex = vertices[i + 1];
