@@ -92,7 +92,7 @@ class PTRefToCHC {
 public:
     static ChcHead constructHead(PTRef head) { return ChcHead{head};}
 //    static ChcHead constructEmptyHead() { return ChcHead{PTRef_Undef};}
-    static ChcBody constructBody(PTRef interpreted, std::vector<PTRef> uninterpreted) {
+    static ChcBody constructBody(PTRef interpreted, std::vector<PTRef> const & uninterpreted) {
         return constructBody(interpreted, uninterpreted.begin(), uninterpreted.end());
     }
     template<typename TIt>
@@ -101,7 +101,7 @@ public:
         std::transform(uninterpretedBegin, uninterpretedEnd, std::back_inserter(uninterpretedPart), [](PTRef ref) {
             return UninterpretedPredicate{.predicate = ref};
         });
-        return ChcBody{interpreted, std::move(uninterpretedPart)};
+        return ChcBody{{interpreted}, std::move(uninterpretedPart)};
     }
 };
 

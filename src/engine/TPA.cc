@@ -171,7 +171,7 @@ public:
         auto model = solver->getModel();
         solver->pop();
         pushed = false;
-        return std::move(model);
+        return model;
     }
 
     PTRef lastQueryTransitionInterpolant() override {

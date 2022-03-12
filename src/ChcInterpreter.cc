@@ -153,15 +153,7 @@ void ChcInterpreterContext::interpretDeclareFun(ASTNode & node) {
     ASTNode& ret_node  = **(it++);
     assert(it == node.children->end());
 
-    const char* fname = name_node.getValue();
-    auto buildSortName = [](ASTNode const & node) {
-        auto it = node.children->begin();
-        char* canon_name;
-        int written = asprintf(&canon_name, "%s", (**it).getValue());
-        assert(written >= 0); (void)written;
-        return canon_name;
-    };
-
+    const char * fname = name_node.getValue();
     SRef codomainSort = sortFromASTNode(ret_node);
 
     if (codomainSort == SRef_Undef) {
@@ -251,7 +243,6 @@ PTRef ChcInterpreterContext::parseTerm(const ASTNode & termNode) {
         if (tr != PTRef_Undef) {
             return tr;
         }
-        char* msg = nullptr;
         tr = logic.resolveTerm(name, {});
         assert(tr != PTRef_Undef);
         return tr;
@@ -271,7 +262,6 @@ PTRef ChcInterpreterContext::parseTerm(const ASTNode & termNode) {
                 args.push(arg_term);
         }
         assert(args.size() > 0);
-        char* msg = nullptr;
         PTRef tr = PTRef_Undef;
         tr = logic.resolveTerm(name, std::move(args));
         assert(tr != PTRef_Undef);

@@ -22,14 +22,14 @@ TEST(TPA_test, test_TPA_simple_safe)
     system.addUninterpretedPredicate(s1);
     system.addClause(
             ChcHead{UninterpretedPredicate{next}},
-            ChcBody{logic.mkEq(xp, logic.getTerm_IntZero()), {}});
+            ChcBody{{logic.mkEq(xp, logic.getTerm_IntZero())}, {}});
     system.addClause(
             ChcHead{UninterpretedPredicate{next}},
-            ChcBody{logic.mkEq(xp, logic.mkPlus(x, logic.getTerm_IntOne())), {UninterpretedPredicate{current}}}
+            ChcBody{{logic.mkEq(xp, logic.mkPlus(x, logic.getTerm_IntOne()))}, {UninterpretedPredicate{current}}}
     );
     system.addClause(
             ChcHead{UninterpretedPredicate{logic.getTerm_false()}},
-            ChcBody{logic.mkLt(x, logic.getTerm_IntZero()), {UninterpretedPredicate{current}}}
+            ChcBody{{logic.mkLt(x, logic.getTerm_IntZero())}, {UninterpretedPredicate{current}}}
     );
     auto hypergraph = ChcGraphBuilder(logic).buildGraph(Normalizer(logic).normalize(system));
     ASSERT_TRUE(hypergraph->isNormalGraph());
@@ -61,14 +61,14 @@ TEST(TPA_test, test_TPA_simple_unsafe)
     system.addUninterpretedPredicate(s1);
     system.addClause(
             ChcHead{UninterpretedPredicate{next}},
-            ChcBody{logic.mkEq(xp, logic.getTerm_IntZero()), {}});
+            ChcBody{{logic.mkEq(xp, logic.getTerm_IntZero())}, {}});
     system.addClause(
             ChcHead{UninterpretedPredicate{next}},
-            ChcBody{logic.mkEq(xp, logic.mkPlus(x, logic.getTerm_IntOne())), {UninterpretedPredicate{current}}}
+            ChcBody{{logic.mkEq(xp, logic.mkPlus(x, logic.getTerm_IntOne()))}, {UninterpretedPredicate{current}}}
     );
     system.addClause(
             ChcHead{UninterpretedPredicate{logic.getTerm_false()}},
-            ChcBody{logic.mkGt(x, logic.getTerm_IntOne()), {UninterpretedPredicate{current}}}
+            ChcBody{{logic.mkGt(x, logic.getTerm_IntOne())}, {UninterpretedPredicate{current}}}
     );
     auto normalizedSystem = Normalizer(logic).normalize(system);
     auto hypergraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
@@ -100,14 +100,14 @@ TEST(TPA_test, test_TPA_CEX_zero) {
     system.addUninterpretedPredicate(s1);
     system.addClause( // x' = 0 => S1(x')
             ChcHead{UninterpretedPredicate{next}},
-            ChcBody{logic.mkEq(xp, logic.getTerm_IntZero()), {}});
+            ChcBody{{logic.mkEq(xp, logic.getTerm_IntZero())}, {}});
     system.addClause( // S1(x) and x' = x + 1 => S1(x')
             ChcHead{UninterpretedPredicate{next}},
-            ChcBody{logic.mkEq(xp, logic.mkPlus(x, logic.getTerm_IntOne())), {UninterpretedPredicate{current}}}
+            ChcBody{{logic.mkEq(xp, logic.mkPlus(x, logic.getTerm_IntOne()))}, {UninterpretedPredicate{current}}}
     );
     system.addClause( // S1(x) and x = 0 => false
             ChcHead{UninterpretedPredicate{logic.getTerm_false()}},
-            ChcBody{logic.mkEq(x, logic.getTerm_IntZero()), {UninterpretedPredicate{current}}}
+            ChcBody{{logic.mkEq(x, logic.getTerm_IntZero())}, {UninterpretedPredicate{current}}}
     );
     auto normalizedSystem = Normalizer(logic).normalize(system);
     auto hypergraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
@@ -138,14 +138,14 @@ TEST(TPA_test, test_TPA_CEX_one) {
     system.addUninterpretedPredicate(s1);
     system.addClause( // x' = 0 => S1(x')
             ChcHead{UninterpretedPredicate{next}},
-            ChcBody{logic.mkEq(xp, logic.getTerm_IntZero()), {}});
+            ChcBody{{logic.mkEq(xp, logic.getTerm_IntZero())}, {}});
     system.addClause( // S1(x) and x' = x + 1 => S1(x')
             ChcHead{UninterpretedPredicate{next}},
-            ChcBody{logic.mkEq(xp, logic.mkPlus(x, logic.getTerm_IntOne())), {UninterpretedPredicate{current}}}
+            ChcBody{{logic.mkEq(xp, logic.mkPlus(x, logic.getTerm_IntOne()))}, {UninterpretedPredicate{current}}}
     );
     system.addClause( // S1(x) and x = 1 => false
             ChcHead{UninterpretedPredicate{logic.getTerm_false()}},
-            ChcBody{logic.mkEq(x, logic.getTerm_IntOne()), {UninterpretedPredicate{current}}}
+            ChcBody{{logic.mkEq(x, logic.getTerm_IntOne())}, {UninterpretedPredicate{current}}}
     );
     auto normalizedSystem = Normalizer(logic).normalize(system);
     auto hypergraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
@@ -176,14 +176,14 @@ TEST(TPA_test, test_TPA_CEX_six) {
     system.addUninterpretedPredicate(s1);
     system.addClause( // x' = 0 => S1(x')
             ChcHead{UninterpretedPredicate{next}},
-            ChcBody{logic.mkEq(xp, logic.getTerm_IntZero()), {}});
+            ChcBody{{logic.mkEq(xp, logic.getTerm_IntZero())}, {}});
     system.addClause( // S1(x) and x' = x + 1 => S1(x')
             ChcHead{UninterpretedPredicate{next}},
-            ChcBody{logic.mkEq(xp, logic.mkPlus(x, logic.getTerm_IntOne())), {UninterpretedPredicate{current}}}
+            ChcBody{{logic.mkEq(xp, logic.mkPlus(x, logic.getTerm_IntOne()))}, {UninterpretedPredicate{current}}}
     );
     system.addClause( // S1(x) and x = 6 => false
             ChcHead{UninterpretedPredicate{logic.getTerm_false()}},
-            ChcBody{logic.mkEq(x, logic.mkIntConst(6)), {UninterpretedPredicate{current}}}
+            ChcBody{{logic.mkEq(x, logic.mkIntConst(6))}, {UninterpretedPredicate{current}}}
     );
     auto normalizedSystem = Normalizer(logic).normalize(system);
     auto hypergraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
@@ -218,23 +218,23 @@ TEST(TPA_test, test_TPA_chain_of_two_unsafe) {
     system.addUninterpretedPredicate(s2);
     system.addClause(
             ChcHead{UninterpretedPredicate{predS1Next}},
-            ChcBody{logic.mkEq(xp, logic.getTerm_IntZero()), {}});
+            ChcBody{{logic.mkEq(xp, logic.getTerm_IntZero())}, {}});
     system.addClause(
             ChcHead{UninterpretedPredicate{predS1Next}},
-            ChcBody{logic.mkEq(xp, logic.mkPlus(x, logic.getTerm_IntOne())), {UninterpretedPredicate{predS1Current}}}
+            ChcBody{{logic.mkEq(xp, logic.mkPlus(x, logic.getTerm_IntOne()))}, {UninterpretedPredicate{predS1Current}}}
     );
     system.addClause(
             ChcHead{UninterpretedPredicate{predS2Current}},
-            ChcBody{logic.getTerm_true(), {UninterpretedPredicate{predS1Current}}}
+            ChcBody{{logic.getTerm_true()}, {UninterpretedPredicate{predS1Current}}}
     );
     system.addClause(
             ChcHead{UninterpretedPredicate{predS2Next}},
-            ChcBody{logic.mkEq(xp, logic.mkMinus(x, logic.getTerm_IntOne())),
+            ChcBody{{logic.mkEq(xp, logic.mkMinus(x, logic.getTerm_IntOne()))},
                     {UninterpretedPredicate{predS2Current}}}
     );
     system.addClause(
             ChcHead{UninterpretedPredicate{logic.getTerm_false()}},
-            ChcBody{logic.mkLt(x, logic.getTerm_IntZero()), {UninterpretedPredicate{predS2Current}}}
+            ChcBody{{logic.mkLt(x, logic.getTerm_IntZero())}, {UninterpretedPredicate{predS2Current}}}
     );
     auto normalizedSystem = Normalizer(logic).normalize(system);
     auto hypergraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
@@ -268,23 +268,23 @@ TEST(TPA_test, test_TPA_chain_of_two_safe) {
     system.addUninterpretedPredicate(s2);
     system.addClause( // x = 0 => S1(x)
             ChcHead{UninterpretedPredicate{predS1Next}},
-            ChcBody{logic.mkEq(xp, logic.getTerm_IntZero()), {}});
+            ChcBody{{logic.mkEq(xp, logic.getTerm_IntZero())}, {}});
     system.addClause( // S1(x) & x' = x + 1 => S1(x')
             ChcHead{UninterpretedPredicate{predS1Next}},
-            ChcBody{logic.mkEq(xp, logic.mkPlus(x, logic.getTerm_IntOne())), {UninterpretedPredicate{predS1Current}}}
+            ChcBody{{logic.mkEq(xp, logic.mkPlus(x, logic.getTerm_IntOne()))}, {UninterpretedPredicate{predS1Current}}}
     );
     system.addClause( // S1(x) => S2(x)
             ChcHead{UninterpretedPredicate{predS2Current}},
-            ChcBody{logic.getTerm_true(), {UninterpretedPredicate{predS1Current}}}
+            ChcBody{{logic.getTerm_true()}, {UninterpretedPredicate{predS1Current}}}
     );
     system.addClause( // S2(x) & x' = x + 2 => S2(x')
             ChcHead{UninterpretedPredicate{predS2Next}},
-            ChcBody{logic.mkEq(xp, logic.mkPlus(x, logic.mkIntConst(FastRational(2)))),
+            ChcBody{{logic.mkEq(xp, logic.mkPlus(x, logic.mkIntConst(FastRational(2))))},
                     {UninterpretedPredicate{predS2Current}}}
     );
     system.addClause( // S2(x) & x < 0 => false
             ChcHead{UninterpretedPredicate{logic.getTerm_false()}},
-            ChcBody{logic.mkLt(x, logic.getTerm_IntZero()), {UninterpretedPredicate{predS2Current}}}
+            ChcBody{{logic.mkLt(x, logic.getTerm_IntZero())}, {UninterpretedPredicate{predS2Current}}}
     );
     auto hypergraph = ChcGraphBuilder(logic).buildGraph(Normalizer(logic).normalize(system));
     ASSERT_TRUE(hypergraph->isNormalGraph());
@@ -317,32 +317,32 @@ TEST(TPA_test, test_TPA_chain_regression) {
     system.addUninterpretedPredicate(s2);
     system.addClause(
             ChcHead{UninterpretedPredicate{predS1Next}},
-            ChcBody{logic.mkAnd(logic.mkEq(xp, logic.getTerm_IntZero()), logic.mkEq(yp, val)), {}});
+            ChcBody{{logic.mkAnd(logic.mkEq(xp, logic.getTerm_IntZero()), logic.mkEq(yp, val))}, {}});
     system.addClause(
             ChcHead{UninterpretedPredicate{predS1Next}},
-            ChcBody{logic.mkAnd({
+            ChcBody{{logic.mkAnd({
                 logic.mkEq(xp, logic.mkPlus(x, logic.getTerm_IntOne())),
                 logic.mkEq(yp, y),
                 logic.mkLt(x, val)
-                }),
+                })},
                 {UninterpretedPredicate{predS1Current}}
             }
     );
     system.addClause(
             ChcHead{UninterpretedPredicate{predS2Current}},
-            ChcBody{logic.mkGeq(x, val), {UninterpretedPredicate{predS1Current}}}
+            ChcBody{{logic.mkGeq(x, val)}, {UninterpretedPredicate{predS1Current}}}
     );
     system.addClause(
             ChcHead{UninterpretedPredicate{predS2Next}},
-            ChcBody{logic.mkAnd(
+            ChcBody{{logic.mkAnd(
                         logic.mkEq(xp, logic.mkPlus(x, logic.getTerm_IntOne())),
                         logic.mkEq(yp, logic.mkPlus(y, logic.getTerm_IntOne()))
-                        ),
+                        )},
                     {UninterpretedPredicate{predS2Current}}}
     );
     system.addClause(
             ChcHead{UninterpretedPredicate{logic.getTerm_false()}},
-            ChcBody{logic.mkAnd(logic.mkEq(x, doubleVal), logic.mkNot(logic.mkEq(x, y))), {UninterpretedPredicate{predS2Current}}}
+            ChcBody{{logic.mkAnd(logic.mkEq(x, doubleVal), logic.mkNot(logic.mkEq(x, y)))}, {UninterpretedPredicate{predS2Current}}}
     );
     auto hypergraph = ChcGraphBuilder(logic).buildGraph(Normalizer(logic).normalize(system));
     ASSERT_TRUE(hypergraph->isNormalGraph());

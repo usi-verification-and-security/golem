@@ -14,14 +14,13 @@ TEST(NormalizerTest, test_boolean_equal_to_constant) {
 
     SymRef s1 = logic.declareFun("s1", logic.getSort_bool(), {logic.getSort_int(), logic.getSort_bool()});
     PTRef x = logic.mkIntVar("x");
-    PTRef xp = logic.mkIntVar("xp");
     PTRef b = logic.mkBoolVar("b");
     ChcSystem system;
     system.addUninterpretedPredicate(s1);
 
     system.addClause(
             ChcHead{UninterpretedPredicate{logic.mkUninterpFun(s1, {logic.getTerm_IntZero(), logic.getTerm_false()})}},
-            ChcBody{logic.getTerm_true()}
+            ChcBody{{logic.getTerm_true()}}
     );
 
     system.addClause(
@@ -53,11 +52,11 @@ TEST(NormalizerTest, test_ModConstraint) {
 
     system.addClause(
         ChcHead{UninterpretedPredicate{logic.mkUninterpFun(s1, {x})}},
-        ChcBody{logic.mkAnd(logic.mkEq(c, zero), logic.mkEq(x, logic.mkPlus(c,logic.mkTimes(d, logic.mkIntConst(3))))), {}}
+        ChcBody{{logic.mkAnd(logic.mkEq(c, zero), logic.mkEq(x, logic.mkPlus(c,logic.mkTimes(d, logic.mkIntConst(3)))))}, {}}
     );
     system.addClause(
         ChcHead{UninterpretedPredicate{logic.getTerm_false()}},
-        ChcBody{logic.mkEq(zero, logic.mkMod(x,logic.mkIntConst(2))), {UninterpretedPredicate{logic.mkUninterpFun(s1, {x})}}}
+        ChcBody{{logic.mkEq(zero, logic.mkMod(x,logic.mkIntConst(2)))}, {UninterpretedPredicate{logic.mkUninterpFun(s1, {x})}}}
     );
     ChcPrinter(logic, std::cout).print(system);
     auto normalizedSystem = Normalizer(logic).normalize(system);

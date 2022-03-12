@@ -21,14 +21,14 @@ TEST(Spacer_test, test_TransitionSystem)
 	system.addUninterpretedPredicate(inv_sym);
 	system.addClause( // x' = 0 => Inv(x')
 		ChcHead{UninterpretedPredicate{invp}},
-		ChcBody{logic.mkEq(xp, logic.getTerm_RealZero()), {}});
+		ChcBody{{logic.mkEq(xp, logic.getTerm_RealZero())}, {}});
 	system.addClause( // Inv(x) & x' = x + 1 => Inv(x')
 		ChcHead{UninterpretedPredicate{invp}},
-		ChcBody{logic.mkEq(xp, logic.mkPlus(x, logic.getTerm_RealOne())), {UninterpretedPredicate{inv}}}
+		ChcBody{{logic.mkEq(xp, logic.mkPlus(x, logic.getTerm_RealOne()))}, {UninterpretedPredicate{inv}}}
 	);
 	system.addClause( // Inv(x) & x < 0 => false
 		ChcHead{UninterpretedPredicate{logic.getTerm_false()}},
-		ChcBody{logic.mkLt(x, logic.getTerm_RealZero()), {UninterpretedPredicate{inv}}}
+		ChcBody{{logic.mkLt(x, logic.getTerm_RealZero())}, {UninterpretedPredicate{inv}}}
 	);
     auto normalizedSystem = Normalizer(logic).normalize(system);
 	auto hypergraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
@@ -59,22 +59,22 @@ TEST(Spacer_test, test_BasicLinearSystem)
     system.addUninterpretedPredicate(inv2_sym);
     system.addClause(
         ChcHead{UninterpretedPredicate{inv1}},
-        ChcBody{logic.mkAnd(logic.mkEq(x, zero), logic.mkEq(y, zero)), {}});
+        ChcBody{{logic.mkAnd(logic.mkEq(x, zero), logic.mkEq(y, zero))}, {}});
     system.addClause(
         ChcHead{UninterpretedPredicate{logic.mkUninterpFun(inv1_sym, {xp,y})}},
-        ChcBody{logic.mkEq(xp, logic.mkPlus(x, logic.getTerm_RealOne())), {UninterpretedPredicate{inv1}}}
+        ChcBody{{logic.mkEq(xp, logic.mkPlus(x, logic.getTerm_RealOne()))}, {UninterpretedPredicate{inv1}}}
     );
     system.addClause(
         ChcHead{UninterpretedPredicate{inv2}},
-        ChcBody{logic.getTerm_true(), {UninterpretedPredicate{inv1}}}
+        ChcBody{{logic.getTerm_true()}, {UninterpretedPredicate{inv1}}}
     );
     system.addClause(
         ChcHead{UninterpretedPredicate{logic.mkUninterpFun(inv2_sym, {x,yp})}},
-        ChcBody{logic.mkEq(yp, logic.mkPlus(y, logic.getTerm_RealOne())), {UninterpretedPredicate{inv2}}}
+        ChcBody{{logic.mkEq(yp, logic.mkPlus(y, logic.getTerm_RealOne()))}, {UninterpretedPredicate{inv2}}}
     );
     system.addClause(
         ChcHead{UninterpretedPredicate{logic.getTerm_false()}},
-        ChcBody{logic.mkLt(logic.mkPlus(x,y), logic.getTerm_RealZero()), {UninterpretedPredicate{inv2}}}
+        ChcBody{{logic.mkLt(logic.mkPlus(x,y), logic.getTerm_RealZero())}, {UninterpretedPredicate{inv2}}}
     );
 //    ChcPrinter{logic, std::cout}.print(system);
     auto normalizedSystem = Normalizer(logic).normalize(system);
@@ -107,22 +107,22 @@ TEST(Spacer_test, test_BasicNonLinearSystem_Safe)
     system.addUninterpretedPredicate(invy_sym);
     system.addClause(
         ChcHead{UninterpretedPredicate{invx}},
-        ChcBody{logic.mkEq(x, zero), {}});
+        ChcBody{{logic.mkEq(x, zero)}, {}});
     system.addClause(
         ChcHead{UninterpretedPredicate{logic.mkUninterpFun(invx_sym, {xp})}},
-        ChcBody{logic.mkEq(xp, logic.mkPlus(x, logic.getTerm_RealOne())), {UninterpretedPredicate{invx}}}
+        ChcBody{{logic.mkEq(xp, logic.mkPlus(x, logic.getTerm_RealOne()))}, {UninterpretedPredicate{invx}}}
     );
     system.addClause(
         ChcHead{UninterpretedPredicate{invy}},
-        ChcBody{logic.mkEq(y, zero), {}});
+        ChcBody{{logic.mkEq(y, zero)}, {}});
     system.addClause(
         ChcHead{UninterpretedPredicate{logic.mkUninterpFun(invy_sym, {yp})}},
-        ChcBody{logic.mkEq(yp, logic.mkPlus(y, logic.getTerm_RealOne())), {UninterpretedPredicate{invy}}}
+        ChcBody{{logic.mkEq(yp, logic.mkPlus(y, logic.getTerm_RealOne()))}, {UninterpretedPredicate{invy}}}
     );
 
     system.addClause(
         ChcHead{UninterpretedPredicate{logic.getTerm_false()}},
-        ChcBody{logic.mkLt(logic.mkPlus(x,y), logic.getTerm_RealZero()), {UninterpretedPredicate{invx}, UninterpretedPredicate{invy}}}
+        ChcBody{{logic.mkLt(logic.mkPlus(x,y), logic.getTerm_RealZero())}, {UninterpretedPredicate{invx}, UninterpretedPredicate{invy}}}
     );
 //    ChcPrinter{logic, std::cout}.print(system);
     auto normalizedSystem = Normalizer(logic).normalize(system);
@@ -154,22 +154,22 @@ TEST(Spacer_test, test_BasicNonLinearSystem_Unsafe)
     system.addUninterpretedPredicate(invy_sym);
     system.addClause(
         ChcHead{UninterpretedPredicate{invx}},
-        ChcBody{logic.mkEq(x, zero), {}});
+        ChcBody{{logic.mkEq(x, zero)}, {}});
     system.addClause(
         ChcHead{UninterpretedPredicate{logic.mkUninterpFun(invx_sym, {xp})}},
-        ChcBody{logic.mkEq(xp, logic.mkPlus(x, logic.getTerm_RealOne())), {UninterpretedPredicate{invx}}}
+        ChcBody{{logic.mkEq(xp, logic.mkPlus(x, logic.getTerm_RealOne()))}, {UninterpretedPredicate{invx}}}
     );
     system.addClause(
         ChcHead{UninterpretedPredicate{invy}},
-        ChcBody{logic.mkEq(y, zero), {}});
+        ChcBody{{logic.mkEq(y, zero)}, {}});
     system.addClause(
         ChcHead{UninterpretedPredicate{logic.mkUninterpFun(invy_sym, {yp})}},
-        ChcBody{logic.mkEq(yp, logic.mkPlus(y, logic.getTerm_RealOne())), {UninterpretedPredicate{invy}}}
+        ChcBody{{logic.mkEq(yp, logic.mkPlus(y, logic.getTerm_RealOne()))}, {UninterpretedPredicate{invy}}}
     );
 
     system.addClause(
         ChcHead{UninterpretedPredicate{logic.getTerm_false()}},
-        ChcBody{logic.mkEq(logic.mkPlus(x,y), logic.mkRealConst(FastRational(3))), {UninterpretedPredicate{invx}, UninterpretedPredicate{invy}}}
+        ChcBody{{logic.mkEq(logic.mkPlus(x,y), logic.mkRealConst(FastRational(3)))}, {UninterpretedPredicate{invx}, UninterpretedPredicate{invy}}}
     );
 //    ChcPrinter{logic, std::cout}.print(system);
     auto hypergraph = ChcGraphBuilder(logic).buildGraph(Normalizer(logic).normalize(system));
@@ -185,9 +185,6 @@ TEST(Spacer_test, test_NonLinearSystem_Bug)
     Options options;
     SymRef M = logic.declareFun("M", logic.getSort_bool(), {logic.getSort_real()});
     SymRef B = logic.declareFun("B", logic.getSort_bool(), {logic.getSort_bool()});
-    PTRef x = logic.mkRealVar("x");
-    PTRef xp = logic.mkRealVar("xp");
-    PTRef b = logic.mkBoolVar("b");
     PTRef zero = logic.getTerm_RealZero();
     PTRef one = logic.getTerm_RealOne();
     ChcSystem system;

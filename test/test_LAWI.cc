@@ -23,14 +23,14 @@ TEST(LAWI_test, test_LAWI_simple) {
     system.addUninterpretedPredicate(s1);
     system.addClause(
             ChcHead{UninterpretedPredicate{next}},
-            ChcBody{logic.mkEq(xp, logic.getTerm_RealZero()), {}});
+            ChcBody{{logic.mkEq(xp, logic.getTerm_RealZero())}, {}});
     system.addClause(
             ChcHead{UninterpretedPredicate{next}},
-            ChcBody{logic.mkEq(xp, logic.mkPlus(x, logic.getTerm_RealOne())), {UninterpretedPredicate{current}}}
+            ChcBody{{logic.mkEq(xp, logic.mkPlus(x, logic.getTerm_RealOne()))}, {UninterpretedPredicate{current}}}
     );
     system.addClause(
             ChcHead{UninterpretedPredicate{logic.getTerm_false()}},
-            ChcBody{logic.mkLt(x, logic.getTerm_RealZero()), {UninterpretedPredicate{current}}}
+            ChcBody{{logic.mkLt(x, logic.getTerm_RealZero())}, {UninterpretedPredicate{current}}}
     );
     auto hypergraph = ChcGraphBuilder(logic).buildGraph(Normalizer(logic).normalize(system));
     ASSERT_TRUE(hypergraph->isNormalGraph());
@@ -66,31 +66,31 @@ TEST(LAWI_test, test_LAWI_branch) {
     system.addUninterpretedPredicate(second);
     system.addClause(
         ChcHead{UninterpretedPredicate{s1p}},
-        ChcBody{logic.mkEq(xp, logic.getTerm_RealZero()), {}});
+        ChcBody{{logic.mkEq(xp, logic.getTerm_RealZero())}, {}});
     system.addClause(
         ChcHead{UninterpretedPredicate{s1p}},
-        ChcBody{logic.mkEq(xp, logic.mkPlus(x, logic.getTerm_RealOne())), {UninterpretedPredicate{s1}}}
+        ChcBody{{logic.mkEq(xp, logic.mkPlus(x, logic.getTerm_RealOne()))}, {UninterpretedPredicate{s1}}}
     );
     system.addClause(
         ChcHead{UninterpretedPredicate{s2}},
-        ChcBody{logic.mkLt(y, logic.getTerm_RealZero()), {UninterpretedPredicate{s1}}}
+        ChcBody{{logic.mkLt(y, logic.getTerm_RealZero())}, {UninterpretedPredicate{s1}}}
     );
     system.addClause(
         ChcHead{UninterpretedPredicate{s2}},
-        ChcBody{logic.mkGeq(y, logic.getTerm_RealZero()), {UninterpretedPredicate{s1}}}
+        ChcBody{{logic.mkGeq(y, logic.getTerm_RealZero())}, {UninterpretedPredicate{s1}}}
     );
     system.addClause(
         ChcHead{UninterpretedPredicate{s2p}},
-        ChcBody{
+        ChcBody{{
             logic.mkAnd(
                 logic.mkEq(yp, logic.mkPlus(y, logic.getTerm_RealOne())),
                 logic.mkEq(xp, x)
-            ),
+            )},
             {UninterpretedPredicate{s2}}}
     );
     system.addClause(
         ChcHead{UninterpretedPredicate{logic.getTerm_false()}},
-        ChcBody{logic.mkLt(x, logic.getTerm_RealZero()), {UninterpretedPredicate{s2}}}
+        ChcBody{{logic.mkLt(x, logic.getTerm_RealZero())}, {UninterpretedPredicate{s2}}}
     );
     auto normalizedSystem = Normalizer(logic).normalize(system);
     auto hypergraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
@@ -125,26 +125,26 @@ TEST(LAWI_test, test_LAWI_unreachable_state) {
     system.addUninterpretedPredicate(s1);
     system.addClause(
         ChcHead{UninterpretedPredicate{next}},
-        ChcBody{logic.mkEq(xp, logic.getTerm_RealZero()), {}});
+        ChcBody{{logic.mkEq(xp, logic.getTerm_RealZero())}, {}});
     system.addClause(
         ChcHead{UninterpretedPredicate{next}},
-        ChcBody{logic.mkEq(xp, logic.mkPlus(x, logic.getTerm_RealOne())), {UninterpretedPredicate{current}}}
+        ChcBody{{logic.mkEq(xp, logic.mkPlus(x, logic.getTerm_RealOne()))}, {UninterpretedPredicate{current}}}
     );
     system.addClause(
         ChcHead{UninterpretedPredicate{logic.getTerm_false()}},
-        ChcBody{logic.mkLt(x, logic.getTerm_RealZero()), {UninterpretedPredicate{current}}}
+        ChcBody{{logic.mkLt(x, logic.getTerm_RealZero())}, {UninterpretedPredicate{current}}}
     );
     system.addClause(
         ChcHead{UninterpretedPredicate{binNext}},
-        ChcBody{logic.mkEq(xp, logic.mkPlus(x, logic.getTerm_RealOne())), {UninterpretedPredicate{binCurrent}}}
+        ChcBody{{logic.mkEq(xp, logic.mkPlus(x, logic.getTerm_RealOne()))}, {UninterpretedPredicate{binCurrent}}}
     );
     system.addClause(
         ChcHead{UninterpretedPredicate{next}},
-        ChcBody{
+        ChcBody{{
             logic.mkAnd(
                 logic.mkEq(xp, x),
                 logic.mkLt(x, logic.getTerm_RealZero())
-            ),
+            )},
             {UninterpretedPredicate{binCurrent}}
         }
     );
@@ -177,14 +177,14 @@ TEST(LAWI_test, test_LAWI_simple_unsafe) {
     system.addUninterpretedPredicate(s1);
     system.addClause(
         ChcHead{UninterpretedPredicate{next}},
-        ChcBody{logic.mkEq(xp, logic.getTerm_RealZero()), {}});
+        ChcBody{{logic.mkEq(xp, logic.getTerm_RealZero())}, {}});
     system.addClause(
         ChcHead{UninterpretedPredicate{next}},
-        ChcBody{logic.mkEq(xp, logic.mkPlus(x, logic.getTerm_RealOne())), {UninterpretedPredicate{current}}}
+        ChcBody{{logic.mkEq(xp, logic.mkPlus(x, logic.getTerm_RealOne()))}, {UninterpretedPredicate{current}}}
     );
     system.addClause(
         ChcHead{UninterpretedPredicate{logic.getTerm_false()}},
-        ChcBody{logic.mkEq(x, logic.mkRealConst(FastRational(1))), {UninterpretedPredicate{current}}}
+        ChcBody{{logic.mkEq(x, logic.mkRealConst(FastRational(1)))}, {UninterpretedPredicate{current}}}
     );
     auto normalizedSystem = Normalizer(logic).normalize(system);
     auto hypergraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
@@ -267,14 +267,14 @@ TEST_F(LAWIIntTest, test_LAWI_accelerated_unsafe) {
     PTRef next = instantiatePredicate(s, {xp});
     std::vector<ChClause> clauses{
         // x' = 0 => S(x')
-        {ChcHead{UninterpretedPredicate{next}}, ChcBody{logic.mkEq(xp, zero), {}}},
+        {ChcHead{UninterpretedPredicate{next}}, ChcBody{{logic.mkEq(xp, zero)}, {}}},
         { // S(x) and x' = x + 1 => S(x')
             ChcHead{UninterpretedPredicate{next}},
-            ChcBody{logic.mkEq(xp, logic.mkPlus(x, one)),{UninterpretedPredicate{current}}}
+            ChcBody{{logic.mkEq(xp, logic.mkPlus(x, one))},{UninterpretedPredicate{current}}}
         },
         { // S(x) and x = 100 => false
             ChcHead{UninterpretedPredicate{logic.getTerm_false()}},
-            ChcBody{logic.mkEq(x, logic.mkIntConst(FastRational(100))), {UninterpretedPredicate{current}}}
+            ChcBody{{logic.mkEq(x, logic.mkIntConst(FastRational(100)))}, {UninterpretedPredicate{current}}}
         }
     };
     solveSystem(clauses, *getAcceleratedEngine(), VerificationResult::UNSAFE, true);
@@ -289,14 +289,14 @@ TEST_F(LAWIIntTest, test_LAWI_auxiliaryVar) {
     PTRef next = instantiatePredicate(s, {xp});
     std::vector<ChClause> clauses{
         // x' = 0 => S(x')
-        {ChcHead{UninterpretedPredicate{next}}, ChcBody{logic.mkEq(xp, zero), {}}},
+        {ChcHead{UninterpretedPredicate{next}}, ChcBody{{logic.mkEq(xp, zero)}, {}}},
         { // S(x) and x' = ite(b, x, x + 1) => S(x')
             ChcHead{UninterpretedPredicate{next}},
-            ChcBody{logic.mkEq(xp, logic.mkIte(b, x, logic.mkPlus(x, one))), {UninterpretedPredicate{current}}}
+            ChcBody{{logic.mkEq(xp, logic.mkIte(b, x, logic.mkPlus(x, one)))}, {UninterpretedPredicate{current}}}
         },
         { // S(x) and x = 2 => false
             ChcHead{UninterpretedPredicate{logic.getTerm_false()}},
-            ChcBody{logic.mkEq(x, two), {UninterpretedPredicate{current}}}
+            ChcBody{{logic.mkEq(x, two)}, {UninterpretedPredicate{current}}}
         }
     };
     solveSystem(clauses, *getBasicEngine(), VerificationResult::UNSAFE, true);
@@ -313,12 +313,12 @@ TEST_F(LAWIIntTest, test_LAWI_auxiliaryVarElimination) {
     PTRef next = instantiatePredicate(s, {xp});
     std::vector<ChClause> clauses{
         // ~b and b = c and c = d and ~d = xp => S(xp)
-        {ChcHead{UninterpretedPredicate{next}}, ChcBody{logic.mkAnd({
-            logic.mkEq(xp, logic.mkNot(d)), logic.mkEq(c,d), logic.mkEq(b,c), logic.mkNot(b)}), {}
+        {ChcHead{UninterpretedPredicate{next}}, ChcBody{{logic.mkAnd({
+            logic.mkEq(xp, logic.mkNot(d)), logic.mkEq(c,d), logic.mkEq(b,c), logic.mkNot(b)})}, {}
         }},
         { // S(x) and x = false => false
             ChcHead{UninterpretedPredicate{logic.getTerm_false()}},
-            ChcBody{logic.mkEq(x, logic.getTerm_false()), {UninterpretedPredicate{current}}}
+            ChcBody{{logic.mkEq(x, logic.getTerm_false())}, {UninterpretedPredicate{current}}}
         }
     };
     solveSystem(clauses, *getBasicEngine(), VerificationResult::SAFE, true);
@@ -333,11 +333,11 @@ TEST_F(LAWIIntTest, test_LAWI_auxiliaryVarElimination2) {
     std::vector<ChClause> clauses{
         { //  z = 0 and x = 3y + z => S(x)
             ChcHead{UninterpretedPredicate{current}},
-            ChcBody{logic.mkAnd(logic.mkEq(z, zero), logic.mkEq(x, logic.mkPlus(z, logic.mkTimes(y, logic.mkIntConst(3))))),{}}
+            ChcBody{{logic.mkAnd(logic.mkEq(z, zero), logic.mkEq(x, logic.mkPlus(z, logic.mkTimes(y, logic.mkIntConst(3)))))},{}}
         },
         { // S(x) and x = 32 => false
         ChcHead{UninterpretedPredicate{logic.getTerm_false()}},
-        ChcBody{logic.mkEq(x, logic.mkIntConst(32)), {UninterpretedPredicate{current}}}
+        ChcBody{{logic.mkEq(x, logic.mkIntConst(32))}, {UninterpretedPredicate{current}}}
         }
     };
     solveSystem(clauses, *getBasicEngine(), VerificationResult::SAFE, true);
@@ -356,26 +356,26 @@ TEST_F(LAWIIntTest, test_LAWI_bug) {
     std::vector<ChClause> clauses{
         { //  S(x,y,z) and x = 1 and y = 1 and z = 0 and xp = 0 and yp = 0 and zp = 1 => S(xp,yp,zp)
             ChcHead{UninterpretedPredicate{next}},
-            ChcBody{logic.mkAnd({
+            ChcBody{{logic.mkAnd({
                 logic.mkEq(z, zero), logic.mkEq(x, one), logic.mkEq(y, one),
                 logic.mkEq(zp, one), logic.mkEq(xp, zero), logic.mkEq(yp, zero)
-            }),{UninterpretedPredicate{current}}}
+            })},{UninterpretedPredicate{current}}}
         },
         { //  x = 0 and y = 0 and z = 0 => S(x,y,z)
             ChcHead{UninterpretedPredicate{current}},
-            ChcBody{logic.mkAnd({logic.mkEq(z, zero), logic.mkEq(x, zero), logic.mkEq(y, zero)}),{}}
+            ChcBody{{logic.mkAnd({logic.mkEq(z, zero), logic.mkEq(x, zero), logic.mkEq(y, zero)})},{}}
         },
         { //  x = 1 and y = 1 and z = 0 => S(x,y,z)
             ChcHead{UninterpretedPredicate{current}},
-            ChcBody{logic.mkAnd({logic.mkEq(z, zero), logic.mkEq(x, one), logic.mkEq(y, one)}),{}}
+            ChcBody{{logic.mkAnd({logic.mkEq(z, zero), logic.mkEq(x, one), logic.mkEq(y, one)})},{}}
         },
         { // S(x,y,z) and x = 0 and y = 0 and z = 1 => false
             ChcHead{UninterpretedPredicate{logic.getTerm_false()}},
-            ChcBody{logic.mkAnd({logic.mkEq(x, zero), logic.mkEq(y, zero), logic.mkEq(z, one)}), {UninterpretedPredicate{current}}}
+            ChcBody{{logic.mkAnd({logic.mkEq(x, zero), logic.mkEq(y, zero), logic.mkEq(z, one)})}, {UninterpretedPredicate{current}}}
         },
         { // S(x,y,z) and x = 1 and y = 1 and z = 1 => false
             ChcHead{UninterpretedPredicate{logic.getTerm_false()}},
-                ChcBody{logic.mkAnd({logic.mkEq(x, one), logic.mkEq(y, one), logic.mkEq(z, one)}), {UninterpretedPredicate{current}}}
+                ChcBody{{logic.mkAnd({logic.mkEq(x, one), logic.mkEq(y, one), logic.mkEq(z, one)})}, {UninterpretedPredicate{current}}}
         }
     };
     solveSystem(clauses, *getBasicEngine(), VerificationResult::UNSAFE, true);

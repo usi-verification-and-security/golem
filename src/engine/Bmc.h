@@ -11,7 +11,7 @@
 
 class BMC : public Engine {
     Logic & logic;
-    Options const & options;
+    [[maybe_unused]]Options const & options;
 public:
 
     BMC(Logic& logic, Options const & options) : logic(logic), options(options) {}

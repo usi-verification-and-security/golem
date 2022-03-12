@@ -292,7 +292,7 @@ ChClause toZeroStepVersion(Logic & logic, ChClause clause) {
 
 bool Validator::isPresentInSystem(const ChClause & clause, const ChcSystem & system) const {
     ChClause zeroStepVersionClause = toZeroStepVersion(logic, clause);
-    for (auto const systemClause : system.getClauses()) {
+    for (auto const & systemClause : system.getClauses()) {
         if (isInstanceOf(zeroStepVersionClause, systemClause, logic)) { return true; }
     }
     return false;

@@ -15,7 +15,7 @@ std::unique_ptr<ChcDirectedHyperGraph> ChcGraphBuilder::buildGraph(NormalizedChc
     auto getOrCreateVertex = [&vertices, &id](SymRef sym) {
         auto vertexIt = std::find_if(vertices.begin(), vertices.end(), [&sym](Vertex const& v) { return v.predicateSymbol == sym; });
         if (vertexIt == vertices.end()) {
-            vertexIt = vertices.insert(vertexIt, Vertex{.predicateSymbol = sym, .id = id++});
+            vertexIt = vertices.insert(vertexIt, Vertex{.predicateSymbol = sym, .id = {id++}});
         }
         return vertexIt->id;
     };

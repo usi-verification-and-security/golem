@@ -22,14 +22,14 @@ TEST(BMC_test, test_BMC_simple) {
     system.addUninterpretedPredicate(s1);
     system.addClause(
             ChcHead{UninterpretedPredicate{next}},
-            ChcBody{logic.mkEq(xp, logic.getTerm_IntZero()), {}});
+            ChcBody{{logic.mkEq(xp, logic.getTerm_IntZero())}, {}});
     system.addClause(
             ChcHead{UninterpretedPredicate{next}},
-            ChcBody{logic.mkEq(xp, logic.mkPlus(x, logic.getTerm_IntOne())), {UninterpretedPredicate{current}}}
+            ChcBody{{logic.mkEq(xp, logic.mkPlus(x, logic.getTerm_IntOne()))}, {UninterpretedPredicate{current}}}
     );
     system.addClause(
             ChcHead{UninterpretedPredicate{logic.getTerm_false()}},
-            ChcBody{logic.mkGt(x, logic.getTerm_IntOne()), {UninterpretedPredicate{current}}}
+            ChcBody{{logic.mkGt(x, logic.getTerm_IntOne())}, {UninterpretedPredicate{current}}}
     );
     auto normalizedSystem = Normalizer(logic).normalize(system);
     auto hypergraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);

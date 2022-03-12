@@ -87,7 +87,7 @@ ChClause Normalizer::eliminateRedundantVariables(ChClause && clause) {
     }
     ////////////////////// END OF DEALING with LOCAL VARIABLES /////////////////////////
 
-    return ChClause{clause.head, ChcBody{newInterpretedBody, clause.body.uninterpretedPart}};
+    return ChClause{clause.head, ChcBody{{newInterpretedBody}, clause.body.uninterpretedPart}};
 }
 
 

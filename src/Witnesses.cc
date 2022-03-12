@@ -66,7 +66,7 @@ SystemInvalidityWitness graphToSystemInvalidityWitness(InvalidityWitness const &
         assert(nucleus.clause.body.uninterpretedPart.size() == 1);
         assert(satellite.clause.head.predicate == nucleus.clause.body.uninterpretedPart[0]);
         step.clause.head = derivation[i].clause.head;
-        step.clause.body = ChcBody{logic.mkAnd(satellite.clause.body.interpretedPart.fla, derivation[i].clause.body.interpretedPart.fla),
+        step.clause.body = ChcBody{{logic.mkAnd(satellite.clause.body.interpretedPart.fla, derivation[i].clause.body.interpretedPart.fla)},
             {satellite.clause.body.uninterpretedPart}
         };
         previousDerivation = step.index;

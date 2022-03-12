@@ -126,7 +126,7 @@ ModelBasedProjection::implicant_t ModelBasedProjection::projectSingleVar(PTRef v
             // the same boolean variable cannot be present twice in the implicant
             assert(std::find_if(it, implicant.end(), [var](PtAsgn literal) { return literal.tr == var; }) == implicant.end());
         }
-        return std::move(implicant);
+        return implicant;
     }
     ArithLogic * lalogic = dynamic_cast<ArithLogic *>(&logic);
     if (not lalogic or not lalogic->isNumVar(var)) {
@@ -176,7 +176,7 @@ ModelBasedProjection::implicant_t ModelBasedProjection::projectSingleVar(PTRef v
                         ++i;
                     }
                 }
-                return std::move(implicant);
+                return implicant;
             } else {
                 assert(lit.sgn == l_False);
                 // replace the non-equality with the strict inequality that is true in the model
@@ -300,7 +300,7 @@ ModelBasedProjection::implicant_t ModelBasedProjection::projectSingleVar(PTRef v
     // don't forget the literals not containing the var to eliminate
     newLiterals.insert(newLiterals.end(), interestingEnd, implicant.end());
     postprocess(newLiterals, *lalogic);
-    return std::move(newLiterals);
+    return newLiterals;
 }
 
 namespace{

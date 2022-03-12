@@ -490,7 +490,7 @@ void LawiContext::applyForcedCovering(VId vertex) {
         PTRef labelToTest = TimeMachine(logic).sendFlaThroughTime(labels.getLabel(candidate), edgeFormulas.size());
 //        std::cout << logic.printTerm(labelToTest) << std::endl;
         solver.insertFormula(logic.mkNot(labelToTest));
-        PTRef fla = logic.mkAnd({labels.getLabel(nca), logic.mkAnd(edgeFormulas), logic.mkNot(labelToTest)});
+//        PTRef fla = logic.mkAnd({labels.getLabel(nca), logic.mkAnd(edgeFormulas), logic.mkNot(labelToTest)});
 //        std::cout << logic.printTerm(fla) << std::endl;
         auto res = solver.check();
         if (res == s_False) {

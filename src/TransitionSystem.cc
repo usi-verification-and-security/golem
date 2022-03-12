@@ -103,10 +103,10 @@ PTRef TransitionSystemHelper::toFrameVar(PTRef var, std::size_t frameNum) {
 SystemType::SystemType(std::vector<SRef> stateVarTypes, std::vector<SRef> auxiliaryVarTypes, Logic & logic) : logic(logic) {
     struct Helper {
         Helper(Logic & logic, std::string varNamePrefix) : logic(logic), varNamePrefix(std::move(varNamePrefix)) {}
+        Logic & logic;
         std::string prefix = "ts::";
         std::string varNamePrefix;
         std::size_t counter = 0;
-        Logic & logic;
 
         PTRef operator()(SRef sref) { return logic.mkVar(sref, std::string(prefix + varNamePrefix + std::to_string(counter++)).c_str());}
     };

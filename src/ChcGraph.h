@@ -118,7 +118,7 @@ class ChcDirectedGraph {
 
 public:
     ChcDirectedGraph(std::vector<Vertex> vertices, std::vector<DirectedEdge> edges, LinearCanonicalPredicateRepresentation predicates, VId entry, VId exit) :
-        vertices(std::move(vertices)), edges(std::move(edges)), predicates(std::move(predicates)), entry(entry), exit(exit)
+        entry(entry), exit(exit), vertices(std::move(vertices)), edges(std::move(edges)), predicates(std::move(predicates))
     {
         assert(entry != exit);
     }
@@ -189,7 +189,7 @@ class ChcDirectedHyperGraph {
 public:
     ChcDirectedHyperGraph(std::vector<Vertex> vertices, std::vector<DirectedHyperEdge> edges,
                           NonlinearCanonicalPredicateRepresentation predicates, VId entry, VId exit) :
-        vertices(std::move(vertices)), edges(std::move(edges)), predicates(std::move(predicates)), entry(entry), exit(exit)
+        entry(entry), exit(exit), vertices(std::move(vertices)), edges(std::move(edges)), predicates(std::move(predicates))
     {}
 
     bool isNormalGraph() const;

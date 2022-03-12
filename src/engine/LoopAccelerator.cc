@@ -35,9 +35,8 @@ ChcDirectedGraph LoopAccelerator::removeAcceleratedLoops(const ChcDirectedGraph 
         for (int i = 0; i < logic.getSym(currentSymbol).nargs(); ++i) {
             domainSorts.push(logic.getSym(currentSymbol)[i]);
         }
-        char* msg;
         SymRef duplicateSymbol = logic.declareFun(duplicateName, logic.getSortRef(current.predicateSymbol), domainSorts);
-        Vertex duplicate = Vertex{.predicateSymbol = duplicateSymbol, .id = nextId++};
+        Vertex duplicate = Vertex{.predicateSymbol = duplicateSymbol, .id = {nextId++}};
         vertices.push_back(duplicate);
         // add the new symbol to canonical representation
         std::vector<PTRef> varargs; varargs.reserve(domainSorts.size_());

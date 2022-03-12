@@ -52,7 +52,7 @@ class TransitionSystemHelper {
     PTRef toFrameVar(PTRef var, std::size_t frameNum);
 
 public:
-    TransitionSystemHelper(Logic & logic, SystemType const & systemType) : logic(logic), systemType(systemType) {}
+    TransitionSystemHelper(Logic & logic, SystemType const & systemType) : systemType(systemType), logic(logic) {}
 
     PTRef getFutureStateFormula(PTRef fla, std::size_t k);
 
