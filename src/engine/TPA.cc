@@ -1490,7 +1490,7 @@ InvalidityWitness TransitionSystemNetworkManager::computeInvalidityWitness() con
     errorPath.push_back(getIncomingEdge(current));
     while (true) {
         auto steps = getNode(current).solver->getTransitionStepCount();
-        errorPath.insert(errorPath.end(), steps, adjacencyRepresentation.getSelfLoopFor(current).value());
+        errorPath.insert(errorPath.end(), steps, getSelfLoopFor(current, graph, adjacencyRepresentation).value());
         if (current == getChainEnd()) {
             break;
         }
@@ -1508,7 +1508,7 @@ InvalidityWitness TransitionSystemNetworkManager::computeInvalidityWitness() con
 }
 
 TransitionSystem TransitionSystemNetworkManager::constructTransitionSystemFor(VId vid) const {
-    EId loopEdge = adjacencyRepresentation.getSelfLoopFor(vid).value();
+    EId loopEdge = getSelfLoopFor(vid, graph, adjacencyRepresentation).value();
     auto edgeVars = getVariablesFromEdge(logic, graph, loopEdge);
     auto systemType = std::make_unique<SystemType>(edgeVars.stateVars, edgeVars.auxiliaryVars, logic);
     PTRef loopLabel = graph.getEdgeLabel(loopEdge);

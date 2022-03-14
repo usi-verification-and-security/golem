@@ -35,7 +35,7 @@ std::unique_ptr<TransitionSystem> toTransitionSystem(ChcDirectedGraph const & gr
     auto reversePostOrder = adjacencyRepresentation.reversePostOrder();
     assert(reversePostOrder.size() == 3);
     VId loopNode = reversePostOrder[1];
-    EId loopEdge = adjacencyRepresentation.getSelfLoopFor(loopNode).value();
+    EId loopEdge = getSelfLoopFor(loopNode, graph, adjacencyRepresentation).value();
     auto edgeVars = getVariablesFromEdge(logic, graph, loopEdge);
     // Now we can continue building the transition system
     auto systemType = systemTypeFrom(edgeVars.stateVars, edgeVars.auxiliaryVars, logic);

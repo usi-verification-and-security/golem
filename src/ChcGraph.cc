@@ -280,14 +280,6 @@ std::vector<VId> AdjacencyListsGraphRepresentation::postOrder() const {
     return order;
 }
 
-std::optional<EId> AdjacencyListsGraphRepresentation::getSelfLoopFor(VId node) const {
-    auto const & outEdges = getOutgoingEdgesFor(node);
-    auto it = std::find_if(outEdges.begin(), outEdges.end(), [&](EId eid) {
-        return getEdge(eid).to == node;
-    });
-    return it != outEdges.end() ? *it : std::optional<EId>{};
-}
-
 std::unique_ptr<ChcDirectedHyperGraph> ChcDirectedGraph::toHyperGraph(Logic & logic) const {
     TimeMachine timeMachine(logic);
     VersionManager manager(logic);
@@ -328,4 +320,12 @@ std::unique_ptr<ChcDirectedHyperGraph> ChcDirectedGraph::toHyperGraph(Logic & lo
         return DirectedHyperEdge{.from = {edge.from}, .to = edge.to, .fla = {newLabel}};
     });
     return std::unique_ptr<ChcDirectedHyperGraph>( new ChcDirectedHyperGraph(vertices, std::move(newEdges), std::move(newPredicates), entry, exit));
+}
+
+std::optional<EId> getSelfLoopFor(VId node, ChcDirectedGraph const & graph, AdjacencyListsGraphRepresentation const & adjacencyRepresentation) {
+    auto const & outEdges = adjacencyRepresentation.getOutgoingEdgesFor(node);
+    auto it = std::find_if(outEdges.begin(), outEdges.end(), [&](EId eid) {
+        return graph.getEdge(eid).to == node;
+    });
+    return it != outEdges.end() ? *it : std::optional<EId>{};
 }
