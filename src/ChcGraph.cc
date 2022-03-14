@@ -238,7 +238,7 @@ AdjacencyListsGraphRepresentation AdjacencyListsGraphRepresentation::from(const 
         incoming[graph.getTarget(eid).id].push_back(eid);
         outgoing[graph.getSource(eid).id].push_back(eid);
     }
-    return AdjacencyListsGraphRepresentation(std::move(incoming), std::move(outgoing), [&graph](EId eid) { return graph.getEdge(eid); });
+    return AdjacencyListsGraphRepresentation(std::move(incoming), std::move(outgoing));
 }
 
 class DFS {

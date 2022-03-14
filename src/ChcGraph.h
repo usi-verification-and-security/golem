@@ -52,12 +52,10 @@ class AdjacencyListsGraphRepresentation {
     using AdjacencyList = std::vector<std::vector<EId>>;
     AdjacencyList incomingEdges;
     AdjacencyList outgoingEdges;
-    std::function<DirectedEdge(EId)> edgeGetter;
 
-	AdjacencyListsGraphRepresentation(AdjacencyList && incoming, AdjacencyList && outgoing, std::function<DirectedEdge(EId)> && edgeGetter)
+	AdjacencyListsGraphRepresentation(AdjacencyList && incoming, AdjacencyList && outgoing)
 		: incomingEdges(std::move(incoming)),
-		  outgoingEdges(std::move(outgoing)),
-		  edgeGetter(std::move(edgeGetter))
+		  outgoingEdges(std::move(outgoing))
 	{}
 
 public:
@@ -66,7 +64,6 @@ public:
     std::vector<EId> const & getOutgoingEdgesFor(VId v) const { return outgoingEdges[v.id]; }
 
     std::size_t getVertexNum() const { return incomingEdges.size(); }
-	DirectedEdge getEdge(EId e) const { return edgeGetter(e); }
 };
 
 class ChcDirectedHyperGraph;
