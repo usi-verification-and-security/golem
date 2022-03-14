@@ -32,7 +32,7 @@ bool TransitionSystem::isWellFormed() {
 }
 
 
-PTRef TransitionSystem::toNextStateVar(PTRef var, std::size_t steps) {
+PTRef TransitionSystem::toNextStateVar(PTRef var) const {
     assert(logic.isVar(var));
     static std::string suffix = "#p";
     std::string originalName = logic.getSymName(var);

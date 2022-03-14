@@ -17,7 +17,7 @@ public:
     BMC(Logic& logic, Options const & options) : logic(logic), options(options) {}
 
     virtual GraphVerificationResult
-    solve(ChcDirectedHyperGraph& system) override { throw std::logic_error("Not supported yet!"); }
+    solve(ChcDirectedHyperGraph &) override { throw std::logic_error("Not supported yet!"); }
 
     virtual GraphVerificationResult solve(ChcDirectedGraph const & system) override;
 

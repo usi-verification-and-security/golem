@@ -4,7 +4,7 @@
 
 #include "ReverseWrapper.h"
 
-InvalidityWitness ReverseWrapper::reverse(InvalidityWitness const & witness, ChcGraphContext & ctx) {
+InvalidityWitness ReverseWrapper::reverse(InvalidityWitness const & witness) {
     InvalidityWitness reversed;
     auto originalPath = witness.getErrorPath().getEdges();
     InvalidityWitness::ErrorPath reversedPath;

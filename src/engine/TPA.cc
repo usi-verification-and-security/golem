@@ -1702,7 +1702,7 @@ ValidityWitness TPAEngine::computeValidityWitness(ChcDirectedGraph const & graph
     auto graphVars = utils.getVarsFromPredicateInOrder(graph.getStateVersion(vertex));
     auto systemVars = ts.getStateVars();
     assert(graphVars.size() == systemVars.size());
-    for (int i = 0; i < graphVars.size(); ++i) {
+    for (std::size_t i = 0; i < graphVars.size(); ++i) {
         subs.insert({systemVars[i], graphVars[i]});
     }
     PTRef graphInvariant = utils.varSubstitute(inductiveInvariant, subs);

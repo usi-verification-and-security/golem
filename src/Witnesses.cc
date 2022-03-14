@@ -32,7 +32,7 @@ SystemInvalidityWitness graphToSystemInvalidityWitness(InvalidityWitness const &
     std::vector<PTRef> vertexPredicates;
     std::transform(vertices.begin(), vertices.end(), std::back_inserter(vertexPredicates), UPHelper(graph, logic));
     std::size_t stepCounter = 0;
-    for (int i = 0; i < edgeIds.size(); ++i) {
+    for (std::size_t i = 0; i < edgeIds.size(); ++i) {
         std::vector<UninterpretedPredicate> uninterpretedPart;
         if (vertexPredicates[i] != logic.getTerm_true()) { uninterpretedPart.push_back(UninterpretedPredicate{.predicate = vertexPredicates[i]}); }
         PTRef edgeFla = graph.getEdgeLabel(edgeIds[i]);

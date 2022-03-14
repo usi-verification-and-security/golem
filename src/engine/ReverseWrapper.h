@@ -17,17 +17,16 @@ public:
     GraphVerificationResult solve(const ChcDirectedGraph& graph) {
         auto reversedGraph = graph.reverse(logic);
         auto res = wrapped->solve(reversedGraph);
-        ChcGraphContext ctx(reversedGraph, logic);
-        return reverse(std::move(res), ctx);
+        return reverse(std::move(res));
     }
 
 private:
-    GraphVerificationResult reverse(GraphVerificationResult res, ChcGraphContext & ctx) {
+    GraphVerificationResult reverse(GraphVerificationResult res) {
         switch(res.getAnswer()) {
             case VerificationResult::SAFE:
                 return GraphVerificationResult(VerificationResult::SAFE, reverse(res.getValidityWitness()));
             case VerificationResult::UNSAFE:
-                return GraphVerificationResult(VerificationResult::UNSAFE, reverse(res.getInvalidityWitness(), ctx));
+                return GraphVerificationResult(VerificationResult::UNSAFE, reverse(res.getInvalidityWitness()));
             case VerificationResult::UNKNOWN:
                 return res;
         }
@@ -43,7 +42,7 @@ private:
         return ValidityWitness(std::move(newDefinitions));
     }
 
-    InvalidityWitness reverse(InvalidityWitness const & witness, ChcGraphContext & ctx);
+    InvalidityWitness reverse(InvalidityWitness const & witness);
 };
 
 #endif //OPENSMT_REVERSEWRAPPER_H

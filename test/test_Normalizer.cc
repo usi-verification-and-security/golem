@@ -20,7 +20,7 @@ TEST(NormalizerTest, test_boolean_equal_to_constant) {
 
     system.addClause(
             ChcHead{UninterpretedPredicate{logic.mkUninterpFun(s1, {logic.getTerm_IntZero(), logic.getTerm_false()})}},
-            ChcBody{{logic.getTerm_true()}}
+            ChcBody{{logic.getTerm_true()}, {}}
     );
 
     system.addClause(

@@ -32,7 +32,7 @@ ChcDirectedGraph LoopAccelerator::removeAcceleratedLoops(const ChcDirectedGraph 
         SymRef currentSymbol = current.predicateSymbol;
         std::string duplicateName = LoopAccelerator::PREFIX + logic.getSymName(current.predicateSymbol);
         vec<SRef> domainSorts;
-        for (int i = 0; i < logic.getSym(currentSymbol).nargs(); ++i) {
+        for (unsigned int i = 0; i < logic.getSym(currentSymbol).nargs(); ++i) {
             domainSorts.push(logic.getSym(currentSymbol)[i]);
         }
         SymRef duplicateSymbol = logic.declareFun(duplicateName, logic.getSortRef(current.predicateSymbol), domainSorts);
@@ -53,7 +53,7 @@ ChcDirectedGraph LoopAccelerator::removeAcceleratedLoops(const ChcDirectedGraph 
         auto duplicateVarsNext = utils.getVarsFromPredicateInOrder(predicateRepresentation.getTargetTermFor(duplicateSymbol));
         auto originalVarsCurrent = utils.getVarsFromPredicateInOrder(predicateRepresentation.getSourceTermFor(currentSymbol));
         auto duplicateVarsCurrent = utils.getVarsFromPredicateInOrder(predicateRepresentation.getSourceTermFor(duplicateSymbol));
-        for (int i = 0; i < originalVarsCurrent.size(); ++i) {
+        for (std::size_t i = 0; i < originalVarsCurrent.size(); ++i) {
             varSubstCurrent.insert({originalVarsCurrent[i], duplicateVarsCurrent[i]});
             varSubstNext.insert({originalVarsNext[i], duplicateVarsNext[i]});
         }

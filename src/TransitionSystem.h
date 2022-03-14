@@ -101,8 +101,7 @@ public:
 private:
     bool isWellFormed();
 
-    PTRef toNextStateVar(PTRef var, std::size_t steps);
-    PTRef toNextStateVar(PTRef var) { return toNextStateVar(var, 1); }
+    PTRef toNextStateVar(PTRef var) const;
 
 };
 

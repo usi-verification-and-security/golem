@@ -143,7 +143,7 @@ public:
         auto domainVars = getVarsFromPredicateInOrder(domain);
         auto codomainVars = getVarsFromPredicateInOrder(codomain);
         assert(domainVars.size() == codomainVars.size());
-        for (int i = 0; i < domainVars.size(); ++i) {
+        for (std::size_t i = 0; i < domainVars.size(); ++i) {
             assert(logic.isVar(domainVars[i]) and logic.isVar(codomainVars[i]));
             subst.insert({domainVars[i], codomainVars[i]});
         }

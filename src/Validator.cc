@@ -101,7 +101,7 @@ Validator::Result Validator::validateValidityWitness(const ChcSystem & system, c
         auto realArgs = utils.getVarsFromPredicateInOrder(predicateTerm);
         assert(formalArgs.size() == realArgs.size());
         std::unordered_map<PTRef, PTRef, PTRefHash> subst;
-        for (int i = 0; i < formalArgs.size(); ++i) {
+        for (std::size_t i = 0; i < formalArgs.size(); ++i) {
             subst.insert({formalArgs[i], realArgs[i]});
         }
         PTRef consequent = utils.varSubstitute(definitionTemplate, subst);

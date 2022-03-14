@@ -572,7 +572,7 @@ vec<PTRef> LawiContext::getPathInterpolants(MainSolver & solver, ArtPath const &
     }
     // MB: Last interpolant must be always false
     pathInterpolants.push(logic.getTerm_false());
-    assert(pathInterpolants.size() == pathSize);
+    assert(pathInterpolants.size_() == pathSize);
     return pathInterpolants;
 }
 
@@ -748,7 +748,7 @@ ArtPath AbstractReachabilityTree::getPath(VId predecessor, VId successor, Logic 
     ArtPath artPath;
     std::vector<EId> path = getAncestorPathUntil(successor, predecessor);
     TimeMachine timeMachine(logic);
-    for (int i = 0; i < path.size(); ++i) {
+    for (std::size_t i = 0; i < path.size(); ++i) {
         EId eid = path[i];
         PTRef fla = getLabel(eid);
         fla = timeMachine.sendFlaThroughTime(fla, i);
@@ -814,7 +814,7 @@ vec<PTRef> LawiContext::normalizeInterpolants(const vec<PTRef> & itps) const {
 
 std::vector<VId> LawiContext::strengthenLabelsAlongPath(const ArtPath & path, const vec<PTRef> & itps) {
     auto vertices = art.getPathVertices(path);
-    assert(vertices.size() == itps.size() + 1);
+    assert(vertices.size() == itps.size_() + 1);
     std::vector<VId> refinedVertices;
     for (int i = 0; i < itps.size(); ++i) {
         VId vertex = vertices[i + 1];
@@ -849,7 +849,7 @@ InvalidityWitness::ErrorPath LawiContext::buildGraphPathFromTreePath(const ArtPa
 // LAWI methods
 //
 
-GraphVerificationResult Lawi::solve(ChcDirectedHyperGraph & system) {
+GraphVerificationResult Lawi::solve(ChcDirectedHyperGraph &) {
     throw std::logic_error("Not supported yet!");
 }
 

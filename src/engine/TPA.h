@@ -32,7 +32,7 @@ class TPAEngine : public Engine {
 public:
     TPAEngine(Logic & logic, Options options) : logic(logic), options(std::move(options)) {}
 
-    GraphVerificationResult solve(ChcDirectedHyperGraph & system) override {
+    GraphVerificationResult solve(ChcDirectedHyperGraph &) override {
         throw std::logic_error("Not supported yet!");
     }
 
