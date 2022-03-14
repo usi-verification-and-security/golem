@@ -7,7 +7,7 @@
 
 bool isTransitionSystem(ChcDirectedGraph const & graph) {
     auto graphRepresentation = AdjacencyListsGraphRepresentation::from(graph);
-    auto reversePostorder = graphRepresentation.reversePostOrder();
+    auto reversePostorder = reversePostOrder(graph, graphRepresentation);
     // TS has 3 vertices: Init, Body, Bad
     if (reversePostorder.size() != 3) { return false; }
     // TS has 3 edges: From Init to Body, self-loop on Body, from Body to Bad
@@ -32,9 +32,9 @@ bool isTransitionSystem(ChcDirectedGraph const & graph) {
 
 std::unique_ptr<TransitionSystem> toTransitionSystem(ChcDirectedGraph const & graph, Logic& logic) {
     auto adjacencyRepresentation = AdjacencyListsGraphRepresentation::from(graph);
-    auto reversePostOrder = adjacencyRepresentation.reversePostOrder();
-    assert(reversePostOrder.size() == 3);
-    VId loopNode = reversePostOrder[1];
+    auto vertices = reversePostOrder(graph, adjacencyRepresentation);
+    assert(vertices.size() == 3);
+    VId loopNode = vertices[1];
     EId loopEdge = getSelfLoopFor(loopNode, graph, adjacencyRepresentation).value();
     auto edgeVars = getVariablesFromEdge(logic, graph, loopEdge);
     // Now we can continue building the transition system
@@ -50,9 +50,9 @@ std::unique_ptr<TransitionSystem> toTransitionSystem(ChcDirectedGraph const & gr
     for (auto const & edge : graph.getEdges()) {
         VId source = graph.getSource(edge);
         VId target = graph.getTarget(edge);
-        bool isInit = source == reversePostOrder[0] && target == reversePostOrder[1];
-        bool isLoop = source == reversePostOrder[1] && target == reversePostOrder[1];
-        bool isEnd = source == reversePostOrder[1] && target == reversePostOrder[2];
+        bool isInit = source == vertices[0] && target == vertices[1];
+        bool isLoop = source == vertices[1] && target == vertices[1];
+        bool isEnd = source == vertices[1] && target == vertices[2];
         assert(isInit || isLoop || isEnd);
         PTRef fla = graph.getEdgeLabel(edge);
         TermUtils utils(logic);
@@ -85,22 +85,22 @@ std::unique_ptr<TransitionSystem> toTransitionSystem(ChcDirectedGraph const & gr
 bool isTransitionSystemChain(ChcDirectedGraph const & graph) {
     if (graph.getVertices().size() < 3) { return false; }
     auto graphRepresentation = AdjacencyListsGraphRepresentation::from(graph);
-    auto reversePostorder = graphRepresentation.reversePostOrder();
-    assert(graph.getEntryId() == reversePostorder[0]);
-    assert(graph.getExitId() == reversePostorder.back());
-    if (graphRepresentation.getOutgoingEdgesFor(reversePostorder[0]).size() != 1
-        or graphRepresentation.getIncomingEdgesFor(reversePostorder.back()).size() != 1) {
+    auto vertices = reversePostOrder(graph, graphRepresentation);
+    assert(graph.getEntryId() == vertices[0]);
+    assert(graph.getExitId() == vertices.back());
+    if (graphRepresentation.getOutgoingEdgesFor(vertices[0]).size() != 1
+        or graphRepresentation.getIncomingEdgesFor(vertices.back()).size() != 1) {
         return false;
     }
-    for (unsigned i = 1; i < reversePostorder.size() - 1; ++i) {
-        VId current = reversePostorder[i];
+    for (unsigned i = 1; i < vertices.size() - 1; ++i) {
+        VId current = vertices[i];
         auto const & outEdges = graphRepresentation.getOutgoingEdgesFor(current);
         if (outEdges.size() != 2) { return false; }
         bool hasSelfLoop = false;
         bool hasEdgeToNext = false;
         for (EId eid : outEdges) {
             hasSelfLoop |= graph.getTarget(eid) == current;
-            hasEdgeToNext |= graph.getTarget(eid) == reversePostorder[i+1];
+            hasEdgeToNext |= graph.getTarget(eid) == vertices[i+1];
         }
         if (not (hasSelfLoop and hasEdgeToNext)) { return false; }
     }

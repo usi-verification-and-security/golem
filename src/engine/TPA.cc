@@ -1407,7 +1407,7 @@ void TransitionSystemNetworkManager::initNetwork() {
         networkMap.at(source).solver->updateQueryStates(tm.sendFlaThroughTime(graph.getEdgeLabel(eid), 0));
     }
     // Connect the network
-    for (VId vid : adjacencyRepresentation.reversePostOrder()) {
+    for (VId vid : reversePostOrder(graph, adjacencyRepresentation)) {
         if (vid != graph.getExitId()) {
             auto outGoingEdges = adjacencyRepresentation.getOutgoingEdgesFor(vid);
             outGoingEdges.erase(std::remove_if(outGoingEdges.begin(), outGoingEdges.end(), [this](EId eid) {

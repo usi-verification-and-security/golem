@@ -634,10 +634,10 @@ std::vector<VId> AbstractReachabilityTree::expand(VId vertex) {
     // get all outgoing edges and create corresponding vertices in this ART
     auto outEdges = graphRepresentation.getOutgoingEdgesFor(originalLocation);
     std::partition(outEdges.begin(), outEdges.end(), [this](EId outEdge) {
-        return graphRepresentation.getEdge(outEdge).to == getOriginalErrorLocation();
+        return graph.getEdge(outEdge).to == getOriginalErrorLocation();
     });
     for (auto const & eid : outEdges) {
-        DirectedEdge edge = graphRepresentation.getEdge(eid);
+        DirectedEdge edge = graph.getEdge(eid);
         VId successor = edge.to;
         VId nVertex = newVertexFor(successor);
         children.push_back(nVertex);

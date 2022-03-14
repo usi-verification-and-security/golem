@@ -67,8 +67,6 @@ public:
 
     std::size_t getVertexNum() const { return incomingEdges.size(); }
 	DirectedEdge getEdge(EId e) const { return edgeGetter(e); }
-    std::vector<VId> reversePostOrder() const;
-    std::vector<VId> postOrder() const;
 };
 
 class ChcDirectedHyperGraph;
@@ -256,5 +254,8 @@ public:
 };
 
 std::optional<EId> getSelfLoopFor(VId, ChcDirectedGraph const & graph, AdjacencyListsGraphRepresentation const & adjacencyRepresentation);
+
+std::vector<VId> reversePostOrder(ChcDirectedGraph const & graph, AdjacencyListsGraphRepresentation const & adjacencyRepresentation);
+std::vector<VId> postOrder(ChcDirectedGraph const & graph, AdjacencyListsGraphRepresentation const & adjacencyRepresentation);
 
 #endif //OPENSMT_CHCGRAPH_H

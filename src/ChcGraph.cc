@@ -242,7 +242,8 @@ AdjacencyListsGraphRepresentation AdjacencyListsGraphRepresentation::from(const 
 }
 
 class DFS {
-    AdjacencyListsGraphRepresentation const * graph;
+    ChcDirectedGraph const & graph;
+    AdjacencyListsGraphRepresentation const & adjacencyRepresentation;
     std::vector<bool> marked;
 
     template<typename TPreorderAction, typename TPostorderAction>
@@ -250,35 +251,26 @@ class DFS {
         if (marked[v.id]) { return; }
         marked[v.id] = true;
         preorder(v);
-        for (EId outEdge : graph->getOutgoingEdgesFor(v)) {
-            runOnVertex(graph->getEdge(outEdge).to, preorder, postorder);
+        for (EId outEdge : adjacencyRepresentation.getOutgoingEdgesFor(v)) {
+            runOnVertex(graph.getEdge(outEdge).to, preorder, postorder);
         }
         postorder(v);
     }
 public:
+    DFS(ChcDirectedGraph const & graph, AdjacencyListsGraphRepresentation const & adjacencyRepresentation) :
+        graph(graph),
+        adjacencyRepresentation(adjacencyRepresentation)
+    {}
+
     template<typename TPreorderAction, typename TPostorderAction>
-    void run(TPreorderAction const & preorder, TPostorderAction const & postorder, AdjacencyListsGraphRepresentation const & graph) && {
-        auto vertexCount = graph.getVertexNum();
+    void run(TPreorderAction const & preorder, TPostorderAction const & postorder) && {
+        auto vertexCount = adjacencyRepresentation.getVertexNum();
         marked.resize(vertexCount, false);
-        this->graph = &graph;
         for (std::size_t i = 0; i < vertexCount; ++i) {
             runOnVertex(VId{i}, preorder, postorder);
         }
     }
 };
-
-std::vector<VId> AdjacencyListsGraphRepresentation::reversePostOrder() const {
-    std::vector<VId> order;
-    DFS().run([](VId){}, [&order](VId v){ order.push_back(v); }, *this);
-    std::reverse(order.begin(), order.end());
-    return order;
-}
-
-std::vector<VId> AdjacencyListsGraphRepresentation::postOrder() const {
-    std::vector<VId> order;
-    DFS().run([](VId){}, [&order](VId v){ order.push_back(v); }, *this);
-    return order;
-}
 
 std::unique_ptr<ChcDirectedHyperGraph> ChcDirectedGraph::toHyperGraph(Logic & logic) const {
     TimeMachine timeMachine(logic);
@@ -328,4 +320,16 @@ std::optional<EId> getSelfLoopFor(VId node, ChcDirectedGraph const & graph, Adja
         return graph.getEdge(eid).to == node;
     });
     return it != outEdges.end() ? *it : std::optional<EId>{};
+}
+
+std::vector<VId> reversePostOrder(ChcDirectedGraph const & graph, AdjacencyListsGraphRepresentation const & adjacencyRepresentation) {
+    std::vector<VId> order = postOrder(graph, adjacencyRepresentation);
+    std::reverse(order.begin(), order.end());
+    return order;
+}
+
+std::vector<VId> postOrder(ChcDirectedGraph const & graph, AdjacencyListsGraphRepresentation const & adjacencyRepresentation) {
+    std::vector<VId> order;
+    DFS(graph, adjacencyRepresentation).run([](VId){}, [&order](VId v){ order.push_back(v); });
+    return order;
 }
