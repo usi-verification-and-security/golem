@@ -241,6 +241,23 @@ AdjacencyListsGraphRepresentation AdjacencyListsGraphRepresentation::from(const 
     return AdjacencyListsGraphRepresentation(std::move(incoming), std::move(outgoing));
 }
 
+AdjacencyListsGraphRepresentation AdjacencyListsGraphRepresentation::from(const ChcDirectedHyperGraph & graph) {
+    auto edges = graph.getEdges();
+    auto vertices = graph.getVertices();
+    std::vector<std::vector<EId>> incoming;
+    std::vector<std::vector<EId>> outgoing;
+    const std::size_t N = vertices.size();
+    incoming.resize(N);
+    outgoing.resize(N);
+    for (EId eid : edges) {
+        incoming[graph.getTarget(eid).id].push_back(eid);
+        for (VId vid : graph.getSources(eid)) {
+            outgoing[vid.id].push_back(eid);
+        }
+    }
+    return AdjacencyListsGraphRepresentation(std::move(incoming), std::move(outgoing));
+}
+
 class DFS {
     ChcDirectedGraph const & graph;
     AdjacencyListsGraphRepresentation const & adjacencyRepresentation;
@@ -332,4 +349,69 @@ std::vector<VId> postOrder(ChcDirectedGraph const & graph, AdjacencyListsGraphRe
     std::vector<VId> order;
     DFS(graph, adjacencyRepresentation).run([](VId){}, [&order](VId v){ order.push_back(v); });
     return order;
+}
+
+void ChcDirectedHyperGraph::contractTrivialVertex(VId vid, EId incomingId, EId outgoingId, Logic & logic) {
+    auto const & incomingSources = getEdge(incomingId).from;
+    assert(std::none_of(incomingSources.begin(), incomingSources.end(), [vid](VId source) { return source == vid; }));
+    assert(getEdge(outgoingId).to != vid);
+    auto const & outgoingSources = getEdge(outgoingId).from;
+    assert(outgoingSources.size() == 1 and outgoingSources[0] == vid);
+    mergeEdges(incomingId, outgoingId, logic);
+    deleteNode(vid);
+}
+
+void ChcDirectedHyperGraph::deleteNode(VId vid) {
+    assert(vid != getEntryId() and vid != getExitId());
+    edges.erase(std::remove_if(edges.begin(), edges.end(), [vid](auto const & edge) {
+        return edge.to == vid or std::find(edge.from.begin(), edge.from.end(), vid) != edge.from.end();
+    }), edges.end());
+
+    VId last = vertices.back().id;
+    vertices[vid.id] = vertices.back();
+    vertices[vid.id].id = vid;
+    vertices.pop_back();
+    for (auto & edge : edges) {
+        if (edge.to == last) { edge.to = vid; }
+        for (VId & source : edge.from) {
+            if (source == last) { source = vid; }
+        }
+    }
+}
+
+void ChcDirectedHyperGraph::mergeEdges(EId incomingId, EId outgoingId, Logic & logic) {
+    auto const & incoming = getEdge(incomingId);
+    auto const & outgoing = getEdge(outgoingId);
+    if (std::find(outgoing.from.begin(), outgoing.from.end(), incoming.to) == outgoing.from.end()) { throw std::logic_error("ChcDirectedGraph::mergeEdges: Trying to merge edges without common node!\n"); }
+
+    VId target = outgoing.to;
+    auto newSources = incoming.from;
+    for (VId outSource : outgoing.from) {
+        if (outSource != incoming.to) {
+            newSources.push_back(outSource);
+        }
+    }
+
+    PTRef mergedLabel = mergeLabels(incoming, outgoing, logic);
+    edges.push_back(DirectedHyperEdge{.from = std::move(newSources), .to = target, .fla = InterpretedFla{mergedLabel}});
+}
+
+PTRef ChcDirectedHyperGraph::mergeLabels(const DirectedHyperEdge & incoming, const DirectedHyperEdge & outgoing, Logic & logic) {
+    VId common = incoming.to;
+    auto const & outgoingSource = outgoing.from;
+    if (outgoingSource.size() != 1) { throw std::logic_error("Outgoing edge must be simple edge!"); }
+    assert(outgoingSource[0] == common);
+    assert(std::find(incoming.from.begin(), incoming.from.end(), common) == incoming.from.end()); // MB: Otherwise we would have variable name clash
+    PTRef incomingLabel = incoming.fla.fla;
+    PTRef outgoingLabel = outgoing.fla.fla;
+    TermUtils utils(logic);
+    TermUtils::substitutions_map subMap;
+    utils.insertVarPairsFromPredicates(getNextStateVersion(common), getStateVersion(common), subMap);
+    PTRef updatedIncomingLabel = utils.varSubstitute(incomingLabel, subMap);
+    PTRef combinedLabel = logic.mkAnd(updatedIncomingLabel, outgoingLabel);
+//    std::cout << logic.pp(combinedLabel) << '\n';
+    PTRef simplifiedLabel = TrivialQuantifierElimination(logic).tryEliminateVars(utils.getVarsFromPredicateInOrder(
+        getStateVersion(common)), combinedLabel);
+//    std::cout << logic.pp(simplifiedLabel) << '\n';
+    return simplifiedLabel;
 }

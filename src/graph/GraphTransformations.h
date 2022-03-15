@@ -16,6 +16,7 @@ public:
 
     // Simple node is a node with max one incoming or outgoing edges
     void eliminateSimpleNodes(ChcDirectedGraph & graph);
+    void eliminateSimpleNodes(ChcDirectedHyperGraph & graph);
 
 private:
     void eliminateNonLoopingNodes(ChcDirectedGraph & graph);

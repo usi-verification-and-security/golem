@@ -47,6 +47,7 @@ struct DirectedEdge {
 };
 
 class ChcDirectedGraph;
+class ChcDirectedHyperGraph;
 
 class AdjacencyListsGraphRepresentation {
     using AdjacencyList = std::vector<std::vector<EId>>;
@@ -60,6 +61,7 @@ class AdjacencyListsGraphRepresentation {
 
 public:
     static AdjacencyListsGraphRepresentation from(ChcDirectedGraph const& graph);
+    static AdjacencyListsGraphRepresentation from(ChcDirectedHyperGraph const& graph);
     std::vector<EId> const & getIncomingEdgesFor(VId v) const { return incomingEdges[v.id]; }
     std::vector<EId> const & getOutgoingEdgesFor(VId v) const { return outgoingEdges[v.id]; }
 
@@ -231,6 +233,11 @@ public:
     VId getTarget(EId eid) const {
         return getEdge(eid).to;
     }
+    void contractTrivialVertex(VId vid, EId incoming, EId outgoing, Logic & logic);
+private:
+    void deleteNode(VId vid);
+    void mergeEdges(EId incomingId, EId outgoingId, Logic & logic);
+    PTRef mergeLabels(const DirectedHyperEdge & incoming, const DirectedHyperEdge & outgoing, Logic & logic);
 };
 
 class ChcGraphBuilder {
