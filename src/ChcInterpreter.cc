@@ -375,6 +375,7 @@ void ChcInterpreterContext::interpretCheckSat() {
         if (opts.getOption(Options::ENGINE) != "spacer") {
             throw std::logic_error("Only Spacer engine can solve nonlinear CHCs at the moment!");
         }
+        GraphTransformations(logic).eliminateSimpleNodes(*hypergraph);
         auto engine = std::unique_ptr<Engine>(new Spacer(logic, opts));
         auto res = engine->solve(*hypergraph);
         switch (res.getAnswer()) {
