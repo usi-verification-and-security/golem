@@ -1,6 +1,8 @@
-//
-// Created by Martin Blicha on 04.08.20.
-//
+/*
+ * Copyright (c) 2020-2022, Martin Blicha <martin.blicha@gmail.com>
+ *
+ * SPDX-License-Identifier: MIT
+ */
 
 #ifndef OPENSMT_TERMUTILS_H
 #define OPENSMT_TERMUTILS_H
@@ -10,6 +12,23 @@
 #include <algorithm>
 #include <iostream>
 #include <sstream>
+
+template<typename TPred>
+class VariableGathererConfig : public DefaultVisitorConfig {
+    Logic & logic;
+    TPred predicate;
+    vec<PTRef> gatheredVariables;
+public:
+    VariableGathererConfig(Logic & logic, TPred predicate): logic(logic), predicate(predicate) {}
+
+    void visit(PTRef term) override {
+        if (logic.isVar(term) and predicate(term)) {
+            gatheredVariables.push(term);
+        }
+    }
+
+    vec<PTRef> && extractGatheredVariables() { return std::move(gatheredVariables); }
+};
 
 class TermUtils {
     Logic & logic;

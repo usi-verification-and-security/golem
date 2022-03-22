@@ -59,24 +59,25 @@ ChClause Normalizer::eliminateRedundantVariables(ChClause && clause) {
     ////////////////////// DEALING with LOCAL VARIABLES /////////////////////////
     {
         // Let's try to do variable elimination already here
-        auto allVars = utils.getVars(newInterpretedBody);
-        auto isValidVar = [&validVars](PTRef var) {
-            return validVars.find(var) != validVars.end();
+        auto isNotValidVar = [&validVars](PTRef var) {
+            return validVars.find(var) == validVars.end();
         };
-        auto newEnd = std::remove_if(allVars.begin(), allVars.end(), isValidVar);
-        allVars.shrink_(allVars.end() - newEnd);
-        if (allVars.size() > 0) {
+        auto gatherVariables = [&](PTRef fla) {
+            VariableGathererConfig<decltype(isNotValidVar)> config(logic, isNotValidVar);
+            TermVisitor<decltype(config)>(logic, config).visit(fla);
+            return config.extractGatheredVariables();
+        };
+        auto toEliminateVars = gatherVariables(newInterpretedBody);
+        if (toEliminateVars.size() > 0) {
 //            std::cout << "Before variable elimination: " << logic.printTerm(newInterpretedBody) << std::endl;
-            newInterpretedBody = TrivialQuantifierElimination(logic).tryEliminateVars(allVars, newInterpretedBody);
+            newInterpretedBody = TrivialQuantifierElimination(logic).tryEliminateVars(toEliminateVars, newInterpretedBody);
 //            std::cout << "After variable elimination: " << logic.printTerm(newInterpretedBody) << std::endl;
         }
-        auto varsAfterElimination = utils.getVars(newInterpretedBody);
-        auto localsEnd = std::remove_if(varsAfterElimination.begin(), varsAfterElimination.end(), isValidVar);
-        if (localsEnd != varsAfterElimination.begin()) {
+        auto localVars = gatherVariables(newInterpretedBody);
+        if (localVars.size() > 0) {
             // there are some local variables left, rename them and make them versioned
             subst.clear();
-            for (auto it = varsAfterElimination.begin(); it != localsEnd; ++it) {
-                PTRef localVar = *it;
+            for (PTRef localVar : localVars) {
                 SRef sort = logic.getSortRef(localVar);
                 std::string uniq_name = "aux#" + std::to_string(counter++);
                 PTRef renamed = timeMachine.getVarVersionZero(uniq_name, sort);
