@@ -186,7 +186,7 @@ protected:
 
     PTRef keepOnlyVars(PTRef fla, vec<PTRef> const & vars, Model & model);
 
-    PTRef unsafeInitialStates(PTRef start, PTRef transitionInvariant, PTRef target) const;
+    PTRef safeSupersetOfInitialStates(PTRef start, PTRef transitionInvariant, PTRef target) const;
 
     bool checkLessThanFixedPoint(unsigned short power);
 

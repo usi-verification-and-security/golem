@@ -1292,7 +1292,7 @@ bool TPABasic::verifyPower(unsigned short level) const {
     return res == s_False;
 }
 
-PTRef TPABase::unsafeInitialStates(PTRef start, PTRef transitionInvariant, PTRef target) const {
+PTRef TPABase::safeSupersetOfInitialStates(PTRef start, PTRef transitionInvariant, PTRef target) const {
     SMTConfig config;
     const char * msg = "ok";
     config.setOption(SMTConfig::o_produce_models, SMTOption(false), msg);
@@ -1444,6 +1444,7 @@ GraphVerificationResult TransitionSystemNetworkManager::solve() && {
                 return {VerificationResult::UNSAFE, computeInvalidityWitness()};
             }
             EId nextEdge = getOutgoingEdge(current);
+//            std::cout << "Reached states in node " << current.id << ": " << logic.pp(explanation) << std::endl;
             getNode(current).trulyReached = explanation;
             PTRef nextConditions = getInitialStates(graph.getTarget(nextEdge));
             auto [edgeRes, edgeExplanation] = queryEdge(nextEdge, explanation, nextConditions);
@@ -1451,10 +1452,12 @@ GraphVerificationResult TransitionSystemNetworkManager::solve() && {
                 VId next = graph.getTarget(nextEdge);
                 networkMap.at(next).solver->resetInitialStates(edgeExplanation);
                 current = next;
+//                std::cout << "Propagating forward query to " << next.id << ": " << logic.pp(edgeExplanation) << std::endl;
                 continue; // Information has been propagated to the next node, continue querying that node
 
             } else { // Edge cannot propagate forward
                 getNode(current).trulyReached = PTRef_Undef;
+//                std::cout << "Edge cannot propagate forward from: " << logic.pp(edgeExplanation) << std::endl;
                 getNode(current).solver->updateQueryStates(logic.mkNot(edgeExplanation));
                 continue; // Repeat the query for the same TS with stronger query
             }
@@ -1463,6 +1466,7 @@ GraphVerificationResult TransitionSystemNetworkManager::solve() && {
                 return {VerificationResult::SAFE, ValidityWitness{}};
             }
             assert(getNode(current).trulySafe != PTRef_Undef);
+//            std::cout << "Query not reachable in " << current.id << ". These states are safe: " << logic.pp(explanation) << std::endl;
             getNode(current).trulySafe = logic.mkOr(getNode(current).trulySafe, explanation);
             EId previousEdge = getIncomingEdge(current);
             auto & previousNode = getNode(graph.getSource(previousEdge));
@@ -1470,10 +1474,12 @@ GraphVerificationResult TransitionSystemNetworkManager::solve() && {
             PTRef updatedConditions = logic.mkNot(getNode(current).trulySafe);
             auto [edgeRes, edgeExplanation] = queryEdge(previousEdge, previousNode.trulyReached, updatedConditions);
             if (reachable(edgeRes)) { // New reached, not refuted yet, states
+//                std::cout << "Found new potential initial states: " << logic.pp(edgeExplanation) << std::endl;
                 getNode(current).solver->resetInitialStates(edgeExplanation);
                 continue; // Repeat the query for the same TS with new initial states
             } else { // Cannot continue from currently computed truly reached states
                 previousNode.trulyReached = PTRef_Undef;
+//                std::cout << "Strenghtening source TS with: " << logic.pp(edgeExplanation) << std::endl;
                 previousNode.solver->updateQueryStates(logic.mkNot(edgeExplanation));
                 current = graph.getSource(previousEdge);
                 continue; // Blocked states have been propagated to the previous node, repeat the query there.
@@ -1598,18 +1604,21 @@ unsigned TPABase::getTransitionStepCount() const {
     return reachedStates.steps;
 }
 
+/*
+ * Returns superset of init that are still safe
+ */
 PTRef TPABase::getSafetyExplanation() const {
     if (explanation.invariantType == SafetyExplanation::TransitionInvariantType::RESTRICTED_TO_INIT) {
         // TODO: compute the safe inductive invariant and return negation of that?
-        return logic.mkNot(init);
+        return init;
     }
     auto power = explanation.power;
     PTRef transitionInvariant = explanation.relationType == TPAType::LESS_THAN ? getPower(power, explanation.relationType)
             : logic.mkOr(shiftOnlyNextVars(getPower(power, TPAType::LESS_THAN)),logic.mkAnd(getPower(power, TPAType::LESS_THAN), getNextVersion(getPower(power, TPAType::EQUALS))));
-    return unsafeInitialStates(
-            getInit(),
-            transitionInvariant,
-            getNextVersion(getQuery(), explanation.relationType == TPAType::LESS_THAN ? 1 : 2)
+    return safeSupersetOfInitialStates(
+        getInit(),
+        transitionInvariant,
+        getNextVersion(getQuery(), explanation.relationType == TPAType::LESS_THAN ? 1 : 2)
     );
 }
 
