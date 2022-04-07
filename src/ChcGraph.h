@@ -9,8 +9,9 @@
 #include "TermUtils.h"
 #include "Normalizer.h"
 
-#include <memory>
 #include <iosfwd>
+#include <memory>
+#include <optional>
 
 struct VId {
     std::size_t id;
