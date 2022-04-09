@@ -46,6 +46,7 @@ GraphVerificationResult TPAEngine::solve(const ChcDirectedGraph & graph) {
                 return GraphVerificationResult(res, computeValidityWitness(graph, *ts, inductiveInvariant));
             }
             case VerificationResult::UNKNOWN:
+            default:
                 assert(false);
                 throw std::logic_error("Unreachable!");
         }
@@ -56,7 +57,7 @@ GraphVerificationResult TPAEngine::solve(const ChcDirectedGraph & graph) {
         if (isTransitionSystemChain(simplifiedGraph)) {
             return solveTransitionSystemChain(simplifiedGraph);
         }
-        throw std::logic_error("BMC cannot handle general CHC systems yet!");
+        throw std::logic_error("TPA cannot handle general CHC systems yet!");
     }
 }
 
