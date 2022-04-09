@@ -11,10 +11,10 @@
 
 class BMC : public Engine {
     Logic & logic;
-    [[maybe_unused]]Options const & options;
+//    Options const & options;
 public:
 
-    BMC(Logic& logic, Options const & options) : logic(logic), options(options) {}
+    BMC(Logic& logic, Options const &) : logic(logic) {}
 
     virtual GraphVerificationResult
     solve(ChcDirectedHyperGraph &) override { throw std::logic_error("Not supported yet!"); }
