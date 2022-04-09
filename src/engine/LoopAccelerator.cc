@@ -219,11 +219,12 @@ GraphVerificationResult LoopAccelerator::solve(const ChcDirectedGraph & graph) {
             TermUtils utils(logic);
             for (std::size_t i = 0; i < errorPathEdges.size(); ++i) {
                 EId eid = errorPathEdges[i];
-                auto edge = updatedGraph.getEdge(eid);
                 if (loopIndexToUnrollingNumber.count(i) > 0) {
                     // unroll
                     auto unrollingNumber = loopIndexToUnrollingNumber[i];
                     // turn the edge into self loop
+                    auto edge = updatedGraph.getEdge(eid);
+                    (void)edge;
                     assert(duplicateToOriginal.count(edge.from) > 0 and duplicateToOriginal[edge.from] == edge.to);
                     for (decltype(unrollingNumber) n = 0; n < unrollingNumber; ++n) {
                         newErrorPathEdges.push_back(eid);
