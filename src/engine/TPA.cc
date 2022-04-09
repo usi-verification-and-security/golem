@@ -1717,7 +1717,7 @@ ValidityWitness TPAEngine::computeValidityWitness(ChcDirectedGraph const & graph
     }
     PTRef graphInvariant = utils.varSubstitute(inductiveInvariant, subs);
 //    std::cout << "Graph invariant: " << logic.printTerm(graphInvariant) << std::endl;
-    ValidityWitness::definitions_type definitions;
+    ValidityWitness::definitions_t definitions;
     definitions.insert({graph.getStateVersion(vertex), graphInvariant});
     return ValidityWitness(definitions);
 }

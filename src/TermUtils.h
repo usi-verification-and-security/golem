@@ -81,11 +81,6 @@ public:
         return Substitutor(logic, map).rewrite(term);
     }
 
-    void printDefine(std::ostream & out, PTRef function, PTRef definition) const {
-        out << "(define " << logic.printTerm(function) << ' ' << logic.printTerm(definition) << ")\n";
-    }
-
-
     struct Conjunction {
         static bool isCorrectJunction(Logic & logic, PTRef term) { return logic.isAnd(term); }
         static bool isOtherJunction(Logic & logic, PTRef term) { return logic.isOr(term); }

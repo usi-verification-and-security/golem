@@ -71,9 +71,7 @@ public:
         switch (answer) {
             case VerificationResult::SAFE: {
                 TermUtils utils(logic);
-                validityWitness.run([&utils](ValidityWitness::entry_type const & entry) {
-                    utils.printDefine(std::cout, entry.first, entry.second);
-                });
+                validityWitness.print(out, logic);
                 return;
             }
             case VerificationResult::UNSAFE: {

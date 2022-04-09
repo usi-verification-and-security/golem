@@ -1,6 +1,8 @@
-//
-// Created by Martin Blicha on 03.09.20.
-//
+/*
+ * Copyright (c) 2020-2022, Martin Blicha <martin.blicha@gmail.com>
+ *
+ * SPDX-License-Identifier: MIT
+ */
 
 #include "Witnesses.h"
 
@@ -135,4 +137,18 @@ void SystemInvalidityWitness::print(std::ostream & out, Logic & logic) const {
         out << logic.printTerm(var) << " := " << logic.printTerm(model.evaluate(var)) << '\n';
     }
     out << std::endl;
+}
+
+void ValidityWitness::print(std::ostream & out, Logic & logic) const {
+    for (auto && [predicate, definition] : interpretations) {
+        out << "  (define-fun " << logic.getSymName(predicate) << " (";
+        const auto & args = TermUtils(logic).getVarsFromPredicateInOrder(predicate);
+        for (std::size_t i = 0; i < args.size(); ++i) {
+            auto sortString = logic.printSort(logic.getSortRef(args[i]));
+            out << "(" << logic.protectName(logic.getSymRef(args[i])) << " " << sortString << ")" << (i == args.size()-1 ? "" : " ");
+        }
+        assert(logic.getSortRef(predicate) == logic.getSort_bool());
+        out << ")" << " " << logic.printSort(logic.getSortRef(predicate)) << "\n";
+        out << "    " << logic.printTerm(definition) << ")\n";
+    }
 }

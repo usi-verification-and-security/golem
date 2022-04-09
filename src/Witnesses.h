@@ -1,6 +1,8 @@
-//
-// Created by Martin Blicha on 02.09.20.
-//
+/*
+ * Copyright (c) 2020-2022, Martin Blicha <martin.blicha@gmail.com>
+ *
+ * SPDX-License-Identifier: MIT
+ */
 
 
 #include "ChcGraph.h"
@@ -82,12 +84,12 @@ SystemInvalidityWitness graphToSystemInvalidityWitness(InvalidityWitness const &
 class ValidityWitness {
     std::unordered_map<PTRef, PTRef, PTRefHash> interpretations;
 public:
+    using definitions_t = decltype(interpretations);
     using entry_type = decltype(interpretations)::value_type;
-    using definitions_type = std::unordered_map<PTRef, PTRef, PTRefHash>;
 
     ValidityWitness() {}
 
-    explicit ValidityWitness(std::unordered_map<PTRef, PTRef, PTRefHash> interpretations)
+    explicit ValidityWitness(definitions_t interpretations)
         : interpretations(std::move(interpretations)) {}
 
     template<typename TFun>
@@ -97,5 +99,7 @@ public:
         }
     }
 
-    definitions_type getDefinitions() const { return interpretations; }
+    definitions_t getDefinitions() const { return interpretations; }
+
+    void print(std::ostream & out, Logic & logic) const;
 };

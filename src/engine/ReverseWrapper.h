@@ -34,9 +34,8 @@ private:
     }
 
     ValidityWitness reverse(ValidityWitness const & witness) {
-        Logic & logic = this->logic;
-        ValidityWitness::definitions_type newDefinitions;
-        witness.run([&logic, &newDefinitions](ValidityWitness::entry_type const & entry) {
+        ValidityWitness::definitions_t newDefinitions;
+        witness.run([&](ValidityWitness::entry_type const & entry) {
             newDefinitions.insert({entry.first, logic.mkNot(entry.second)});
         });
         return ValidityWitness(std::move(newDefinitions));
