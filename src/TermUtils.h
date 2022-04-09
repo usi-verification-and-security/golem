@@ -347,6 +347,12 @@ class VersionManager {
         VersioningRewriter(Logic & logic, VersioningConfig<TVarTransform> & config) : Rewriter<VersioningConfig<TVarTransform>>(logic, config) {}
     };
 
+    template<typename TVarTransform>
+    PTRef rewrite(PTRef fla, TVarTransform transform) const {
+        VersioningConfig<TVarTransform> config(logic, transform);
+        return VersioningRewriter(logic, config).rewrite(fla);
+    }
+
 public:
     VersionManager(Logic & logic) : logic(logic) {}
 
@@ -355,12 +361,6 @@ public:
     PTRef targetFormulaToBase(PTRef fla) const;
     PTRef sourceFormulaToBase(PTRef fla) const;
     PTRef sourceFormulaToTarget(PTRef fla) const;
-
-    template<typename TVarTransform>
-    PTRef rewrite(PTRef fla, TVarTransform transform) const {
-        VersioningConfig<TVarTransform> config(logic, transform);
-        return VersioningRewriter(logic, config).rewrite(fla);
-    }
 
     PTRef toBase(PTRef var) const {
         assert(logic.isVar(var));
