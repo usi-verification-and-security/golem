@@ -319,7 +319,7 @@ void TPABase::updateQueryStates(PTRef fla) {
 }
 
 PTRef TPASplit::getExactPower(unsigned short power) const {
-    assert(power >= 0 and power < exactPowers.size());
+    assert(power < exactPowers.size());
     return exactPowers[power];
 }
 
@@ -345,13 +345,12 @@ void TPASplit::storeExactPower(unsigned short power, PTRef tr) {
 }
 
 PTRef TPASplit::getLessThanPower(unsigned short power) const {
-    assert(power >= 0 and power < lessThanPowers.size());
+    assert(power < lessThanPowers.size());
     return lessThanPowers[power];
 }
 
 void TPASplit::storeLessThanPower(unsigned short power, PTRef tr) {
 //    std::cout << "Strengthening less-than reachability on level " << power << " with " << logic.printTerm(tr) << std::endl;
-    assert(power >= 0);
     if (power >= 2 and not isPureTransitionFormula(tr)) {
         throw std::logic_error("Transition relation has some auxiliary variables!");
     }
@@ -1112,7 +1111,7 @@ TPABasic::~TPABasic() {
 
 
 PTRef TPABasic::getLevelTransition(unsigned short power) const {
-    assert(power >= 0 and power < transitionHierarchy.size());
+    assert(power < transitionHierarchy.size());
     return transitionHierarchy[power];
 }
 
@@ -1173,7 +1172,6 @@ VerificationResult TPABasic::checkPower(unsigned short power) {
 TPABasic::QueryResult TPABasic::reachabilityQuery(PTRef from, PTRef to, unsigned short power) {
     //        std::cout << "Checking LEQ reachability on level " << power << " from " << logic.printTerm(from) << " to " << logic.printTerm(to) << std::endl;
     TRACE(2,"Checking LEQ reachability on level " << power << " from " << from.x << " to " << to.x)
-    assert(power >= 0);
     if (power == 0) { // Basic check with real transition relation
         auto res = reachabilityExactZeroStep(from, to);
         if (res.result == ReachabilityResult::REACHABLE) { return res; }
