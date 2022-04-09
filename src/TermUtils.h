@@ -345,7 +345,7 @@ class VersionManager {
     template<typename TVarTransform>
     PTRef rewrite(PTRef fla, TVarTransform transform) const {
         VersioningConfig<TVarTransform> config(logic, transform);
-        return VersioningRewriter(logic, config).rewrite(fla);
+        return VersioningRewriter<TVarTransform>(logic, config).rewrite(fla);
     }
 
 public:
