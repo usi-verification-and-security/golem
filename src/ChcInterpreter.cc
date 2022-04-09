@@ -104,6 +104,14 @@ void ChcInterpreterContext::interpretCommand(ASTNode & node) {
             this->doExit = true;
             break;
         }
+        case t_getmodel: {
+            /* Silently ignore for now */
+            break;
+        }
+        case t_setoption: {
+            /* Silently ignore for now */
+            break;
+        }
         default:
             reportError("Unknown command, ignoring");
     }
