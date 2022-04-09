@@ -352,11 +352,13 @@ std::vector<VId> postOrder(ChcDirectedGraph const & graph, AdjacencyListsGraphRe
 }
 
 void ChcDirectedHyperGraph::contractTrivialVertex(VId vid, EId incomingId, EId outgoingId, Logic & logic) {
+#ifndef NDEBUG
     auto const & incomingSources = getEdge(incomingId).from;
     assert(std::none_of(incomingSources.begin(), incomingSources.end(), [vid](VId source) { return source == vid; }));
     assert(getEdge(outgoingId).to != vid);
     auto const & outgoingSources = getEdge(outgoingId).from;
     assert(outgoingSources.size() == 1 and outgoingSources[0] == vid);
+#endif // NDEBUG
     mergeEdges(incomingId, outgoingId, logic);
     deleteNode(vid);
 }

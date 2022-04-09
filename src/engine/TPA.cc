@@ -699,6 +699,7 @@ TPASplit::QueryResult TPASplit::reachabilityQueryLessThan(PTRef from, PTRef to, 
                 unsigned stepsToMidpoint = extractStepsTaken(subQueryRes);
                 // here the first half of the found path is feasible, check the second half
                 PTRef previousExactTransition = getExactPower(power - 1);
+                (void)previousExactTransition;
                 subQueryRes = reachabilityQueryExact(nextState, to, power - 1);
                 if (isUnreachable(subQueryRes)) {
                     assert(getExactPower(power - 1) != previousExactTransition);
@@ -1275,6 +1276,7 @@ void TPABasic::resetPowers() {
 
 bool TPABasic::verifyPower(unsigned short power, TPAType relationType) const {
     assert(relationType == TPAType::LESS_THAN);
+    (void)relationType;
     return verifyPower(power);
 }
 
