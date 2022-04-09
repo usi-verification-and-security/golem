@@ -263,8 +263,7 @@ ModelBasedProjection::implicant_t ModelBasedProjection::projectSingleVar(PTRef v
             [&](PTRef lit) { return lalogic->isNot(lit) ? PtAsgn(lalogic->getPterm(lit)[0], l_False) : PtAsgn(lit, l_True);});
     } else {
         // pick the correct literal based on the model
-        PTRef varVal = model.evaluate(var);
-        assert(lalogic->isConstant(varVal));
+        assert(lalogic->isConstant(model.evaluate(var)));
         // pick substitution from lower bounds
         // pick highest lower bound according to the model
         Bound const * highestLowerBound = nullptr;
@@ -412,7 +411,9 @@ ModelBasedProjection::implicant_t ModelBasedProjection::getImplicant(PTRef fla, 
 
 namespace{
 void checkImplicant(ModelBasedProjection::implicant_t const & implicant, Logic & logic, Model & model) {
+    (void)logic; (void)model;
     for (auto const& elem : implicant) {
+        (void)elem;
         assert(elem.sgn == l_False or elem.sgn == l_True);
         assert((elem.sgn == l_False and model.evaluate(elem.tr) == logic.getTerm_false())
                or (elem.sgn == l_True and model.evaluate(elem.tr) == logic.getTerm_true()));
@@ -523,6 +524,7 @@ PTRef ModelBasedProjection::projectIntegerVars(PTRef * beg, PTRef * end, implica
         PTRef rhs = lialogic.getPterm(lit.tr)[1];
         PTRef val = lialogic.isNumConst(lhs) ? lhs : rhs;
         PTRef mod = lialogic.isNumConst(lhs) ? rhs : lhs;
+        (void)val;
         assert(val == lialogic.getTerm_IntZero());
         assert(lialogic.isMod(lialogic.getSymRef(mod)));
         PTRef term = lialogic.getPterm(mod)[0];

@@ -64,6 +64,7 @@ SystemInvalidityWitness graphToSystemInvalidityWitness(InvalidityWitness const &
         step.satellites = {previousDerivation};
         DerivationStep const & satellite = derivation[previousDerivation];
         DerivationStep const & nucleus = derivation[step.nucleus];
+        (void)nucleus;
         assert(hasOnlyInterpretedBody(satellite.clause));
         assert(nucleus.clause.body.uninterpretedPart.size() == 1);
         assert(satellite.clause.head.predicate == nucleus.clause.body.uninterpretedPart[0]);
