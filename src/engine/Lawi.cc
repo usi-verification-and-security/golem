@@ -327,6 +327,8 @@ class LawiContext{
     };
 
     RefinementResult refine(VId vertex);
+
+    [[maybe_unused]]
     void cover(VId v, VId w);
 
     bool coverWithHints(VId v, VId w, std::vector<std::unique_ptr<Model>>& vModels);
