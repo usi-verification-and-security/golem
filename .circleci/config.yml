@@ -17,7 +17,7 @@ jobs:
                 command: sudo apt-get update
             - run:
                 name: install dependencies
-                command: sudo apt-get install libgmp-dev bison flex cmake libubsan0 python3-pip cython
+                command: sudo apt-get install libgmp-dev bison flex cmake libubsan0
             - run:
                 name: Debug build gcc
                 command: ./ci/run_commands.sh
@@ -73,8 +73,6 @@ jobs:
                     yum -y install python3-pip
                     yum -y install zlib-devel
                     pip3 install wheel
-                    echo "pip3 install pyinstaller" |scl enable devtoolset-8 bash
-                    yum -y install Cython
                     yum -y install patch
                     yum -y install bzip2
                     yum -y install glibc-static
