@@ -14,6 +14,6 @@ cmake -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} \
       ${COMPILER_OPTION} \
       ..
 
-make -j4
-make test
+cmake --build . -j 4
+ctest
 
