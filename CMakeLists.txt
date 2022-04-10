@@ -17,11 +17,12 @@ if (NOT EXISTS ${CMAKE_BINARY_DIR}/CMakeCache.txt)
   endif()
 endif()
 
+option(GOLEM_BUILD_TEST "Build the tests" ON)
+
 add_subdirectory(${CMAKE_SOURCE_DIR})
 
 ################# TESTING #############################################
-option(PACKAGE_TESTS "Build the tests" OFF)
-if(PACKAGE_TESTS)
+if(GOLEM_BUILD_TEST)
     enable_testing()
     add_subdirectory(${PROJECT_SOURCE_DIR}/test)
 endif()
