@@ -72,7 +72,6 @@ jobs:
                     yum -y install rh-python38
                     yum -y install python3-pip
                     yum -y install zlib-devel
-                    pip3 install wheel
                     yum -y install bzip2
                     yum -y install glibc-static
                     yum -y install libstdc++-static
