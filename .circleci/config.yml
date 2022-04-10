@@ -69,9 +69,7 @@ jobs:
                     yum -y install bison
                     yum -y install git
                     yum -y install wget
-                    yum -y install rh-python38
                     yum -y install python3-pip
-                    yum -y install zlib-devel
                     yum -y install bzip2
                     yum -y install glibc-static
                     yum -y install libstdc++-static
