@@ -55,7 +55,7 @@ private:
     AdjacencyListsGraphRepresentation graphRepresentation;
 
     VId root;
-    std::map<VId, VId> toOriginalLoc;
+    std::map<VId, SymRef> toOriginalLoc;
     std::map<EId, EId> toOriginalEdge;
     std::size_t vertexCount = 0;
     VId getNewVertex() { return VId{vertexCount++}; }
@@ -69,7 +69,7 @@ public:
     AbstractReachabilityTree(ChcDirectedGraph const& graph)
         : graph(graph), graphRepresentation(AdjacencyListsGraphRepresentation::from(graph)) {
         root = getNewVertex();
-        toOriginalLoc.insert({root, graph.getEntryId()});
+        toOriginalLoc.insert({root, graph.getEntry()});
     }
 
     bool isErrorLocation(VId vertex) const { return getOriginalLocation(vertex) == getOriginalErrorLocation(); }
@@ -99,7 +99,7 @@ public:
 
     VId getRoot() const { return root; }
 
-    VId getOriginalLocation(VId vertex) const { assert(toOriginalLoc.count(vertex) != 0); return toOriginalLoc.at(vertex); }
+    SymRef getOriginalLocation(VId vertex) const { assert(toOriginalLoc.count(vertex) != 0); return toOriginalLoc.at(vertex); }
 	EId getOriginalEdge(EId eid) const { assert(toOriginalEdge.count(eid) != 0); return toOriginalEdge.at(eid); }
 
     void traverse(std::function<void(VId)> fun) const;
@@ -125,9 +125,9 @@ private:
         parentOf.insert({to, eid});
     }
 
-    VId getOriginalErrorLocation() const { return graph.getExitId(); };
+    SymRef getOriginalErrorLocation() const { return graph.getExit(); };
 
-    VId newVertexFor(VId originalLocation) {
+    VId newVertexFor(SymRef originalLocation) {
         VId nv = getNewVertex();
         toOriginalLoc.insert({nv, originalLocation});
         return nv;
@@ -404,7 +404,7 @@ GraphVerificationResult LawiContext::unwind() {
     if (not computeWitness) { return GraphVerificationResult(VerificationResult::SAFE); }
     // Solution found!
     // Map original locations to disjunction of labels of not covered vertices
-    std::map<VId, std::vector<PTRef>> finalLabels;
+    std::unordered_map<SymRef, std::vector<PTRef>, SymRefHash> finalLabels;
     art.traverse([&](VId vertex) {
         if (not coveringRelation.isCovered(vertex)) {
             auto originalLocation = art.getOriginalLocation(vertex);
@@ -414,7 +414,7 @@ GraphVerificationResult LawiContext::unwind() {
     });
     // computed interpretations
     std::unordered_map<PTRef, PTRef, PTRefHash> solution;
-    for (VId vid : graph.getVertices()) {
+    for (auto vid : graph.getVertices()) {
         PTRef predicate = graph.getStateVersion(vid);
         if (logic.isTrue(predicate) || logic.isFalse(predicate)) { continue; }
         auto it = finalLabels.find(vid);
@@ -632,15 +632,14 @@ void CoveringRelation::vertexStrengthened(VId vertex) {
 std::vector<VId> AbstractReachabilityTree::expand(VId vertex) {
     assert(isLeaf(vertex));
     std::vector<VId> children;
-    VId originalLocation = getOriginalLocation(vertex);
+    auto originalLocation = getOriginalLocation(vertex);
     // get all outgoing edges and create corresponding vertices in this ART
     auto outEdges = graphRepresentation.getOutgoingEdgesFor(originalLocation);
     std::partition(outEdges.begin(), outEdges.end(), [this](EId outEdge) {
-        return graph.getEdge(outEdge).to == getOriginalErrorLocation();
+        return graph.getTarget(outEdge) == getOriginalErrorLocation();
     });
-    for (auto const & eid : outEdges) {
-        DirectedEdge edge = graph.getEdge(eid);
-        VId successor = edge.to;
+    for (EId eid : outEdges) {
+        auto successor = graph.getTarget(eid);
         VId nVertex = newVertexFor(successor);
         children.push_back(nVertex);
         connect(vertex, nVertex, eid);

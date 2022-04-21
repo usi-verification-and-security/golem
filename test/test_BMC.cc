@@ -34,7 +34,7 @@ TEST(BMC_test, test_BMC_simple) {
     auto normalizedSystem = Normalizer(logic).normalize(system);
     auto hypergraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
     ASSERT_TRUE(hypergraph->isNormalGraph());
-    auto graph = hypergraph->toNormalGraph(logic);
+    auto graph = hypergraph->toNormalGraph();
     BMC bmc(logic, options);
     auto res = bmc.solve(*graph);
     auto answer = res.getAnswer();

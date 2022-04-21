@@ -6,7 +6,6 @@
 
 #include <gtest/gtest.h>
 #include "engine/Lawi.h"
-#include "engine/LoopAccelerator.h"
 #include "Validator.h"
 
 TEST(LAWI_test, test_LAWI_simple) {
@@ -34,14 +33,13 @@ TEST(LAWI_test, test_LAWI_simple) {
     );
     auto hypergraph = ChcGraphBuilder(logic).buildGraph(Normalizer(logic).normalize(system));
     ASSERT_TRUE(hypergraph->isNormalGraph());
-    auto graph = hypergraph->toNormalGraph(logic);
+    auto graph = hypergraph->toNormalGraph();
     Lawi engine(logic, options);
     auto res = engine.solve(*graph);
     auto answer = res.getAnswer();
     ASSERT_EQ(answer, VerificationResult::SAFE);
     auto witness = res.getValidityWitness();
-    ChcGraphContext ctx(*graph, logic);
-    SystemVerificationResult systemResult(std::move(res), ctx);
+    SystemVerificationResult systemResult(std::move(res), *graph);
     auto validationResult = Validator(logic).validate(system, systemResult);
     ASSERT_EQ(validationResult, Validator::Result::VALIDATED);
 }
@@ -95,14 +93,13 @@ TEST(LAWI_test, test_LAWI_branch) {
     auto normalizedSystem = Normalizer(logic).normalize(system);
     auto hypergraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
     ASSERT_TRUE(hypergraph->isNormalGraph());
-    auto graph = hypergraph->toNormalGraph(logic);
+    auto graph = hypergraph->toNormalGraph();
 //	graph->toDot(std::cout, logic);
     Lawi engine(logic, options);
     auto res = engine.solve(*graph);
     auto answer = res.getAnswer();
     ASSERT_EQ(answer, VerificationResult::SAFE);
-    ChcGraphContext ctx(*graph, logic);
-    SystemVerificationResult systemResult(std::move(res), ctx);
+    SystemVerificationResult systemResult(std::move(res), *graph);
     systemResult.printWitness(std::cout, logic);
     auto validationResult = Validator(logic).validate(system, systemResult);
     ASSERT_EQ(validationResult, Validator::Result::VALIDATED);
@@ -150,14 +147,13 @@ TEST(LAWI_test, test_LAWI_unreachable_state) {
     );
     auto hypergraph = ChcGraphBuilder(logic).buildGraph(Normalizer(logic).normalize(system));
     ASSERT_TRUE(hypergraph->isNormalGraph());
-    auto graph = hypergraph->toNormalGraph(logic);
+    auto graph = hypergraph->toNormalGraph();
     Lawi engine(logic, options);
     auto res = engine.solve(*graph);
     auto answer = res.getAnswer();
     ASSERT_EQ(answer, VerificationResult::SAFE);
     auto witness = res.getValidityWitness();
-    ChcGraphContext ctx(*graph, logic);
-    SystemVerificationResult systemResult(std::move(res), ctx);
+    SystemVerificationResult systemResult(std::move(res), *graph);
     auto validationResult = Validator(logic).validate(system, systemResult);
     systemResult.printWitness(std::cout, logic);
     ASSERT_EQ(validationResult, Validator::Result::VALIDATED);
@@ -189,14 +185,13 @@ TEST(LAWI_test, test_LAWI_simple_unsafe) {
     auto normalizedSystem = Normalizer(logic).normalize(system);
     auto hypergraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
     ASSERT_TRUE(hypergraph->isNormalGraph());
-    auto graph = hypergraph->toNormalGraph(logic);
+    auto graph = hypergraph->toNormalGraph();
     Lawi engine(logic, options);
     auto res = engine.solve(*graph);
     auto answer = res.getAnswer();
     ASSERT_EQ(answer, VerificationResult::UNSAFE);
 
-    ChcGraphContext ctx(*graph, logic);
-    SystemVerificationResult systemResult(std::move(res), ctx);
+    SystemVerificationResult systemResult(std::move(res), *graph);
     auto validationResult = Validator(logic).validate(*normalizedSystem.normalizedSystem, systemResult);
     ASSERT_EQ(validationResult, Validator::Result::VALIDATED);
 }
@@ -234,8 +229,6 @@ protected:
 
     auto getBasicEngine() { return std::make_unique<Lawi>(logic, options); }
 
-    auto getAcceleratedEngine() { return std::make_unique<LoopAccelerator>(logic, getBasicEngine()); }
-
     void solveSystem(std::vector<ChClause> const & clauses, Engine & engine, VerificationResult expectedResult, bool validate) {
         options.addOption(Options::COMPUTE_WITNESS, std::to_string(validate));
 
@@ -246,39 +239,16 @@ protected:
 //        ChcPrinter(logic, std::cout).print(*normalizedSystem.normalizedSystem);
         auto hypergraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
         ASSERT_TRUE(hypergraph->isNormalGraph());
-        auto graph = hypergraph->toNormalGraph(logic);
+        auto graph = hypergraph->toNormalGraph();
         auto res = engine.solve(*graph);
         auto answer = res.getAnswer();
         ASSERT_EQ(answer, expectedResult);
 
-        ChcGraphContext ctx(*graph, logic);
-        SystemVerificationResult systemResult(std::move(res), ctx);
+        SystemVerificationResult systemResult(std::move(res), *graph);
         auto validationResult = Validator(logic).validate(*normalizedSystem.normalizedSystem, systemResult);
         ASSERT_EQ(validationResult, Validator::Result::VALIDATED);
     }
-
 };
-
-TEST_F(LAWIIntTest, test_LAWI_accelerated_unsafe) {
-    SymRef s = mkPredicateSymbol("s", {intSort()});
-    PTRef x = mkIntVar("x");
-    PTRef xp = mkIntVar("xp");
-    PTRef current = instantiatePredicate(s, {x});
-    PTRef next = instantiatePredicate(s, {xp});
-    std::vector<ChClause> clauses{
-        // x' = 0 => S(x')
-        {ChcHead{UninterpretedPredicate{next}}, ChcBody{{logic.mkEq(xp, zero)}, {}}},
-        { // S(x) and x' = x + 1 => S(x')
-            ChcHead{UninterpretedPredicate{next}},
-            ChcBody{{logic.mkEq(xp, logic.mkPlus(x, one))},{UninterpretedPredicate{current}}}
-        },
-        { // S(x) and x = 100 => false
-            ChcHead{UninterpretedPredicate{logic.getTerm_false()}},
-            ChcBody{{logic.mkEq(x, logic.mkIntConst(FastRational(100)))}, {UninterpretedPredicate{current}}}
-        }
-    };
-    solveSystem(clauses, *getAcceleratedEngine(), VerificationResult::UNSAFE, true);
-}
 
 TEST_F(LAWIIntTest, test_LAWI_auxiliaryVar) {
     SymRef s = mkPredicateSymbol("s", {intSort()});

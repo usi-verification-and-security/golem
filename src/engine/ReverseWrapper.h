@@ -15,7 +15,7 @@ public:
     explicit ReverseWrapper(std::unique_ptr<Engine> wrapped, Logic & logic) : wrapped(std::move(wrapped)), logic(logic) {}
 
     GraphVerificationResult solve(const ChcDirectedGraph& graph) {
-        auto reversedGraph = graph.reverse(logic);
+        auto reversedGraph = graph.reverse();
         auto res = wrapped->solve(reversedGraph);
         return reverse(std::move(res));
     }

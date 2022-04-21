@@ -35,8 +35,8 @@ TEST(NormalizerTest, test_boolean_equal_to_constant) {
     ChcPrinter(logic, std::cout).print(system);
     auto normalizedSystem = Normalizer(logic).normalize(system);
     ChcPrinter(logic, std::cout).print(*normalizedSystem.normalizedSystem);
-    auto graph = ChcGraphBuilder(logic).buildGraph(normalizedSystem)->toNormalGraph(logic);
-    graph->toDot(std::cout, logic);
+    auto graph = ChcGraphBuilder(logic).buildGraph(normalizedSystem)->toNormalGraph();
+    graph->toDot(std::cout);
 }
 
 TEST(NormalizerTest, test_ModConstraint) {

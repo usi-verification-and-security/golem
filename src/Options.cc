@@ -14,7 +14,6 @@ const std::string Options::LOGIC = "logic";
 const std::string Options::ENGINE = "engine";
 const std::string Options::ANALYSIS_FLOW = "flow";
 const std::string Options::VALIDATE_RESULT = "validate";
-const std::string Options::ACCELERATE_LOOPS = "accelerate-loops";
 const std::string Options::COMPUTE_WITNESS = "compute-witness";
 const std::string Options::PRINT_WITNESS = "print-witness";
 const std::string Options::LRA_ITP_ALG = "lra-itp-algorithm";
@@ -53,7 +52,6 @@ Options CommandLineParser::parse(int argc, char ** argv) {
     Options res;
     int validate = 0;
     int printWitness = 0;
-    int accelerateLoops = 0;
     int computeWitness = 0;
     int lraItpAlg = 0;
     int forcedCovering = 0;
@@ -69,7 +67,6 @@ Options CommandLineParser::parse(int argc, char ** argv) {
             {Options::ANALYSIS_FLOW.c_str(), required_argument, nullptr, 'f'},
             {Options::VALIDATE_RESULT.c_str(), no_argument, &validate, 1},
             {Options::PRINT_WITNESS.c_str(), no_argument, &printWitness, 1},
-            {Options::ACCELERATE_LOOPS.c_str(), optional_argument, &accelerateLoops, 1},
             {Options::COMPUTE_WITNESS.c_str(), optional_argument, &computeWitness, 1},
             {Options::LRA_ITP_ALG.c_str(), required_argument, &lraItpAlg, 0},
             {Options::FORCED_COVERING.c_str(), optional_argument, &forcedCovering, 1},
@@ -85,13 +82,7 @@ Options CommandLineParser::parse(int argc, char ** argv) {
 
         switch (c) {
             case 0:
-                if (long_options[option_index].flag == &accelerateLoops and optarg) {
-                    if (isDisableKeyword(optarg)) {
-                        accelerateLoops = 0;
-                    } else {
-                        accelerateLoops = 1;
-                    }
-                } else if (long_options[option_index].flag == &computeWitness and optarg) {
+                if (long_options[option_index].flag == &computeWitness and optarg) {
                     if (isDisableKeyword(optarg)) {
                         computeWitness = 0;
                     }
@@ -151,9 +142,6 @@ Options CommandLineParser::parse(int argc, char ** argv) {
     }
     if (printWitness) {
         res.addOption(Options::PRINT_WITNESS, "true");
-    }
-    if (accelerateLoops) {
-        res.addOption(Options::ACCELERATE_LOOPS, "true");
     }
     if (validate || printWitness || computeWitness) {
         res.addOption(Options::COMPUTE_WITNESS, "true");

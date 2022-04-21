@@ -11,22 +11,22 @@ bool isTransitionSystem(ChcDirectedGraph const & graph) {
     // TS has 3 vertices: Init, Body, Bad
     if (reversePostorder.size() != 3) { return false; }
     // TS has 3 edges: From Init to Body, self-loop on Body, from Body to Bad
-    Vertex const & beg = graph.getVertex(reversePostorder[0]);
-    Vertex const & loop = graph.getVertex(reversePostorder[1]);
-    Vertex const & end = graph.getVertex(reversePostorder[2]);
-    auto const & begOutEdges = graphRepresentation.getOutgoingEdgesFor(beg.id);
-    if (begOutEdges.size() != 1 || graph.getTarget(begOutEdges[0]) != loop.id) { return false; }
-    auto const & loopOutEdges = graphRepresentation.getOutgoingEdgesFor(loop.id);
+    auto beg = reversePostorder[0];
+    auto loop = reversePostorder[1];
+    auto end = reversePostorder[2];
+    auto const & begOutEdges = graphRepresentation.getOutgoingEdgesFor(beg);
+    if (begOutEdges.size() != 1 || graph.getTarget(begOutEdges[0]) != loop) { return false; }
+    auto const & loopOutEdges = graphRepresentation.getOutgoingEdgesFor(loop);
     if (loopOutEdges.size() != 2) { return false; }
     bool selfLoop = std::find_if(loopOutEdges.begin(), loopOutEdges.end(),
-                                 [&graph, loop](EId eid) { return graph.getTarget(eid) == loop.id; }) !=
+                                 [&graph, loop](EId eid) { return graph.getTarget(eid) == loop; }) !=
                     loopOutEdges.end();
     if (not selfLoop) { return false; }
     bool edgeToEnd = std::find_if(loopOutEdges.begin(), loopOutEdges.end(),
-                                  [&graph, end](EId eid) { return graph.getTarget(eid) == end.id; }) !=
+                                  [&graph, end](EId eid) { return graph.getTarget(eid) == end; }) !=
                      loopOutEdges.end();
     if (not edgeToEnd) { return false; }
-    if (not graphRepresentation.getOutgoingEdgesFor(end.id).empty()) { return false; }
+    if (not graphRepresentation.getOutgoingEdgesFor(end).empty()) { return false; }
     return true;
 }
 
@@ -34,7 +34,7 @@ std::unique_ptr<TransitionSystem> toTransitionSystem(ChcDirectedGraph const & gr
     auto adjacencyRepresentation = AdjacencyListsGraphRepresentation::from(graph);
     auto vertices = reversePostOrder(graph, adjacencyRepresentation);
     assert(vertices.size() == 3);
-    VId loopNode = vertices[1];
+    auto loopNode = vertices[1];
     EId loopEdge = getSelfLoopFor(loopNode, graph, adjacencyRepresentation).value();
     auto edgeVars = getVariablesFromEdge(logic, graph, loopEdge);
     // Now we can continue building the transition system
@@ -47,14 +47,14 @@ std::unique_ptr<TransitionSystem> toTransitionSystem(ChcDirectedGraph const & gr
     PTRef init = PTRef_Undef;
     PTRef transitionRelation = PTRef_Undef;
     PTRef bad = PTRef_Undef;
-    for (auto const & edge : graph.getEdges()) {
-        VId source = graph.getSource(edge);
-        VId target = graph.getTarget(edge);
+    graph.forEachEdge([&](DirectedEdge const & edge) {
+        auto source = edge.from;
+        auto target = edge.to;
         bool isInit = source == vertices[0] && target == vertices[1];
         bool isLoop = source == vertices[1] && target == vertices[1];
         bool isEnd = source == vertices[1] && target == vertices[2];
         assert(isInit || isLoop || isEnd);
-        PTRef fla = graph.getEdgeLabel(edge);
+        PTRef fla = edge.fla.fla;
         TermUtils utils(logic);
         if (isInit) {
             std::unordered_map<PTRef, PTRef, PTRefHash> subMap;
@@ -76,7 +76,7 @@ std::unique_ptr<TransitionSystem> toTransitionSystem(ChcDirectedGraph const & gr
             bad = QuantifierElimination(logic).keepOnly(bad, stateVars);
 //            std::cout << logic.printTerm(bad) << std::endl;
         }
-    }
+    });
     assert(init != PTRef_Undef && transitionRelation != PTRef_Undef && bad != PTRef_Undef);
     auto ts = std::unique_ptr<TransitionSystem>(new TransitionSystem(logic, std::move(systemType), init, transitionRelation, bad));
     return ts;
@@ -86,14 +86,14 @@ bool isTransitionSystemChain(ChcDirectedGraph const & graph) {
     if (graph.getVertices().size() < 3) { return false; }
     auto graphRepresentation = AdjacencyListsGraphRepresentation::from(graph);
     auto vertices = reversePostOrder(graph, graphRepresentation);
-    assert(graph.getEntryId() == vertices[0]);
-    assert(graph.getExitId() == vertices.back());
+    assert(graph.getEntry() == vertices[0]);
+    assert(graph.getExit() == vertices.back());
     if (graphRepresentation.getOutgoingEdgesFor(vertices[0]).size() != 1
         or graphRepresentation.getIncomingEdgesFor(vertices.back()).size() != 1) {
         return false;
     }
     for (unsigned i = 1; i < vertices.size() - 1; ++i) {
-        VId current = vertices[i];
+        auto current = vertices[i];
         auto const & outEdges = graphRepresentation.getOutgoingEdgesFor(current);
         if (outEdges.size() != 2) { return false; }
         bool hasSelfLoop = false;

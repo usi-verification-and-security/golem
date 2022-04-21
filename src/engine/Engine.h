@@ -45,13 +45,13 @@ class SystemVerificationResult {
     SystemInvalidityWitness invalidityWitness;
 
 public:
-    SystemVerificationResult(GraphVerificationResult && graphResult, ChcGraphContext & ctx) {
+    SystemVerificationResult(GraphVerificationResult && graphResult, ChcDirectedGraph & graph) {
         answer = graphResult.getAnswer();
         if (answer == VerificationResult::SAFE) {
             validityWitness = graphResult.getValidityWitness();
         }
         if (answer == VerificationResult::UNSAFE) {
-            invalidityWitness = graphToSystemInvalidityWitness(graphResult.getInvalidityWitness(), ctx);
+            invalidityWitness = graphToSystemInvalidityWitness(graphResult.getInvalidityWitness(), graph);
         }
     }
 

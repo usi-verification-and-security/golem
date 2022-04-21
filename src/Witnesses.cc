@@ -6,10 +6,9 @@
 
 #include "Witnesses.h"
 
-SystemInvalidityWitness graphToSystemInvalidityWitness(InvalidityWitness const & witness, ChcGraphContext & ctx) {
+SystemInvalidityWitness graphToSystemInvalidityWitness(InvalidityWitness const & witness, ChcDirectedGraph & graph) {
     using Derivation = SystemInvalidityWitness::Derivation;
-    Logic & logic = ctx.getLogic();
-    auto const & graph = ctx.getGraph();
+    Logic & logic = graph.getLogic();
     Derivation derivation;
     using DerivationStep = Derivation::DerivationStep;
     auto const & path = witness.getErrorPath();
@@ -20,14 +19,14 @@ SystemInvalidityWitness graphToSystemInvalidityWitness(InvalidityWitness const &
         ChcDirectedGraph const & graph;
         TimeMachine timeMachine;
 
-        PTRef operator()(VId vertex) {
+        PTRef operator()(SymRef vertex) {
             PTRef term = graph.getStateVersion(vertex);
             return timeMachine.sendFlaThroughTime(term, counter++);
         }
 
         UPHelper(ChcDirectedGraph const & graph, Logic & logic) : graph(graph), timeMachine(logic) {}
     };
-    std::vector<VId> vertices;
+    std::vector<SymRef> vertices;
     std::transform(edgeIds.begin(), edgeIds.end(), std::back_inserter(vertices),
                    [&graph](EId eid) { return graph.getSource(eid); });
     vertices.push_back(graph.getTarget(edgeIds.back()));

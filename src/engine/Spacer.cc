@@ -18,7 +18,7 @@
 
 class ApproxMap {
 public:
-    vec<PTRef> getComponents(VId vid, std::size_t bound) const {
+    vec<PTRef> getComponents(SymRef vid, std::size_t bound) const {
         vec<PTRef> res;
         (const_cast<ApproxMap*>(this))->ensureBound(bound);
         auto const& boundMap = innerMap[bound];
@@ -32,14 +32,14 @@ public:
         return res;
     }
 
-    void insert(VId vid, std::size_t bound, PTRef summary) {
+    void insert(SymRef vid, std::size_t bound, PTRef summary) {
         ensureBound(bound);
         auto & boundMap = innerMap[bound];
         auto & components = boundMap[vid];
         components.insert(summary);
     }
 
-    bool has(VId vid, std::size_t bound, PTRef summary) {
+    bool has(SymRef vid, std::size_t bound, PTRef summary) {
         ensureBound(bound);
         auto const & boundMap = innerMap[bound];
         auto it = boundMap.find(vid);
@@ -50,7 +50,7 @@ public:
     }
 
 private:
-    std::vector<std::unordered_map<VId, std::unordered_set<PTRef, PTRefHash>, VertexHasher>> innerMap; // bound -> vertex -> elements of approximation
+    std::vector<std::unordered_map<SymRef, std::unordered_set<PTRef, PTRefHash>, SymRefHash>> innerMap; // bound -> vertex -> elements of approximation
 
     void ensureBound(std::size_t bound) {
         while (innerMap.size() <= bound) {
@@ -68,19 +68,21 @@ class OverApproxMap : public ApproxMap {
 };
 
 struct ProofObligation {
-    VId vertex;
+    SymRef vertex;
     std::size_t bound;
     PTRef constraint;
 };
 
 bool operator<(ProofObligation const& pob1, ProofObligation const& pob2) {
+    // TODO: Does it make sense to break ties using vertices?
     return pob1.bound < pob2.bound or
-           (pob1.bound == pob2.bound and pob1.vertex.id < pob2.vertex.id);
+           (pob1.bound == pob2.bound and pob1.vertex.x < pob2.vertex.x);
 }
 
+// TODO: why we need both operators??
 bool operator>(ProofObligation const& pob1, ProofObligation const& pob2) {
     return pob1.bound > pob2.bound or
-           (pob1.bound == pob2.bound and pob1.vertex.id > pob2.vertex.id);
+           (pob1.bound == pob2.bound and pob1.vertex.x > pob2.vertex.x);
 }
 
 struct PriorityQueue {
@@ -104,21 +106,21 @@ class SpacerContext {
 
     // Helper data structures to get the versioning right
     class VertexInstances {
-        std::vector<std::vector<unsigned>> instanceCounter;
+        std::map<EId, std::vector<unsigned>> instanceCounter;
     public:
         VertexInstances(ChcDirectedHyperGraph const & graph);
 
         unsigned getInstanceNumber(EId eid, unsigned sourceIndex) const {
-            return instanceCounter[eid.id][sourceIndex];
+            return instanceCounter.at(eid)[sourceIndex];
         }
     };
     VertexInstances vertexInstances;
 
-    PTRef getMustSummary(VId vid, std::size_t bound) const {
+    PTRef getMustSummary(SymRef vid, std::size_t bound) const {
         return logic.mkOr(under.getComponents(vid, bound));
     }
 
-    PTRef getMaySummary(VId vid, std::size_t bound) const {
+    PTRef getMaySummary(SymRef vid, std::size_t bound) const {
         return logic.mkAnd(over.getComponents(vid, bound));
     }
 
@@ -141,7 +143,7 @@ class SpacerContext {
 
     InductiveCheckResult isInductive(std::size_t currentBound);
 
-    bool tryPushComponents(VId , std::size_t, PTRef);
+    bool tryPushComponents(SymRef, std::size_t, PTRef);
 
 
     enum class QueryAnswer {VALID, INVALID, ERROR, UNKNOWN};
@@ -177,8 +179,8 @@ class SpacerContext {
 public:
     SpacerContext(Logic & logic, ChcDirectedHyperGraph const & graph): logic(logic), graph(graph), vertexInstances(graph) {
         auto vertices = graph.getVertices();
-        for (VId vid : vertices) {
-            PTRef toInsert = vid == graph.getEntryId() ? logic.getTerm_true() : logic.getTerm_false();
+        for (auto vid : vertices) {
+            PTRef toInsert = vid == graph.getEntry() ? logic.getTerm_true() : logic.getTerm_false();
             over.insert(vid, 0, toInsert);
             under.insert(vid, 0, toInsert);
         }
@@ -192,15 +194,15 @@ GraphVerificationResult Spacer::solve(ChcDirectedHyperGraph & system) {
 }
 
 GraphVerificationResult Spacer::solve(const ChcDirectedGraph & system) {
-    auto hyperGraph = system.toHyperGraph(logic);
+    auto hyperGraph = system.toHyperGraph();
     return SpacerContext(logic, *hyperGraph).run();
 }
 
 GraphVerificationResult SpacerContext::run() {
     std::size_t currentBound = 1;
     while(true) {
-        over.insert(graph.getEntryId(), currentBound, logic.getTerm_true());
-        under.insert(graph.getEntryId(), currentBound, logic.getTerm_true());
+        over.insert(graph.getEntry(), currentBound, logic.getTerm_true());
+        under.insert(graph.getEntry(), currentBound, logic.getTerm_true());
         auto boundedResult = boundSafety(currentBound);
         switch (boundedResult) {
             case BoundedSafetyResult::UNSAFE:
@@ -210,9 +212,9 @@ GraphVerificationResult SpacerContext::run() {
                 if (inductiveResult.answer == InductiveCheckAnswer::INDUCTIVE) {
                     std::unordered_map<PTRef, PTRef, PTRefHash> solution;
                     auto inductiveLevel = inductiveResult.inductiveLevel;
-                    for (VId vid : graph.getVertices()) {
+                    for (auto vid : graph.getVertices()) {
                         PTRef statePredicate = graph.getStateVersion(vid);
-                        if (vid == graph.getEntryId() or vid == graph.getExitId()) { continue; }
+                        if (vid == graph.getEntry() or vid == graph.getExit()) { continue; }
                         // MB: 0-ary predicate would be treated as variables in VersionManager, not what we want
                         PTRef predicate = logic.getPterm(statePredicate).size() > 0 ? VersionManager(logic).sourceFormulaToBase(statePredicate) : statePredicate;
                         PTRef invariantSummary = logic.mkAnd(over.getComponents(vid, inductiveLevel));
@@ -238,22 +240,25 @@ GraphVerificationResult SpacerContext::run() {
 }
 
 
-std::vector<EId> incomingEdges(VId v, ChcDirectedHyperGraph const & graph) {
-    auto res = graph.getEdges();
-    res.erase(std::remove_if(res.begin(), res.end(), [&](EId e) { return graph.getEdge(e).to != v; }), res.end());
-    return res;
+std::vector<EId> incomingEdges(SymRef v, ChcDirectedHyperGraph const & graph) {
+    // TODO: Remember the adjacency representation and do not recompute this all the time
+    std::vector<EId> incoming;
+    graph.forEachEdge([&](auto const & edge) {
+       if (graph.getTarget(edge.id) == v) { incoming.push_back(edge.id); }
+    });
+    return incoming;
 }
 
 SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t currentBound) {
     TRACE(1, "\nRunning bounded safety check at level " << currentBound)
-    VId query = graph.getExitId();
+    auto query = graph.getExit();
     PriorityQueue pqueue;
     pqueue.push(ProofObligation{query, currentBound, logic.getTerm_true()});
     lowestChangedLevel = currentBound;
     while(not pqueue.empty()) {
-        TRACE(2, "Examining proof obligation " << pqueue.peek().vertex.id)
+        TRACE(2, "Examining proof obligation " << pqueue.peek().vertex.x)
         auto const & pob = pqueue.peek();
-        if (pob.vertex == graph.getEntryId()) {
+        if (pob.vertex == graph.getEntry()) {
             assert(false); // With the must summaries, we actually never finish here
             return BoundedSafetyResult::UNSAFE;
         }
@@ -262,8 +267,7 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
         std::vector<ProofObligation> newProofObligations;
         for (EId edgeId : edges) {
             TRACE(2, "Considering edge " << edgeId.id)
-            auto const & edge = graph.getEdge(edgeId);
-            assert(edge.to == pob.vertex);
+            assert(graph.getTarget(edgeId) == pob.vertex);
             // test if vertex can be reached using must summaries
             assert(pob.bound > 0);
             auto result = mustReachable(edgeId, pob.constraint, pob.bound - 1);
@@ -289,7 +293,7 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
             // examine the sources to generate a new proof obligation for this edge
 
             // Find the first source vertex such that under-approximating it (instead of over-approximating it) makes the target unreachable
-            auto const& sources = edge.from;
+            auto const & sources = graph.getSources(edgeId);
             assert(not sources.empty());
             std::size_t vertexToRefine = 0; // vertex that is the last one to be over-approximated
             auto bound = pob.bound - 1;
@@ -300,7 +304,7 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
                 if (res.answer == QueryAnswer::INVALID) {
                     assert(res.model);
                     // When this source is over-approximated and the edge becomes feasible -> extract next proof obligation
-                    VId source = sources[vertexToRefine];
+                    auto source = sources[vertexToRefine];
                     auto predicateVars = TermUtils(logic).getVars(graph.getStateVersion(source, vertexInstances.getInstanceNumber(edgeId, vertexToRefine)));
                     PTRef newConstraint = projectFormula(logic.mkAnd(mixedEdgeSummary, pob.constraint), predicateVars, *res.model);
                     PTRef newPob = VersionManager(logic).sourceFormulaToTarget(newConstraint); // ensure POB is target fla
@@ -333,7 +337,7 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
                     throw std::logic_error("All edges should have been blocked, but they are not!");
                 }
                 PTRef newLemma = VersionManager(logic).targetFormulaToBase(res.interpolant);
-                TRACE(2, "Learnt new lemma for " << pob.vertex.id << " at level " << pob.bound << " - " << logic.pp(newLemma))
+                TRACE(2, "Learnt new lemma for " << pob.vertex.x << " at level " << pob.bound << " - " << logic.pp(newLemma))
                 over.insert(pob.vertex, pob.bound, newLemma);
                 if (pob.bound < lowestChangedLevel) {
                     lowestChangedLevel = pob.bound;
@@ -341,7 +345,7 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
                 pqueue.pop(); // This POB has been successfully blocked
             } else {
                 for (auto const& npob : newProofObligations) {
-                    TRACE(2,"Pushing new proof obligation " << logic.pp(npob.constraint) << " for " << npob.vertex.id << " at level " << npob.bound)
+                    TRACE(2,"Pushing new proof obligation " << logic.pp(npob.constraint) << " for " << npob.vertex.x << " at level " << npob.bound)
                     pqueue.push(npob);
                 }
             }
@@ -420,7 +424,7 @@ SpacerContext::MustReachResult SpacerContext::mustReachable(EId eid, PTRef targe
         assert(implCheckRes.model);
         res.applied = true;
         // eliminate variables from body except variables present in predicate of edge target
-        VId target = graph.getEdge(eid).to;
+        auto target = graph.getTarget(eid);
         auto predicateVars = TermUtils(logic).getVars(graph.getNextStateVersion(target));
         PTRef newMustSummary = projectFormula(edgeMustSummary, predicateVars, *implCheckRes.model); // TODO: is body OK, or do I need to project also the head?
         res.mustSummary = newMustSummary;
@@ -451,7 +455,7 @@ SpacerContext::InductiveCheckResult SpacerContext::isInductive(std::size_t maxLe
     for (std::size_t level = minLevel; level <= maxLevel; ++level) {
         bool inductive = true;
 //        std::cout << "Checking level " << level << std::endl;
-        for (VId vid : graph.getVertices()) {
+        for (auto vid : graph.getVertices()) {
 //            std::cout << " Checking vertex " << vid.id << std::endl;
             // encode body as disjunction over all the incoming edges
             vec<PTRef> edgeRepresentations;
@@ -474,7 +478,7 @@ SpacerContext::InductiveCheckResult SpacerContext::isInductive(std::size_t maxLe
     return InductiveCheckResult{InductiveCheckAnswer::NOT_INDUCTIVE, 0};
 }
 
-bool SpacerContext::tryPushComponents(VId vid, std::size_t level, PTRef body) {
+bool SpacerContext::tryPushComponents(SymRef vid, std::size_t level, PTRef body) {
     auto maySummaryComponents = over.getComponents(vid, level);
     bool allPushed = true;
     SMTConfig config;
@@ -533,7 +537,7 @@ PTRef SpacerContext::getEdgeMustSummary(EId eid, std::size_t bound) const {
 //    std::cout << "Edge sources:\n";
     auto const & sources = graph.getSources(eid);
     for (unsigned sourceIndex = 0; sourceIndex < sources.size(); ++sourceIndex) {
-        VId source = sources[sourceIndex];
+        auto source = sources[sourceIndex];
         PTRef mustSummary = getMustSummary(source, bound);
         PTRef summaryAsSource = VersionManager(logic).baseFormulaToSource(mustSummary, vertexInstances.getInstanceNumber(eid, sourceIndex));
 //        std::cout << source.id << " with summary " << logic.pp(summaryAsSource) << '\n';
@@ -551,7 +555,7 @@ PTRef SpacerContext::getEdgeMaySummary(EId eid, std::size_t bound) const {
 //    std::cout << "Edge sources:\n";
     auto const & sources = graph.getSources(eid);
     for (unsigned sourceIndex = 0; sourceIndex < sources.size(); ++sourceIndex) {
-        VId source = sources[sourceIndex];
+        auto source = sources[sourceIndex];
         PTRef maySummary = getMaySummary(source, bound);
         PTRef summaryAsSource = VersionManager(logic).baseFormulaToSource(maySummary, vertexInstances.getInstanceNumber(eid, sourceIndex));
 //        std::cout << source.id << " with summary " << logic.pp(summaryAsSource) << '\n';
@@ -581,18 +585,14 @@ PTRef SpacerContext::getEdgeMixedSummary(EId eid, std::size_t bound, std::size_t
 }
 
 SpacerContext::VertexInstances::VertexInstances(const ChcDirectedHyperGraph & graph) {
-
-    auto edges = graph.getEdges();
-    instanceCounter.resize(edges.size());
-    for (EId eid : edges) {
-        auto edge = graph.getEdge(eid);
+    graph.forEachEdge([&](DirectedHyperEdge const & edge) {
         auto const & sources = edge.from;
-        instanceCounter[eid.id].resize(sources.size());
-        std::unordered_map<VId, unsigned, VertexHasher> edgeCounter;
+        instanceCounter[edge.id].resize(sources.size());
+        std::unordered_map<SymRef, unsigned, SymRefHash> edgeCounter;
         for (unsigned sourceIndex = 0; sourceIndex < sources.size(); ++sourceIndex) {
-            VId source = sources[sourceIndex];
+            auto source = sources[sourceIndex];
             unsigned instance = edgeCounter[source]++;
-            instanceCounter[eid.id][sourceIndex] = instance;
+            instanceCounter.at(edge.id)[sourceIndex] = instance;
         }
-    }
+    });
 }

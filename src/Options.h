@@ -30,7 +30,6 @@ public:
     static const std::string ENGINE;
     static const std::string ANALYSIS_FLOW;
     static const std::string VALIDATE_RESULT;
-    static const std::string ACCELERATE_LOOPS;
     static const std::string COMPUTE_WITNESS;
     static const std::string PRINT_WITNESS;
     static const std::string LRA_ITP_ALG;

@@ -6,19 +6,21 @@
 
 namespace {
 std::vector<EId> getSelfLoops(ChcDirectedGraph const & graph) {
-    auto edges = graph.getEdges();
-    edges.erase(std::remove_if(edges.begin(), edges.end(), [&graph](EId edge) {
-        return graph.getSource(edge) != graph.getTarget(edge);
-    }), edges.end());
-    return edges;
+    std::vector<EId> selfLoops;
+    graph.forEachEdge([&](DirectedEdge const & edge){
+       if (edge.from == edge.to) {
+           selfLoops.push_back(edge.id);
+       }
+    });
+    return selfLoops;
 }
 
-std::unordered_set<VId, VertexHasher> getNodesWithSelfLoop(ChcDirectedGraph const & graph){
+auto getNodesWithSelfLoop(ChcDirectedGraph const & graph){
     auto selfLoops = getSelfLoops(graph);
-    std::unordered_set<VId, VertexHasher> selfLoopNodes;
+    std::unordered_set<SymRef, SymRefHash> selfLoopNodes;
     std::transform(selfLoops.begin(), selfLoops.end(), std::inserter(selfLoopNodes, selfLoopNodes.end()), [&graph](EId eid) {
-       assert(graph.getEdge(eid).from == graph.getEdge(eid).to);
-       return graph.getEdge(eid).from;
+       assert(graph.getSource(eid) == graph.getTarget(eid));
+       return graph.getSource(eid);
     });
     return selfLoopNodes;
 }
@@ -36,21 +38,21 @@ void GraphTransformations::eliminateNonLoopingNodes(ChcDirectedGraph & graph) {
     while(true) {
         auto selfLoopNodes = getNodesWithSelfLoop(graph);
         auto vertices = graph.getVertices();
-        vertices.erase(std::remove_if(vertices.begin(), vertices.end(), [&](VId vid) {
-            return selfLoopNodes.find(vid) != selfLoopNodes.end() or vid == graph.getEntryId() or
-                   vid == graph.getExitId();
+        vertices.erase(std::remove_if(vertices.begin(), vertices.end(), [&](auto vid) {
+            return selfLoopNodes.find(vid) != selfLoopNodes.end() or vid == graph.getEntry() or
+                   vid == graph.getExit();
         }), vertices.end());
         if (vertices.empty()) { return; }
-        graph.contractVertex(vertices[0], logic);
+        graph.contractVertex(vertices[0]);
     }
 }
 
 void GraphTransformations::removeAlwaysValidClauses(ChcDirectedGraph & graph) {
-    graph.removeEdges([this](DirectedEdge const & edge) { return edge.fla.fla == logic.getTerm_false(); });
+    graph.deleteMatchingEdges([this](DirectedEdge const & edge) { return edge.fla.fla == logic.getTerm_false(); });
 }
 
 void GraphTransformations::mergeMultiEdges(ChcDirectedGraph & graph) {
-    graph.mergeMultiEdges(logic);
+    graph.mergeMultiEdges();
 }
 
 void GraphTransformations::eliminateSimpleNodes(ChcDirectedGraph & graph) {
@@ -58,12 +60,12 @@ void GraphTransformations::eliminateSimpleNodes(ChcDirectedGraph & graph) {
     while(true) {
         AdjacencyListsGraphRepresentation adjacencyList = AdjacencyListsGraphRepresentation::from(graph);
         auto vertices = graph.getVertices();
-        vertices.erase(std::remove_if(vertices.begin(), vertices.end(), [&](VId vid) {
+        vertices.erase(std::remove_if(vertices.begin(), vertices.end(), [&](auto vid) {
             return not((adjacencyList.getIncomingEdgesFor(vid).size() == 1 and adjacencyList.getOutgoingEdgesFor(vid).size() >= 1)
             or (adjacencyList.getIncomingEdgesFor(vid).size() >= 1 and adjacencyList.getOutgoingEdgesFor(vid).size() == 1));
         }), vertices.end());
         if (vertices.empty()) { break; }
-        graph.contractVertex(vertices[0], logic);
+        graph.contractVertex(vertices[0]);
     }
 //    std::cout << graph.getVertices().size() << std::endl;
 }
@@ -72,17 +74,17 @@ void GraphTransformations::eliminateSimpleNodes(ChcDirectedHyperGraph & graph) {
 //    std::cout << graph.getVertices().size() << std::endl;
     while(true) {
         AdjacencyListsGraphRepresentation adjacencyList = AdjacencyListsGraphRepresentation::from(graph);
-        auto isTrivial = [&](VId vid) {
+        auto isTrivial = [&](auto vid) {
             if (adjacencyList.getIncomingEdgesFor(vid).size() != 1) { return false; }
             auto out = adjacencyList.getOutgoingEdgesFor(vid);
             if (out.size() != 1) { return false; }
-            return graph.getEdge(out[0]).from.size() == 1;
+            return graph.getSources(out[0]).size() == 1;
         };
         auto vertices = graph.getVertices();
         auto it = std::find_if(vertices.begin(), vertices.end(), isTrivial);
         if (it == vertices.end()) { break; }
-        VId trivialVId = *it;
-        graph.contractTrivialVertex(trivialVId, adjacencyList.getIncomingEdgesFor(trivialVId)[0], adjacencyList.getOutgoingEdgesFor(trivialVId)[0], logic);
+        auto trivialVId = *it;
+        graph.contractTrivialVertex(trivialVId, adjacencyList.getIncomingEdgesFor(trivialVId)[0], adjacencyList.getOutgoingEdgesFor(trivialVId)[0]);
     }
 //    std::cout << graph.getVertices().size() << std::endl;
 }

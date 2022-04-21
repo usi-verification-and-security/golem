@@ -8,56 +8,44 @@
 #include <map>
 
 std::unique_ptr<ChcDirectedHyperGraph> ChcGraphBuilder::buildGraph(NormalizedChcSystem const & system) {
-    std::vector<Vertex> vertices;
     std::vector<DirectedHyperEdge> edges;
 
-    std::size_t id = 0;
-    auto getOrCreateVertex = [&vertices, &id](SymRef sym) {
-        auto vertexIt = std::find_if(vertices.begin(), vertices.end(), [&sym](Vertex const& v) { return v.predicateSymbol == sym; });
-        if (vertexIt == vertices.end()) {
-            vertexIt = vertices.insert(vertexIt, Vertex{.predicateSymbol = sym, .id = {id++}});
-        }
-        return vertexIt->id;
-    };
     ChcSystem const & chcSystem = *system.normalizedSystem;
     // Special case to cover initial clauses, we are adding artificial "TRUE" starting predicate
-    VId init = getOrCreateVertex(logic.getSym_true());
-    // Special vertex representing error location, we assume it is represented by FALSE predicate in the system
-    VId error = getOrCreateVertex(logic.getSym_false());
+    SymRef init = logic.getSym_true();
     for (auto const & clause : chcSystem.getClauses()) {
         auto const& head = clause.head;
         auto const& body = clause.body;
-        auto toVertex = getOrCreateVertex(logic.getSymRef(head.predicate.predicate));
+        auto headSymbol = logic.getSymRef(head.predicate.predicate);
 
-        std::vector<VId> from;
+        std::vector<SymRef> from;
         for (auto const& bodyPredicate : body.uninterpretedPart) {
-            from.push_back(getOrCreateVertex(logic.getSymRef(bodyPredicate.predicate)));
+            from.push_back(logic.getSymRef(bodyPredicate.predicate));
         }
         if (from.empty()) {
             from.push_back(init);
         }
-        edges.push_back(DirectedHyperEdge{.from = std::move(from), .to = toVertex, .fla = body.interpretedPart});
+        edges.push_back(DirectedHyperEdge{.from = std::move(from), .to = headSymbol, .fla = body.interpretedPart, .id = {0}});
     }
-    return std::unique_ptr<ChcDirectedHyperGraph>(
-        new ChcDirectedHyperGraph(std::move(vertices), std::move(edges),
-                                  system.canonicalPredicateRepresentation,
-                                  init,
-                                  error
-                                  ));
+    return std::make_unique<ChcDirectedHyperGraph>(std::move(edges), system.canonicalPredicateRepresentation, logic);
 }
 
 bool ChcDirectedHyperGraph::isNormalGraph() const {
-    return std::all_of(edges.begin(), edges.end(), [](const DirectedHyperEdge& edge) { assert(not edge.from.empty()); return edge.from.size() == 1; });
+    return std::all_of(edges.begin(), edges.end(), [](auto const & entry) {
+        auto const & sources = entry.second.from;
+        assert(not sources.empty());
+        return sources.size() == 1;
+    });
 }
 
-std::unique_ptr<ChcDirectedGraph> ChcDirectedHyperGraph::toNormalGraph(Logic & logic) const {
+std::unique_ptr<ChcDirectedGraph> ChcDirectedHyperGraph::toNormalGraph() const {
     TimeMachine timeMachine(logic);
     VersionManager manager(logic);
     TermUtils utils(logic);
     LinearCanonicalPredicateRepresentation newPredicates(logic);
-    for (Vertex v : vertices) {
+    for (SymRef sym : getVertices()) {
         std::vector<PTRef> vars;
-        PTRef originalTerm = predicates.getSourceTermFor(v.predicateSymbol);
+        PTRef originalTerm = predicates.getSourceTermFor(sym);
         for (PTRef var : logic.getPterm(originalTerm)) {
             assert(logic.isVar(var));
             vars.push_back(var);
@@ -65,14 +53,14 @@ std::unique_ptr<ChcDirectedGraph> ChcDirectedHyperGraph::toNormalGraph(Logic & l
         std::transform(vars.begin(), vars.end(), vars.begin(), [&](PTRef var){
             return manager.toBase(var);
         });
-        newPredicates.addRepresentation(v.predicateSymbol, std::move(vars));
+        newPredicates.addRepresentation(sym, std::move(vars));
     }
 
     std::vector<DirectedEdge> normalEdges;
-    std::transform(this->edges.begin(), this->edges.end(), std::back_inserter(normalEdges), [&](DirectedHyperEdge const& edge) {
+    forEachEdge([&](DirectedHyperEdge const& edge) {
         assert(edge.from.size() == 1);
-        VId source = edge.from[0];
-        VId target = edge.to;
+        auto source = edge.from[0];
+        auto target = edge.to;
         TermUtils::substitutions_map subst;
         {
             auto sourceVars = utils.getVarsFromPredicateInOrder(getStateVersion(source));
@@ -90,35 +78,34 @@ std::unique_ptr<ChcDirectedGraph> ChcDirectedHyperGraph::toNormalGraph(Logic & l
         }
 
         PTRef newLabel = TermUtils(logic).varSubstitute(edge.fla.fla, subst);
-        return DirectedEdge{.from = edge.from[0], .to = edge.to, .fla = {newLabel}};
+        normalEdges.emplace_back(DirectedEdge{.from = edge.from[0], .to = edge.to, .fla = {newLabel}, .id = {0}});
     });
-    return std::unique_ptr<ChcDirectedGraph>( new ChcDirectedGraph(vertices, std::move(normalEdges), std::move(newPredicates), entry, exit));
+    return std::make_unique<ChcDirectedGraph>(std::move(normalEdges), std::move(newPredicates), logic);
 }
 
-void ChcDirectedGraph::toDot(std::ostream & out, Logic const& logic) const {
+void ChcDirectedGraph::toDot(std::ostream & out) const {
 
     out << "digraph proof {" << '\n';
 
-    std::map<VId, std::string> dotIds;
+    std::unordered_map<SymRef, std::string, SymRefHash> dotIds;
 
-    for (auto const & vertex : vertices) {
-        auto id = vertex.id;
-        auto pred = this->getStateVersion(id);
-        dotIds.insert(std::make_pair(id, "n" + std::to_string(id.id)));
+    for (SymRef sym : getVertices()) {
+        auto pred = this->getStateVersion(sym);
+        dotIds.insert(std::make_pair(sym, "n" + std::to_string(sym.x)));
         std::string label = logic.printTerm(pred);
-        out << dotIds[id] << "\t[label =  \"" << label << "\"];\n";
+        out << dotIds[sym] << "\t[label =  \"" << label << "\"];\n";
     }
 
-    for (auto const& edge : edges) {
+    forEachEdge([&](auto const & edge) {
         out << dotIds[edge.from] << " -> " << dotIds[edge.to] << " [label = \"" << logic.printTerm(edge.fla.fla) << "\"];\n";
-    }
+    });
 
     out << "}" << std::endl;
 }
 
 DirectedEdge ChcDirectedGraph::reverseEdge(DirectedEdge const & edge, TermUtils & utils) const {
-    VId rfrom = edge.to;
-    VId rto = edge.from;
+    auto rfrom = edge.to;
+    auto rto = edge.from;
     PTRef ofla = edge.fla.fla;
     std::unordered_map<PTRef, PTRef, PTRefHash> subst;
     // variables from 'from' are expressed as state vars, they must be changed to next state
@@ -127,40 +114,42 @@ DirectedEdge ChcDirectedGraph::reverseEdge(DirectedEdge const & edge, TermUtils 
     utils.insertVarPairsFromPredicates(this->getNextStateVersion(edge.to), this->getStateVersion(edge.to), subst);
     // simulataneous substitution
     PTRef rfla = utils.varSubstitute(ofla, subst);
-    return DirectedEdge{.from = rfrom, .to = rto, .fla = InterpretedFla{rfla}};
+    return DirectedEdge{.from = rfrom, .to = rto, .fla = InterpretedFla{rfla}, .id = edge.id};
 }
 
-ChcDirectedGraph ChcDirectedGraph::reverse(Logic & logic) const {
+ChcDirectedGraph ChcDirectedGraph::reverse() const {
     // same vertices, same canonical representation, switch entry and exit and reverse edges
     // NOTE: reversing edge means flipping state and next state variables
-    assert(vertices[entry.id].predicateSymbol == logic.getSym_true() and vertices[exit.id].predicateSymbol == logic.getSym_false());
-    auto rvertices = vertices;
-    std::swap(rvertices[entry.id].predicateSymbol, rvertices[exit.id].predicateSymbol);
     TermUtils utils(logic);
     std::vector<DirectedEdge> redges;
-    for (auto const& edge : this->edges) {
-        redges.push_back(reverseEdge(edge, utils));
-    }
-    auto rentry = exit;
-    auto rexit = entry;
-    return ChcDirectedGraph(std::move(rvertices), std::move(redges), this->predicates, rentry, rexit);
+    auto swapTrueFalse = [&](SymRef sym) {
+        return sym == logic.getSym_false() ? logic.getSym_true()
+            : sym == logic.getSym_true() ? logic.getSym_false() : sym;
+    };
+    forEachEdge([&](auto const & edge) {
+        auto reversed = reverseEdge(edge, utils);
+        swapTrueFalse(reversed.from);
+        swapTrueFalse(reversed.to);
+        redges.push_back(reversed);
+    });
+    return ChcDirectedGraph(std::move(redges), this->predicates, logic);
 }
 
-void ChcDirectedGraph::contractVertex(VId vid, Logic & logic) {
+void ChcDirectedGraph::contractVertex(SymRef sym) {
     auto adjacencyList = AdjacencyListsGraphRepresentation::from(*this);
-    auto const & incomingEdges = adjacencyList.getIncomingEdgesFor(vid);
-    auto const & outgoingEdges = adjacencyList.getOutgoingEdgesFor(vid);
+    auto const & incomingEdges = adjacencyList.getIncomingEdgesFor(sym);
+    auto const & outgoingEdges = adjacencyList.getOutgoingEdgesFor(sym);
     for (EId incomingId : incomingEdges) {
         assert(getEdge(incomingId).to != getEdge(incomingId).from);
         for (EId outgoingId : outgoingEdges) {
             assert(getEdge(outgoingId).to != getEdge(outgoingId).from);
-            mergeEdges(incomingId, outgoingId, logic);
+            mergeEdges(incomingId, outgoingId);
         }
     }
-    deleteNode(vid);
+    deleteNode(sym);
 }
 
-PTRef ChcDirectedGraph::mergeLabels(const DirectedEdge & incoming, const DirectedEdge & outgoing, Logic & logic) {
+PTRef ChcDirectedGraph::mergeLabels(const DirectedEdge & incoming, const DirectedEdge & outgoing) {
     assert(incoming.to == outgoing.from);
     PTRef incomingLabel = incoming.fla.fla;
     PTRef outgoingLabel = outgoing.fla.fla;
@@ -176,25 +165,24 @@ PTRef ChcDirectedGraph::mergeLabels(const DirectedEdge & incoming, const Directe
     return simplifiedLabel;
 }
 
-void ChcDirectedGraph::mergeEdges(EId incomingId, EId outgoingId, Logic & logic) {
+void ChcDirectedGraph::mergeEdges(EId incomingId, EId outgoingId) {
     auto const & incoming = getEdge(incomingId);
     auto const & outgoing = getEdge(outgoingId);
     if (incoming.to != outgoing.from) { throw std::logic_error("ChcDirectedGraph::mergeEdges: Trying to merge edges without common node!\n"); }
 
-    VId source = incoming.from;
-    VId target = outgoing.to;
-    PTRef mergedLabel = mergeLabels(incoming, outgoing, logic);
-    edges.push_back(DirectedEdge{.from = source, .to = target, .fla = InterpretedFla{mergedLabel}});
+    auto source = incoming.from;
+    auto target = outgoing.to;
+    PTRef mergedLabel = mergeLabels(incoming, outgoing);
+    newEdge(source, target, InterpretedFla{mergedLabel});
 }
 
-void ChcDirectedGraph::mergeMultiEdges(Logic & logic) {
-    std::unordered_map<std::pair<VId, VId>, std::vector<unsigned>, EdgeHasher> buckets;
-    std::vector<unsigned> edgesToRemove;
-    for (unsigned i = 0; i < edges.size(); ++i) {
-        auto const & edge = edges[i];
+void ChcDirectedGraph::mergeMultiEdges() {
+    std::unordered_map<std::pair<SymRef, SymRef>, std::vector<EId>, EdgeHasher> buckets;
+    std::vector<EId> edgesToRemove;
+    forEachEdge([&](auto const & edge) {
         auto pair = std::make_pair(edge.from, edge.to);
-        buckets[pair].push_back(i);
-    }
+        buckets[pair].push_back(edge.id);
+    });
     for (auto const & bucketEntry : buckets) {
         auto const & bucket = bucketEntry.second;
         if (bucket.size() < 2) { continue; }
@@ -204,109 +192,63 @@ void ChcDirectedGraph::mergeMultiEdges(Logic & logic) {
             labels.push(edges[index].fla.fla);
         }
         edges[bucket[0]].fla = InterpretedFla{logic.mkOr(std::move(labels))};
-        std::for_each(bucket.begin() + 1, bucket.end(), [&edgesToRemove](unsigned i) { edgesToRemove.push_back(i); });
+        std::for_each(bucket.begin() + 1, bucket.end(), [&edgesToRemove](EId eid) { edgesToRemove.push_back(eid); });
     }
-    std::sort(edgesToRemove.begin(), edgesToRemove.end());
-    std::for_each(edgesToRemove.crbegin(), edgesToRemove.crend(), [this](auto index) { edges.erase(begin(edges) + index); });
+    std::for_each(edgesToRemove.cbegin(), edgesToRemove.cend(), [this](EId eid) { edges.erase(eid); });
 }
 
-void ChcDirectedGraph::deleteNode(VId vid) {
-    assert(vid != getEntryId() and vid != getExitId());
-    edges.erase(std::remove_if(edges.begin(), edges.end(), [vid](DirectedEdge const & edge) {
-        return edge.from == vid or edge.to == vid;
-    }), edges.end());
-
-    VId last = vertices.back().id;
-    vertices[vid.id] = vertices.back();
-    vertices[vid.id].id = vid;
-    vertices.pop_back();
-    for (DirectedEdge & edge : edges) {
-        if (edge.to == last) { edge.to = vid; }
-        if (edge.from == last) { edge.from = vid; }
-    }
+void ChcDirectedGraph::deleteNode(SymRef sym) {
+    deleteMatchingEdges([sym](DirectedEdge const & edge) {
+        return edge.from == sym or edge.to == sym;
+    });
 }
 
 AdjacencyListsGraphRepresentation AdjacencyListsGraphRepresentation::from(const ChcDirectedGraph & graph) {
-    auto edges = graph.getEdges();
-    auto vertices = graph.getVertices();
-    std::vector<std::vector<EId>> incoming;
-    std::vector<std::vector<EId>> outgoing;
-    const std::size_t N = vertices.size();
-    incoming.resize(N);
-    outgoing.resize(N);
-    for (EId eid : edges) {
-        incoming[graph.getTarget(eid).id].push_back(eid);
-        outgoing[graph.getSource(eid).id].push_back(eid);
-    }
+    AdjacencyList incoming;
+    AdjacencyList outgoing;
+    graph.forEachEdge([&](DirectedEdge const & edge) {
+        incoming[edge.to].push_back(edge.id);
+        outgoing[edge.from].push_back(edge.id);
+        // TODO: figure out a better way to ensure that all vertices are present in both lists
+        incoming[edge.from];
+        outgoing[edge.to];
+    });
     return AdjacencyListsGraphRepresentation(std::move(incoming), std::move(outgoing));
 }
 
 AdjacencyListsGraphRepresentation AdjacencyListsGraphRepresentation::from(const ChcDirectedHyperGraph & graph) {
-    auto edges = graph.getEdges();
-    auto vertices = graph.getVertices();
-    std::vector<std::vector<EId>> incoming;
-    std::vector<std::vector<EId>> outgoing;
-    const std::size_t N = vertices.size();
-    incoming.resize(N);
-    outgoing.resize(N);
-    for (EId eid : edges) {
-        incoming[graph.getTarget(eid).id].push_back(eid);
-        for (VId vid : graph.getSources(eid)) {
-            outgoing[vid.id].push_back(eid);
+    AdjacencyList incoming;
+    AdjacencyList outgoing;
+    graph.forEachEdge([&](DirectedHyperEdge const & edge) {
+        // TODO: figure out a better way to ensure that all vertices are present in both lists
+        incoming[edge.to].push_back(edge.id);
+        for (SymRef sym : edge.from) {
+            incoming[sym];
+            outgoing[sym].push_back(edge.id);
         }
-    }
+        outgoing[edge.to];
+    });
     return AdjacencyListsGraphRepresentation(std::move(incoming), std::move(outgoing));
 }
 
-class DFS {
-    ChcDirectedGraph const & graph;
-    AdjacencyListsGraphRepresentation const & adjacencyRepresentation;
-    std::vector<bool> marked;
-
-    template<typename TPreorderAction, typename TPostorderAction>
-    void runOnVertex(VId v, TPreorderAction const & preorder, TPostorderAction const & postorder) {
-        if (marked[v.id]) { return; }
-        marked[v.id] = true;
-        preorder(v);
-        for (EId outEdge : adjacencyRepresentation.getOutgoingEdgesFor(v)) {
-            runOnVertex(graph.getEdge(outEdge).to, preorder, postorder);
-        }
-        postorder(v);
-    }
-public:
-    DFS(ChcDirectedGraph const & graph, AdjacencyListsGraphRepresentation const & adjacencyRepresentation) :
-        graph(graph),
-        adjacencyRepresentation(adjacencyRepresentation)
-    {}
-
-    template<typename TPreorderAction, typename TPostorderAction>
-    void run(TPreorderAction const & preorder, TPostorderAction const & postorder) && {
-        auto vertexCount = adjacencyRepresentation.getVertexNum();
-        marked.resize(vertexCount, false);
-        for (std::size_t i = 0; i < vertexCount; ++i) {
-            runOnVertex(VId{i}, preorder, postorder);
-        }
-    }
-};
-
-std::unique_ptr<ChcDirectedHyperGraph> ChcDirectedGraph::toHyperGraph(Logic & logic) const {
+std::unique_ptr<ChcDirectedHyperGraph> ChcDirectedGraph::toHyperGraph() const {
     TimeMachine timeMachine(logic);
     VersionManager manager(logic);
     TermUtils utils(logic);
     NonlinearCanonicalPredicateRepresentation newPredicates(logic);
-    for (Vertex v : vertices) {
-        PTRef originalTerm = predicates.getSourceTermFor(v.predicateSymbol);
+    for (SymRef sym : getVertices()) {
+        PTRef originalTerm = predicates.getSourceTermFor(sym);
         std::vector<PTRef> vars = utils.getVarsFromPredicateInOrder(originalTerm);
         std::transform(vars.begin(), vars.end(), vars.begin(), [&](PTRef var){
             return timeMachine.getUnversioned(var);
         });
-        newPredicates.addRepresentation(v.predicateSymbol, std::move(vars));
+        newPredicates.addRepresentation(sym, std::move(vars));
     }
 
     std::vector<DirectedHyperEdge> newEdges;
-    std::transform(this->edges.begin(), this->edges.end(), std::back_inserter(newEdges), [&](DirectedEdge const & edge) {
-        VId source = edge.from;
-        VId target = edge.to;
+    forEachEdge([&](DirectedEdge const & edge) {
+        auto source = edge.from;
+        auto target = edge.to;
         TermUtils::substitutions_map subst;
         {
             auto sourceVars = utils.getVarsFromPredicateInOrder(getStateVersion(source));
@@ -326,80 +268,98 @@ std::unique_ptr<ChcDirectedHyperGraph> ChcDirectedGraph::toHyperGraph(Logic & lo
         }
 
         PTRef newLabel = TermUtils(logic).varSubstitute(edge.fla.fla, subst);
-        return DirectedHyperEdge{.from = {edge.from}, .to = edge.to, .fla = {newLabel}};
+        newEdges.push_back(DirectedHyperEdge{.from = {edge.from}, .to = edge.to, .fla = {newLabel}, .id = {0}});
     });
-    return std::unique_ptr<ChcDirectedHyperGraph>( new ChcDirectedHyperGraph(vertices, std::move(newEdges), std::move(newPredicates), entry, exit));
+    return std::make_unique<ChcDirectedHyperGraph>(std::move(newEdges), std::move(newPredicates), logic);
 }
 
-std::optional<EId> getSelfLoopFor(VId node, ChcDirectedGraph const & graph, AdjacencyListsGraphRepresentation const & adjacencyRepresentation) {
-    auto const & outEdges = adjacencyRepresentation.getOutgoingEdgesFor(node);
+std::optional<EId> getSelfLoopFor(SymRef sym, ChcDirectedGraph const & graph, AdjacencyListsGraphRepresentation const & adjacencyRepresentation) {
+    auto const & outEdges = adjacencyRepresentation.getOutgoingEdgesFor(sym);
     auto it = std::find_if(outEdges.begin(), outEdges.end(), [&](EId eid) {
-        return graph.getEdge(eid).to == node;
+        return graph.getTarget(eid) == sym;
     });
     return it != outEdges.end() ? *it : std::optional<EId>{};
 }
 
-std::vector<VId> reversePostOrder(ChcDirectedGraph const & graph, AdjacencyListsGraphRepresentation const & adjacencyRepresentation) {
-    std::vector<VId> order = postOrder(graph, adjacencyRepresentation);
+class DFS {
+    ChcDirectedGraph const & graph;
+    AdjacencyListsGraphRepresentation const & adjacencyRepresentation;
+    std::unordered_set<SymRef, SymRefHash> marked;
+
+    bool isMarked(SymRef sym) const { return marked.find(sym) != marked.end(); }
+    void mark(SymRef sym) { marked.insert(sym); }
+
+    template<typename TPreorderAction, typename TPostorderAction>
+    void runOnVertex(SymRef sym, TPreorderAction const & preorder, TPostorderAction const & postorder) {
+        if (isMarked(sym)) { return; }
+        mark(sym);
+        preorder(sym);
+        for (EId outEdge : adjacencyRepresentation.getOutgoingEdgesFor(sym)) {
+            runOnVertex(graph.getTarget(outEdge), preorder, postorder);
+        }
+        postorder(sym);
+    }
+public:
+    DFS(ChcDirectedGraph const & graph, AdjacencyListsGraphRepresentation const & adjacencyRepresentation) :
+        graph(graph),
+        adjacencyRepresentation(adjacencyRepresentation)
+    {}
+
+    template<typename TPreorderAction, typename TPostorderAction>
+    void run(TPreorderAction const & preorder, TPostorderAction const & postorder) && {
+            runOnVertex(graph.getEntry(), preorder, postorder);
+    }
+};
+
+std::vector<SymRef> reversePostOrder(ChcDirectedGraph const & graph, AdjacencyListsGraphRepresentation const & adjacencyRepresentation) {
+    std::vector<SymRef> order = postOrder(graph, adjacencyRepresentation);
     std::reverse(order.begin(), order.end());
     return order;
 }
 
-std::vector<VId> postOrder(ChcDirectedGraph const & graph, AdjacencyListsGraphRepresentation const & adjacencyRepresentation) {
-    std::vector<VId> order;
-    DFS(graph, adjacencyRepresentation).run([](VId){}, [&order](VId v){ order.push_back(v); });
+std::vector<SymRef> postOrder(ChcDirectedGraph const & graph, AdjacencyListsGraphRepresentation const & adjacencyRepresentation) {
+    std::vector<SymRef> order;
+    DFS(graph, adjacencyRepresentation).run([](SymRef){}, [&order](SymRef v){ order.push_back(v); });
     return order;
 }
 
-void ChcDirectedHyperGraph::contractTrivialVertex(VId vid, EId incomingId, EId outgoingId, Logic & logic) {
+void ChcDirectedHyperGraph::contractTrivialVertex(SymRef sym, EId incomingId, EId outgoingId) {
 #ifndef NDEBUG
     auto const & incomingSources = getEdge(incomingId).from;
-    assert(std::none_of(incomingSources.begin(), incomingSources.end(), [vid](VId source) { return source == vid; }));
-    assert(getEdge(outgoingId).to != vid);
+    assert(std::none_of(incomingSources.begin(), incomingSources.end(), [sym](SymRef source) { return source == sym; }));
+    assert(getEdge(outgoingId).to != sym);
     auto const & outgoingSources = getEdge(outgoingId).from;
-    assert(outgoingSources.size() == 1 and outgoingSources[0] == vid);
+    assert(outgoingSources.size() == 1 and outgoingSources[0] == sym);
 #endif // NDEBUG
-    mergeEdges(incomingId, outgoingId, logic);
-    deleteNode(vid);
+    mergeEdges(incomingId, outgoingId);
+    deleteNode(sym);
 }
 
-void ChcDirectedHyperGraph::deleteNode(VId vid) {
-    assert(vid != getEntryId() and vid != getExitId());
-    edges.erase(std::remove_if(edges.begin(), edges.end(), [vid](auto const & edge) {
-        return edge.to == vid or std::find(edge.from.begin(), edge.from.end(), vid) != edge.from.end();
-    }), edges.end());
-
-    VId last = vertices.back().id;
-    vertices[vid.id] = vertices.back();
-    vertices[vid.id].id = vid;
-    vertices.pop_back();
-    for (auto & edge : edges) {
-        if (edge.to == last) { edge.to = vid; }
-        for (VId & source : edge.from) {
-            if (source == last) { source = vid; }
-        }
-    }
+void ChcDirectedHyperGraph::deleteNode(SymRef sym) {
+    deleteMatchingEdges([sym](auto const & edge) {
+        return edge.to == sym or std::find(edge.from.begin(), edge.from.end(), sym) != edge.from.end();
+    });
 }
 
-void ChcDirectedHyperGraph::mergeEdges(EId incomingId, EId outgoingId, Logic & logic) {
+void ChcDirectedHyperGraph::mergeEdges(EId incomingId, EId outgoingId) {
     auto const & incoming = getEdge(incomingId);
     auto const & outgoing = getEdge(outgoingId);
     if (std::find(outgoing.from.begin(), outgoing.from.end(), incoming.to) == outgoing.from.end()) { throw std::logic_error("ChcDirectedGraph::mergeEdges: Trying to merge edges without common node!\n"); }
 
-    VId target = outgoing.to;
+    auto target = outgoing.to;
     auto newSources = incoming.from;
-    for (VId outSource : outgoing.from) {
+    for (auto outSource : outgoing.from) {
         if (outSource != incoming.to) {
             newSources.push_back(outSource);
         }
     }
 
-    PTRef mergedLabel = mergeLabels(incoming, outgoing, logic);
-    edges.push_back(DirectedHyperEdge{.from = std::move(newSources), .to = target, .fla = InterpretedFla{mergedLabel}});
+    PTRef mergedLabel = mergeLabels(incoming, outgoing);
+    newEdge(std::move(newSources), target, InterpretedFla{mergedLabel});
 }
 
-PTRef ChcDirectedHyperGraph::mergeLabels(const DirectedHyperEdge & incoming, const DirectedHyperEdge & outgoing, Logic & logic) {
-    VId common = incoming.to;
+PTRef ChcDirectedHyperGraph::mergeLabels(const DirectedHyperEdge & incoming, const DirectedHyperEdge & outgoing) {
+    auto common = incoming.to;
     auto const & outgoingSource = outgoing.from;
     if (outgoingSource.size() != 1) { throw std::logic_error("Outgoing edge must be simple edge!"); }
     assert(outgoingSource[0] == common);
@@ -416,4 +376,22 @@ PTRef ChcDirectedHyperGraph::mergeLabels(const DirectedHyperEdge & incoming, con
         getStateVersion(common)), combinedLabel);
 //    std::cout << logic.pp(simplifiedLabel) << '\n';
     return simplifiedLabel;
+}
+
+std::vector<SymRef> ChcDirectedGraph::getVertices() const {
+    std::unordered_set<SymRef, SymRefHash> vertices;
+    forEachEdge([&](DirectedEdge const & edge){
+        vertices.insert(edge.to);
+    });
+    vertices.insert(getEntry());
+    return std::vector<SymRef>(vertices.begin(), vertices.end());
+}
+
+std::vector<SymRef> ChcDirectedHyperGraph::getVertices() const {
+    std::unordered_set<SymRef, SymRefHash> vertices;
+    forEachEdge([&](DirectedHyperEdge const & edge){
+        vertices.insert(edge.to);
+    });
+    vertices.insert(getEntry());
+    return std::vector<SymRef>(vertices.begin(), vertices.end());
 }

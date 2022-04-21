@@ -81,7 +81,7 @@ public:
     void print(std::ostream & out, Logic & logic) const;
 };
 
-SystemInvalidityWitness graphToSystemInvalidityWitness(InvalidityWitness const & witness, ChcGraphContext & ctx);
+SystemInvalidityWitness graphToSystemInvalidityWitness(InvalidityWitness const & witness, ChcDirectedGraph & graph);
 
 class ValidityWitness {
     std::unordered_map<PTRef, PTRef, PTRefHash> interpretations;

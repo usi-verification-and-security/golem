@@ -23,18 +23,20 @@ Validator::Result Validator::validate(const ChcSystem & system, const SystemVeri
 }
 
 Validator::Result Validator::validateValidityWitness(const ChcDirectedGraph & graph, const ValidityWitness & witness) {
-    auto edges = graph.getEdges();
     auto definitions = witness.getDefinitions();
     definitions.insert({logic.getTerm_true(), logic.getTerm_true()});
     definitions.insert({logic.getTerm_false(), logic.getTerm_false()});
-    for (auto const & edge : edges) {
-        VId from = graph.getSource(edge);
-        VId to = graph.getTarget(edge);
-        PTRef fla = graph.getEdgeLabel(edge);
+    auto adjacencyList = AdjacencyListsGraphRepresentation::from(graph);
+    Validator::Result result = Result::VALIDATED;
+    graph.forEachEdge([&](DirectedEdge const & edge) {
+        auto from = edge.from;
+        auto to = edge.to;
+        PTRef fla = edge.fla.fla;
         PTRef fromPredicate = graph.getStateVersion(from);
         PTRef toPredicate = graph.getStateVersion(to);
         if (definitions.count(fromPredicate) == 0 || definitions.count(toPredicate) == 0) {
-            return Validator::Result::NOT_VALIDATED;
+            result = Validator::Result::NOT_VALIDATED;
+            return;
         }
         PTRef fromInterpreted = definitions.at(fromPredicate);
         PTRef toInterpreted = TimeMachine(logic).sendFlaThroughTime(definitions.at(toPredicate), 1);
@@ -46,10 +48,10 @@ Validator::Result Validator::validateValidityWitness(const ChcDirectedGraph & gr
         solver.insertFormula(query);
         auto res = solver.check();
         if (res != s_False) {
-            return Validator::Result::NOT_VALIDATED;
+            result = Validator::Result::NOT_VALIDATED;
         }
-    }
-    return Validator::Result::VALIDATED;
+    });
+    return result;
 }
 
 Validator::Result Validator::validateValidityWitness(const ChcSystem & system, const ValidityWitness & witness) {

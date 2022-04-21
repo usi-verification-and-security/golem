@@ -9,7 +9,6 @@
 #include <engine/Lawi.h>
 #include <engine/Spacer.h>
 #include <engine/ReverseWrapper.h>
-#include <engine/LoopAccelerator.h>
 #include "ChcInterpreter.h"
 #include "ChcGraph.h"
 #include "graph/GraphTransformations.h"
@@ -321,23 +320,13 @@ void ChcInterpreterContext::interpretCheckSat() {
     auto normalizedSystem = Normalizer(logic).normalize(*system);
     auto hypergraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
     if (hypergraph->isNormalGraph()) {
-        auto graph = hypergraph->toNormalGraph(logic);
+        auto graph = hypergraph->toNormalGraph();
 //        graph->toDot(std::cout, logic);
         GraphTransformations(logic).eliminateSimpleNodes(*graph);
         auto engine = getEngine();
         bool backwardAnalysis = opts.hasOption(Options::ANALYSIS_FLOW) && opts.getOption(Options::ANALYSIS_FLOW) == "backward";
         if (backwardAnalysis) {
             engine = std::unique_ptr<Engine>(new ReverseWrapper(std::move(engine), logic));
-        }
-        bool tryAccelerateLoops = opts.hasOption(Options::ACCELERATE_LOOPS);
-        if (tryAccelerateLoops) {
-            assert(opts.getOption(Options::ACCELERATE_LOOPS) == "true");
-            auto * laLogic = dynamic_cast<ArithLogic*>(&logic);
-            if (laLogic and laLogic->hasIntegers()) {
-                engine = std::unique_ptr<Engine>(new LoopAccelerator(*laLogic, std::move(engine)));
-            } else {
-                std::cerr << "Loops can be accelerated only for arithmetic problems, skipping this preprocessing\n";
-            }
         }
         auto res = engine->solve(*graph);
         bool validateWitness = opts.hasOption(Options::VALIDATE_RESULT);
@@ -358,8 +347,7 @@ void ChcInterpreterContext::interpretCheckSat() {
                 break;
         }
         if (validateWitness || printWitness) {
-            ChcGraphContext ctx(*graph, logic);
-            SystemVerificationResult systemResult (std::move(res), ctx);
+            SystemVerificationResult systemResult (std::move(res), *graph);
             if (printWitness) {
                 systemResult.printWitness(std::cout, logic);
             }
