@@ -42,11 +42,7 @@ public:
     }
 
     vec<PTRef> getVars(PTRef term) const {
-        MapWithKeys<PTRef,bool,PTRefHash> vars;
-        ::getVars(term, logic, vars);
-        vec<PTRef> keys;
-        vars.getKeys().copyTo(keys);
-        return keys;
+        return ::variables(logic, term);
     }
 
     std::vector<PTRef> getVarsFromPredicateInOrder(PTRef predicate) const {
