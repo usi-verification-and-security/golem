@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: MIT
  */
 
+#ifndef GOLEM_WITNESSES_H
+#define GOLEM_WITNESSES_H
 
 #include "ChcGraph.h"
 
@@ -103,3 +105,5 @@ public:
 
     void print(std::ostream & out, Logic & logic) const;
 };
+
+#endif // GOLEM_WITNESSES_H
