@@ -473,6 +473,8 @@ public:
     TrivialQuantifierElimination(Logic & logic) : logic(logic) {}
 
     PTRef tryEliminateVars(vec<PTRef> const & vars, PTRef fla) const;
+
+    PTRef tryEliminateVarsExcept(vec<PTRef> const & vars, PTRef fla) const;
 };
 
 

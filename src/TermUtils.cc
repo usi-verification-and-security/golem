@@ -1,12 +1,15 @@
-//
-// Created by Martin Blicha on 20.08.20.
-//
+/*
+ * Copyright (c) 2020-2022, Martin Blicha <martin.blicha@gmail.com>
+ *
+ * SPDX-License-Identifier: MIT
+ */
 
 #include "TermUtils.h"
 
-PTRef TrivialQuantifierElimination::tryEliminateVars(vec<PTRef> const & vars, PTRef fla) const {
-    if (vars.size() == 0) { return fla; }
-    ArithLogic & arithLogic = dynamic_cast<ArithLogic&>(logic);
+namespace {
+template<typename TKeep>
+PTRef tryEliminateVars(PTRef fla, Logic & logic, TKeep shouldKeepVar) {
+    ArithLogic & arithLogic = dynamic_cast<ArithLogic &>(logic);
     auto res = TermUtils(logic).extractSubstitutionsAndSimplify(fla);
     PTRef simplifiedFormula = res.result;
     auto & substitutions = res.substitutionsUsed;
@@ -21,11 +24,12 @@ PTRef TrivialQuantifierElimination::tryEliminateVars(vec<PTRef> const & vars, PT
     for (auto const & key : substitutions.getKeys()) {
 //        std::cout << logic.pp(key) << " -> " << logic.pp(substitutions[key]) << std::endl;
         assert(logic.isVar(key));
-        if (std::find(vars.begin(), vars.end(), key) == vars.end()) {
+        if (shouldKeepVar(key)) {
             // If it is not a variable we wanted to eliminate, we need to insert back the equality
             // Unless we can extract TBE var from the RHS
             PTRef rhs = substitutions[key];
-            if (logic.isVar(rhs) and std::find(vars.begin(), vars.end(), rhs) != vars.end() and not revertedSubs.has(rhs)) {
+            if (logic.isVar(rhs) and not shouldKeepVar(rhs) and
+                not revertedSubs.has(rhs)) {
                 revertedSubs.insert(rhs, key);
             } else {
                 equalitiesToRestore.push(logic.mkEq(key, rhs));
@@ -36,13 +40,12 @@ PTRef TrivialQuantifierElimination::tryEliminateVars(vec<PTRef> const & vars, PT
                 //     We need to keep this information
                 PTRef rhs = substitutions[key];
                 Pterm const & term = logic.getPterm(rhs);
-                if (std::any_of(term.begin(), term.end(), [&](PTRef arg){
-                    auto [var, constant] = arithLogic.splitTermToVarAndConst(arg);
+                if (std::any_of(term.begin(), term.end(), [&](PTRef arg) {
+                    auto[var, constant] = arithLogic.splitTermToVarAndConst(arg);
                     return not arithLogic.getNumConst(constant).isInteger();
                 })) { // There are some fractions on the RHS, better keep this substitution, just in case
                     equalitiesToRestore.push(logic.mkEq(key, rhs));
                 }
-
             }
         }
     }
@@ -56,6 +59,16 @@ PTRef TrivialQuantifierElimination::tryEliminateVars(vec<PTRef> const & vars, PT
     }
 //    std::cout << logic.pp(simplifiedFormula) << std::endl;
     return simplifiedFormula;
+}
+}
+
+PTRef TrivialQuantifierElimination::tryEliminateVars(vec<PTRef> const & vars, PTRef fla) const {
+    if (vars.size() == 0) { return fla; }
+    return ::tryEliminateVars(fla, logic, [&](PTRef var) { return std::find(vars.begin(), vars.end(), var) == vars.end(); });
+}
+
+PTRef TrivialQuantifierElimination::tryEliminateVarsExcept(vec<PTRef> const & vars, PTRef fla) const {
+    return ::tryEliminateVars(fla, logic, [&](PTRef var) { return std::find(vars.begin(), vars.end(), var) != vars.end(); });
 }
 
 PTRef LATermUtils::expressZeroTermFor(PTRef zeroTerm, PTRef var) {
