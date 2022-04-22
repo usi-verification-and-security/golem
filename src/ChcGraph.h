@@ -212,6 +212,7 @@ public:
     std::vector<SymRef> getVertices() const;
     Logic & getLogic() { return logic; }
     Logic const & getLogic() const { return logic; }
+    NonlinearCanonicalPredicateRepresentation const & predicateRepresentation() const { return predicates; }
     bool isNormalGraph() const;
     std::unique_ptr<ChcDirectedGraph> toNormalGraph() const;
 
