@@ -21,6 +21,12 @@ public:
 
         ValidityWitness translate(ValidityWitness witness) override;
 
+        using SummarizedChain = std::pair<std::vector<DirectedHyperEdge>, DirectedHyperEdge>;
+
+        void addSummarizedChain(SummarizedChain && chain) { summarizedChains.push_back(std::move(chain)); }
+
+    private:
+        std::vector<SummarizedChain> summarizedChains;
     };
 private:
     Logic & logic;

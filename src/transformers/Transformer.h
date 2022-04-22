@@ -17,12 +17,14 @@ class WitnessBackTranslator {
 public:
     virtual InvalidityWitness translate(InvalidityWitness witness) = 0;
     virtual ValidityWitness translate(ValidityWitness witness) = 0;
+    virtual ~WitnessBackTranslator() = default;
 };
 
 class Transformer {
 public:
     using TransformationResult = std::pair<std::unique_ptr<ChcDirectedHyperGraph>, std::unique_ptr<WitnessBackTranslator>>;
     virtual TransformationResult transform(std::unique_ptr<ChcDirectedHyperGraph> graph) = 0;
+    virtual ~Transformer() = default;
 };
 
 #endif //GOLEM_TRANSFORMER_H

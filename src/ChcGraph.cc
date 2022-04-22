@@ -323,16 +323,18 @@ std::vector<SymRef> postOrder(ChcDirectedGraph const & graph, AdjacencyListsGrap
     return order;
 }
 
-void ChcDirectedHyperGraph::contractTrivialVertex(SymRef sym, EId incomingId, EId outgoingId) {
-#ifndef NDEBUG
-    auto const & incomingSources = getEdge(incomingId).from;
-    assert(std::none_of(incomingSources.begin(), incomingSources.end(), [sym](SymRef source) { return source == sym; }));
-    assert(getEdge(outgoingId).to != sym);
-    auto const & outgoingSources = getEdge(outgoingId).from;
-    assert(outgoingSources.size() == 1 and outgoingSources[0] == sym);
-#endif // NDEBUG
-    mergeEdges(incomingId, outgoingId);
-    deleteNode(sym);
+DirectedHyperEdge ChcDirectedHyperGraph::contractTrivialChain(std::vector<EId> const & trivialChain) {
+    assert(trivialChain.size() >= 2);
+    auto summaryEdge = mergeEdges(trivialChain);
+    std::vector<SymRef> vertices;
+    for (EId eid : trivialChain) {
+        vertices.push_back(getTarget(eid));
+    }
+    vertices.pop_back(); // We want to keep the last one
+    for (auto vertex : vertices) {
+        deleteNode(vertex);
+    }
+    return summaryEdge;
 }
 
 void ChcDirectedHyperGraph::deleteNode(SymRef sym) {
@@ -341,39 +343,37 @@ void ChcDirectedHyperGraph::deleteNode(SymRef sym) {
     });
 }
 
-void ChcDirectedHyperGraph::mergeEdges(EId incomingId, EId outgoingId) {
-    auto const & incoming = getEdge(incomingId);
-    auto const & outgoing = getEdge(outgoingId);
-    if (std::find(outgoing.from.begin(), outgoing.from.end(), incoming.to) == outgoing.from.end()) { throw std::logic_error("ChcDirectedGraph::mergeEdges: Trying to merge edges without common node!\n"); }
-
-    auto target = outgoing.to;
-    auto newSources = incoming.from;
-    for (auto outSource : outgoing.from) {
-        if (outSource != incoming.to) {
-            newSources.push_back(outSource);
-        }
-    }
-
-    PTRef mergedLabel = mergeLabels(incoming, outgoing);
-    newEdge(std::move(newSources), target, InterpretedFla{mergedLabel});
+DirectedHyperEdge ChcDirectedHyperGraph::mergeEdges(std::vector<EId> const & chain) {
+    auto source = getSources(chain.front()).front();
+    auto target = getTarget(chain.back());
+    PTRef mergedLabel = mergeLabels(chain);
+    auto eid = newEdge({source}, target, InterpretedFla{mergedLabel});
+    return getEdge(eid);
 }
 
-PTRef ChcDirectedHyperGraph::mergeLabels(const DirectedHyperEdge & incoming, const DirectedHyperEdge & outgoing) {
-    auto common = incoming.to;
-    auto const & outgoingSource = outgoing.from;
-    if (outgoingSource.size() != 1) { throw std::logic_error("Outgoing edge must be simple edge!"); }
-    assert(outgoingSource[0] == common);
-    assert(std::find(incoming.from.begin(), incoming.from.end(), common) == incoming.from.end()); // MB: Otherwise we would have variable name clash
-    PTRef incomingLabel = incoming.fla.fla;
-    PTRef outgoingLabel = outgoing.fla.fla;
+PTRef ChcDirectedHyperGraph::mergeLabels(std::vector<EId> const & chain) {
+    // MB: We can rely on the fact that every predicate has unique variables in its canonical representation
+    // This is guaranteed by Normalizer
+    assert(chain.size() >= 2);
+    auto source = getSources(chain.front()).front();
+    auto target = getTarget(chain.back());
+    vec<PTRef> labels;
     TermUtils utils(logic);
     TermUtils::substitutions_map subMap;
-    utils.insertVarPairsFromPredicates(getNextStateVersion(common), getStateVersion(common), subMap);
-    PTRef updatedIncomingLabel = utils.varSubstitute(incomingLabel, subMap);
-    PTRef combinedLabel = logic.mkAnd(updatedIncomingLabel, outgoingLabel);
-//    std::cout << logic.pp(combinedLabel) << '\n';
-    PTRef simplifiedLabel = TrivialQuantifierElimination(logic).tryEliminateVars(utils.getVarsFromPredicateInOrder(
-        getStateVersion(common)), combinedLabel);
+    for (auto incomingIt = chain.begin(), outgoingIt = chain.begin() + 1; outgoingIt != chain.end(); ++incomingIt, ++outgoingIt) {
+        EId incoming = *incomingIt;
+        EId outgoing = *outgoingIt;
+        auto common = getTarget(incoming);
+        assert(getSources(outgoing).size() == 1 and getSources(outgoing).front() == common);
+        // MB: Simply casting the target variables to current state from next state is only possible because this is trivial chain
+        utils.insertVarPairsFromPredicates(getNextStateVersion(common), getStateVersion(common), subMap);
+        labels.push(getEdgeLabel(incoming));
+    }
+    PTRef combinedLabel = logic.mkAnd(std::move(labels));
+    PTRef updatedLabel = utils.varSubstitute(combinedLabel, subMap);
+//    std::cout << logic.pp(updatedLabel) << '\n';
+    PTRef simplifiedLabel = TrivialQuantifierElimination(logic).tryEliminateVarsExcept(utils.getVarsFromPredicateInOrder(
+        getStateVersion(source)) + utils.getVarsFromPredicateInOrder(getNextStateVersion(target)), updatedLabel);
 //    std::cout << logic.pp(simplifiedLabel) << '\n';
     return simplifiedLabel;
 }

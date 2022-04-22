@@ -222,6 +222,10 @@ public:
 
     PTRef getNextStateVersion(SymRef sym) const { return predicates.getTargetTermFor(sym); }
 
+    DirectedHyperEdge const & getEdge(EId eid) const {
+        return edges.at(eid);
+    }
+
     PTRef getEdgeLabel(EId eid) const {
         return getEdge(eid).fla.fla;
     }
@@ -233,7 +237,7 @@ public:
     SymRef getTarget(EId eid) const {
         return getEdge(eid).to;
     }
-    void contractTrivialVertex(SymRef sym, EId incoming, EId outgoing);
+    DirectedHyperEdge contractTrivialChain(std::vector<EId> const & trivialChain);
 
     template<typename TAction>
     void forEachEdge(TAction action) const {
@@ -242,13 +246,10 @@ public:
         }
     }
 private:
-    DirectedHyperEdge const & getEdge(EId eid) const {
-        return edges.at(eid);
-    }
-
-    void newEdge(std::vector<SymRef> && from, SymRef to, InterpretedFla label) {
+    EId newEdge(std::vector<SymRef> && from, SymRef to, InterpretedFla label) {
         EId eid = freshId();
         edges.emplace(eid, DirectedHyperEdge{.from = std::move(from), .to = to, .fla = label, .id = eid});
+        return eid;
     }
 
     template<typename TPred>
@@ -263,8 +264,8 @@ private:
     }
 
     void deleteNode(SymRef sym);
-    void mergeEdges(EId incomingId, EId outgoingId);
-    PTRef mergeLabels(const DirectedHyperEdge & incoming, const DirectedHyperEdge & outgoing);
+    DirectedHyperEdge mergeEdges(std::vector<EId> const & chain);
+    PTRef mergeLabels(std::vector<EId> const & chain);
 };
 
 class ChcGraphBuilder {

@@ -14,6 +14,7 @@
 #include "graph/GraphTransformations.h"
 #include "Validator.h"
 #include "Normalizer.h"
+#include "transformers/SimpleChainSummarizer.h"
 
 using namespace osmttokens;
 
@@ -371,7 +372,8 @@ void ChcInterpreterContext::interpretCheckSat() {
         if (opts.getOption(Options::ENGINE) != "spacer") {
             throw std::logic_error("Only Spacer engine can solve nonlinear CHCs at the moment!");
         }
-        GraphTransformations(logic).eliminateSimpleNodes(*hypergraph);
+        auto [newGraph, translator] = SimpleChainSummarizer(logic).transform(std::move(hypergraph));
+        hypergraph = std::move(newGraph);
         auto engine = std::unique_ptr<Engine>(new Spacer(logic, opts));
         auto res = engine->solve(*hypergraph);
         switch (res.getAnswer()) {
