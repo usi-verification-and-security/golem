@@ -7,7 +7,7 @@
 #include "SimpleChainSummarizer.h"
 
 Transformer::TransformationResult SimpleChainSummarizer::transform(std::unique_ptr<ChcDirectedHyperGraph> graph) {
-    auto translator = std::make_unique<SimpleChainBackTranslator>();
+    auto translator = std::make_unique<SimpleChainBackTranslator>(logic, graph->predicateRepresentation());
     while(true) {
         AdjacencyListsGraphRepresentation adjacencyList = AdjacencyListsGraphRepresentation::from(*graph);
         auto isTrivial = [&](SymRef sym) {
@@ -42,18 +42,79 @@ Transformer::TransformationResult SimpleChainSummarizer::transform(std::unique_p
         }(trivialVertex);
         std::vector<DirectedHyperEdge> summarizedChain;
         std::transform(trivialChain.begin(), trivialChain.end(), std::back_inserter(summarizedChain), [&](EId eid) {
+//            std::cout << "Edge in chain: " << logic.pp(graph->getEdgeLabel(eid)) << std::endl;
             return graph->getEdge(eid);
         });
         auto summaryEdge = graph->contractTrivialChain(trivialChain);
+//        std::cout << "Summary edge: " << logic.pp(summaryEdge.fla.fla) << std::endl;
         translator->addSummarizedChain({summarizedChain, summaryEdge});
     }
     return {std::move(graph), std::move(translator)};
 }
 
 InvalidityWitness SimpleChainSummarizer::SimpleChainBackTranslator::translate(InvalidityWitness witness) {
+    if (summarizedChains.empty()) { return witness; }
+    // TODO: Implement this
     return InvalidityWitness();
 }
 
 ValidityWitness SimpleChainSummarizer::SimpleChainBackTranslator::translate(ValidityWitness witness) {
-    return ValidityWitness();
+    if (summarizedChains.empty()) { return witness; }
+    auto definitions = witness.getDefinitions();
+    // TODO: assert that we have true and false already
+    definitions.insert({logic.getTerm_true(), logic.getTerm_true()});
+    definitions.insert({logic.getTerm_false(), logic.getTerm_false()});
+    std::reverse(summarizedChains.begin(), summarizedChains.end());
+    SMTConfig config;
+    const char * msg;
+    config.setOption(SMTConfig::o_produce_models, SMTOption(false), msg);
+    config.setOption(SMTConfig::o_produce_inter, SMTOption(true), msg);
+    TermUtils utils(logic);
+    VersionManager manager(logic);
+    for (auto && [chain, summary] : summarizedChains) {
+        // Compute definitions for vertices on the chain using path interpolants
+        MainSolver solver(logic, config, "labeler");
+        assert(summary.from.size() == 1);
+        PTRef sourceInterpretation = manager.baseFormulaToSource(
+            definitions.at(manager.sourceFormulaToBase(predicateRepresentation.getSourceTermFor(summary.from.front())))
+        );
+        solver.insertFormula(sourceInterpretation);
+        for (auto const & edge : chain) {
+            TermUtils::substitutions_map substitutionsMap;
+            auto target = edge.to;
+            utils.insertVarPairsFromPredicates(predicateRepresentation.getTargetTermFor(target), predicateRepresentation.getSourceTermFor(target), substitutionsMap);
+            PTRef updatedLabel = utils.varSubstitute(edge.fla.fla, substitutionsMap);
+            solver.insertFormula(updatedLabel);
+        }
+        PTRef targetInterpretation = manager.baseFormulaToSource(
+            definitions.at(manager.sourceFormulaToBase(predicateRepresentation.getSourceTermFor(summary.to)))
+        );
+        solver.insertFormula(logic.mkNot(targetInterpretation));
+        auto res = solver.check();
+        if (res != s_False) {
+            //throw std::logic_error("SimpleChainBackTranslator could not recompute solution!");
+            std::cerr << "; SimpleChainBackTranslator could not recompute solution! Solver could not prove UNSAT!" << std::endl;
+            return ValidityWitness();
+        }
+        auto itpCtx = solver.getInterpolationContext();
+        std::vector<ipartitions_t> partitionings;
+        ipartitions_t p = 1;
+        for (auto i = 0u; i < chain.size() - 1; ++i) {
+            opensmt::setbit(p, i + 1); // MB: +1 for the source interpretation
+            partitionings.push_back(p);
+        }
+        vec<PTRef> itps;
+        itpCtx->getPathInterpolants(itps, partitionings);
+        for (auto i = 0u; i < chain.size() - 1; ++i) {
+            auto target = chain[i].to;
+            PTRef predicate = predicateRepresentation.getSourceTermFor(target);
+            predicate = logic.getPterm(predicate).size() > 0 ? VersionManager(logic).sourceFormulaToBase(predicate) : predicate;
+            if (definitions.count(predicate) > 0) {
+                std::cerr << "; Unexpected situation in SimpleChainBackTranslator: Predicate already has a solution!" << std::endl;
+                return ValidityWitness();
+            }
+            definitions.insert({predicate, VersionManager(logic).sourceFormulaToBase(itps[i])});
+        }
+    }
+    return ValidityWitness(std::move(definitions));
 }

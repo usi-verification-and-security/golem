@@ -375,7 +375,8 @@ void ChcInterpreterContext::interpretCheckSat() {
         auto [newGraph, translator] = SimpleChainSummarizer(logic).transform(std::move(hypergraph));
         hypergraph = std::move(newGraph);
         auto engine = std::unique_ptr<Engine>(new Spacer(logic, opts));
-        auto res = engine->solve(*hypergraph);
+        auto engineRes = engine->solve(*hypergraph);
+        auto res = translator->translate(engineRes);
         switch (res.getAnswer()) {
             case VerificationResult::SAFE: {
                 std::cout << "sat" << std::endl;

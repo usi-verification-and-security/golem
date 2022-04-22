@@ -17,6 +17,9 @@ public:
 
     class SimpleChainBackTranslator : public WitnessBackTranslator {
     public:
+        SimpleChainBackTranslator(Logic & logic, NonlinearCanonicalPredicateRepresentation predicateRepresentation)
+        : logic(logic), predicateRepresentation(std::move(predicateRepresentation)) {}
+
         InvalidityWitness translate(InvalidityWitness witness) override;
 
         ValidityWitness translate(ValidityWitness witness) override;
@@ -27,6 +30,8 @@ public:
 
     private:
         std::vector<SummarizedChain> summarizedChains;
+        Logic & logic;
+        NonlinearCanonicalPredicateRepresentation predicateRepresentation;
     };
 private:
     Logic & logic;
