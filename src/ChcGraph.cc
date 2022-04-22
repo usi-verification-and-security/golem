@@ -362,7 +362,7 @@ PTRef ChcDirectedHyperGraph::mergeLabels(std::vector<EId> const & chain) {
     TermUtils::substitutions_map subMap;
     for (auto incomingIt = chain.begin(), outgoingIt = chain.begin() + 1; outgoingIt != chain.end(); ++incomingIt, ++outgoingIt) {
         EId incoming = *incomingIt;
-        EId outgoing = *outgoingIt;
+        EId outgoing = *outgoingIt; (void)outgoing;
         auto common = getTarget(incoming);
         assert(getSources(outgoing).size() == 1 and getSources(outgoing).front() == common);
         // MB: Simply casting the target variables to current state from next state is only possible because this is trivial chain
