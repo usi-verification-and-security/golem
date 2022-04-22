@@ -21,6 +21,7 @@ target_sources(GolemTest
     PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/test_Spacer.cc"
     PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/test_TermUtils.cc"
     PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/test_TPA.cc"
+    PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/test_Transformers.cc"
     )
 
 target_link_libraries(GolemTest PUBLIC golem_lib gtest gtest_main)
