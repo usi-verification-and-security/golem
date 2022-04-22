@@ -41,8 +41,8 @@ PTRef tryEliminateVars(PTRef fla, Logic & logic, TKeep shouldKeepVar) {
                 PTRef rhs = substitutions[key];
                 Pterm const & term = logic.getPterm(rhs);
                 if (std::any_of(term.begin(), term.end(), [&](PTRef arg) {
-                    auto[var, constant] = arithLogic.splitTermToVarAndConst(arg);
-                    return not arithLogic.getNumConst(constant).isInteger();
+                    auto varConstant = arithLogic.splitTermToVarAndConst(arg);
+                    return not arithLogic.getNumConst(varConstant.second).isInteger();
                 })) { // There are some fractions on the RHS, better keep this substitution, just in case
                     equalitiesToRestore.push(logic.mkEq(key, rhs));
                 }
