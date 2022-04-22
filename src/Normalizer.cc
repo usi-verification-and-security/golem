@@ -29,12 +29,12 @@ ChClause Normalizer::eliminateRedundantVariables(ChClause && clause) {
     std::unordered_set<PTRef, PTRefHash> validVars;
     // vars from head
     {
-        auto headVars = utils.getVarsFromPredicateInOrder(clause.head.predicate.predicate);
+        auto headVars = utils.predicateArgsInOrder(clause.head.predicate.predicate);
         validVars.insert(headVars.begin(), headVars.end());
     }
     // vars from uninterpreted body
     for (auto const & pred : clause.body.uninterpretedPart) {
-        auto vars = utils.getVarsFromPredicateInOrder(pred.predicate);
+        auto vars = utils.predicateArgsInOrder(pred.predicate);
         validVars.insert(vars.begin(), vars.end());
     }
     // build substitution map

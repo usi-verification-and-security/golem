@@ -63,14 +63,14 @@ std::unique_ptr<ChcDirectedGraph> ChcDirectedHyperGraph::toNormalGraph() const {
         auto target = edge.to;
         TermUtils::substitutions_map subst;
         {
-            auto sourceVars = utils.getVarsFromPredicateInOrder(getStateVersion(source));
+            auto sourceVars = utils.predicateArgsInOrder(getStateVersion(source));
             for (PTRef sourceVar : sourceVars) {
                 PTRef newVar = timeMachine.getVarVersionZero(manager.toBase(sourceVar));
                 subst.insert({sourceVar, newVar});
             }
         }
         {
-            auto targetVars = utils.getVarsFromPredicateInOrder(getNextStateVersion(target));
+            auto targetVars = utils.predicateArgsInOrder(getNextStateVersion(target));
             for (PTRef targetVar : targetVars) {
                 PTRef newVar = timeMachine.sendVarThroughTime(timeMachine.getVarVersionZero(manager.toBase(targetVar)), 1);
                 subst.insert({targetVar, newVar});
@@ -159,7 +159,7 @@ PTRef ChcDirectedGraph::mergeLabels(const DirectedEdge & incoming, const Directe
     PTRef updatedIncomingLabel = utils.varSubstitute(incomingLabel, subMap);
     PTRef combinedLabel = logic.mkAnd(updatedIncomingLabel, outgoingLabel);
 //    std::cout << logic.pp(combinedLabel) << '\n';
-    PTRef simplifiedLabel = TrivialQuantifierElimination(logic).tryEliminateVars(utils.getVarsFromPredicateInOrder(
+    PTRef simplifiedLabel = TrivialQuantifierElimination(logic).tryEliminateVars(utils.predicateArgsInOrder(
         getStateVersion(outgoing.from)), combinedLabel);
 //    std::cout << logic.pp(simplifiedLabel) << '\n';
     return simplifiedLabel;
@@ -238,7 +238,7 @@ std::unique_ptr<ChcDirectedHyperGraph> ChcDirectedGraph::toHyperGraph() const {
     NonlinearCanonicalPredicateRepresentation newPredicates(logic);
     for (SymRef sym : getVertices()) {
         PTRef originalTerm = predicates.getSourceTermFor(sym);
-        std::vector<PTRef> vars = utils.getVarsFromPredicateInOrder(originalTerm);
+        std::vector<PTRef> vars = utils.predicateArgsInOrder(originalTerm);
         std::transform(vars.begin(), vars.end(), vars.begin(), [&](PTRef var){
             return timeMachine.getUnversioned(var);
         });
@@ -251,7 +251,7 @@ std::unique_ptr<ChcDirectedHyperGraph> ChcDirectedGraph::toHyperGraph() const {
         auto target = edge.to;
         TermUtils::substitutions_map subst;
         {
-            auto sourceVars = utils.getVarsFromPredicateInOrder(getStateVersion(source));
+            auto sourceVars = utils.predicateArgsInOrder(getStateVersion(source));
             for (PTRef sourceVar : sourceVars) {
                 assert(timeMachine.isVersioned(sourceVar));
                 PTRef newVar = manager.toSource(timeMachine.getUnversioned(sourceVar));
@@ -259,7 +259,7 @@ std::unique_ptr<ChcDirectedHyperGraph> ChcDirectedGraph::toHyperGraph() const {
             }
         }
         {
-            auto targetVars = utils.getVarsFromPredicateInOrder(getNextStateVersion(target));
+            auto targetVars = utils.predicateArgsInOrder(getNextStateVersion(target));
             for (PTRef targetVar : targetVars) {
                 assert(timeMachine.isVersioned(targetVar));
                 PTRef newVar = manager.toTarget(timeMachine.getUnversioned(targetVar));
@@ -372,8 +372,8 @@ PTRef ChcDirectedHyperGraph::mergeLabels(std::vector<EId> const & chain) {
     PTRef combinedLabel = logic.mkAnd(std::move(labels));
     PTRef updatedLabel = utils.varSubstitute(combinedLabel, subMap);
 //    std::cout << logic.pp(updatedLabel) << '\n';
-    PTRef simplifiedLabel = TrivialQuantifierElimination(logic).tryEliminateVarsExcept(utils.getVarsFromPredicateInOrder(
-        getStateVersion(source)) + utils.getVarsFromPredicateInOrder(getNextStateVersion(target)), updatedLabel);
+    PTRef simplifiedLabel = TrivialQuantifierElimination(logic).tryEliminateVarsExcept(utils.predicateArgsInOrder(
+        getStateVersion(source)) + utils.predicateArgsInOrder(getNextStateVersion(target)), updatedLabel);
 //    std::cout << logic.pp(simplifiedLabel) << '\n';
     return simplifiedLabel;
 }

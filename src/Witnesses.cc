@@ -142,7 +142,7 @@ void SystemInvalidityWitness::print(std::ostream & out, Logic & logic) const {
 void ValidityWitness::print(std::ostream & out, Logic & logic) const {
     for (auto && [predicate, definition] : interpretations) {
         out << "  (define-fun " << logic.getSymName(predicate) << " (";
-        const auto & args = TermUtils(logic).getVarsFromPredicateInOrder(predicate);
+        const auto & args = TermUtils(logic).predicateArgsInOrder(predicate);
         for (std::size_t i = 0; i < args.size(); ++i) {
             auto sortString = logic.printSort(logic.getSortRef(args[i]));
             out << "(" << logic.protectName(logic.getSymRef(args[i])) << " " << sortString << ")" << (i == args.size()-1 ? "" : " ");

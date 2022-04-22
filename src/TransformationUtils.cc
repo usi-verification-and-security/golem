@@ -112,8 +112,8 @@ EdgeVariables getVariablesFromEdge(Logic & logic, ChcDirectedGraph const & graph
     TermUtils utils(logic);
     PTRef sourcePred = graph.getStateVersion(graph.getSource(eid));
     PTRef targetPred = graph.getNextStateVersion(graph.getTarget(eid));
-    res.stateVars = utils.getVarsFromPredicateInOrder(sourcePred);
-    res.nextStateVars = utils.getVarsFromPredicateInOrder(targetPred);
+    res.stateVars = utils.predicateArgsInOrder(sourcePred);
+    res.nextStateVars = utils.predicateArgsInOrder(targetPred);
     PTRef edgeLabel = graph.getEdgeLabel(eid);
     auto allVars = TermUtils(logic).getVars(edgeLabel);
     for (PTRef var : allVars) {

@@ -1542,7 +1542,7 @@ TransitionSystemNetworkManager::QueryResult TransitionSystemNetworkManager::quer
         auto model = solver.getModel();
         ModelBasedProjection mbp(logic);
         PTRef query = logic.mkAnd({sourceCondition, label, target});
-        auto targetVars = TermUtils(logic).getVarsFromPredicateInOrder(graph.getNextStateVersion(graph.getTarget(eid)));
+        auto targetVars = TermUtils(logic).predicateArgsInOrder(graph.getNextStateVersion(graph.getTarget(eid)));
         PTRef eliminated = mbp.keepOnly(query, targetVars, *model);
         eliminated = TimeMachine(logic).sendFlaThroughTime(eliminated, -1);
         TRACE(1, "Propagating along the edge " << logic.pp(eliminated))
@@ -1707,7 +1707,7 @@ ValidityWitness TPAEngine::computeValidityWitness(ChcDirectedGraph const & graph
     assert(vertex != graph.getEntry() and vertex != graph.getExit());
     TermUtils utils(logic);
     TermUtils::substitutions_map subs;
-    auto graphVars = utils.getVarsFromPredicateInOrder(graph.getStateVersion(vertex));
+    auto graphVars = utils.predicateArgsInOrder(graph.getStateVersion(vertex));
     auto systemVars = ts.getStateVars();
     assert(graphVars.size() == systemVars.size());
     for (std::size_t i = 0; i < graphVars.size(); ++i) {

@@ -45,10 +45,9 @@ public:
         return ::variables(logic, term);
     }
 
-    std::vector<PTRef> getVarsFromPredicateInOrder(PTRef predicate) const {
+    std::vector<PTRef> predicateArgsInOrder(PTRef predicate) const {
         assert(isUPOrConstant(predicate));
         auto const & pterm = logic.getPterm(predicate);
-        assert(std::all_of(pterm.begin(), pterm.end(), [&](PTRef child) { return logic.isVar(child); }));
         std::vector<PTRef> vars;
         vars.resize(pterm.size());
         std::copy(pterm.begin(), pterm.end(), vars.begin());
@@ -150,8 +149,8 @@ public:
 
     void insertVarPairsFromPredicates(PTRef domain, PTRef codomain, substitutions_map & subst) const {
         assert(isUPOrConstant(domain) and isUPOrConstant(codomain));
-        auto domainVars = getVarsFromPredicateInOrder(domain);
-        auto codomainVars = getVarsFromPredicateInOrder(codomain);
+        auto domainVars = predicateArgsInOrder(domain);
+        auto codomainVars = predicateArgsInOrder(codomain);
         assert(domainVars.size() == codomainVars.size());
         for (std::size_t i = 0; i < domainVars.size(); ++i) {
             assert(logic.isVar(domainVars[i]) and logic.isVar(codomainVars[i]));

@@ -99,8 +99,8 @@ Validator::Result Validator::validateValidityWitness(const ChcSystem & system, c
         // we need to substitute real arguments in the definition of the predicate
         PTRef definitionTemplate = it->second;
         // build the substitution map
-        auto formalArgs = utils.getVarsFromPredicateInOrder(it->first);
-        auto realArgs = utils.getVarsFromPredicateInOrder(predicateTerm);
+        auto formalArgs = utils.predicateArgsInOrder(it->first);
+        auto realArgs = utils.predicateArgsInOrder(predicateTerm);
         assert(formalArgs.size() == realArgs.size());
         std::unordered_map<PTRef, PTRef, PTRefHash> subst;
         for (std::size_t i = 0; i < formalArgs.size(); ++i) {
@@ -254,7 +254,7 @@ ChClause toZeroStepVersion(Logic & logic, ChClause clause) {
     TimeMachine timeMachine(logic);
     PTRef headPredicate = clause.head.predicate.predicate;
     if (logic.getPterm(headPredicate).nargs() > 0) {
-        auto vars = TermUtils(logic).getVarsFromPredicateInOrder(headPredicate);
+        auto vars = TermUtils(logic).predicateArgsInOrder(headPredicate);
         assert(not vars.empty());
         auto version = timeMachine.getVersionNumber(vars[0]);
         assert(std::all_of(vars.begin(), vars.end(), [version, &timeMachine](PTRef var) {
@@ -267,7 +267,7 @@ ChClause toZeroStepVersion(Logic & logic, ChClause clause) {
         if (bodyPredicates.size() > 1) { throw ValidationException("Cannot validate InvalidityWitness for non-linear clauses yet!"); }
         PTRef bodyPredicate = bodyPredicates[0].predicate;
         if (logic.getPterm(bodyPredicate).nargs() > 0) {
-            auto vars = TermUtils(logic).getVarsFromPredicateInOrder(bodyPredicate);
+            auto vars = TermUtils(logic).predicateArgsInOrder(bodyPredicate);
             assert(not vars.empty());
             auto version = timeMachine.getVersionNumber(vars[0]);
             assert(std::all_of(vars.begin(), vars.end(), [version, &timeMachine](PTRef var) {
