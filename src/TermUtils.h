@@ -477,5 +477,13 @@ public:
     PTRef tryEliminateVarsExcept(vec<PTRef> const & vars, PTRef fla) const;
 };
 
+inline vec<PTRef> operator+(vec<PTRef> const & first, vec<PTRef> const & second) {
+    vec<PTRef> res;
+    first.copyTo(res);
+    for (PTRef term : second) {
+        res.push(term);
+    }
+    return res;
+}
 
 #endif //OPENSMT_TERMUTILS_H
