@@ -372,11 +372,12 @@ PTRef ChcDirectedHyperGraph::mergeLabels(std::vector<EId> const & chain) {
         utils.insertVarPairsFromPredicates(getNextStateVersion(common), getStateVersion(common), subMap);
     }
     PTRef combinedLabel = logic.mkAnd(std::move(labels));
+//    std::cout << "Original labels: " << logic.pp(combinedLabel) << '\n';
     PTRef updatedLabel = utils.varSubstitute(combinedLabel, subMap);
-//    std::cout << logic.pp(updatedLabel) << '\n';
+//    std::cout << "After substitution: " << logic.pp(updatedLabel) << '\n';
     PTRef simplifiedLabel = TrivialQuantifierElimination(logic).tryEliminateVarsExcept(utils.predicateArgsInOrder(
         getStateVersion(source)) + utils.predicateArgsInOrder(getNextStateVersion(target)), updatedLabel);
-//    std::cout << logic.pp(simplifiedLabel) << std::endl;
+//    std::cout << "After simplification: " << logic.pp(simplifiedLabel) << std::endl;
     return simplifiedLabel;
 }
 
