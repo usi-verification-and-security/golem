@@ -11,10 +11,11 @@ Transformer::TransformationResult SimpleChainSummarizer::transform(std::unique_p
     while(true) {
         AdjacencyListsGraphRepresentation adjacencyList = AdjacencyListsGraphRepresentation::from(*graph);
         auto isTrivial = [&](SymRef sym) {
-            if (adjacencyList.getIncomingEdgesFor(sym).size() != 1) { return false; }
-            auto out = adjacencyList.getOutgoingEdgesFor(sym);
-            if (out.size() != 1) { return false; }
-            return graph->getSources(out[0]).size() == 1;
+            auto const & incoming = adjacencyList.getIncomingEdgesFor(sym);
+            if (incoming.size() != 1) { return false; }
+            auto const & outgoing = adjacencyList.getOutgoingEdgesFor(sym);
+            if (outgoing.size() != 1) { return false; }
+            return graph->getSources(outgoing[0]).size() == 1 and graph->getSources(incoming[0]).size() == 1;
         };
         auto vertices = graph->getVertices();
         auto it = std::find_if(vertices.begin(), vertices.end(), isTrivial);
