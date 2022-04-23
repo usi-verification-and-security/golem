@@ -360,6 +360,9 @@ PTRef ChcDirectedHyperGraph::mergeLabels(std::vector<EId> const & chain) {
     vec<PTRef> labels;
     TermUtils utils(logic);
     TermUtils::substitutions_map subMap;
+    for (EId eid : chain) {
+        labels.push(getEdgeLabel(eid));
+    }
     for (auto incomingIt = chain.begin(), outgoingIt = chain.begin() + 1; outgoingIt != chain.end(); ++incomingIt, ++outgoingIt) {
         EId incoming = *incomingIt;
         EId outgoing = *outgoingIt; (void)outgoing;
@@ -367,14 +370,13 @@ PTRef ChcDirectedHyperGraph::mergeLabels(std::vector<EId> const & chain) {
         assert(getSources(outgoing).size() == 1 and getSources(outgoing).front() == common);
         // MB: Simply casting the target variables to current state from next state is only possible because this is trivial chain
         utils.insertVarPairsFromPredicates(getNextStateVersion(common), getStateVersion(common), subMap);
-        labels.push(getEdgeLabel(incoming));
     }
     PTRef combinedLabel = logic.mkAnd(std::move(labels));
     PTRef updatedLabel = utils.varSubstitute(combinedLabel, subMap);
 //    std::cout << logic.pp(updatedLabel) << '\n';
     PTRef simplifiedLabel = TrivialQuantifierElimination(logic).tryEliminateVarsExcept(utils.predicateArgsInOrder(
         getStateVersion(source)) + utils.predicateArgsInOrder(getNextStateVersion(target)), updatedLabel);
-//    std::cout << logic.pp(simplifiedLabel) << '\n';
+//    std::cout << logic.pp(simplifiedLabel) << std::endl;
     return simplifiedLabel;
 }
 
