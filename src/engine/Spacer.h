@@ -15,6 +15,8 @@ class Spacer : public Engine {
 public:
     Spacer(Logic & logic, Options const &): logic(logic) {}
 
+    Spacer(Logic & logic) : logic(logic) {}
+
     GraphVerificationResult solve(ChcDirectedHyperGraph & system) override;
 
     GraphVerificationResult solve(const ChcDirectedGraph & system) override;
