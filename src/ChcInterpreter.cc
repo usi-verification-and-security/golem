@@ -380,6 +380,10 @@ void ChcInterpreterContext::interpretCheckSat() {
         switch (res.getAnswer()) {
             case VerificationResult::SAFE: {
                 std::cout << "sat" << std::endl;
+                bool printWitness = opts.hasOption(Options::PRINT_WITNESS);
+                if (printWitness) {
+                    res.getValidityWitness().print(std::cout, logic);
+                }
                 if (opts.hasOption(Options::VALIDATE_RESULT)) {
                     SystemVerificationResult systemResult(std::move(res));
                     auto validationResult = Validator(logic).validate(*normalizedSystem.normalizedSystem, systemResult);
