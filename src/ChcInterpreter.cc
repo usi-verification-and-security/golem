@@ -320,10 +320,11 @@ void ChcInterpreterContext::interpretCheckSat() {
 //    ChcPrinter(logic).print(*system, std::cout);
     auto normalizedSystem = Normalizer(logic).normalize(*system);
     auto hypergraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
+    auto [newGraph, translator] = SimpleChainSummarizer(logic).transform(std::move(hypergraph));
+    hypergraph = std::move(newGraph);
     if (hypergraph->isNormalGraph()) {
         auto graph = hypergraph->toNormalGraph();
 //        graph->toDot(std::cout, logic);
-        GraphTransformations(logic).eliminateSimpleNodes(*graph);
         auto engine = getEngine();
         bool backwardAnalysis = opts.hasOption(Options::ANALYSIS_FLOW) && opts.getOption(Options::ANALYSIS_FLOW) == "backward";
         if (backwardAnalysis) {
@@ -348,6 +349,7 @@ void ChcInterpreterContext::interpretCheckSat() {
                 break;
         }
         if (validateWitness || printWitness) {
+            res = translator->translate(std::move(res));
             SystemVerificationResult systemResult (std::move(res), *graph);
             if (printWitness) {
                 systemResult.printWitness(std::cout, logic);
@@ -372,8 +374,6 @@ void ChcInterpreterContext::interpretCheckSat() {
         if (opts.getOption(Options::ENGINE) != "spacer") {
             throw std::logic_error("Only Spacer engine can solve nonlinear CHCs at the moment!");
         }
-        auto [newGraph, translator] = SimpleChainSummarizer(logic).transform(std::move(hypergraph));
-        hypergraph = std::move(newGraph);
         auto engine = std::unique_ptr<Engine>(new Spacer(logic, opts));
         auto engineRes = engine->solve(*hypergraph);
         auto res = translator->translate(engineRes);
