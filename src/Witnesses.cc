@@ -96,25 +96,6 @@ SystemInvalidityWitness graphToSystemInvalidityWitness(InvalidityWitness const &
     return sysWitness;
 }
 
-//std::vector<VId> InvalidityWitness::ErrorPath::getVertices() const {
-//    assert(not path.empty());
-//    std::vector<VId> vertices;
-//    vertices.push_back(path[0].from);
-//    for (auto const & edge : path) {
-//        assert(edge.from == vertices.back());
-//        vertices.push_back(edge.to);
-//    }
-//    return vertices;
-//}
-//
-//vec<PTRef> InvalidityWitness::ErrorPath::getEdgeFormulas() const {
-//    vec<PTRef> flas;
-//    for (auto const & edge : path) {
-//        flas.push(edge.fla.fla);
-//    }
-//    return flas;
-//}
-
 void SystemInvalidityWitness::print(std::ostream & out, Logic & logic) const {
     auto derivationSize = derivation.size();
     ChcPrinter printer(logic, out);

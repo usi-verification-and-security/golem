@@ -25,9 +25,7 @@ public:
     class ErrorPath {
         std::vector<EId> path;
     public:
-//        std::vector<VId> getVertices() const;
         std::vector<EId> getEdges() const { return path; }
-//        vec<PTRef> getEdgeFormulas() const;
         void setPath(std::vector<EId> npath) { this->path = std::move(npath); }
         bool isEmpty() const { return path.empty(); }
     };
