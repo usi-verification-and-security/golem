@@ -14,9 +14,6 @@ public:
 
     ChcDirectedGraph eliminateNodes(ChcDirectedGraph const & graph);
 
-    // Simple node is a node with max one incoming or outgoing edges
-    void eliminateSimpleNodes(ChcDirectedGraph & graph);
-
 private:
     void eliminateNonLoopingNodes(ChcDirectedGraph & graph);
 
