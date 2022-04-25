@@ -41,8 +41,6 @@ protected:
     PTRef instantiatePredicate(SymRef symbol, vec<PTRef> const & args) { return logic.mkUninterpFun(symbol, args); }
 
     void solveSystem(std::vector<ChClause> const & clauses, Engine & engine, VerificationResult expectedResult, bool validate) {
-        options.addOption(Options::COMPUTE_WITNESS, std::to_string(validate));
-
         for (auto const & clause : clauses) { system.addClause(clause); }
 
         auto normalizedSystem = Normalizer(logic).normalize(system);
@@ -294,5 +292,45 @@ TEST_F(TPATest, test_TPA_chain_regression) {
                 {UninterpretedPredicate{predS2Current}}}
         }};
     TPAEngine engine(logic, options);
+    solveSystem(clauses, engine, VerificationResult::SAFE, false);
+}
+
+TEST_F(TPATest, test_transformContractVertex) {
+    Options options;
+    options.addOption(Options::LOGIC, "QF_LIA");
+    options.addOption(Options::COMPUTE_WITNESS, "true");
+    options.addOption(Options::ENGINE, "tpa-split");
+    SymRef s1 = mkPredicateSymbol("s1", {intSort()});
+    SymRef s2 = mkPredicateSymbol("s2", {intSort()});
+    PTRef predS1Current = instantiatePredicate(s1, {x});
+    PTRef predS1Next = instantiatePredicate(s1, {xp});
+    PTRef predS2Current = instantiatePredicate(s2, {x});
+    PTRef predS2Next = instantiatePredicate(s2, {xp});
+    std::vector<ChClause> clauses{{ // x < 0 => S1(x)
+        ChcHead{UninterpretedPredicate{predS1Next}},
+        ChcBody{{logic.mkLt(xp, zero)}, {}}
+    },
+        { // x > 0 => S1(x)
+            ChcHead{UninterpretedPredicate{predS1Next}},
+            ChcBody{{logic.mkGt(xp, zero)}, {}}
+        },
+        { // S1(x) => S2(x)
+            ChcHead{UninterpretedPredicate{predS2Current}},
+            ChcBody{{logic.getTerm_true()}, {UninterpretedPredicate{predS1Current}}}
+        },
+        { // S2(x) and (x < 0 => x' = x - 1) and (x > 0 => x' = x + 1 => S2(x')
+            ChcHead{UninterpretedPredicate{predS2Next}},
+            ChcBody{{logic.mkAnd(
+                logic.mkImpl(logic.mkLt(x, zero), logic.mkEq(xp, logic.mkMinus(x, one))),
+                logic.mkImpl(logic.mkGt(x, zero), logic.mkEq(xp, logic.mkPlus(x, one)))
+                )},
+                {UninterpretedPredicate{predS2Current}}}
+        },
+        { // S2(x) & x = 0 => false
+            ChcHead{UninterpretedPredicate{logic.getTerm_false()}},
+            ChcBody{{logic.mkEq(x, zero)}, {UninterpretedPredicate{predS2Current}}}
+        }};
+    TPAEngine engine(logic, options);
+    // FIXME: Enable validation when TPA can compute witnesses for chains
     solveSystem(clauses, engine, VerificationResult::SAFE, false);
 }

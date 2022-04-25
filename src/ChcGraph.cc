@@ -7,6 +7,52 @@
 #include <iostream>
 #include <map>
 
+
+namespace{
+
+class DFS {
+    ChcDirectedGraph const & graph;
+    AdjacencyListsGraphRepresentation const & adjacencyRepresentation;
+    std::unordered_set<SymRef, SymRefHash> marked;
+
+    bool isMarked(SymRef sym) const { return marked.find(sym) != marked.end(); }
+    void mark(SymRef sym) { marked.insert(sym); }
+
+    template<typename TPreorderAction, typename TPostorderAction>
+    void runOnVertex(SymRef sym, TPreorderAction const & preorder, TPostorderAction const & postorder) {
+        if (isMarked(sym)) { return; }
+        mark(sym);
+        preorder(sym);
+        for (EId outEdge : adjacencyRepresentation.getOutgoingEdgesFor(sym)) {
+            runOnVertex(graph.getTarget(outEdge), preorder, postorder);
+        }
+        postorder(sym);
+    }
+public:
+    DFS(ChcDirectedGraph const & graph, AdjacencyListsGraphRepresentation const & adjacencyRepresentation) :
+        graph(graph),
+        adjacencyRepresentation(adjacencyRepresentation)
+    {}
+
+    template<typename TPreorderAction, typename TPostorderAction>
+    void run(TPreorderAction const & preorder, TPostorderAction const & postorder) && {
+        runOnVertex(graph.getEntry(), preorder, postorder);
+    }
+};
+}
+
+std::vector<SymRef> reversePostOrder(ChcDirectedGraph const & graph, AdjacencyListsGraphRepresentation const & adjacencyRepresentation) {
+    std::vector<SymRef> order = postOrder(graph, adjacencyRepresentation);
+    std::reverse(order.begin(), order.end());
+    return order;
+}
+
+std::vector<SymRef> postOrder(ChcDirectedGraph const & graph, AdjacencyListsGraphRepresentation const & adjacencyRepresentation) {
+    std::vector<SymRef> order;
+    DFS(graph, adjacencyRepresentation).run([](SymRef){}, [&order](SymRef v){ order.push_back(v); });
+    return order;
+}
+
 std::unique_ptr<ChcDirectedHyperGraph> ChcGraphBuilder::buildGraph(NormalizedChcSystem const & system) {
     std::vector<DirectedHyperEdge> edges;
 
@@ -281,48 +327,6 @@ std::optional<EId> getSelfLoopFor(SymRef sym, ChcDirectedGraph const & graph, Ad
     return it != outEdges.end() ? *it : std::optional<EId>{};
 }
 
-class DFS {
-    ChcDirectedGraph const & graph;
-    AdjacencyListsGraphRepresentation const & adjacencyRepresentation;
-    std::unordered_set<SymRef, SymRefHash> marked;
-
-    bool isMarked(SymRef sym) const { return marked.find(sym) != marked.end(); }
-    void mark(SymRef sym) { marked.insert(sym); }
-
-    template<typename TPreorderAction, typename TPostorderAction>
-    void runOnVertex(SymRef sym, TPreorderAction const & preorder, TPostorderAction const & postorder) {
-        if (isMarked(sym)) { return; }
-        mark(sym);
-        preorder(sym);
-        for (EId outEdge : adjacencyRepresentation.getOutgoingEdgesFor(sym)) {
-            runOnVertex(graph.getTarget(outEdge), preorder, postorder);
-        }
-        postorder(sym);
-    }
-public:
-    DFS(ChcDirectedGraph const & graph, AdjacencyListsGraphRepresentation const & adjacencyRepresentation) :
-        graph(graph),
-        adjacencyRepresentation(adjacencyRepresentation)
-    {}
-
-    template<typename TPreorderAction, typename TPostorderAction>
-    void run(TPreorderAction const & preorder, TPostorderAction const & postorder) && {
-            runOnVertex(graph.getEntry(), preorder, postorder);
-    }
-};
-
-std::vector<SymRef> reversePostOrder(ChcDirectedGraph const & graph, AdjacencyListsGraphRepresentation const & adjacencyRepresentation) {
-    std::vector<SymRef> order = postOrder(graph, adjacencyRepresentation);
-    std::reverse(order.begin(), order.end());
-    return order;
-}
-
-std::vector<SymRef> postOrder(ChcDirectedGraph const & graph, AdjacencyListsGraphRepresentation const & adjacencyRepresentation) {
-    std::vector<SymRef> order;
-    DFS(graph, adjacencyRepresentation).run([](SymRef){}, [&order](SymRef v){ order.push_back(v); });
-    return order;
-}
-
 DirectedHyperEdge ChcDirectedHyperGraph::contractTrivialChain(std::vector<EId> const & trivialChain) {
     assert(trivialChain.size() >= 2);
     auto summaryEdge = mergeEdges(trivialChain);
@@ -344,6 +348,7 @@ void ChcDirectedHyperGraph::deleteNode(SymRef sym) {
 }
 
 DirectedHyperEdge ChcDirectedHyperGraph::mergeEdges(std::vector<EId> const & chain) {
+    assert(getSources(chain.front()).size() == 1);
     auto source = getSources(chain.front()).front();
     auto target = getTarget(chain.back());
     PTRef mergedLabel = mergeLabels(chain);
@@ -397,4 +402,18 @@ std::vector<SymRef> ChcDirectedHyperGraph::getVertices() const {
     });
     vertices.insert(getEntry());
     return std::vector<SymRef>(vertices.begin(), vertices.end());
+}
+
+void ChcDirectedHyperGraph::contractVertex(SymRef sym) {
+    auto adjacencyList = AdjacencyListsGraphRepresentation::from(*this);
+    auto const & incomingEdges = adjacencyList.getIncomingEdgesFor(sym);
+    auto const & outgoingEdges = adjacencyList.getOutgoingEdgesFor(sym);
+    for (EId incomingId : incomingEdges) {
+        if (getSources(incomingId).size() > 1) { throw std::logic_error("Unable to contract vertex with hyperedge!"); }
+        for (EId outgoingId : outgoingEdges) {
+            if (getSources(outgoingId).size() > 1) { throw std::logic_error("Unable to contract vertex with hyperedge!"); }
+            mergeEdges({incomingId, outgoingId});
+        }
+    }
+    deleteNode(sym);
 }

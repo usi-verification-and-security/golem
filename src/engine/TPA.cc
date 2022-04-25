@@ -8,6 +8,7 @@
 #include "ModelBasedProjection.h"
 #include "QuantifierElimination.h"
 #include "graph/GraphTransformations.h"
+#include "transformers/NonLoopEliminator.h"
 
 #define TRACE_LEVEL 0
 
@@ -23,6 +24,25 @@ std::unique_ptr<TPABase> TPAEngine::mkSolver() {
     } else {
         throw std::logic_error("Unexpected situation");
     }
+}
+
+GraphVerificationResult TPAEngine::solve(ChcDirectedHyperGraph & graph) {
+    std::vector<std::unique_ptr<WitnessBackTranslator>> translators;
+    auto transformationResult = NonLoopEliminator{}.transform(std::make_unique<ChcDirectedHyperGraph>(graph));
+    translators.push_back(std::move(transformationResult.second));
+    // TODO: Add missing translations for joining multi-edges and removing non-reachable predicates;
+    //      Then remove the transformations inside solve for normal graph
+    auto transformedGraph = std::move(transformationResult.first);
+    if (transformedGraph->isNormalGraph()) {
+        auto normalGraph = transformedGraph->toNormalGraph();
+        auto res = solve(*normalGraph);
+        std::reverse(translators.begin(), translators.end());
+        for (auto const & translator : translators) {
+            res = translator->translate(res);
+        }
+        return res;
+    }
+    return GraphVerificationResult(VerificationResult::UNKNOWN);
 }
 
 GraphVerificationResult TPAEngine::solve(const ChcDirectedGraph & graph) {
@@ -50,7 +70,6 @@ GraphVerificationResult TPAEngine::solve(const ChcDirectedGraph & graph) {
                 assert(false);
                 throw std::logic_error("Unreachable!");
         }
-
     }
     else {
         auto simplifiedGraph = GraphTransformations(logic).eliminateNodes(graph);

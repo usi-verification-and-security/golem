@@ -239,6 +239,7 @@ public:
         return getEdge(eid).to;
     }
     DirectedHyperEdge contractTrivialChain(std::vector<EId> const & trivialChain);
+    void contractVertex(SymRef sym);
 
     template<typename TAction>
     void forEachEdge(TAction action) const {
@@ -281,5 +282,38 @@ std::optional<EId> getSelfLoopFor(SymRef, ChcDirectedGraph const & graph, Adjace
 
 std::vector<SymRef> reversePostOrder(ChcDirectedGraph const & graph, AdjacencyListsGraphRepresentation const & adjacencyRepresentation);
 std::vector<SymRef> postOrder(ChcDirectedGraph const & graph, AdjacencyListsGraphRepresentation const & adjacencyRepresentation);
+
+class ReverseDFS {
+    ChcDirectedHyperGraph const & graph;
+    AdjacencyListsGraphRepresentation const & adjacencyRepresentation;
+    std::unordered_set<SymRef, SymRefHash> marked;
+
+    bool isMarked(SymRef sym) const { return marked.find(sym) != marked.end(); }
+    void mark(SymRef sym) { marked.insert(sym); }
+
+    template<typename TPreorderAction, typename TPostorderAction>
+    void runOnVertex(SymRef sym, TPreorderAction const & preorder, TPostorderAction const & postorder) {
+        if (isMarked(sym)) { return; }
+        mark(sym);
+        preorder(sym);
+        for (EId inEdge : adjacencyRepresentation.getIncomingEdgesFor(sym)) {
+            auto const & sources = graph.getSources(inEdge);
+            for (auto source : sources) {
+                runOnVertex(source, preorder, postorder);
+            }
+        }
+        postorder(sym);
+    }
+public:
+    ReverseDFS(ChcDirectedHyperGraph const & graph, AdjacencyListsGraphRepresentation const & adjacencyRepresentation) :
+        graph(graph),
+        adjacencyRepresentation(adjacencyRepresentation)
+    {}
+
+    template<typename TPreorderAction, typename TPostorderAction>
+    void run(TPreorderAction const & preorder, TPostorderAction const & postorder) && {
+        runOnVertex(graph.getExit(), preorder, postorder);
+    }
+};
 
 #endif //OPENSMT_CHCGRAPH_H
