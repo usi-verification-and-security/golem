@@ -193,11 +193,6 @@ GraphVerificationResult Spacer::solve(ChcDirectedHyperGraph & system) {
     return SpacerContext(logic, system).run();
 }
 
-GraphVerificationResult Spacer::solve(const ChcDirectedGraph & system) {
-    auto hyperGraph = system.toHyperGraph();
-    return SpacerContext(logic, *hyperGraph).run();
-}
-
 GraphVerificationResult SpacerContext::run() {
     std::size_t currentBound = 1;
     while(true) {

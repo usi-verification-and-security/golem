@@ -134,13 +134,16 @@ class SystemVerificationResult {
     SystemInvalidityWitness invalidityWitness;
 
 public:
-    SystemVerificationResult(GraphVerificationResult && graphResult, ChcDirectedGraph & graph) {
+    SystemVerificationResult(GraphVerificationResult && graphResult, ChcDirectedHyperGraph & graph) {
         answer = graphResult.getAnswer();
         if (answer == VerificationResult::SAFE) {
             validityWitness = graphResult.getValidityWitness();
         }
         if (answer == VerificationResult::UNSAFE) {
-            invalidityWitness = graphToSystemInvalidityWitness(graphResult.getInvalidityWitness(), graph);
+            if (graph.isNormalGraph()) {
+                auto simpleGraph = graph.toNormalGraph();
+                invalidityWitness = graphToSystemInvalidityWitness(graphResult.getInvalidityWitness(), *simpleGraph);
+            }
         }
     }
 

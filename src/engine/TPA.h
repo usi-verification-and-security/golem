@@ -32,11 +32,15 @@ class TPAEngine : public Engine {
 public:
     TPAEngine(Logic & logic, Options options) : logic(logic), options(std::move(options)) {}
 
-    GraphVerificationResult solve(ChcDirectedHyperGraph &) override {
+    GraphVerificationResult solve(ChcDirectedHyperGraph & graph) override {
+        if (graph.isNormalGraph()) {
+            auto normalGraph = graph.toNormalGraph();
+            return solve(*normalGraph);
+        }
         throw std::logic_error("Not supported yet!");
     }
 
-    GraphVerificationResult solve(const ChcDirectedGraph & system) override;
+    GraphVerificationResult solve(const ChcDirectedGraph & system);
 
 private:
     std::unique_ptr<TPABase> mkSolver();

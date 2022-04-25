@@ -850,8 +850,12 @@ InvalidityWitness::ErrorPath LawiContext::buildGraphPathFromTreePath(const ArtPa
 // LAWI methods
 //
 
-GraphVerificationResult Lawi::solve(ChcDirectedHyperGraph &) {
-    throw std::logic_error("Not supported yet!");
+GraphVerificationResult Lawi::solve(ChcDirectedHyperGraph & graph) {
+    if (graph.isNormalGraph()) {
+        auto normalGraph = graph.toNormalGraph();
+        return solve(*normalGraph);
+    }
+    return GraphVerificationResult(VerificationResult::UNKNOWN);
 }
 
 

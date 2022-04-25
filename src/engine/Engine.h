@@ -17,11 +17,7 @@
 class Engine {
 public:
     virtual GraphVerificationResult solve(ChcDirectedHyperGraph &) {
-        throw std::logic_error("Not implemented yet!");
-    }
-
-    virtual GraphVerificationResult solve(ChcDirectedGraph const &) {
-        throw std::logic_error("Not implemented yet!");
+        return GraphVerificationResult(VerificationResult::UNKNOWN);
     }
 
     virtual ~Engine() = default;

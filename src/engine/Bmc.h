@@ -17,9 +17,15 @@ public:
     BMC(Logic& logic, Options const &) : logic(logic) {}
 
     virtual GraphVerificationResult
-    solve(ChcDirectedHyperGraph &) override { throw std::logic_error("Not supported yet!"); }
+    solve(ChcDirectedHyperGraph & graph) override {
+        if (graph.isNormalGraph()) {
+            auto normalGraph = graph.toNormalGraph();
+            return solve(*normalGraph);
+        }
+        return GraphVerificationResult(VerificationResult::UNKNOWN);
+    }
 
-    virtual GraphVerificationResult solve(ChcDirectedGraph const & system) override;
+    GraphVerificationResult solve(ChcDirectedGraph const & system);
 
 private:
     GraphVerificationResult solveTransitionSystem(TransitionSystem & system);

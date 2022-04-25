@@ -25,7 +25,7 @@ public:
 
     GraphVerificationResult solve(ChcDirectedHyperGraph & system) override;
 
-    GraphVerificationResult solve(const ChcDirectedGraph & system) override;
+    GraphVerificationResult solve(const ChcDirectedGraph & system);
 
 private:
 

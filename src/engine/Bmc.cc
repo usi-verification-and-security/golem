@@ -11,9 +11,7 @@ GraphVerificationResult BMC::solve(ChcDirectedGraph const & system) {
         auto ts = toTransitionSystem(system, logic);
         return solveTransitionSystem(*ts);
     }
-    else {
-        throw std::logic_error("BMC cannot handle general CHC systems yet!");
-    }
+    return GraphVerificationResult(VerificationResult::UNKNOWN);
 }
 
 GraphVerificationResult BMC::solveTransitionSystem(TransitionSystem & system) {

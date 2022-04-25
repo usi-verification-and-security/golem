@@ -33,13 +33,12 @@ TEST(TPA_test, test_TPA_simple_safe)
     );
     auto hypergraph = ChcGraphBuilder(logic).buildGraph(Normalizer(logic).normalize(system));
     ASSERT_TRUE(hypergraph->isNormalGraph());
-    auto graph = hypergraph->toNormalGraph();
     TPAEngine engine(logic, options);
-    auto res = engine.solve(*graph);
+    auto res = engine.solve(*hypergraph);
     auto answer = res.getAnswer();
     ASSERT_EQ(answer, VerificationResult::SAFE);
     auto witness = res.getValidityWitness();
-    SystemVerificationResult systemResult (std::move(res), *graph);
+    SystemVerificationResult systemResult (std::move(res), *hypergraph);
     auto validationResult = Validator(logic).validate(system, systemResult);
     ASSERT_EQ(validationResult, Validator::Result::VALIDATED);
 }
@@ -72,13 +71,12 @@ TEST(TPA_test, test_TPA_simple_unsafe)
     auto normalizedSystem = Normalizer(logic).normalize(system);
     auto hypergraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
     ASSERT_TRUE(hypergraph->isNormalGraph());
-    auto graph = hypergraph->toNormalGraph();
     TPAEngine engine(logic, options);
-    auto res = engine.solve(*graph);
+    auto res = engine.solve(*hypergraph);
     auto answer = res.getAnswer();
     ASSERT_EQ(answer, VerificationResult::UNSAFE);
 //    auto witness = res.getInvalidityWitness();
-    SystemVerificationResult systemResult (std::move(res), *graph);
+    SystemVerificationResult systemResult (std::move(res), *hypergraph);
     auto validationResult = Validator(logic).validate(*normalizedSystem.normalizedSystem, systemResult);
     ASSERT_EQ(validationResult, Validator::Result::VALIDATED);
 }
@@ -110,12 +108,11 @@ TEST(TPA_test, test_TPA_CEX_zero) {
     auto normalizedSystem = Normalizer(logic).normalize(system);
     auto hypergraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
     ASSERT_TRUE(hypergraph->isNormalGraph());
-    auto graph = hypergraph->toNormalGraph();
     TPAEngine engine(logic, options);
-    auto res = engine.solve(*graph);
+    auto res = engine.solve(*hypergraph);
     auto answer = res.getAnswer();
     ASSERT_EQ(answer, VerificationResult::UNSAFE);
-    SystemVerificationResult systemResult (std::move(res), *graph);
+    SystemVerificationResult systemResult (std::move(res), *hypergraph);
     auto validationResult = Validator(logic).validate(*normalizedSystem.normalizedSystem, systemResult);
     ASSERT_EQ(validationResult, Validator::Result::VALIDATED);
 }
@@ -147,12 +144,11 @@ TEST(TPA_test, test_TPA_CEX_one) {
     auto normalizedSystem = Normalizer(logic).normalize(system);
     auto hypergraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
     ASSERT_TRUE(hypergraph->isNormalGraph());
-    auto graph = hypergraph->toNormalGraph();
     TPAEngine engine(logic, options);
-    auto res = engine.solve(*graph);
+    auto res = engine.solve(*hypergraph);
     auto answer = res.getAnswer();
     ASSERT_EQ(answer, VerificationResult::UNSAFE);
-    SystemVerificationResult systemResult (std::move(res), *graph);
+    SystemVerificationResult systemResult (std::move(res), *hypergraph);
     auto validationResult = Validator(logic).validate(*normalizedSystem.normalizedSystem, systemResult);
     ASSERT_EQ(validationResult, Validator::Result::VALIDATED);
 }
@@ -184,12 +180,11 @@ TEST(TPA_test, test_TPA_CEX_six) {
     auto normalizedSystem = Normalizer(logic).normalize(system);
     auto hypergraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
     ASSERT_TRUE(hypergraph->isNormalGraph());
-    auto graph = hypergraph->toNormalGraph();
     TPAEngine engine(logic, options);
-    auto res = engine.solve(*graph);
+    auto res = engine.solve(*hypergraph);
     auto answer = res.getAnswer();
     ASSERT_EQ(answer, VerificationResult::UNSAFE);
-    SystemVerificationResult systemResult (std::move(res), *graph);
+    SystemVerificationResult systemResult (std::move(res), *hypergraph);
     auto validationResult = Validator(logic).validate(*normalizedSystem.normalizedSystem, systemResult);
     ASSERT_EQ(validationResult, Validator::Result::VALIDATED);
 }
@@ -234,11 +229,10 @@ TEST(TPA_test, test_TPA_chain_of_two_unsafe) {
     auto normalizedSystem = Normalizer(logic).normalize(system);
     auto hypergraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
     ASSERT_TRUE(hypergraph->isNormalGraph());
-    auto graph = hypergraph->toNormalGraph();
     TPAEngine engine(logic, options);
-    auto res = engine.solve(*graph);
+    auto res = engine.solve(*hypergraph);
     ASSERT_EQ(res.getAnswer(), VerificationResult::UNSAFE);
-    SystemVerificationResult systemResult (std::move(res), *graph);
+    SystemVerificationResult systemResult (std::move(res), *hypergraph);
     auto validationResult = Validator(logic).validate(*normalizedSystem.normalizedSystem, systemResult);
     ASSERT_EQ(validationResult, Validator::Result::VALIDATED);
 }

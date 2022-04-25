@@ -18,9 +18,6 @@ public:
     Spacer(Logic & logic) : logic(logic) {}
 
     GraphVerificationResult solve(ChcDirectedHyperGraph & system) override;
-
-    GraphVerificationResult solve(const ChcDirectedGraph & system) override;
-
 };
 
 

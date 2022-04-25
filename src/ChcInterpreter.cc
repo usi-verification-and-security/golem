@@ -8,7 +8,6 @@
 #include <engine/Bmc.h>
 #include <engine/Lawi.h>
 #include <engine/Spacer.h>
-#include <engine/ReverseWrapper.h>
 #include "ChcInterpreter.h"
 #include "ChcGraph.h"
 #include "graph/GraphTransformations.h"
@@ -322,95 +321,47 @@ void ChcInterpreterContext::interpretCheckSat() {
     auto hypergraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
     auto [newGraph, translator] = SimpleChainSummarizer(logic).transform(std::move(hypergraph));
     hypergraph = std::move(newGraph);
-    if (hypergraph->isNormalGraph()) {
-        auto graph = hypergraph->toNormalGraph();
-//        graph->toDot(std::cout, logic);
-        auto engine = getEngine();
-        bool backwardAnalysis = opts.hasOption(Options::ANALYSIS_FLOW) && opts.getOption(Options::ANALYSIS_FLOW) == "backward";
-        if (backwardAnalysis) {
-            engine = std::unique_ptr<Engine>(new ReverseWrapper(std::move(engine), logic));
+    bool validateWitness = opts.hasOption(Options::VALIDATE_RESULT);
+    assert(not validateWitness || opts.getOption(Options::VALIDATE_RESULT) == std::string("true"));
+    bool printWitness = opts.hasOption(Options::PRINT_WITNESS);
+    assert(not printWitness || opts.getOption(Options::PRINT_WITNESS) == std::string("true"));
+    auto engine = getEngine();
+    auto res = engine->solve(*hypergraph);
+    switch (res.getAnswer()) {
+        case VerificationResult::SAFE: {
+            std::cout << "sat" << std::endl;
+            break;
         }
-        auto res = engine->solve(*graph);
-        bool validateWitness = opts.hasOption(Options::VALIDATE_RESULT);
-        assert(not validateWitness || opts.getOption(Options::VALIDATE_RESULT) == std::string("true"));
-        bool printWitness = opts.hasOption(Options::PRINT_WITNESS);
-        assert(not printWitness || opts.getOption(Options::PRINT_WITNESS) == std::string("true"));
-        switch (res.getAnswer()) {
-            case VerificationResult::SAFE: {
-                std::cout << "sat" << std::endl;
-                break;
-            }
-            case VerificationResult::UNSAFE: {
-                std::cout << "unsat" << std::endl;
-                break;
-            }
-            case VerificationResult::UNKNOWN:
-                std::cout << "unknown" << std::endl;
-                break;
+        case VerificationResult::UNSAFE: {
+            std::cout << "unsat" << std::endl;
+            break;
         }
-        if (validateWitness || printWitness) {
-            res = translator->translate(std::move(res));
-            SystemVerificationResult systemResult (std::move(res), *graph);
-            if (printWitness) {
-                systemResult.printWitness(std::cout, logic);
-            }
-            if (validateWitness) {
-                auto validationResult = Validator(logic).validate(*normalizedSystem.normalizedSystem, systemResult);
-                switch (validationResult) {
-                    case Validator::Result::VALIDATED: {
-                        std::cout << "Internal witness validation successful!" << std::endl;
-                        break;
-                    }
-                    case Validator::Result::NOT_VALIDATED: {
-                        std::cout << "Internal witness validation failed!" << std::endl;
-                        break;
-                    }
-                    default:
-                        throw std::logic_error("Unexpected case in result validation!");
+        case VerificationResult::UNKNOWN:
+            std::cout << "unknown" << std::endl;
+            return;
+    }
+    if (validateWitness || printWitness) {
+        res = translator->translate(std::move(res));
+        SystemVerificationResult systemResult (std::move(res), *hypergraph);
+        if (printWitness) {
+            systemResult.printWitness(std::cout, logic);
+        }
+        if (validateWitness) {
+            auto validationResult = Validator(logic).validate(*normalizedSystem.normalizedSystem, systemResult);
+            switch (validationResult) {
+                case Validator::Result::VALIDATED: {
+                    std::cout << "Internal witness validation successful!" << std::endl;
+                    break;
                 }
-            }
-        }
-    } else {
-        if (opts.getOption(Options::ENGINE) != "spacer") {
-            throw std::logic_error("Only Spacer engine can solve nonlinear CHCs at the moment!");
-        }
-        auto engine = std::unique_ptr<Engine>(new Spacer(logic, opts));
-        auto engineRes = engine->solve(*hypergraph);
-        auto res = translator->translate(engineRes);
-        switch (res.getAnswer()) {
-            case VerificationResult::SAFE: {
-                std::cout << "sat" << std::endl;
-                bool printWitness = opts.hasOption(Options::PRINT_WITNESS);
-                if (printWitness) {
-                    res.getValidityWitness().print(std::cout, logic);
+                case Validator::Result::NOT_VALIDATED: {
+                    std::cout << "Internal witness validation failed!" << std::endl;
+                    break;
                 }
-                if (opts.hasOption(Options::VALIDATE_RESULT)) {
-                    SystemVerificationResult systemResult(std::move(res));
-                    auto validationResult = Validator(logic).validate(*normalizedSystem.normalizedSystem, systemResult);
-                    switch (validationResult) {
-                        case Validator::Result::VALIDATED: {
-                            std::cout << "Internal witness validation successful!" << std::endl;
-                            break;
-                        }
-                        case Validator::Result::NOT_VALIDATED: {
-                            std::cout << "Internal witness validation failed!" << std::endl;
-                            break;
-                        }
-                    }
-                }
-                break;
+                default:
+                    throw std::logic_error("Unexpected case in result validation!");
             }
-            case VerificationResult::UNSAFE: {
-                std::cout << "unsat" << std::endl;
-                break;
-            }
-            case VerificationResult::UNKNOWN:
-                std::cout << "unknown" << std::endl;
-                break;
         }
     }
-
-
 }
 
 void ChcInterpreterContext::reportError(std::string msg) {

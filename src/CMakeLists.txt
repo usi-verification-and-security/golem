@@ -37,7 +37,6 @@ target_sources(golem_lib
     PRIVATE engine/Bmc.cc
     PRIVATE engine/Lawi.cc
     PRIVATE engine/Spacer.cc
-    PRIVATE engine/ReverseWrapper.cc
     PRIVATE TransitionSystem.cc
     PRIVATE Options.cc
     PRIVATE TermUtils.cc
