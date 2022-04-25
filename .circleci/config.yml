@@ -107,6 +107,7 @@ jobs:
         macos:
             xcode: 12.4.0
         steps:
+            - run: echo "HOMEBREW_NO_AUTO_UPDATE=1" >> $BASH_ENV
             - run:
                 name: Packages
                 command: |
