@@ -9,6 +9,7 @@
 #include "QuantifierElimination.h"
 #include "graph/GraphTransformations.h"
 #include "transformers/NonLoopEliminator.h"
+#include "transformers/MultiEdgeMerger.h"
 
 #define TRACE_LEVEL 0
 
@@ -30,9 +31,12 @@ GraphVerificationResult TPAEngine::solve(ChcDirectedHyperGraph & graph) {
     std::vector<std::unique_ptr<WitnessBackTranslator>> translators;
     auto transformationResult = NonLoopEliminator{}.transform(std::make_unique<ChcDirectedHyperGraph>(graph));
     translators.push_back(std::move(transformationResult.second));
+    auto transformedGraph = std::move(transformationResult.first);
     // TODO: Add missing translations for joining multi-edges and removing non-reachable predicates;
     //      Then remove the transformations inside solve for normal graph
-    auto transformedGraph = std::move(transformationResult.first);
+    transformationResult = MultiEdgeMerger{}.transform(std::move(transformedGraph));
+    translators.push_back(std::move(transformationResult.second));
+    transformedGraph = std::move(transformationResult.first);
     if (transformedGraph->isNormalGraph()) {
         auto normalGraph = transformedGraph->toNormalGraph();
         auto res = solve(*normalGraph);

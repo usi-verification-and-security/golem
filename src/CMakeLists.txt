@@ -49,6 +49,7 @@ target_sources(golem_lib
     PRIVATE graph/GraphTransformations.cc
     PRIVATE transformers/SimpleChainSummarizer.cc
     PRIVATE transformers/NonLoopEliminator.cc
+    PRIVATE transformers/MultiEdgeMerger.cc
     )
 
 target_include_directories(golem_lib PUBLIC ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/src/include)

@@ -417,3 +417,27 @@ void ChcDirectedHyperGraph::contractVertex(SymRef sym) {
     }
     deleteNode(sym);
 }
+
+bool ChcDirectedHyperGraph::mergeMultiEdges() {
+    bool changed = false;
+    std::unordered_map<std::pair<SymRef, SymRef>, std::vector<EId>, EdgeHasher> buckets;
+    forEachEdge([&](auto const & edge) {
+        auto const & sources = edge.from;
+        if (sources.size() != 1) { return; } // TODO: enable also merging hyperedges
+        auto pair = std::make_pair(sources[0], edge.to);
+        buckets[pair].push_back(edge.id);
+    });
+    for (auto const & bucketEntry : buckets) {
+        auto const & bucket = bucketEntry.second;
+        if (bucket.size() < 2) { continue; }
+        vec<PTRef> labels;
+        labels.capacity(bucket.size());
+        for (auto index : bucket) {
+            labels.push(edges[index].fla.fla);
+        }
+        edges[bucket[0]].fla = InterpretedFla{logic.mkOr(std::move(labels))};
+        std::for_each(bucket.begin() + 1, bucket.end(), [this](EId eid) { edges.erase(eid); });
+        changed = true;
+    }
+    return changed;
+}

@@ -240,6 +240,8 @@ public:
     }
     DirectedHyperEdge contractTrivialChain(std::vector<EId> const & trivialChain);
     void contractVertex(SymRef sym);
+    // FIXME: Return more information about what happened
+    bool mergeMultiEdges();
 
     template<typename TAction>
     void forEachEdge(TAction action) const {

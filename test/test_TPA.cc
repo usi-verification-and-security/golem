@@ -332,5 +332,5 @@ TEST_F(TPATest, test_transformContractVertex) {
         }};
     TPAEngine engine(logic, options);
     // FIXME: Enable validation when TPA can compute witnesses for chains
-    solveSystem(clauses, engine, VerificationResult::SAFE, false);
+    solveSystem(clauses, engine, VerificationResult::SAFE, true);
 }
