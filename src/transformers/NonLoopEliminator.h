@@ -1,0 +1,14 @@
+
+//
+#ifndef GOLEM_NONLOOPELIMINATOR_H
+#define GOLEM_NONLOOPELIMINATOR_H
+
+
+
+class NonLoopEliminator {
+
+};
+
+
+
+#endif //GOLEM_NONLOOPELIMINATOR_H
