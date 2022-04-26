@@ -1654,7 +1654,7 @@ PTRef TPABase::getInductiveInvariant() const {
             return PTRef_Undef;
         }
         if (explanation.power > 10) {
-            std::cerr << "; k-inductive invariant computed, by k is too large to compute 1-inductive invariant"
+            std::cerr << "; k-inductive invariant computed, but k is too large to compute 1-inductive invariant"
                       << std::endl;
             return PTRef_Undef;
         }
