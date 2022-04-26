@@ -71,14 +71,10 @@ GraphVerificationResult TPAEngine::solve(const ChcDirectedGraph & graph) {
                 assert(false);
                 throw std::logic_error("Unreachable!");
         }
+    } else if (isTransitionSystemChain(graph)) {
+            return solveTransitionSystemChain(graph);
     }
-    else {
-        auto simplifiedGraph = GraphTransformations(logic).eliminateNodes(graph);
-        if (isTransitionSystemChain(simplifiedGraph)) {
-            return solveTransitionSystemChain(simplifiedGraph);
-        }
-        throw std::logic_error("TPA cannot handle general CHC systems yet!");
-    }
+    return GraphVerificationResult(VerificationResult::UNKNOWN);
 }
 
 class SolverWrapperSingleUse : public SolverWrapper {

@@ -34,9 +34,9 @@ public:
 
     GraphVerificationResult solve(ChcDirectedHyperGraph & graph) override;
 
+private:
     GraphVerificationResult solve(const ChcDirectedGraph & system);
 
-private:
     std::unique_ptr<TPABase> mkSolver();
     
     GraphVerificationResult solveTransitionSystemChain(ChcDirectedGraph const & graph);
