@@ -65,6 +65,10 @@ ValidityWitness NonLoopEliminator::BackTranslator::translate(ValidityWitness wit
         for (auto const & edge : entry.incoming) {
             if (edge.from.size() != 1) { throw std::logic_error("NonLoopEliminator should not have processed hyperEdges!"); }
             PTRef sourceDef = definitionFor(edge.from[0]);
+            assert(sourceDef != PTRef_Undef);
+            if (sourceDef == PTRef_Undef) { // Missing definition, cannot backtranslate
+                return ValidityWitness{};
+            }
             sourceDef = manager.baseFormulaToSource(sourceDef);
             incomingFormulas.push(logic.mkAnd(sourceDef, edge.fla.fla));
         }
@@ -72,6 +76,7 @@ ValidityWitness NonLoopEliminator::BackTranslator::translate(ValidityWitness wit
         for (auto const & edge : entry.outgoing) {
             if (edge.from.size() != 1) { throw std::logic_error("NonLoopEliminator should not have processed hyperEdges!"); }
             PTRef targetDef = definitionFor(edge.to);
+            assert(targetDef != PTRef_Undef);
             if (targetDef == PTRef_Undef) { // Missing definition, cannot backtranslate
                 return ValidityWitness{};
             }
