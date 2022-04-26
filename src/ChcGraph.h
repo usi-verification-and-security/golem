@@ -249,6 +249,9 @@ public:
             action(entry.second);
         }
     }
+
+    void deleteDeadEdges();
+
 private:
     EId newEdge(std::vector<SymRef> && from, SymRef to, InterpretedFla label) {
         EId eid = freshId();

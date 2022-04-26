@@ -441,3 +441,7 @@ bool ChcDirectedHyperGraph::mergeMultiEdges() {
     }
     return changed;
 }
+
+void ChcDirectedHyperGraph::deleteDeadEdges() {
+    deleteMatchingEdges([this](auto const & edge) { return edge.fla.fla == logic.getTerm_false(); });
+}
