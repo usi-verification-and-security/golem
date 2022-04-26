@@ -51,6 +51,7 @@ target_sources(golem_lib
     PRIVATE transformers/NonLoopEliminator.cc
     PRIVATE transformers/MultiEdgeMerger.cc
     PRIVATE transformers/DeadClauseRemoval.cc
+    PRIVATE transformers/TransformationPipeline.cc
     )
 
 target_include_directories(golem_lib PUBLIC ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/src/include)

@@ -8,8 +8,10 @@
 #include "ModelBasedProjection.h"
 #include "QuantifierElimination.h"
 #include "graph/GraphTransformations.h"
-#include "transformers/NonLoopEliminator.h"
+#include "transformers/DeadClauseRemoval.h"
 #include "transformers/MultiEdgeMerger.h"
+#include "transformers/NonLoopEliminator.h"
+#include "transformers/TransformationPipeline.h"
 
 #define TRACE_LEVEL 0
 
@@ -28,23 +30,18 @@ std::unique_ptr<TPABase> TPAEngine::mkSolver() {
 }
 
 GraphVerificationResult TPAEngine::solve(ChcDirectedHyperGraph & graph) {
-    std::vector<std::unique_ptr<WitnessBackTranslator>> translators;
-    auto transformationResult = NonLoopEliminator{}.transform(std::make_unique<ChcDirectedHyperGraph>(graph));
-    translators.push_back(std::move(transformationResult.second));
+    TransformationPipeline::pipeline_t stages;
+    stages.push_back(std::make_unique<NonLoopEliminator>());
+    stages.push_back(std::make_unique<DeadClauseRemoval>());
+    stages.push_back(std::make_unique<MultiEdgeMerger>());
+    TransformationPipeline pipeline(std::move(stages));
+    auto transformationResult = pipeline.transform(std::make_unique<ChcDirectedHyperGraph>(graph));
     auto transformedGraph = std::move(transformationResult.first);
-    // TODO: Add missing translations for joining multi-edges and removing non-reachable predicates;
-    //      Then remove the transformations inside solve for normal graph
-    transformationResult = MultiEdgeMerger{}.transform(std::move(transformedGraph));
-    translators.push_back(std::move(transformationResult.second));
-    transformedGraph = std::move(transformationResult.first);
+    auto translator = std::move(transformationResult.second);
     if (transformedGraph->isNormalGraph()) {
         auto normalGraph = transformedGraph->toNormalGraph();
         auto res = solve(*normalGraph);
-        std::reverse(translators.begin(), translators.end());
-        for (auto const & translator : translators) {
-            res = translator->translate(res);
-        }
-        return res;
+        return translator->translate(std::move(res));
     }
     return GraphVerificationResult(VerificationResult::UNKNOWN);
 }
