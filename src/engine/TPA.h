@@ -1,9 +1,11 @@
-//
-// Created by Martin Blicha on 01.06.21.
-//
+/*
+ * Copyright (c) 2021-2022, Martin Blicha <martin.blicha@gmail.com>
+ *
+ * SPDX-License-Identifier: MIT
+ */
 
-#ifndef OPENSMT_ACCELERATEDBMC_H
-#define OPENSMT_ACCELERATEDBMC_H
+#ifndef GOLEM_TPA_H
+#define GOLEM_TPA_H
 
 #include "Engine.h"
 
@@ -192,6 +194,8 @@ protected:
     QueryResult reachabilityExactZeroStep(PTRef from, PTRef to);
 
     PTRef computeIdentity() const;
+
+    void resetExplanation();
 };
 
 class TPASplit : public TPABase {
@@ -263,4 +267,4 @@ private:
 };
 
 
-#endif //OPENSMT_ACCELERATEDBMC_H
+#endif //GOLEM_TPA_H

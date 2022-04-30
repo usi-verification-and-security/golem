@@ -1,6 +1,8 @@
-//
-// Created by Martin Blicha on 01.06.21.
-//
+/*
+ * Copyright (c) 2021-2022, Martin Blicha <martin.blicha@gmail.com>
+ *
+ * SPDX-License-Identifier: MIT
+ */
 
 #include "TPA.h"
 #include "TransformationUtils.h"
@@ -320,18 +322,23 @@ PTRef TPABase::keepOnlyVars(PTRef fla, const vec<PTRef> & vars, Model & model) {
     }
 }
 
+void TPABase::resetExplanation() {
+    explanation.invariantType = SafetyExplanation::TransitionInvariantType::NONE;
+    explanation.power = 0;
+}
+
 void TPABase::resetInitialStates(PTRef fla) {
     assert(isPureStateFormula(fla));
     this->init = fla;
     queryCache.clear();
-    explanation.invariantType = SafetyExplanation::TransitionInvariantType::NONE;
+    resetExplanation();
 }
 
 void TPABase::updateQueryStates(PTRef fla) {
     assert(isPureStateFormula(fla));
     this->query = logic.mkAnd(fla, this->query);
     queryCache.clear();
-    explanation.invariantType = SafetyExplanation::TransitionInvariantType::NONE;
+    resetExplanation();
 }
 
 PTRef TPASplit::getExactPower(unsigned short power) const {
@@ -341,7 +348,7 @@ PTRef TPASplit::getExactPower(unsigned short power) const {
 
 void TPASplit::storeExactPower(unsigned short power, PTRef tr) {
 //    std::cout << "Strengthening exact reachability on level " << power << " with " << logic.printTerm(tr) << std::endl;
-    if (power >= 2 and not isPureTransitionFormula(tr)) {
+    if (power != 0 and not isPureTransitionFormula(tr)) {
         throw std::logic_error("Transition relation has some auxiliary variables!");
     }
     exactPowers.growTo(power + 1, PTRef_Undef);
@@ -388,8 +395,7 @@ VerificationResult TPABase::solveTransitionSystem(TransitionSystem & system) {
 }
 
 VerificationResult TPABase::solve() {
-    queryCache.emplace_back();
-    unsigned short power = 1;
+    unsigned short power = 0;
     while (true) {
         auto res = checkPower(power);
         switch (res) {
@@ -404,38 +410,40 @@ VerificationResult TPABase::solve() {
 
 
 VerificationResult TPASplit::checkPower(unsigned short power) {
-    assert(power > 0);
     TRACE(1, "Checking power " << power)
-    // First compute the <2^n transition relation using information from previous level;
+    queryCache.emplace_back();
     auto res = reachabilityQueryLessThan(init, query, power);
     if (isReachable(res)) {
         reachedStates = ReachedStates{res.refinedTarget, res.steps};
         return VerificationResult::UNSAFE;
     } else if (isUnreachable(res)) {
-        if (verbose() > 0) {
-            std::cout << "; System is safe up to <2^" << power - 1 << " steps" << std::endl;
+        if (explanation.invariantType != SafetyExplanation::TransitionInvariantType::NONE) {
+            // MB: Transition invariant found in the previous iteration from Equals relation
+            // However, at that point we were not sure yet if it is also safe, now we are.
+            assert(explanation.relationType == TPAType::EQUALS);
+            assert(explanation.power == power);
+            return VerificationResult::SAFE;
         }
-        // Check if we have not reached fixed point.
-        if (power >= 3) {
-            auto fixedPointReached = checkLessThanFixedPoint(power);
-            if (fixedPointReached) {
-                return VerificationResult::SAFE;
-            }
-            fixedPointReached = checkExactFixedPoint(power - 1);
-            if (fixedPointReached) {
-                return VerificationResult::SAFE;
-            }
+        if (verbose() > 0) {
+            std::cout << "; System is safe up to <2^" << power + 1 << " steps" << std::endl;
+        }
+        bool fixedPointReached = checkLessThanFixedPoint(power);
+        if (fixedPointReached) {
+            return VerificationResult::SAFE;
         }
     }
-    queryCache.emplace_back();
-    // Second compute the exact power using the concatenation of previous one
     res = reachabilityQueryExact(init, query, power);
     if (isReachable(res)) {
         reachedStates = ReachedStates{res.refinedTarget, res.steps};
         return VerificationResult::UNSAFE;
     } else if (isUnreachable(res)) {
         if (verbose() > 0) {
-            std::cout << "; System is safe up to 2^" << power - 1 << " steps" << std::endl;
+            std::cout << "; System is safe up to 2^" << power + 1 << " steps" << std::endl;
+        }
+        bool fixedPointReached = checkExactFixedPoint(power);
+        if (fixedPointReached and explanation.power <= power) {
+            assert(explanation.invariantType != SafetyExplanation::TransitionInvariantType::NONE);
+            return VerificationResult::SAFE;
         }
         return VerificationResult::UNKNOWN;
     } else {
@@ -494,17 +502,13 @@ TPABase::QueryResult TPABase::reachabilityExactZeroStep(PTRef from, PTRef to) {
 }
 
 /*
- * Check if 'to' is reachable from 'from' (these are state formulas) in exactly 2^n steps (n is 'power').
- * We do this using the (n-1)th abstraction of the transition relation and check 2-step reachability in this abstraction.
- * If 'to' is unreachable, we interpolate over the 2 step transition to obtain 1-step transition of level n.
+ * Check if 'to' is reachable from 'from' (these are state formulas) in exactly 2^{n+1} steps (n is 'power').
+ * We do this using the n-th abstraction of the transition relation and check 2-step reachability in this abstraction.
+ * If 'to' is unreachable, we interpolate over the 2 step transition to obtain 1-step transition of level n+1.
  */
 TPASplit::QueryResult TPASplit::reachabilityQueryExact(PTRef from, PTRef to, unsigned short power) {
 //        std::cout << "Checking exact reachability on level " << power << " from " << logic.printTerm(from) << " to " << logic.printTerm(to) << std::endl;
     TRACE(2,"Checking exact reachability on level " << power << " from " << from.x << " to " << to.x)
-    assert(power >= 1);
-    if (power == 1) { // Basic check with real transition relation
-        return reachabilityExactOneStep(from, to);
-    }
     assert(queryCache.size() > power);
     auto it = queryCache[power].find({from, to});
     if (it != queryCache[power].end()) {
@@ -516,17 +520,17 @@ TPASplit::QueryResult TPASplit::reachabilityQueryExact(PTRef from, PTRef to, uns
     unsigned counter = 0;
     while(true) {
         TRACE(3, "Exact: Iteration " << ++counter << " on level " << power)
-        auto solver = getExactReachabilitySolver(power);
+        auto solver = getExactReachabilitySolver(power + 1); // Solver at n+1 contains reachability in two steps of ATr^{=n}
         assert(solver);
         auto res = solver->checkConsistent(logic.mkAnd(from, goal));
         switch (res) {
             case ReachabilityResult::REACHABLE:
             {
                 TRACE(3, "Top level query was reachable")
-                PTRef previousTransition = getExactPower(power - 1);
+                PTRef previousTransition = getExactPower(power);
                 PTRef translatedPreviousTransition = getNextVersion(previousTransition);
                 auto model = solver->lastQueryModel();
-                if (power == 2) { // Base case, the 2 steps of the exact transition relation have been used
+                if (power == 0) { // Base case, the 2 steps of the exact transition relation have been used
                     result.result = ReachabilityResult::REACHABLE;
                     result.refinedTarget = refineTwoStepTarget(from, logic.mkAnd(previousTransition, translatedPreviousTransition), goal, *model);
                     result.steps = 2;
@@ -541,27 +545,28 @@ TPASplit::QueryResult TPASplit::reachabilityQueryExact(PTRef from, PTRef to, uns
 //              std::cout << "Midpoint single point: " << logic.printTerm(modelMidpoint) << '\n';
                 TRACE(3,"Midpoint from MBP: " << nextState.x)
                 // check the reachability using lower level abstraction
+                assert(power > 0);
                 auto subQueryRes = reachabilityQueryExact(from, nextState, power - 1);
                 if (isUnreachable(subQueryRes)) {
                     TRACE(3, "Exact: First half was unreachable, repeating...")
-                    assert(getExactPower(power - 1) != previousTransition);
+                    assert(getExactPower(power) != previousTransition);
                     continue; // We need to re-check this level with refined abstraction
                 } else {
                     assert(isReachable(subQueryRes));
                     // TODO: check that this is really a subset of the original midpoint
                     TRACE(3, "Exact: First half was reachable")
                     nextState = extractReachableTarget(subQueryRes);
-                    TRACE(3, "Midpoint from MBP - part 2: " << nextState.x)
                     if (nextState == PTRef_Undef) {
                         throw std::logic_error("Refined reachable target not set in subquery!");
                     }
+                    TRACE(3, "Midpoint from MBP - part 2: " << nextState.x)
                 }
                 unsigned stepsToMidpoint = extractStepsTaken(subQueryRes);
                 // here the first half of the found path is feasible, check the second half
                 subQueryRes = reachabilityQueryExact(nextState, to, power - 1);
                 if (isUnreachable(subQueryRes)) {
                     TRACE(3, "Exact: Second half was unreachable, repeating...")
-                    assert(getExactPower(power - 1) != previousTransition);
+                    assert(getExactPower(power) != previousTransition);
                     continue; // We need to re-check this level with refined abstraction
                 }
                 assert(isReachable(subQueryRes));
@@ -583,7 +588,7 @@ TPASplit::QueryResult TPASplit::reachabilityQueryExact(PTRef from, PTRef to, uns
                 TRACE(3, "Learning " << itp.x)
                 TRACE(4, "Learning " << logic.pp(itp))
                 assert(itp != logic.getTerm_true());
-                storeExactPower(power, itp);
+                storeExactPower(power + 1, itp);
                 result.result = ReachabilityResult::UNREACHABLE;
                 return result;
             }
@@ -592,15 +597,14 @@ TPASplit::QueryResult TPASplit::reachabilityQueryExact(PTRef from, PTRef to, uns
 }
 
 /*
- * Check if 'to' is reachable from 'from' (these are state formulas) in less than 2^n steps (n is 'power').
- * We do this using the (n-1)th abstractions of the transition relation (both exact and less-than).
- * Reachability in <2^n steps can happen if it is reachable in <2^(n-1) steps or if it is reachable in 2^(n-1) + <2^(n-1) steps.
- * If 'to' is unreachable, we interpolate over the 2 step transition to obtain 1-step transition of level n.
+ * Check if 'to' is reachable from 'from' (these are state formulas) in less than 2^{n+1} steps (n is 'power').
+ * We do this using the n-th abstractions of the transition relation (both exact and less-than).
+ * Reachability in <2^{n+1} steps can happen if it is reachable in <2^n steps or if it is reachable in 2^n + <2^n steps.
+ * If 'to' is unreachable, we interpolate over the 2 step transition to obtain 1-step transition of level n+1.
  */
 TPASplit::QueryResult TPASplit::reachabilityQueryLessThan(PTRef from, PTRef to, unsigned short power) {
 //        std::cout << "Checking less-than reachability on level " << power << " from " << logic.printTerm(from) << " to " << logic.printTerm(to) << std::endl;
     TRACE(2,"Checking less-than reachability on level " << power << " from " << from.x << " to " << to.x)
-    assert(power >= 1);
     if (from == to) {
         QueryResult result;
         result.result = ReachabilityResult::REACHABLE;
@@ -608,11 +612,7 @@ TPASplit::QueryResult TPASplit::reachabilityQueryLessThan(PTRef from, PTRef to, 
         result.steps = 0;
         return result;
     }
-    if (power == 1) {
-        return reachabilityExactZeroStep(from, to);
-    }
     QueryResult result;
-    assert(power >= 2);
     PTRef goal = getNextVersion(to, 2);
     unsigned counter = 0;
     while(true) {
@@ -625,9 +625,9 @@ TPASplit::QueryResult TPASplit::reachabilityQueryLessThan(PTRef from, PTRef to, 
         config.setSimplifyInterpolant(4);
         config.setLRAInterpolationAlgorithm(itp_lra_alg_decomposing_strong);
         MainSolver solver(logic, config, "Less-than reachability checker");
-        // Tr^{<n-1} or (Tr^{<n-1} concat Tr^{n-1})
-        PTRef previousLessThanTransition = getLessThanPower(power - 1);
-        PTRef translatedExactTransition = getNextVersion(getExactPower(power - 1));
+        // Tr^{<n} or (Tr^{<n} concat Tr^{=n})
+        PTRef previousLessThanTransition = getLessThanPower(power);
+        PTRef translatedExactTransition = getNextVersion(getExactPower(power));
         PTRef currentToNextNextPreviousLessThanTransition = shiftOnlyNextVars(previousLessThanTransition);
         PTRef twoStepTransition = logic.mkOr(
             currentToNextNextPreviousLessThanTransition,
@@ -654,7 +654,7 @@ TPASplit::QueryResult TPASplit::reachabilityQueryLessThan(PTRef from, PTRef to, 
             TRACE(3, "Learning " << itp.x)
             TRACE(4, "Learning " << logic.pp(itp))
             assert(itp != logic.getTerm_true());
-            storeLessThanPower(power, itp);
+            storeLessThanPower(power + 1, itp);
             result.result = ReachabilityResult::UNREACHABLE;
             return result;
         } else if (res == s_True) {
@@ -663,10 +663,9 @@ TPASplit::QueryResult TPASplit::reachabilityQueryLessThan(PTRef from, PTRef to, 
             if (model->evaluate(currentToNextNextPreviousLessThanTransition) == logic.getTerm_true()) {
                 // First disjunct was responsible for the positive answer, check it
                 TRACE(3, "First disjunct was satisfiable")
-                if (power == 2) { // This means the goal is reachable in 0 steps, no need to re-check anythin
-                    // TODO: double-check this
+                if (power == 0) { // This means the goal is reachable in 0 steps, no need to re-check anythin
                     result.result = ReachabilityResult::REACHABLE;
-                    result.refinedTarget = logic.mkAnd(from, to); // TODO: check if this is needed
+                    result.refinedTarget = logic.mkAnd(from, to);
                     result.steps = 0;
                     TRACE(3, "Less-than: Truly reachable states are " << result.refinedTarget.x)
                     TRACE(4, "Less-than: Truly reachable states are " << logic.pp(result.refinedTarget))
@@ -679,15 +678,16 @@ TPASplit::QueryResult TPASplit::reachabilityQueryLessThan(PTRef from, PTRef to, 
                 } else {
                     TRACE(3, "Less-than: First half was unreachable, repeating...")
                     assert(isUnreachable(subQueryRes));
-                    assert(getLessThanPower(power - 1) != previousLessThanTransition);
+                    assert(getLessThanPower(power) != previousLessThanTransition);
                     continue;
                 }
             } else {
                 // Second disjunct was responsible for the positive answer
                 assert(model->evaluate(logic.mkAnd(previousLessThanTransition, translatedExactTransition)) == logic.getTerm_true());
                 TRACE(3, "Second disjunct was satisfiable")
-                if (power == 2) { // Since it was not reachable in 0 steps (checked above), here it means it was reachable in exactly 1 step
+                if (power == 0) { //  Reachable in exactly 1 step
                     result.result = ReachabilityResult::REACHABLE;
+                    // TODO: simplify to refine only one step of exact relation (which is just Tr)
                     result.refinedTarget = refineTwoStepTarget(from, logic.mkAnd(previousLessThanTransition, translatedExactTransition), goal, *model);
                     result.steps = 1;
                     TRACE(3, "Less-than: Truly reachable states are " << result.refinedTarget.x)
@@ -700,7 +700,7 @@ TPASplit::QueryResult TPASplit::reachabilityQueryLessThan(PTRef from, PTRef to, 
                 auto subQueryRes = reachabilityQueryLessThan(from, nextState, power - 1);
                 if (isUnreachable(subQueryRes)) {
                     TRACE(3, "Less-than: First half was unreachable, repeating...")
-                    assert(getLessThanPower(power - 1) != previousLessThanTransition);
+                    assert(getLessThanPower(power) != previousLessThanTransition);
                     continue; // We need to re-check this level with refined abstraction
                 } else {
                     assert(isReachable(subQueryRes));
@@ -714,11 +714,11 @@ TPASplit::QueryResult TPASplit::reachabilityQueryLessThan(PTRef from, PTRef to, 
                 }
                 unsigned stepsToMidpoint = extractStepsTaken(subQueryRes);
                 // here the first half of the found path is feasible, check the second half
-                PTRef previousExactTransition = getExactPower(power - 1);
+                PTRef previousExactTransition = getExactPower(power);
                 (void)previousExactTransition;
                 subQueryRes = reachabilityQueryExact(nextState, to, power - 1);
                 if (isUnreachable(subQueryRes)) {
-                    assert(getExactPower(power - 1) != previousExactTransition);
+                    assert(getExactPower(power) != previousExactTransition);
                     TRACE(3, "Less-than: Second half was unreachable, repeating...")
                     continue; // We need to re-check this level with refined abstraction
                 }
@@ -868,10 +868,8 @@ PTRef TPABase::refineTwoStepTarget(PTRef start, PTRef twoSteptransition, PTRef g
 void TPASplit::resetPowers() {
     this->exactPowers.clear();
     this->lessThanPowers.clear();
-    storeExactPower(0, identity);
-    storeExactPower(1, transition);
-    lessThanPowers.push(PTRef_Undef); // <0 does not make sense
-    lessThanPowers.push(exactPowers[0]); // <1 is just exact 0
+    storeExactPower(0, transition); // ATr^{=0} = Tr
+    lessThanPowers.push(identity);  // Atr^{<0} = Id
 }
 
 bool TPASplit::verifyPower(unsigned short power, TPAType relationType) const {
@@ -883,7 +881,7 @@ bool TPASplit::verifyPower(unsigned short power, TPAType relationType) const {
 }
 
 bool TPASplit::verifyLessThanPower(unsigned short power) const {
-    assert(power >= 2);
+    assert(power > 0);
     SMTConfig config;
     MainSolver solver(logic, config, "");
     PTRef current = getLessThanPower(power);
@@ -901,8 +899,8 @@ bool TPASplit::verifyLessThanPower(unsigned short power) const {
 }
 
 bool TPASplit::verifyExactPower(unsigned short power) const {
-    assert(power >= 2);
-    if (power > 2) {
+    assert(power >= 1);
+    if (power > 1) {
         bool previousRes = verifyExactPower(power - 1);
         if (not previousRes) {
             return false;
@@ -923,9 +921,8 @@ bool TPASplit::verifyExactPower(unsigned short power) const {
 
 
 bool TPABase::checkLessThanFixedPoint(unsigned short power) {
-    assert(power >= 3);
-    assert(verifyPower(power, TPAType::LESS_THAN));
-    for (unsigned short i = 3; i <= power; ++i) {
+    assert(verifyPower(power + 1, TPAType::LESS_THAN));
+    for (unsigned short i = 1; i <= power + 1; ++i) {
         PTRef currentLevelTransition = getPower(i, TPAType::LESS_THAN);
         // first check if it is fixed point with respect to initial state
         SMTConfig config;
@@ -985,9 +982,8 @@ bool TPABase::checkLessThanFixedPoint(unsigned short power) {
 }
 
 bool TPASplit::checkExactFixedPoint(unsigned short power) {
-    assert(power >= 2);
-    assert(verifyExactPower(power));
-    for (unsigned short i = 2; i <= power; ++i) {
+    assert(verifyExactPower(power + 1));
+    for (unsigned short i = 1; i <= power + 1; ++i) {
         PTRef currentLevelTransition = getExactPower(i);
         PTRef currentTwoStep = logic.mkAnd(currentLevelTransition, getNextVersion(currentLevelTransition));
         PTRef shifted = shiftOnlyNextVars(currentLevelTransition);
@@ -1134,7 +1130,7 @@ PTRef TPABasic::getLevelTransition(unsigned short power) const {
 
 void TPABasic::storeLevelTransition(unsigned short power, PTRef tr) {
     //    std::cout << "Strengthening exact reachability on level " << power << " with " << logic.printTerm(tr) << std::endl;
-    if (power >= 2 and not isPureTransitionFormula(tr)) {
+    if (power != 0 and not isPureTransitionFormula(tr)) {
         throw std::logic_error("Transition relation has some auxiliary variables!");
     }
     transitionHierarchy.growTo(power + 1, PTRef_Undef);
@@ -1159,7 +1155,6 @@ SolverWrapper* TPABasic::getReachabilitySolver(unsigned short power) const {
 }
 
 VerificationResult TPABasic::checkPower(unsigned short power) {
-    assert(power > 0);
     TRACE(1, "Checking power " << power)
     queryCache.emplace_back();
     auto res = reachabilityQuery(init, query, power);
@@ -1168,33 +1163,25 @@ VerificationResult TPABasic::checkPower(unsigned short power) {
         return VerificationResult::UNSAFE;
     } else if (isUnreachable(res)) {
         if (verbose() > 0) {
-            std::cout << "; System is safe up to <=2^" << power - 1 << " steps" << std::endl;
+            std::cout << "; System is safe up to <=2^" << power + 1 << " steps" << std::endl;
         }
         // Check if we have not reached fixed point.
-        if (power >= 3) {
-            bool fixedPointReached = checkLessThanFixedPoint(power);
-            if (fixedPointReached) {
-                return VerificationResult::SAFE;
-            }
+        bool fixedPointReached = checkLessThanFixedPoint(power);
+        if (fixedPointReached) {
+            return VerificationResult::SAFE;
         }
     }
     return VerificationResult::UNKNOWN;
 }
 
 /*
- * Check if 'to' is reachable from 'from' (these are state formulas) in  <=2^n steps (n is 'power').
- * We do this using the (n-1)th abstraction of the transition relation and check 2-step reachability in this abstraction.
- * If 'to' is unreachable, we interpolate over the 2 step transition to obtain 1-step transition of level n.
+ * Check if 'to' is reachable from 'from' (these are state formulas) in  <=2^{n+1} steps (n is 'power').
+ * We do this using the n-th abstraction of the transition relation and check 2-step reachability in this abstraction.
+ * If 'to' is unreachable, we interpolate over the 2 step transition to obtain 1-step transition of level n+1.
  */
 TPABasic::QueryResult TPABasic::reachabilityQuery(PTRef from, PTRef to, unsigned short power) {
     //        std::cout << "Checking LEQ reachability on level " << power << " from " << logic.printTerm(from) << " to " << logic.printTerm(to) << std::endl;
     TRACE(2,"Checking LEQ reachability on level " << power << " from " << from.x << " to " << to.x)
-    if (power == 0) { // Basic check with real transition relation
-        auto res = reachabilityExactZeroStep(from, to);
-        if (res.result == ReachabilityResult::REACHABLE) { return res; }
-        res = reachabilityExactOneStep(from, to);
-        return res;
-    }
     assert(queryCache.size() > power);
     auto it = queryCache[power].find({from, to});
     if (it != queryCache[power].end()) {
@@ -1206,17 +1193,17 @@ TPABasic::QueryResult TPABasic::reachabilityQuery(PTRef from, PTRef to, unsigned
     unsigned counter = 0;
     while(true) {
         TRACE(3, "Exact: Iteration " << ++counter << " on level " << power)
-        auto solver = getReachabilitySolver(power);
+        auto solver = getReachabilitySolver(power + 1);
         assert(solver);
         auto res = solver->checkConsistent(logic.mkAnd(from, goal));
         switch (res) {
             case ReachabilityResult::REACHABLE:
             {
                 TRACE(3, "Top level query was reachable")
-                PTRef previousTransition = getLevelTransition(power - 1);
+                PTRef previousTransition = getLevelTransition(power);
                 PTRef translatedPreviousTransition = getNextVersion(previousTransition);
                 auto model = solver->lastQueryModel();
-                if (power == 1) { // Base case, <=2 steps of the exact transition relation have been used
+                if (power == 0) { // Base case, <=2 steps of the exact transition relation have been used
                     result.result = ReachabilityResult::REACHABLE;
                     bool firstStepTaken = model->evaluate(identity) == logic.getTerm_false();
                     bool secondStepTaken = model->evaluate(getNextVersion(identity)) == logic.getTerm_false();
@@ -1235,11 +1222,12 @@ TPABasic::QueryResult TPABasic::reachabilityQuery(PTRef from, PTRef to, unsigned
                 PTRef nextState = extractMidPoint(from, previousTransition, translatedPreviousTransition, goal, *model);
                 //              std::cout << "Midpoint single point: " << logic.printTerm(modelMidpoint) << '\n';
                 TRACE(3,"Midpoint from MBP: " << nextState.x)
+                assert(power != 0);
                 // check the reachability using lower level abstraction
                 auto subQueryRes = reachabilityQuery(from, nextState, power - 1);
                 if (isUnreachable(subQueryRes)) {
                     TRACE(3, "Exact: First half was unreachable, repeating...")
-                    assert(getLevelTransition(power - 1) != previousTransition);
+                    assert(getLevelTransition(power) != previousTransition);
                     continue; // We need to re-check this level with refined abstraction
                 } else {
                     assert(isReachable(subQueryRes));
@@ -1255,7 +1243,7 @@ TPABasic::QueryResult TPABasic::reachabilityQuery(PTRef from, PTRef to, unsigned
                 subQueryRes = reachabilityQuery(nextState, to, power - 1);
                 if (isUnreachable(subQueryRes)) {
                     TRACE(3, "Exact: Second half was unreachable, repeating...")
-                    assert(getLevelTransition(power - 1) != previousTransition);
+                    assert(getLevelTransition(power) != previousTransition);
                     continue; // We need to re-check this level with refined abstraction
                 }
                 assert(isReachable(subQueryRes));
@@ -1277,7 +1265,7 @@ TPABasic::QueryResult TPABasic::reachabilityQuery(PTRef from, PTRef to, unsigned
                 TRACE(3, "Learning " << itp.x)
                 TRACE(4, "Learning " << logic.pp(itp))
                 assert(itp != logic.getTerm_true());
-                storeLevelTransition(power, itp);
+                storeLevelTransition(power + 1, itp);
                 result.result = ReachabilityResult::UNREACHABLE;
                 return result;
             }
@@ -1297,7 +1285,7 @@ bool TPABasic::verifyPower(unsigned short power, TPAType relationType) const {
 }
 
 bool TPABasic::verifyPower(unsigned short level) const {
-    assert(level >= 2);
+    assert(level > 0);
     SMTConfig config;
     MainSolver solver(logic, config, "");
     PTRef current = getLevelTransition(level);
@@ -1667,8 +1655,8 @@ PTRef TPASplit::inductiveInvariantFromEqualsTransitionInvariant() const {
     unsigned short power = explanation.power;
     assert(verifyLessThanPower(power));
     assert(verifyExactPower(power));
-//    std::cout << "Less-than transition: " << logic.printTerm(getLessThanPower(i)) << '\n';
-//    std::cout << "Exact transition: " << logic.printTerm(getExactPower(i)) << std::endl;
+//    std::cout << "Less-than transition: " << logic.printTerm(getLessThanPower(power)) << '\n';
+//    std::cout << "Exact transition: " << logic.printTerm(getExactPower(power)) << std::endl;
     PTRef transitionInvariant = logic.mkOr(
             shiftOnlyNextVars(getLessThanPower(power)),
             logic.mkAnd(getLessThanPower(power), getNextVersion(getExactPower(power)))
@@ -1681,7 +1669,7 @@ PTRef TPASplit::inductiveInvariantFromEqualsTransitionInvariant() const {
     stateInvariant = getNextVersion(stateInvariant, -2);
 //    std::cout << "State invariant: " << logic.printTerm(stateInvariant) << std::endl;
     unsigned long k = 1;
-    k <<= (power - 1);
+    k <<= power;
     assert(verifyKinductiveInvariant(stateInvariant, k));
 //    std::cout << "K-inductivness of invariant sucessfully checked for k=" << k << std::endl;
     PTRef inductiveInvariant = kinductiveToInductive(stateInvariant, k);
