@@ -97,9 +97,7 @@ jobs:
             - run:
                 name: Release build gcc under devtoolset-8
                 command: |
-                  # Enable maximally static build after new release of OpenSMT (later than 2.3.1)
-                  #cat ./ci/build_maximally_static.sh |scl enable devtoolset-8 bash
-                    cat ./ci/run_commands.sh | scl enable devtoolset-8 bash
+                  cat ./ci/build_maximally_static.sh |scl enable devtoolset-8 bash
                 environment:
                     CMAKE_BUILD_TYPE: Release
 
