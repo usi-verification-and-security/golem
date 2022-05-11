@@ -19,12 +19,15 @@
 
 #define TRACE(l,m) if (TRACE_LEVEL >= l) {std::cout << m << std::endl; }
 
+const std::string TPAEngine::TPA = "tpa";
+const std::string TPAEngine::SPLIT_TPA = "split-tpa";
+
 std::unique_ptr<TPABase> TPAEngine::mkSolver() {
     assert(options.hasOption(Options::ENGINE));
     auto val = options.getOption(Options::ENGINE);
-    if (val == "tpa-split") {
+    if (val == SPLIT_TPA) {
         return std::unique_ptr<TPABase>(new TPASplit(logic, options));
-    } else if (val == "tpa") {
+    } else if (val == TPA) {
         return std::unique_ptr<TPABase>(new TPABasic(logic, options));
     } else {
         throw std::logic_error("Unexpected situation");

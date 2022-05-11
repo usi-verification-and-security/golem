@@ -1,6 +1,8 @@
-//
-// Created by Martin Blicha on 07.08.20.
-//
+/*
+ * Copyright (c) 2020-2022, Martin Blicha <martin.blicha@gmail.com>
+ *
+ * SPDX-License-Identifier: MIT
+ */
 
 #include "Options.h"
 #include "getopt.h"
@@ -30,10 +32,11 @@ void printUsage() {
         "-h,--help                  Print this help message\n"
         "-l,--logic <name>          SMT-LIB logic to use (required); possible values: QF_LRA, QF_LIA\n"
         "-e,--engine <name>         Select engine to use; supported engines:\n"
-        "                               bmc - bounded model checking (only transition systems)\n"
+        //"                               bmc - bounded model checking (only transition systems)\n"
         "                               lawi - Lazy Abstraction with Interpolants (only linear CHC systems)\n"
-        "                               tpa - Transition Power Abstraction (only transition systems)\n"
         "                               spacer - custom implementation of Spacer (any CHC system)\n"
+        "                               split-tpa - Split Transition Power Abstraction (only transition systems)\n"
+        "                               tpa - Transition Power Abstraction (only transition systems)\n"
         "--validate                 Internally validate computed solution\n"
         "--print-witness            Print computed solution\n"
         "-v                         Increase verbosity (can be applied multiple times)\n"

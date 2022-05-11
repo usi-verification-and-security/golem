@@ -1,9 +1,11 @@
-//
-// Created by Martin Blicha on 07.08.20.
-//
+/*
+ * Copyright (c) 2020-2022, Martin Blicha <martin.blicha@gmail.com>
+ *
+ * SPDX-License-Identifier: MIT
+ */
 
-#ifndef OPENSMT_OPTIONS_H
-#define OPENSMT_OPTIONS_H
+#ifndef GOLEM_OPTIONS_H
+#define GOLEM_OPTIONS_H
 
 #include <map>
 #include <string>
@@ -43,4 +45,4 @@ public:
     Options parse(int argc, char * argv[]);
 };
 
-#endif //OPENSMT_OPTIONS_H
+#endif //GOLEM_OPTIONS_H

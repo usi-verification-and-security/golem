@@ -36,6 +36,8 @@ public:
 
     GraphVerificationResult solve(ChcDirectedHyperGraph & graph) override;
 
+    static const std::string TPA;
+    static const std::string SPLIT_TPA;
 private:
     GraphVerificationResult solve(const ChcDirectedGraph & system);
 

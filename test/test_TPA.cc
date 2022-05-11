@@ -61,7 +61,7 @@ TEST_F(TPATest, test_TPA_simple_safe)
     Options options;
     options.addOption(Options::LOGIC, "QF_LIA");
     options.addOption(Options::COMPUTE_WITNESS, "true");
-    options.addOption(Options::ENGINE, "tpa-split");
+    options.addOption(Options::ENGINE, TPAEngine::SPLIT_TPA);
     SymRef s1 = mkPredicateSymbol("s1", {intSort()});
     PTRef current = instantiatePredicate(s1, {x});
     PTRef next = instantiatePredicate(s1, {xp});
@@ -85,7 +85,7 @@ TEST_F(TPATest, test_TPA_simple_unsafe)
     Options options;
     options.addOption(Options::LOGIC, "QF_LIA");
     options.addOption(Options::COMPUTE_WITNESS, "true");
-    options.addOption(Options::ENGINE, "tpa-split");
+    options.addOption(Options::ENGINE, TPAEngine::SPLIT_TPA);
     SymRef s1 = mkPredicateSymbol("s1",{intSort()});
     PTRef current = instantiatePredicate(s1, {x});
     PTRef next = instantiatePredicate(s1, {xp});
@@ -108,7 +108,7 @@ TEST_F(TPATest, test_TPA_CEX_zero) {
     Options options;
     options.addOption(Options::LOGIC, "QF_LIA");
     options.addOption(Options::COMPUTE_WITNESS, "true");
-    options.addOption(Options::ENGINE, "tpa");
+    options.addOption(Options::ENGINE, TPAEngine::TPA);
     SymRef s1 = mkPredicateSymbol("s1", {intSort()});
     PTRef current = instantiatePredicate(s1, {x});
     PTRef next = instantiatePredicate(s1, {xp});
@@ -132,7 +132,7 @@ TEST_F(TPATest, test_TPA_CEX_one) {
     Options options;
     options.addOption(Options::LOGIC, "QF_LIA");
     options.addOption(Options::COMPUTE_WITNESS, "true");
-    options.addOption(Options::ENGINE, "tpa");
+    options.addOption(Options::ENGINE, TPAEngine::TPA);
     SymRef s1 = mkPredicateSymbol("s1", {logic.getSort_int()});
     PTRef current = instantiatePredicate(s1, {x});
     PTRef next = instantiatePredicate(s1, {xp});
@@ -156,7 +156,7 @@ TEST_F(TPATest, test_TPA_CEX_six) {
     Options options;
     options.addOption(Options::LOGIC, "QF_LIA");
     options.addOption(Options::COMPUTE_WITNESS, "true");
-    options.addOption(Options::ENGINE, "tpa");
+    options.addOption(Options::ENGINE, TPAEngine::TPA);
     SymRef s1 = mkPredicateSymbol("s1", {intSort()});
     PTRef current = instantiatePredicate(s1, {x});
     PTRef next = instantiatePredicate(s1, {xp});
@@ -180,7 +180,7 @@ TEST_F(TPATest, test_TPA_chain_of_two_unsafe) {
     Options options;
     options.addOption(Options::LOGIC, "QF_LIA");
     options.addOption(Options::COMPUTE_WITNESS, "true");
-    options.addOption(Options::ENGINE, "tpa-split");
+    options.addOption(Options::ENGINE, TPAEngine::SPLIT_TPA);
     SymRef s1 = mkPredicateSymbol("s1", {intSort()});
     SymRef s2 = mkPredicateSymbol("s2", {intSort()});
     PTRef predS1Current = instantiatePredicate(s1, {x});
@@ -216,7 +216,7 @@ TEST_F(TPATest, test_TPA_chain_of_two_safe) {
     Options options;
     options.addOption(Options::LOGIC, "QF_LIA");
     options.addOption(Options::COMPUTE_WITNESS, "true");
-    options.addOption(Options::ENGINE, "tpa-split");
+    options.addOption(Options::ENGINE, TPAEngine::SPLIT_TPA);
     SymRef s1 = mkPredicateSymbol("s1", {intSort()});
     SymRef s2 = mkPredicateSymbol("s2", {intSort()});
     PTRef predS1Current = instantiatePredicate(s1, {x});
@@ -252,7 +252,7 @@ TEST_F(TPATest, test_TPA_chain_regression) {
     Options options;
     options.addOption(Options::LOGIC, "QF_LIA");
     options.addOption(Options::COMPUTE_WITNESS, "true");
-    options.addOption(Options::ENGINE, "tpa-split");
+    options.addOption(Options::ENGINE, TPAEngine::SPLIT_TPA);
     SymRef s1 = mkPredicateSymbol("inv1", {intSort(), intSort()});
     SymRef s2 = mkPredicateSymbol("inv2", {intSort(), intSort()});
     PTRef y = mkIntVar("y");
@@ -299,7 +299,7 @@ TEST_F(TPATest, test_transformContractVertex) {
     Options options;
     options.addOption(Options::LOGIC, "QF_LIA");
     options.addOption(Options::COMPUTE_WITNESS, "true");
-    options.addOption(Options::ENGINE, "tpa-split");
+    options.addOption(Options::ENGINE, TPAEngine::SPLIT_TPA);
     SymRef s1 = mkPredicateSymbol("s1", {intSort()});
     SymRef s2 = mkPredicateSymbol("s2", {intSort()});
     PTRef predS1Current = instantiatePredicate(s1, {x});
