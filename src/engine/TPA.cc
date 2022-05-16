@@ -1086,9 +1086,25 @@ PTRef TPABase::kinductiveToInductive(PTRef invariant, unsigned long k) const {
 }
 
 bool TPABase::verifyKinductiveInvariant(PTRef fla, unsigned long k) const {
-    SMTConfig config;
-    // Base cases:
-    {
+    constexpr int trace_level = 1;
+    TRACE(trace_level, "Verifying k-inductive invariant for k = " << k)
+    {   // Inductive case:
+        SMTConfig config;
+        MainSolver solver(logic, config, "k-induction inductive step checker");
+        for (unsigned long i = 0; i < k; ++i) {
+            solver.insertFormula(getNextVersion(fla, i));
+            solver.insertFormula(getNextVersion(transition, i));
+        }
+        solver.insertFormula(logic.mkNot(getNextVersion(fla, k)));
+        auto res = solver.check();
+        if (res != s_False) {
+            std::cerr << "k-induction verification failed; induction step does not hold!" << std::endl;
+            return false;
+        }
+        TRACE(trace_level, "Inductive case succesfully verified")
+    }
+    {   // Base cases:
+        SMTConfig config;
         MainSolver solver(logic, config, "k-induction base checker");
         solver.insertFormula(init);
         for (unsigned long i = 0; i < k; ++i) {
@@ -1099,21 +1115,11 @@ bool TPABase::verifyKinductiveInvariant(PTRef fla, unsigned long k) const {
                 std::cerr << "k-induction verification failed; base case " << i << " does not hold!" << std::endl;
                 return false;
             }
+            TRACE(trace_level, "Base case " << i << " succesfully verified")
             solver.pop();
+            solver.push();
             solver.insertFormula(getNextVersion(transition, i));
         }
-    }
-    // Inductive case:
-    MainSolver solver(logic, config, "k-induction inductive step checker");
-    for (unsigned long i = 0; i < k; ++i) {
-        solver.insertFormula(getNextVersion(fla, i));
-        solver.insertFormula(getNextVersion(transition, i));
-    }
-    solver.insertFormula(logic.mkNot(getNextVersion(fla, k)));
-    auto res = solver.check();
-    if (res != s_False) {
-        std::cerr << "k-induction verification failed; induction step does not hold!" << std::endl;
-        return false;
     }
     return true;
 }
@@ -1671,8 +1677,8 @@ PTRef TPASplit::inductiveInvariantFromEqualsTransitionInvariant() const {
     stateInvariant = QuantifierElimination(logic).eliminate(stateInvariant, getStateVars(1));
     stateInvariant = getNextVersion(stateInvariant, -2);
 //    std::cout << "State invariant: " << logic.printTerm(stateInvariant) << std::endl;
-    unsigned long k = 1;
-    k <<= power;
+    if (power >= 64) { return PTRef_Undef; } // MB: Cannot shift more than 63 bits
+    unsigned long k = 1ul << power;
     assert(verifyKinductiveInvariant(stateInvariant, k));
 //    std::cout << "K-inductivness of invariant sucessfully checked for k=" << k << std::endl;
     PTRef inductiveInvariant = kinductiveToInductive(stateInvariant, k);
