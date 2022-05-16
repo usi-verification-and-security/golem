@@ -427,7 +427,7 @@ bool ChcInterpreterContext::isUninterpretedPredicate(PTRef ref) const {
 }
 
 std::unique_ptr<Engine> ChcInterpreterContext::getEngine() const {
-    std::string engineStr = opts.hasOption(Options::ENGINE) ? opts.getOption(Options::ENGINE) : "lawi";
+    std::string engineStr = opts.hasOption(Options::ENGINE) ? opts.getOption(Options::ENGINE) : "spacer";
     if (engineStr == TPAEngine::TPA or engineStr == TPAEngine::SPLIT_TPA) {
         return std::unique_ptr<Engine>(new TPAEngine(logic, opts));
     } else if (engineStr == "bmc") {
