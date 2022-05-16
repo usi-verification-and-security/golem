@@ -30,14 +30,14 @@ Golem currently supports 4 different backend algorithms for solving CHCs.
 - split-tpa
 
 Spacer engine is the default one.
-It represents are own implementation of the algorithm from [this paper](https://link.springer.com/article/10.1007/s10703-016-0249-4). You might be familiar with the original implementation of Spacer inside [Z3]{https://github.com/z3Prover/z3/}.
+It represents are own implementation of the algorithm from [this paper](https://link.springer.com/article/10.1007/s10703-016-0249-4). You might be familiar with the original implementation of Spacer inside [Z3](https://github.com/z3Prover/z3/).
 
-LAWI stands for Lazy Abstraction With Interpolants. The algorithm is described in [this paper]{https://link.springer.com/chapter/10.1007/11817963_14}.
+LAWI stands for Lazy Abstraction With Interpolants. The algorithm is described in [this paper](https://link.springer.com/chapter/10.1007/11817963_14).
 It is also known as `Impact`, which was the first tool where the algorithm was implemented.
 LAWI engine supports only linear systems of Horn clauses.
 
-TPA stands for Transition Power Abstraction. It is an algorithm we have developed recently with the goal to detect long counterexample quickly. The description of the algorithm can be found in [this paper]{https://link.springer.com/chapter/10.1007/978-3-030-99524-9_29}.
-TPA supports only a limited subset of linear CHC systems.
+TPA stands for Transition Power Abstraction. It is an algorithm we have developed recently with the goal to detect long counterexample quickly. The description of the algorithm can be found in [this paper](https://link.springer.com/chapter/10.1007/978-3-030-99524-9_29).
+TPA supports only a limited subset of linear CHC systems that represent chains of transition systems.
 
 split-TPA is a different instantiation of the TPA paradigm and is typically more powerful than TPA on satisfiable (safe) CHC systems.
 
