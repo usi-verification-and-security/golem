@@ -10,7 +10,7 @@
 #include "ModelBasedProjection.h"
 #include "QuantifierElimination.h"
 #include "graph/GraphTransformations.h"
-#include "transformers/DeadClauseRemoval.h"
+#include "transformers/FalseClauseRemoval.h"
 #include "transformers/MultiEdgeMerger.h"
 #include "transformers/NonLoopEliminator.h"
 #include "transformers/TransformationPipeline.h"
@@ -37,7 +37,7 @@ std::unique_ptr<TPABase> TPAEngine::mkSolver() {
 GraphVerificationResult TPAEngine::solve(ChcDirectedHyperGraph & graph) {
     TransformationPipeline::pipeline_t stages;
     stages.push_back(std::make_unique<NonLoopEliminator>());
-    stages.push_back(std::make_unique<DeadClauseRemoval>());
+    stages.push_back(std::make_unique<FalseClauseRemoval>());
     stages.push_back(std::make_unique<MultiEdgeMerger>());
     TransformationPipeline pipeline(std::move(stages));
     auto transformationResult = pipeline.transform(std::make_unique<ChcDirectedHyperGraph>(graph));

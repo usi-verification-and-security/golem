@@ -250,7 +250,7 @@ public:
         }
     }
 
-    void deleteDeadEdges();
+    void deleteFalseEdges();
 
 private:
     EId newEdge(std::vector<SymRef> && from, SymRef to, InterpretedFla label) {

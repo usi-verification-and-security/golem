@@ -4,12 +4,12 @@
  * SPDX-License-Identifier: MIT
  */
 
-#ifndef GOLEM_DEADCLAUSEREMOVAL_H
-#define GOLEM_DEADCLAUSEREMOVAL_H
+#ifndef GOLEM_FALSECLAUSEREMOVAL_H
+#define GOLEM_FALSECLAUSEREMOVAL_H
 
 #include "Transformer.h"
 
-class DeadClauseRemoval : public Transformer {
+class FalseClauseRemoval : public Transformer {
 public:
     TransformationResult transform(std::unique_ptr<ChcDirectedHyperGraph> graph) override;
 
@@ -20,4 +20,4 @@ public:
 };
 
 
-#endif //GOLEM_DEADCLAUSEREMOVAL_H
+#endif //GOLEM_FALSECLAUSEREMOVAL_H

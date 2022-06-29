@@ -4,9 +4,9 @@
  * SPDX-License-Identifier: MIT
  */
 
-#include "DeadClauseRemoval.h"
+#include "FalseClauseRemoval.h"
 
-Transformer::TransformationResult DeadClauseRemoval::transform(std::unique_ptr<ChcDirectedHyperGraph> graph) {
-    graph->deleteDeadEdges();
+Transformer::TransformationResult FalseClauseRemoval::transform(std::unique_ptr<ChcDirectedHyperGraph> graph) {
+    graph->deleteFalseEdges();
     return {std::move(graph), std::make_unique<BackTranslator>()};
 }
