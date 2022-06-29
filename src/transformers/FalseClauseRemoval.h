@@ -14,8 +14,9 @@ public:
     TransformationResult transform(std::unique_ptr<ChcDirectedHyperGraph> graph) override;
 
     class BackTranslator : public WitnessBackTranslator {
-        InvalidityWitness translate(InvalidityWitness witness) { return witness; }
-        ValidityWitness translate(ValidityWitness witness) { return witness; }
+    public:
+        InvalidityWitness translate(InvalidityWitness witness) override { return witness; }
+        ValidityWitness translate(ValidityWitness witness) override { return witness; }
     };
 };
 

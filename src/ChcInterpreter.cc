@@ -13,7 +13,9 @@
 #include "graph/GraphTransformations.h"
 #include "Validator.h"
 #include "Normalizer.h"
+#include "transformers/RemoveUnreachableNodes.h"
 #include "transformers/SimpleChainSummarizer.h"
+#include "transformers/TransformationPipeline.h"
 
 using namespace osmttokens;
 
@@ -319,7 +321,11 @@ void ChcInterpreterContext::interpretCheckSat() {
 //    ChcPrinter(logic).print(*system, std::cout);
     auto normalizedSystem = Normalizer(logic).normalize(*system);
     auto hypergraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
-    auto [newGraph, translator] = SimpleChainSummarizer(logic).transform(std::move(hypergraph));
+
+    TransformationPipeline::pipeline_t transformations;
+    transformations.push_back(std::make_unique<SimpleChainSummarizer>(logic));
+    transformations.push_back(std::make_unique<RemoveUnreachableNodes>());
+    auto [newGraph, translator] = TransformationPipeline(std::move(transformations)).transform(std::move(hypergraph));
     hypergraph = std::move(newGraph);
     bool validateWitness = opts.hasOption(Options::VALIDATE_RESULT);
     assert(not validateWitness || opts.getOption(Options::VALIDATE_RESULT) == std::string("true"));

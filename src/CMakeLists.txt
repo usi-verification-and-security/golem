@@ -51,6 +51,7 @@ target_sources(golem_lib
     PRIVATE transformers/NonLoopEliminator.cc
     PRIVATE transformers/MultiEdgeMerger.cc
     PRIVATE transformers/FalseClauseRemoval.cc
+    PRIVATE transformers/RemoveUnreachableNodes.cc
     PRIVATE transformers/TransformationPipeline.cc
     )
 

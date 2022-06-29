@@ -54,9 +54,12 @@ class ChcDirectedGraph;
 class ChcDirectedHyperGraph;
 
 class AdjacencyListsGraphRepresentation {
-    using AdjacencyList = std::unordered_map<SymRef, std::vector<EId>, SymRefHash>;
+    using Node = SymRef;
+    using NodeHash = SymRefHash;
+    using AdjacencyList = std::unordered_map<Node, std::vector<EId>, NodeHash>;
     AdjacencyList incomingEdges;
     AdjacencyList outgoingEdges;
+
 
 	AdjacencyListsGraphRepresentation(AdjacencyList && incoming, AdjacencyList && outgoing)
 		: incomingEdges(std::move(incoming)),
@@ -76,6 +79,15 @@ public:
     }
 
     std::size_t getVertexNum() const { return incomingEdges.size(); }
+
+    std::vector<Node> getNodes() const {
+        std::vector<Node> res;
+        res.reserve(incomingEdges.size());
+        for (auto const & entry : incomingEdges) {
+            res.push_back(entry.first);
+        }
+        return res;
+    }
 };
 
 class ChcDirectedHyperGraph;
@@ -251,6 +263,7 @@ public:
     }
 
     void deleteFalseEdges();
+    void deleteNode(SymRef sym);
 
 private:
     EId newEdge(std::vector<SymRef> && from, SymRef to, InterpretedFla label) {
@@ -270,7 +283,6 @@ private:
         }
     }
 
-    void deleteNode(SymRef sym);
     DirectedHyperEdge mergeEdges(std::vector<EId> const & chain);
     PTRef mergeLabels(std::vector<EId> const & chain);
 };
