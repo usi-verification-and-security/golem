@@ -16,6 +16,7 @@ protected:
     PTRef c;
     PTRef zero;
     PTRef one;
+    PTRef trueTerm;
     ModelBasedProjection mbp;
     MBP_RealTest() : mbp(logic) {
         x = logic.mkRealVar("x");
@@ -26,6 +27,16 @@ protected:
         c = logic.mkBoolVar("c");
         zero = logic.getTerm_RealZero();
         one = logic.getTerm_RealOne();
+        trueTerm = logic.getTerm_true();
+    }
+
+    using Assignment = std::vector<std::pair<PTRef, PTRef>>;
+    auto getModel(Assignment const & values) {
+        ModelBuilder builder(logic);
+        for (auto const & entry : values) {
+            builder.addVarValue(entry.first, entry.second);
+        }
+        return builder.build();
     }
 };
 
@@ -38,10 +49,7 @@ TEST_F(MBP_RealTest, test_AllEqualBounds) {
     PTRef lit2 = logic.mkGeq(x0, zero);
     PTRef lit3 = logic.mkLeq(logic.mkMinus(x1, x0), one);
     PTRef lit4 = logic.mkGeq(logic.mkMinus(x1, x0), one);
-    ModelBuilder builder(logic);
-    builder.addVarValue(x0, zero);
-    builder.addVarValue(x1, one);
-    auto model = builder.build();
+    auto model = getModel({{x0, zero}, {x1, one}});
     PTRef result = mbp.project(logic.mkAnd({lit1, lit2, lit3, lit4}), {x0}, *model);
     // result should be equivalent to "x1 = 1"
     std::cout << logic.printTerm(result) << std::endl;
@@ -52,11 +60,7 @@ TEST_F(MBP_RealTest, test_AllEqualBoundsTwoVars) {
     // x = y and y = z
     PTRef eq1 = logic.mkEq(x, y);
     PTRef eq2 = logic.mkEq(y, z);
-    ModelBuilder builder(logic);
-    builder.addVarValue(x, zero);
-    builder.addVarValue(y, zero);
-    builder.addVarValue(z, zero);
-    auto model = builder.build();
+    auto model = getModel({{x,zero}, {y,zero}, {z,zero}});
     PTRef result = mbp.project(logic.mkAnd(eq1, eq2), {x,y}, *model);
     // result should be equivalent to true
     std::cout << logic.printTerm(result) << std::endl;
@@ -70,12 +74,7 @@ TEST_F(MBP_RealTest, test_SimpleDisjunction) {
     PTRef part1 = logic.mkOr(a,b);
     PTRef part2 = logic.mkLeq(x0, zero);
     PTRef part3 = logic.mkLeq(x1, x0);
-    ModelBuilder builder(logic);
-    builder.addVarValue(x0, zero);
-    builder.addVarValue(x1, zero);
-    builder.addVarValue(a, logic.getTerm_true());
-    builder.addVarValue(b, logic.getTerm_true());
-    auto model = builder.build();
+    auto model = getModel({{x0,zero}, {x1, zero}, {a, trueTerm}, {b, trueTerm}});
     PTRef result = mbp.project(logic.mkAnd({part1, part2, part3}), {x0}, *model);
     // NOTE: Check that the result is not unnecessary strict.
     // Ideally the result should be "(a or b) and (x1 <= 0)"
@@ -92,10 +91,7 @@ TEST_F(MBP_RealTest, test_SimpleDisjunction) {
 TEST_F(MBP_RealTest, test_TwoInequalities_BothStrict) {
     PTRef lower = logic.mkLt(y, x);
     PTRef upper = logic.mkLt(x, zero);
-    ModelBuilder builder(logic);
-    builder.addVarValue(x, logic.mkRealConst(FastRational(-1)));
-    builder.addVarValue(y, logic.mkRealConst(FastRational(-3,2)));
-    auto model = builder.build();
+    auto model = getModel({{x,logic.mkRealConst(FastRational(-1))}, {y, logic.mkRealConst(FastRational(-3,2))}});
     auto res = mbp.project(logic.mkAnd(lower, upper), {x}, *model);
     ASSERT_EQ(logic.mkLt(y, zero), res);
 }
@@ -103,10 +99,7 @@ TEST_F(MBP_RealTest, test_TwoInequalities_BothStrict) {
 TEST_F(MBP_RealTest, test_TwoInequalities_StrictNonstrict) {
     PTRef lower = logic.mkLt(y, x);
     PTRef upper = logic.mkLeq(x, zero);
-    ModelBuilder builder(logic);
-    builder.addVarValue(x, zero);
-    builder.addVarValue(y, logic.mkRealConst(FastRational(-3,2)));
-    auto model = builder.build();
+    auto model = getModel({{x,zero}, {y,logic.mkRealConst(FastRational(-3,2))}});
     auto res = mbp.project(logic.mkAnd(lower, upper), {x}, *model);
     ASSERT_EQ(logic.mkLt(y, zero), res);
 }
@@ -114,10 +107,8 @@ TEST_F(MBP_RealTest, test_TwoInequalities_StrictNonstrict) {
 TEST_F(MBP_RealTest, test_TwoInequalities_NonstrictStrict) {
     PTRef lower = logic.mkLeq(y, x);
     PTRef upper = logic.mkLt(x, zero);
-    ModelBuilder builder(logic);
-    builder.addVarValue(x, logic.mkRealConst(FastRational(-3,2)));
-    builder.addVarValue(y, logic.mkRealConst(FastRational(-3,2)));
-    auto model = builder.build();
+    PTRef val = logic.mkRealConst(FastRational(-3,2));
+    auto model = getModel({{x,val}, {y,val}});
     auto res = mbp.project(logic.mkAnd(lower, upper), {x}, *model);
     ASSERT_EQ(logic.mkLt(y, zero), res);
 }
@@ -125,19 +116,14 @@ TEST_F(MBP_RealTest, test_TwoInequalities_NonstrictStrict) {
 TEST_F(MBP_RealTest, test_TwoInequalities_NonstrictNonstrict) {
     PTRef lower = logic.mkLeq(y, x);
     PTRef upper = logic.mkLeq(x, zero);
-    ModelBuilder builder(logic);
-    builder.addVarValue(x, zero);
-    builder.addVarValue(y, logic.mkRealConst(FastRational(-3,2)));
-    auto model = builder.build();
+    auto model = getModel({{x,zero}, {y,logic.mkRealConst(FastRational(-3,2))}});
     auto res = mbp.project(logic.mkAnd(lower, upper), {x}, *model);
     ASSERT_EQ(logic.mkLeq(y, zero), res);
 }
 
 TEST_F(MBP_RealTest, test_Disequality) {
     PTRef diseq = logic.mkNot(logic.mkEq(y, logic.mkPlus(y, one)));
-    ModelBuilder builder(logic);
-    builder.addVarValue(y, zero);
-    auto model = builder.build();
+    auto model = getModel({{y,zero}});
     auto res = mbp.project(diseq, {y}, *model);
     ASSERT_EQ(logic.getTerm_true(), res);
 }
@@ -147,10 +133,7 @@ TEST_F(MBP_RealTest, test_strictInequalitiesProblem) {
     PTRef lit2 = logic.mkGeq(x, logic.mkMinus(y, one));
     PTRef lit3 = logic.mkNot(logic.mkEq(y, one));
     PTRef fla = logic.mkAnd({lit1, lit2, lit3});
-    ModelBuilder builder(logic);
-    builder.addVarValue(x, logic.mkRealConst(FastRational(1)));
-    builder.addVarValue(y, logic.mkRealConst(FastRational(2)));
-    auto model = builder.build();
+    auto model = getModel({{x,one}, {y,logic.mkRealConst(FastRational(2))}});
     PTRef res = mbp.project(fla, {y}, *model);
     std::cout << logic.printTerm(res) << std::endl;
     EXPECT_EQ(res, logic.mkLt(zero, x));
@@ -162,10 +145,7 @@ TEST_F(MBP_RealTest, test_strictNonStrictEqualitiesSameBound_1) {
     PTRef lit3 = logic.mkLt(x,y);
     // 0 <= x and 0 < x and x < y
     PTRef fla = logic.mkAnd({lit1, lit2, lit3});
-    ModelBuilder builder(logic);
-    builder.addVarValue(x, logic.mkRealConst(FastRational(1)));
-    builder.addVarValue(y, logic.mkRealConst(FastRational(2)));
-    auto model = builder.build();
+    auto model = getModel({{x,one}, {y,logic.mkRealConst(FastRational(2))}});
     PTRef res = mbp.project(fla, {x}, *model);
     std::cout << logic.printTerm(res) << std::endl;
     EXPECT_EQ(res, logic.mkLt(zero, y));
@@ -177,10 +157,7 @@ TEST_F(MBP_RealTest, test_strictNonStrictEqualitiesSameBound_2) {
     PTRef lit3 = logic.mkLeq(x,y);
     // 0 <= x and 0 < x and x <= y
     PTRef fla = logic.mkAnd({lit1, lit2, lit3});
-    ModelBuilder builder(logic);
-    builder.addVarValue(x, logic.mkRealConst(FastRational(1)));
-    builder.addVarValue(y, logic.mkRealConst(FastRational(2)));
-    auto model = builder.build();
+    auto model = getModel({{x,one}, {y,logic.mkRealConst(FastRational(2))}});
     PTRef res = mbp.project(fla, {x}, *model);
     std::cout << logic.printTerm(res) << std::endl;
 //    EXPECT_EQ(res, logic.mkLt(zero, y));
@@ -222,19 +199,15 @@ TEST_F(MBP_RealTest, test_RegressionTest) {
         logic.mkLeq(yp, xp)
     );
     PTRef fla = logic.mkAnd({part1, part2, part3});
-    ModelBuilder builder(logic);
-    builder.addVarValue(x, logic.mkRealConst(FastRational(3,2)));
-    builder.addVarValue(y, logic.mkRealConst(FastRational(256)));
-    builder.addVarValue(xp, logic.mkRealConst(FastRational(513,2)));
-    builder.addVarValue(yp, logic.mkRealConst(FastRational(256)));
-    auto model = builder.build();
+    auto model = getModel({{x, logic.mkRealConst(FastRational(3, 2))},
+                           {y, logic.mkRealConst(FastRational(256))},
+                           {xp, logic.mkRealConst(FastRational(513, 2))},
+                           {yp, logic.mkRealConst(FastRational(256))}
+                          });
     ASSERT_EQ(model->evaluate(fla), logic.getTerm_true());
     PTRef midpoint = mbp.project(fla, {xp,yp}, *model);
     std::cout << logic.printTerm(midpoint) << std::endl;
-    ModelBuilder checkerBuilder(logic);
-    checkerBuilder.addVarValue(x, zero);
-    checkerBuilder.addVarValue(y, logic.mkRealConst(FastRational(256)));
-    auto checker = checkerBuilder.build();
+    auto checker = getModel({{x,zero}, {y, logic.mkRealConst(FastRational(256))}});
     ASSERT_NE(checker->evaluate(midpoint), logic.getTerm_true());
 }
 
@@ -248,11 +221,7 @@ TEST_F(MBP_RealTest, test_strictNonStrict_1) {
     PTRef lit3 = logic.mkLeq(x, two);
     PTRef lit4 = logic.mkLeq(x, z);
     PTRef fla = logic.mkAnd({lit1, lit2, lit3, lit4});
-    ModelBuilder builder(logic);
-    builder.addVarValue(x, one);
-    builder.addVarValue(y, zero);
-    builder.addVarValue(z, one);
-    auto model = builder.build();
+    auto model = getModel({{x, one}, {y, zero}, {z, one}});
     ASSERT_EQ(model->evaluate(fla), logic.getTerm_true());
     PTRef res = mbp.project(fla, {x}, *model);
     std::cout << logic.printTerm(res) << std::endl;
@@ -270,11 +239,7 @@ TEST_F(MBP_RealTest, test_strictNonStrict_2) {
     PTRef lit3 = logic.mkLeq(x, two);
     PTRef lit4 = logic.mkLeq(x, z);
     PTRef fla = logic.mkAnd({lit1, lit2, lit3, lit4});
-    ModelBuilder builder(logic);
-    builder.addVarValue(x, one);
-    builder.addVarValue(y, half);
-    builder.addVarValue(z, one);
-    auto model = builder.build();
+    auto model = getModel({{x, one}, {y, half}, {z, one}});
     ASSERT_EQ(model->evaluate(fla), logic.getTerm_true());
     PTRef res = mbp.project(fla, {x}, *model);
     std::cout << logic.printTerm(res) << std::endl;
@@ -292,11 +257,7 @@ TEST_F(MBP_RealTest, test_strictNonStrict_3) {
     PTRef lit3 = logic.mkLeq(x, two);
     PTRef lit4 = logic.mkLeq(x, z);
     PTRef fla = logic.mkAnd({lit1, lit2, lit3, lit4});
-    ModelBuilder builder(logic);
-    builder.addVarValue(x, one);
-    builder.addVarValue(y, half);
-    builder.addVarValue(z, one);
-    auto model = builder.build();
+    auto model = getModel({{x, one}, {y, half}, {z, one}});
     ASSERT_EQ(model->evaluate(fla), logic.getTerm_true());
     PTRef res = mbp.project(fla, {x}, *model);
     std::cout << logic.printTerm(res) << std::endl;
@@ -314,11 +275,7 @@ TEST_F(MBP_RealTest, test_strictNonStrict_4) {
     PTRef lit3 = logic.mkLeq(x, two);
     PTRef lit4 = logic.mkLeq(x, z);
     PTRef fla = logic.mkAnd({lit1, lit2, lit3, lit4});
-    ModelBuilder builder(logic);
-    builder.addVarValue(x, one);
-    builder.addVarValue(y, half);
-    builder.addVarValue(z, one);
-    auto model = builder.build();
+    auto model = getModel({{x, one}, {y, half}, {z, one}});
     ASSERT_EQ(model->evaluate(fla), logic.getTerm_true());
     PTRef res = mbp.project(fla, {x}, *model);
     std::cout << logic.printTerm(res) << std::endl;
@@ -331,10 +288,7 @@ TEST_F(MBP_RealTest, test_avoidRedundantBounds) {
     PTRef lit2 = logic.mkLeq(y, zero);
     PTRef lit3 = logic.mkLeq(y, one);
     PTRef fla = logic.mkAnd({lit1, lit2, lit3});
-    ModelBuilder builder(logic);
-    builder.addVarValue(x, logic.mkRealConst(FastRational(-1)));
-    builder.addVarValue(y, zero);
-    auto model = builder.build();
+    auto model = getModel({{x, logic.getTerm_RealMinusOne()}, {y, zero}});
     PTRef res = mbp.project(fla, {y}, *model);
     std::cout << logic.printTerm(res) << std::endl;
     EXPECT_EQ(res, logic.mkLeq(x, zero)); // The redundant bound x <= 1 should not appear in the projection
@@ -345,10 +299,7 @@ TEST_F(MBP_RealTest, test_EqualityNotNormalized) {
     PTRef lhs = logic.mkPlus(x,y);
     PTRef rhs = logic.mkPlus(x, one);
     PTRef lit = logic.mkEq(lhs, rhs);
-    ModelBuilder builder(logic);
-    builder.addVarValue(x, one);
-    builder.addVarValue(y, one);
-    auto model = builder.build();
+    auto model = getModel({{x,one}, {y,one}});
     PTRef res = mbp.project(lit, {x}, *model);
     std::cout << logic.printTerm(res) << std::endl;
     // EXPECT_EQ(res, logic.mkEq(y,one));
@@ -363,11 +314,7 @@ TEST_F(MBP_RealTest, test_singleUpperBound) {
     PTRef lit3 = logic.mkLeq(zero, x);
     PTRef lit4 = logic.mkLeq(x, one);
     PTRef fla = logic.mkAnd({lit1, lit2, lit3, lit4});
-    ModelBuilder builder(logic);
-    builder.addVarValue(x, zero);
-    builder.addVarValue(y, zero);
-    builder.addVarValue(z, zero);
-    auto model = builder.build();
+    auto model = getModel({{x,zero}, {y,zero}, {z,zero}});
     PTRef res = mbp.project(fla, {x}, *model);
     std::cout << logic.printTerm(res) << std::endl;
     EXPECT_EQ(res, logic.mkAnd(logic.mkLeq(y, one), logic.mkLeq(z, one)));
@@ -381,11 +328,7 @@ TEST_F(MBP_RealTest, test_avoidRedundantBounds_2) {
     PTRef lit3 = logic.mkLeq(yz, one);
     PTRef lit4 = logic.mkEq(z, zero);
     PTRef fla = logic.mkAnd({lit1, lit2, lit3, lit4});
-    ModelBuilder builder(logic);
-    builder.addVarValue(x, zero);
-    builder.addVarValue(y, zero);
-    builder.addVarValue(z, zero);
-    auto model = builder.build();
+    auto model = getModel({{x,zero}, {y,zero}, {z,zero}});
     PTRef res = mbp.project(fla, {x,z}, *model);
     std::cout << logic.printTerm(res) << std::endl;
     EXPECT_EQ(res, logic.mkAnd({logic.mkLeq(y, zero)}));
@@ -397,10 +340,7 @@ TEST_F(MBP_RealTest, test_avoidRedundantBounds_3) {
     PTRef lit2 = logic.mkLeq(x, zero);
     PTRef lit3 = logic.mkLeq(y, one);
     PTRef fla = logic.mkAnd({lit1, lit2, lit3});
-    ModelBuilder builder(logic);
-    builder.addVarValue(x, zero);
-    builder.addVarValue(y, zero);
-    auto model = builder.build();
+    auto model = getModel({{x,zero}, {y,zero}});
     PTRef res = mbp.project(fla, {x}, *model);
     std::cout << logic.printTerm(res) << std::endl;
     EXPECT_EQ(res, logic.mkAnd({logic.mkLeq(y, zero)}));
@@ -413,11 +353,7 @@ TEST_F(MBP_RealTest, test_hiddenEquality) {
     PTRef lit2 = logic.mkLeq(x, y);
     PTRef lit4 = logic.mkLeq(x, one);
     PTRef fla = logic.mkAnd({lit1, lit2, lit3, lit4});
-    ModelBuilder builder(logic);
-    builder.addVarValue(x, zero);
-    builder.addVarValue(y, zero);
-    builder.addVarValue(z, zero);
-    auto model = builder.build();
+    auto model = getModel({{x,zero}, {y,zero}, {z,zero}});
     PTRef res = mbp.project(fla, {x}, *model);
     std::cout << logic.printTerm(res) << std::endl;
     EXPECT_EQ(res, logic.mkAnd({logic.mkLeq(z, y), logic.mkLeq(y, one)}));
@@ -435,6 +371,7 @@ protected:
     PTRef c;
     PTRef zero;
     PTRef one;
+    PTRef minusOne;
     ModelBasedProjection mbp;
     MBP_IntTest() : mbp(logic) {
         x = logic.mkIntVar("x");
@@ -445,6 +382,16 @@ protected:
         c = logic.mkBoolVar("c");
         zero = logic.getTerm_IntZero();
         one = logic.getTerm_IntOne();
+        minusOne = logic.getTerm_IntMinusOne();
+    }
+
+    using Assignment = std::vector<std::pair<PTRef, PTRef>>;
+    auto getModel(Assignment const & values) {
+        ModelBuilder builder(logic);
+        for (auto const & entry : values) {
+            builder.addVarValue(entry.first, entry.second);
+        }
+        return builder.build();
     }
 };
 
@@ -452,10 +399,7 @@ TEST_F(MBP_IntTest, test_oneLower_oneUpper) {
     PTRef lit1 = logic.mkLeq(x,y);
     PTRef lit2 = logic.mkLeq(y,zero);
     PTRef fla = logic.mkAnd(lit1, lit2);
-    ModelBuilder builder(logic);
-    builder.addVarValue(x, logic.mkIntConst(FastRational(-1)));
-    builder.addVarValue(y, zero);
-    auto model = builder.build();
+    auto model = getModel({{x, minusOne}, {y, zero}});
     PTRef res = mbp.project(fla, {y}, *model);
     EXPECT_EQ(res, logic.mkLeq(x, zero));
 }
@@ -466,10 +410,7 @@ TEST_F(MBP_IntTest, test_oneLower_oneUpper_withCoefficients_1) {
     PTRef lit1 = logic.mkLeq(x,y2);
     PTRef lit2 = logic.mkLt(y2,zero);
     PTRef fla = logic.mkAnd(lit1, lit2);
-    ModelBuilder builder(logic);
-    builder.addVarValue(x, logic.mkIntConst(FastRational(-2)));
-    builder.addVarValue(y, logic.getTerm_IntMinusOne());
-    auto model = builder.build();
+    auto model = getModel({{x, logic.mkIntConst(FastRational(-2))}, {y, minusOne}});
     PTRef res = mbp.project(fla, {y}, *model);
     std::cout << logic.pp(res) << std::endl;
     EXPECT_EQ(res, logic.mkLeq(x, logic.mkIntConst(FastRational(-2))));
@@ -483,9 +424,7 @@ TEST_F(MBP_IntTest, test_oneLower_oneUpper_withCoefficients_2) {
     PTRef lit1 = logic.mkLeq(zero,y3);
     PTRef lit2 = logic.mkLeq(y2,zero);
     PTRef fla = logic.mkAnd(lit1, lit2);
-    ModelBuilder builder(logic);
-    builder.addVarValue(y, zero);
-    auto model = builder.build();
+    auto model = getModel({{y, zero}});
     PTRef res = mbp.project(fla, {y}, *model);
     std::cout << logic.pp(res) << std::endl;
     EXPECT_EQ(res, logic.getTerm_true());
@@ -499,11 +438,7 @@ TEST_F(MBP_IntTest, test_oneLower_oneUpper_withCoefficients_3) {
     PTRef lit1 = logic.mkLeq(x,y3);
     PTRef lit2 = logic.mkLeq(y2,z);
     PTRef fla = logic.mkAnd(lit1, lit2);
-    ModelBuilder builder(logic);
-    builder.addVarValue(x, three);
-    builder.addVarValue(y, one);
-    builder.addVarValue(z, two);
-    auto model = builder.build();
+    auto model = getModel({{x, three}, {y, one}, {z, two}});
     PTRef res = mbp.project(fla, {y}, *model);
     std::cout << logic.pp(res) << std::endl;
     // MB: not 100% sure, but this should be the correct result
@@ -521,11 +456,7 @@ TEST_F(MBP_IntTest, test_ElimTwoVariables_withDivConstraints) {
     PTRef lit1 = logic.mkLeq(x,y3);
     PTRef lit2 = logic.mkLeq(y2,z);
     PTRef fla = logic.mkAnd(lit1, lit2);
-    ModelBuilder builder(logic);
-    builder.addVarValue(x, three);
-    builder.addVarValue(y, one);
-    builder.addVarValue(z, two);
-    auto model = builder.build();
+    auto model = getModel({{x, three}, {y, one}, {z, two}});
     PTRef res = mbp.project(fla, {y,z}, *model);
     std::cout << logic.pp(res) << std::endl;
     EXPECT_EQ(res, logic.getTerm_true());
@@ -537,11 +468,7 @@ TEST_F(MBP_IntTest, test_Equality) {
     PTRef lit2 = logic.mkLeq(y,z);
     PTRef lit3 = logic.mkEq(y, two);
     PTRef fla = logic.mkAnd({lit1, lit2, lit3});
-    ModelBuilder builder(logic);
-    builder.addVarValue(x, logic.mkIntConst(FastRational(-2)));
-    builder.addVarValue(y, two);
-    builder.addVarValue(z, two);
-    auto model = builder.build();
+    auto model = getModel({{x, logic.mkIntConst(FastRational(-2))}, {y, two}, {z, two}});
     PTRef res = mbp.project(fla, {y}, *model);
     std::cout << logic.pp(res) << std::endl;
     EXPECT_EQ(res, logic.mkAnd(logic.mkLeq(x, two), logic.mkLeq(two, z)));
@@ -555,11 +482,7 @@ TEST_F(MBP_IntTest, test_EqualityWithCoefficients) {
     PTRef lit1 = logic.mkEq(x2,y);
     PTRef lit2 = logic.mkLeq(z,x3);
     PTRef fla = logic.mkAnd({lit1, lit2});
-    ModelBuilder builder(logic);
-    builder.addVarValue(x, zero);
-    builder.addVarValue(y, zero);
-    builder.addVarValue(z, logic.getTerm_IntMinusOne());
-    auto model = builder.build();
+    auto model = getModel({{x, zero}, {y, zero}, {z, minusOne}});
     PTRef res = mbp.project(fla, {x}, *model);
     std::cout << logic.pp(res) << std::endl;
     EXPECT_EQ(res,logic.mkAnd(
@@ -577,11 +500,7 @@ TEST_F(MBP_IntTest, test_EqualityAsConjunctionOfInequalities) {
     PTRef lit2 = logic.mkLeq(y,x2);
     PTRef lit3 = logic.mkLeq(z,x3);
     PTRef fla = logic.mkAnd({lit1, lit2, lit3});
-    ModelBuilder builder(logic);
-    builder.addVarValue(x, zero);
-    builder.addVarValue(y, zero);
-    builder.addVarValue(z, logic.getTerm_IntMinusOne());
-    auto model = builder.build();
+    auto model = getModel({{x, zero}, {y, zero}, {z, minusOne}});
     PTRef res = mbp.project(fla, {x}, *model);
     std::cout << logic.pp(res) << std::endl;
     EXPECT_EQ(res,logic.mkAnd(
@@ -606,10 +525,7 @@ TEST_F(MBP_IntTest, test_AuxiliaryVarAndDisequality) {
     // x >= 3
     PTRef lit4 = logic.mkLeq(three, x);
     PTRef fla = logic.mkAnd({lit1, lit2, lit3, lit4});
-    ModelBuilder builder(logic);
-    builder.addVarValue(x, logic.mkIntConst(FastRational(3)));
-    builder.addVarValue(y, one);
-    auto model = builder.build();
+    auto model = getModel({{x, logic.mkIntConst(FastRational(3))}, {y, one}});
     PTRef res = mbp.project(fla, {x}, *model);
     std::cout << logic.pp(res) << std::endl;
     EXPECT_EQ(res, logic.getTerm_true());
@@ -623,10 +539,7 @@ TEST_F(MBP_IntTest, test_ResolvesToTrue) {
     PTRef lit1 = logic.mkLeq(y5, x);
     PTRef lit2 = logic.mkLeq(logic.mkMinus(x, three), y5);
     PTRef fla = logic.mkAnd({lit1, lit2});
-    ModelBuilder builder(logic);
-    builder.addVarValue(x, logic.mkIntConst(FastRational(6)));
-    builder.addVarValue(y, one);
-    auto model = builder.build();
+    auto model = getModel({{x, logic.mkIntConst(FastRational(6))}, {y, one}});
     PTRef res = mbp.project(fla, {y}, *model);
     std::cout << logic.pp(res) << std::endl;
     // Because of the model x -> 6, we get that 5 divides (x - 1)
