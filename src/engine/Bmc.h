@@ -1,12 +1,13 @@
-//
-// Created by Martin Blicha on 17.07.20.
-//
+/*
+ * Copyright (c) 2020-2022, Martin Blicha <martin.blicha@gmail.com>
+ *
+ * SPDX-License-Identifier: MIT
+ */
 
-#ifndef OPENSMT_BMC_H
-#define OPENSMT_BMC_H
+#ifndef GOLEM_BMC_H
+#define GOLEM_BMC_H
 
 #include "Engine.h"
-
 #include "TransitionSystem.h"
 
 class BMC : public Engine {
@@ -16,8 +17,7 @@ public:
 
     BMC(Logic& logic, Options const &) : logic(logic) {}
 
-    virtual GraphVerificationResult
-    solve(ChcDirectedHyperGraph & graph) override {
+    virtual GraphVerificationResult solve(ChcDirectedHyperGraph & graph) override {
         if (graph.isNormalGraph()) {
             auto normalGraph = graph.toNormalGraph();
             return solve(*normalGraph);
@@ -32,4 +32,4 @@ private:
 };
 
 
-#endif //OPENSMT_BMC_H
+#endif //GOLEM_BMC_H

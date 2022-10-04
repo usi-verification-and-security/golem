@@ -1,6 +1,8 @@
-//
-// Created by Martin Blicha on 17.07.20.
-//
+/*
+ * Copyright (c) 2020-2022, Martin Blicha <martin.blicha@gmail.com>
+ *
+ * SPDX-License-Identifier: MIT
+ */
 
 #include "Bmc.h"
 #include "TermUtils.h"
@@ -15,21 +17,38 @@ GraphVerificationResult BMC::solve(ChcDirectedGraph const & system) {
 }
 
 GraphVerificationResult BMC::solveTransitionSystem(TransitionSystem & system) {
-    // non-incremental solving
-//    std::size_t maxLoopUnrollings = std::numeric_limits<std::size_t>::max();
-    std::size_t maxLoopUnrollings = 100;
-    std::size_t currentUnrolling = 0;
+    std::size_t maxLoopUnrollings = std::numeric_limits<std::size_t>::max();
+    PTRef init = system.getInit();
+    PTRef query = system.getQuery();
+    PTRef transition = system.getTransition();
+
     SMTConfig config;
-    while (currentUnrolling < maxLoopUnrollings) {
-        auto fla = system.getPathFormula(currentUnrolling);
-        MainSolver solver(logic, config, "BMC" + std::to_string(currentUnrolling));
-        solver.insertFormula(fla);
+    MainSolver solver(logic, config, "BMC");
+//    std::cout << "Adding initial states: " << logic.pp(init) << std::endl;
+    solver.insertFormula(init);
+    { // Check for system with empty initial states
+        auto res = solver.check();
+        if (res == s_False) {
+            return GraphVerificationResult{VerificationResult::SAFE};
+        }
+    }
+
+    TimeMachine tm{logic};
+    for (std::size_t currentUnrolling = 0; currentUnrolling < maxLoopUnrollings; ++currentUnrolling) {
+        PTRef versionedQuery = tm.sendFlaThroughTime(query, currentUnrolling);
+//        std::cout << "Adding query: " << logic.pp(versionedQuery) << std::endl;
+        solver.push();
+        solver.insertFormula(versionedQuery);
         auto res = solver.check();
         if (res == s_True) {
-            std::cout << "Bug found in depth: " << currentUnrolling << std::endl;
+            // std::cout << "Bug found in depth: " << currentUnrolling << std::endl;
             return GraphVerificationResult(VerificationResult::UNSAFE, InvalidityWitness{});
         }
-        ++currentUnrolling;
+//        std::cout << "No path of length " << currentUnrolling << " found!\n";
+        solver.pop();
+        PTRef versionedTransition = tm.sendFlaThroughTime(transition, currentUnrolling);
+//        std::cout << "Adding transition: " << logic.pp(versionedTransition) << std::endl;
+        solver.insertFormula(versionedTransition);
     }
     return GraphVerificationResult(VerificationResult::UNKNOWN);
 }
