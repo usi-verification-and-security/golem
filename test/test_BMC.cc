@@ -20,14 +20,14 @@ TEST(BMC_test, test_BMC_simple) {
     PTRef next = logic.mkUninterpFun(s1, {xp});
     ChcSystem system;
     system.addUninterpretedPredicate(s1);
-    system.addClause(
+    system.addClause( // x' = 0 => s1(x')
             ChcHead{UninterpretedPredicate{next}},
             ChcBody{{logic.mkEq(xp, logic.getTerm_IntZero())}, {}});
-    system.addClause(
+    system.addClause( // s1(x) and x' = x + 1 => s1(x')
             ChcHead{UninterpretedPredicate{next}},
             ChcBody{{logic.mkEq(xp, logic.mkPlus(x, logic.getTerm_IntOne()))}, {UninterpretedPredicate{current}}}
     );
-    system.addClause(
+    system.addClause( // s1(x) and x > 1 => false
             ChcHead{UninterpretedPredicate{logic.getTerm_false()}},
             ChcBody{{logic.mkGt(x, logic.getTerm_IntOne())}, {UninterpretedPredicate{current}}}
     );
