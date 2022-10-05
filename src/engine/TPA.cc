@@ -1689,28 +1689,7 @@ PTRef TPASplit::inductiveInvariantFromEqualsTransitionInvariant() const {
 }
 
 InvalidityWitness TPAEngine::computeInvalidityWitness(ChcDirectedGraph const & graph, unsigned steps) const {
-    auto adjacencyList = AdjacencyListsGraphRepresentation::from(graph);
-    auto vertices = graph.getVertices();
-    assert(vertices.size() == 3);
-    auto loopingVertex = *std::find_if(vertices.begin(), vertices.end(), [&](SymRef sym) {
-       return sym != graph.getEntry() and sym != graph.getExit();
-    });
-    auto loopingVertexIncoming = adjacencyList.getIncomingEdgesFor(loopingVertex);
-    auto it = std::find_if(loopingVertexIncoming.begin(), loopingVertexIncoming.end(), [&graph](EId eid) {
-        return graph.getSource(eid) == graph.getTarget(eid);
-    });
-    assert(it != loopingVertexIncoming.end());
-    EId loopingEdge = *it;
-    EId startEdge = adjacencyList.getOutgoingEdgesFor(graph.getEntry())[0];
-    EId finalEdge = adjacencyList.getIncomingEdgesFor(graph.getExit())[0];
-    InvalidityWitness witness;
-    InvalidityWitness::ErrorPath path;
-    std::vector<EId> pathEdges(steps, loopingEdge);
-    pathEdges.push_back(finalEdge);
-    pathEdges.insert(pathEdges.begin(), startEdge);
-    path.setPath(std::move(pathEdges));
-    witness.setErrorPath(std::move(path));
-    return witness;
+    return InvalidityWitness::fromTransitionSystem(graph, steps);
 }
 
 ValidityWitness TPAEngine::computeValidityWitness(ChcDirectedGraph const & graph, TransitionSystem const & ts, PTRef inductiveInvariant) const {

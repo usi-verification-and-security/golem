@@ -33,6 +33,8 @@ public:
 
     ErrorPath const & getErrorPath() const { return errorPath; }
 
+    static InvalidityWitness fromTransitionSystem(ChcDirectedGraph const & graph, std::size_t unrollings);
+
 private:
     ErrorPath errorPath;
 };

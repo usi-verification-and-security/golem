@@ -39,11 +39,8 @@ TEST(BMC_test, test_BMC_simple) {
     auto res = bmc.solve(*graph);
     auto answer = res.getAnswer();
     ASSERT_EQ(answer, VerificationResult::UNSAFE);
-    /* TODO: uncomment when BMC produces invalidity witnesses
     auto witness = res.getInvalidityWitness();
-    ChcGraphContext ctx(*graph, logic);
-    SystemVerificationResult systemResult (std::move(res), ctx);
-    auto validationResult = Validator(logic).validate(system, systemResult);
+    SystemVerificationResult systemResult (std::move(res), *hypergraph);
+    auto validationResult = Validator(logic).validate(*normalizedSystem.normalizedSystem, systemResult);
     ASSERT_EQ(validationResult, Validator::Result::VALIDATED);
-    */
 }

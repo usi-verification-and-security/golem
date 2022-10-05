@@ -28,7 +28,7 @@ public:
     GraphVerificationResult solve(ChcDirectedGraph const & system);
 
 private:
-    GraphVerificationResult solveTransitionSystem(TransitionSystem & system);
+    GraphVerificationResult solveTransitionSystem(TransitionSystem const & system, ChcDirectedGraph const & graph);
 };
 
 

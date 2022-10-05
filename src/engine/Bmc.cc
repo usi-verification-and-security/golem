@@ -11,12 +11,12 @@
 GraphVerificationResult BMC::solve(ChcDirectedGraph const & system) {
     if (isTransitionSystem(system)) {
         auto ts = toTransitionSystem(system, logic);
-        return solveTransitionSystem(*ts);
+        return solveTransitionSystem(*ts, system);
     }
     return GraphVerificationResult(VerificationResult::UNKNOWN);
 }
 
-GraphVerificationResult BMC::solveTransitionSystem(TransitionSystem & system) {
+GraphVerificationResult BMC::solveTransitionSystem(TransitionSystem const & system, ChcDirectedGraph const & graph) {
     std::size_t maxLoopUnrollings = std::numeric_limits<std::size_t>::max();
     PTRef init = system.getInit();
     PTRef query = system.getQuery();
@@ -42,7 +42,7 @@ GraphVerificationResult BMC::solveTransitionSystem(TransitionSystem & system) {
         auto res = solver.check();
         if (res == s_True) {
             // std::cout << "Bug found in depth: " << currentUnrolling << std::endl;
-            return GraphVerificationResult(VerificationResult::UNSAFE, InvalidityWitness{});
+            return GraphVerificationResult(VerificationResult::UNSAFE, InvalidityWitness::fromTransitionSystem(graph, currentUnrolling));
         }
 //        std::cout << "No path of length " << currentUnrolling << " found!\n";
         solver.pop();

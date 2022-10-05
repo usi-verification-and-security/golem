@@ -6,6 +6,8 @@
 
 #include "Witnesses.h"
 
+#include "TransformationUtils.h"
+
 SystemInvalidityWitness graphToSystemInvalidityWitness(InvalidityWitness const & witness, ChcDirectedGraph & graph) {
     using Derivation = SystemInvalidityWitness::Derivation;
     Logic & logic = graph.getLogic();
@@ -132,4 +134,30 @@ void ValidityWitness::print(std::ostream & out, Logic & logic) const {
         out << ")" << " " << logic.printSort(logic.getSortRef(predicate)) << "\n";
         out << "    " << logic.printTerm(definition) << ")\n";
     }
+}
+
+InvalidityWitness InvalidityWitness::fromTransitionSystem(const ChcDirectedGraph & graph, std::size_t unrollings) {
+    if (not isTransitionSystem(graph)) { return {}; }
+    auto adjacencyList = AdjacencyListsGraphRepresentation::from(graph);
+    auto vertices = graph.getVertices();
+    assert(vertices.size() == 3);
+    auto loopingVertex = *std::find_if(vertices.begin(), vertices.end(), [&](SymRef sym) {
+        return sym != graph.getEntry() and sym != graph.getExit();
+    });
+    auto loopingVertexIncoming = adjacencyList.getIncomingEdgesFor(loopingVertex);
+    auto it = std::find_if(loopingVertexIncoming.begin(), loopingVertexIncoming.end(), [&graph](EId eid) {
+        return graph.getSource(eid) == graph.getTarget(eid);
+    });
+    assert(it != loopingVertexIncoming.end());
+    EId loopingEdge = *it;
+    EId startEdge = adjacencyList.getOutgoingEdgesFor(graph.getEntry())[0];
+    EId finalEdge = adjacencyList.getIncomingEdgesFor(graph.getExit())[0];
+    InvalidityWitness witness;
+    InvalidityWitness::ErrorPath path;
+    std::vector<EId> pathEdges(unrollings, loopingEdge);
+    pathEdges.push_back(finalEdge);
+    pathEdges.insert(pathEdges.begin(), startEdge);
+    path.setPath(std::move(pathEdges));
+    witness.setErrorPath(std::move(path));
+    return witness;
 }
