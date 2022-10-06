@@ -32,7 +32,7 @@ void printUsage() {
         "-h,--help                  Print this help message\n"
         "-l,--logic <name>          SMT-LIB logic to use (required); possible values: QF_LRA, QF_LIA\n"
         "-e,--engine <name>         Select engine to use; supported engines:\n"
-        //"                               bmc - bounded model checking (only transition systems)\n"
+        "                               bmc - Bounded Model Checking (only transition systems)\n"
         "                               lawi - Lazy Abstraction with Interpolants (only linear CHC systems)\n"
         "                               spacer - custom implementation of Spacer (any CHC system)\n"
         "                               split-tpa - Split Transition Power Abstraction (only transition systems)\n"
