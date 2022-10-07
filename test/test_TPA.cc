@@ -1,6 +1,8 @@
-//
-// Created by Martin Blicha on 06.12.21.
-//
+/*
+ * Copyright (c) 2021-2022, Martin Blicha <martin.blicha@gmail.com>
+ *
+ * SPDX-License-Identifier: MIT
+ */
 
 #include <gtest/gtest.h>
 #include "engine/TPA.h"
@@ -67,14 +69,14 @@ TEST_F(TPATest, test_TPA_simple_safe)
     PTRef next = instantiatePredicate(s1, {xp});
     std::vector<ChClause> clauses{{
             ChcHead{UninterpretedPredicate{next}},
-            ChcBody{{logic.mkEq(xp, logic.getTerm_IntZero())}, {}}},
+            ChcBody{{logic.mkEq(xp, zero)}, {}}},
         {
             ChcHead{UninterpretedPredicate{next}},
-            ChcBody{{logic.mkEq(xp, logic.mkPlus(x, logic.getTerm_IntOne()))}, {UninterpretedPredicate{current}}}
+            ChcBody{{logic.mkEq(xp, logic.mkPlus(x, one))}, {UninterpretedPredicate{current}}}
         },
         {
             ChcHead{UninterpretedPredicate{logic.getTerm_false()}},
-            ChcBody{{logic.mkLt(x, logic.getTerm_IntZero())}, {UninterpretedPredicate{current}}}
+            ChcBody{{logic.mkLt(x, zero)}, {UninterpretedPredicate{current}}}
         }};
     TPAEngine engine(logic, options);
     solveSystem(clauses, engine, VerificationResult::SAFE, true);
@@ -91,14 +93,14 @@ TEST_F(TPATest, test_TPA_simple_unsafe)
     PTRef next = instantiatePredicate(s1, {xp});
     std::vector<ChClause> clauses{{
             ChcHead{UninterpretedPredicate{next}},
-            ChcBody{{logic.mkEq(xp, logic.getTerm_IntZero())}, {}}},
+            ChcBody{{logic.mkEq(xp, zero)}, {}}},
         {
             ChcHead{UninterpretedPredicate{next}},
-            ChcBody{{logic.mkEq(xp, logic.mkPlus(x, logic.getTerm_IntOne()))}, {UninterpretedPredicate{current}}}
+            ChcBody{{logic.mkEq(xp, logic.mkPlus(x, one))}, {UninterpretedPredicate{current}}}
         },
         {
             ChcHead{UninterpretedPredicate{logic.getTerm_false()}},
-            ChcBody{{logic.mkGt(x, logic.getTerm_IntOne())}, {UninterpretedPredicate{current}}}
+            ChcBody{{logic.mkGt(x, one)}, {UninterpretedPredicate{current}}}
         }};
     TPAEngine engine(logic, options);
     solveSystem(clauses, engine, VerificationResult::UNSAFE, true);
@@ -114,15 +116,15 @@ TEST_F(TPATest, test_TPA_CEX_zero) {
     PTRef next = instantiatePredicate(s1, {xp});
     std::vector<ChClause> clauses{{ // x' = 0 => S1(x')
             ChcHead{UninterpretedPredicate{next}},
-            ChcBody{{logic.mkEq(xp, logic.getTerm_IntZero())}, {}}
+            ChcBody{{logic.mkEq(xp, zero)}, {}}
         },
         { // S1(x) and x' = x + 1 => S1(x')
             ChcHead{UninterpretedPredicate{next}},
-            ChcBody{{logic.mkEq(xp, logic.mkPlus(x, logic.getTerm_IntOne()))}, {UninterpretedPredicate{current}}}
+            ChcBody{{logic.mkEq(xp, logic.mkPlus(x, one))}, {UninterpretedPredicate{current}}}
         },
         { // S1(x) and x = 0 => false
             ChcHead{UninterpretedPredicate{logic.getTerm_false()}},
-            ChcBody{{logic.mkEq(x, logic.getTerm_IntZero())}, {UninterpretedPredicate{current}}}
+            ChcBody{{logic.mkEq(x, zero)}, {UninterpretedPredicate{current}}}
         }};
     TPAEngine engine(logic, options);
     solveSystem(clauses, engine, VerificationResult::UNSAFE, true);
@@ -138,15 +140,15 @@ TEST_F(TPATest, test_TPA_CEX_one) {
     PTRef next = instantiatePredicate(s1, {xp});
     std::vector<ChClause> clauses{{ // x' = 0 => S1(x')
             ChcHead{UninterpretedPredicate{next}},
-            ChcBody{{logic.mkEq(xp, logic.getTerm_IntZero())}, {}}
+            ChcBody{{logic.mkEq(xp, zero)}, {}}
         },
         { // S1(x) and x' = x + 1 => S1(x')
             ChcHead{UninterpretedPredicate{next}},
-            ChcBody{{logic.mkEq(xp, logic.mkPlus(x, logic.getTerm_IntOne()))}, {UninterpretedPredicate{current}}}
+            ChcBody{{logic.mkEq(xp, logic.mkPlus(x, one))}, {UninterpretedPredicate{current}}}
         },
         { // S1(x) and x = 1 => false
             ChcHead{UninterpretedPredicate{logic.getTerm_false()}},
-            ChcBody{{logic.mkEq(x, logic.getTerm_IntOne())}, {UninterpretedPredicate{current}}}
+            ChcBody{{logic.mkEq(x, one)}, {UninterpretedPredicate{current}}}
         }};
     TPAEngine engine(logic, options);
     solveSystem(clauses, engine, VerificationResult::UNSAFE, true);
@@ -162,11 +164,11 @@ TEST_F(TPATest, test_TPA_CEX_six) {
     PTRef next = instantiatePredicate(s1, {xp});
     std::vector<ChClause> clauses{{ // x' = 0 => S1(x')
             ChcHead{UninterpretedPredicate{next}},
-            ChcBody{{logic.mkEq(xp, logic.getTerm_IntZero())}, {}}
+            ChcBody{{logic.mkEq(xp, zero)}, {}}
         },
         { // S1(x) and x' = x + 1 => S1(x')
             ChcHead{UninterpretedPredicate{next}},
-            ChcBody{{logic.mkEq(xp, logic.mkPlus(x, logic.getTerm_IntOne()))}, {UninterpretedPredicate{current}}}
+            ChcBody{{logic.mkEq(xp, logic.mkPlus(x, one))}, {UninterpretedPredicate{current}}}
         },
         { // S1(x) and x = 6 => false
             ChcHead{UninterpretedPredicate{logic.getTerm_false()}},
@@ -189,11 +191,11 @@ TEST_F(TPATest, test_TPA_chain_of_two_unsafe) {
     PTRef predS2Next = instantiatePredicate(s2, {xp});
     std::vector<ChClause> clauses{{
             ChcHead{UninterpretedPredicate{predS1Next}},
-            ChcBody{{logic.mkEq(xp, logic.getTerm_IntZero())}, {}}
+            ChcBody{{logic.mkEq(xp, zero)}, {}}
         },
         {
             ChcHead{UninterpretedPredicate{predS1Next}},
-            ChcBody{{logic.mkEq(xp, logic.mkPlus(x, logic.getTerm_IntOne()))}, {UninterpretedPredicate{predS1Current}}}
+            ChcBody{{logic.mkEq(xp, logic.mkPlus(x, one))}, {UninterpretedPredicate{predS1Current}}}
         },
         {
             ChcHead{UninterpretedPredicate{predS2Current}},
@@ -201,12 +203,12 @@ TEST_F(TPATest, test_TPA_chain_of_two_unsafe) {
         },
         {
             ChcHead{UninterpretedPredicate{predS2Next}},
-            ChcBody{{logic.mkEq(xp, logic.mkMinus(x, logic.getTerm_IntOne()))},
+            ChcBody{{logic.mkEq(xp, logic.mkMinus(x, one))},
                 {UninterpretedPredicate{predS2Current}}}
         },
         {
             ChcHead{UninterpretedPredicate{logic.getTerm_false()}},
-            ChcBody{{logic.mkLt(x, logic.getTerm_IntZero())}, {UninterpretedPredicate{predS2Current}}}
+            ChcBody{{logic.mkLt(x, zero)}, {UninterpretedPredicate{predS2Current}}}
         }};
     TPAEngine engine(logic, options);
     solveSystem(clauses, engine, VerificationResult::UNSAFE, true);
@@ -225,11 +227,11 @@ TEST_F(TPATest, test_TPA_chain_of_two_safe) {
     PTRef predS2Next = instantiatePredicate(s2, {xp});
     std::vector<ChClause> clauses{{ // x = 0 => S1(x)
             ChcHead{UninterpretedPredicate{predS1Next}},
-            ChcBody{{logic.mkEq(xp, logic.getTerm_IntZero())}, {}}
+            ChcBody{{logic.mkEq(xp, zero)}, {}}
         },
         { // S1(x) & x' = x + 1 => S1(x')
             ChcHead{UninterpretedPredicate{predS1Next}},
-            ChcBody{{logic.mkEq(xp, logic.mkPlus(x, logic.getTerm_IntOne()))}, {UninterpretedPredicate{predS1Current}}}
+            ChcBody{{logic.mkEq(xp, logic.mkPlus(x, one))}, {UninterpretedPredicate{predS1Current}}}
         },
         { // S1(x) => S2(x)
             ChcHead{UninterpretedPredicate{predS2Current}},
@@ -242,7 +244,7 @@ TEST_F(TPATest, test_TPA_chain_of_two_safe) {
         },
         { // S2(x) & x < 0 => false
             ChcHead{UninterpretedPredicate{logic.getTerm_false()}},
-            ChcBody{{logic.mkLt(x, logic.getTerm_IntZero())}, {UninterpretedPredicate{predS2Current}}}
+            ChcBody{{logic.mkLt(x, zero)}, {UninterpretedPredicate{predS2Current}}}
         }};
     TPAEngine engine(logic, options);
     solveSystem(clauses, engine, VerificationResult::SAFE, false);
@@ -265,7 +267,7 @@ TEST_F(TPATest, test_TPA_chain_regression) {
     PTRef doubleVal = logic.mkIntConst(FastRational(10));
     std::vector<ChClause> clauses{{ // x = 0 and y = 5 => S1(x,y)
             ChcHead{UninterpretedPredicate{predS1Next}},
-            ChcBody{{logic.mkAnd(logic.mkEq(xp, logic.getTerm_IntZero()), logic.mkEq(yp, val))}, {}}
+            ChcBody{{logic.mkAnd(logic.mkEq(xp, zero), logic.mkEq(yp, val))}, {}}
         },
         { // S1(x,y) and x < 5 and x' = x + 1 and y' = y => S1(x',y')
             ChcHead{UninterpretedPredicate{predS1Next}},
@@ -280,8 +282,8 @@ TEST_F(TPATest, test_TPA_chain_regression) {
         { // S2(x,y) and x' = x + 1 and y' = y + 1 => S2(x',y')
             ChcHead{UninterpretedPredicate{predS2Next}},
             ChcBody{{logic.mkAnd(
-                logic.mkEq(xp, logic.mkPlus(x, logic.getTerm_IntOne())),
-                logic.mkEq(yp, logic.mkPlus(y, logic.getTerm_IntOne()))
+                logic.mkEq(xp, logic.mkPlus(x, one)),
+                logic.mkEq(yp, logic.mkPlus(y, one))
             )
             },
                 {UninterpretedPredicate{predS2Current}}}
