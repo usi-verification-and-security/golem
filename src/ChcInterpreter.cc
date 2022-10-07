@@ -4,10 +4,11 @@
  * SPDX-License-Identifier: MIT
  */
 
-#include <engine/TPA.h>
 #include <engine/Bmc.h>
+#include <engine/Kind.h>
 #include <engine/Lawi.h>
 #include <engine/Spacer.h>
+#include <engine/TPA.h>
 #include "ChcInterpreter.h"
 #include "ChcGraph.h"
 #include "graph/GraphTransformations.h"
@@ -442,6 +443,8 @@ std::unique_ptr<Engine> ChcInterpreterContext::getEngine() const {
         return std::unique_ptr<Engine>(new Lawi(logic, opts));
     } else if (engineStr == "spacer") {
         return std::unique_ptr<Engine>(new Spacer(logic, opts));
+    } else if (engineStr == "kind") {
+        return std::unique_ptr<Engine>(new Kind(logic, opts));
     } else {
         throw std::invalid_argument("Unknown engine specified");
     }
