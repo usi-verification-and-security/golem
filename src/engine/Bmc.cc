@@ -41,10 +41,14 @@ GraphVerificationResult BMC::solveTransitionSystem(TransitionSystem const & syst
         solver.insertFormula(versionedQuery);
         auto res = solver.check();
         if (res == s_True) {
-            // std::cout << "Bug found in depth: " << currentUnrolling << std::endl;
+            if (verbosity > 0) {
+                std::cout << "; BMC: Bug found in depth: " << currentUnrolling << std::endl;
+            }
             return GraphVerificationResult(VerificationResult::UNSAFE, InvalidityWitness::fromTransitionSystem(graph, currentUnrolling));
         }
-//        std::cout << "No path of length " << currentUnrolling << " found!\n";
+        if (verbosity > 1) {
+            std::cout << "; BMC: No path of length " << currentUnrolling << " found!" << std::endl;
+        }
         solver.pop();
         PTRef versionedTransition = tm.sendFlaThroughTime(transition, currentUnrolling);
 //        std::cout << "Adding transition: " << logic.pp(versionedTransition) << std::endl;

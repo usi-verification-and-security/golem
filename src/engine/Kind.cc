@@ -91,10 +91,14 @@ GraphVerificationResult Kind::solveTransitionSystem(TransitionSystem const & sys
         solverBase.insertFormula(versionedQuery);
         auto res = solverBase.check();
         if (res == s_True) {
-            // std::cout << "Bug found in depth: " << k << std::endl;
+            if (verbosity > 0) {
+                 std::cout << "; KIND: Bug found in depth: " << k << std::endl;
+            }
             return GraphVerificationResult(VerificationResult::UNSAFE, InvalidityWitness::fromTransitionSystem(graph, k));
         }
-//        std::cout << "No path of length " << currentUnrolling << " found!\n";
+        if (verbosity > 1) {
+            std::cout << "; KIND: No path of length " << k << " found!" << std::endl;
+        }
         solverBase.pop();
         PTRef versionedTransition = tm.sendFlaThroughTime(transition, k);
 //        std::cout << "Adding transition: " << logic.pp(versionedTransition) << std::endl;
@@ -103,6 +107,9 @@ GraphVerificationResult Kind::solveTransitionSystem(TransitionSystem const & sys
         // step forward
         res = solverStepForward.check();
         if (res == s_False) {
+            if (verbosity > 0) {
+                std::cout << "; KIND: Found invariant with forward induction, which is " << k << "-inductive" << std::endl;
+            }
             return GraphVerificationResult(VerificationResult::SAFE);
         }
         PTRef versionedBackwardTransition = tm.sendFlaThroughTime(backwardTransition, k);
@@ -113,6 +120,9 @@ GraphVerificationResult Kind::solveTransitionSystem(TransitionSystem const & sys
         // step backward
         res = solverStepBackward.check();
         if (res == s_False) {
+            if (verbosity > 0) {
+                std::cout << "; KIND: Found invariant with backward induction, which is " << k << "-inductive" << std::endl;
+            }
             return GraphVerificationResult(VerificationResult::SAFE);
         }
         solverStepBackward.push();

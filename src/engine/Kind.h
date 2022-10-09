@@ -15,9 +15,14 @@
 class Kind : public Engine {
     Logic & logic;
 //    Options const & options;
+    int verbosity = 0;
 public:
 
-    Kind(Logic& logic, Options const &) : logic(logic) {}
+    Kind(Logic & logic, Options const & options) : logic(logic) {
+        if (options.hasOption(Options::VERBOSE)) {
+            verbosity = std::stoi(options.getOption(Options::VERBOSE));
+        }
+    }
 
     virtual GraphVerificationResult solve(ChcDirectedHyperGraph & graph) override {
         if (graph.isNormalGraph()) {
