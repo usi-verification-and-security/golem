@@ -1,8 +1,25 @@
 version: 2.1
 jobs:
-    build-recent:
+    build-recent-gcc-debug:
         docker:
-          - image: cimg/base:stable
+          - image: usiverify/verify-env:current
+            auth:
+                username: mydockerhub-user
+                password: $DOCKERHUB_PASSWORD
+            environment:
+                CMAKE_BUILD_TYPE: Debug
+                FLAGS: -Wall -Wextra -Werror
+
+        steps:
+            - checkout
+            - run:
+                name: Debug build gcc
+                command: ./ci/run_commands.sh
+
+
+    build-recent-gcc-release:
+        docker:
+          - image: usiverify/verify-env:current
             auth:
                 username: mydockerhub-user
                 password: $DOCKERHUB_PASSWORD
@@ -13,44 +30,71 @@ jobs:
         steps:
             - checkout
             - run:
-                name: apt-get update
-                command: sudo apt-get update
-            - run:
-                name: install dependencies
-                command: sudo apt-get install libgmp-dev bison flex cmake libubsan0
-            - run:
-                name: Debug build gcc
-                command: ./ci/run_commands.sh
-                environment:
-                    CMAKE_BUILD_TYPE: Debug
-            - run:
                 name: Release build gcc
                 command: ./ci/run_commands.sh
-                environment:
-                    CMAKE_BUILD_TYPE: Release
-            - run:
-                name: Install clang
-                command: |
-                    sudo apt-get install clang
-                    sudo update-alternatives --install /usr/bin/c++ c++ /usr/bin/clang++ 60
-            - run:
-                name: Debug build llvm
-                command: ./ci/run_commands.sh
-                environment:
-                    CMAKE_BUILD_TYPE: Debug
-                    FLAGS: -Wall -Wextra -Werror -fsanitize=signed-integer-overflow,address,undefined
-            - run:
-                name: Release build llvm
-                command: ./ci/run_commands.sh
-                environment:
-                    CMAKE_BUILD_TYPE: Release
 
-    # To set up the centos-7 environment:
-    #  - yum install centos-release-scl devtoolset-8 gmp-devel 
-    #  - scl enable devtoolset-8 bash
-    build-starexec:
+
+    build-recent-clang-debug:
         docker:
-            - image: centos:7
+          - image: usiverify/verify-env:current
+            auth:
+                username: mydockerhub-user
+                password: $DOCKERHUB_PASSWORD
+            environment:
+                CMAKE_BUILD_TYPE: Debug
+                FLAGS: -Wall -Wextra -Werror -fsanitize=signed-integer-overflow,address,undefined
+
+        steps:
+            - checkout
+            - run:
+               name: Setup clang
+               command: sudo update-alternatives --install /usr/bin/c++ c++ /usr/bin/clang++ 60
+            - run:
+                name: Debug build clang
+                command: ./ci/run_commands.sh
+
+
+    build-recent-clang-release:
+        docker:
+          - image: usiverify/verify-env:current
+            auth:
+                username: mydockerhub-user
+                password: $DOCKERHUB_PASSWORD
+            environment:
+                CMAKE_BUILD_TYPE: Release
+                FLAGS: -Wall -Wextra -Werror
+
+        steps:
+            - checkout
+            - run:
+               name: Setup clang
+               command: sudo update-alternatives --install /usr/bin/c++ c++ /usr/bin/clang++ 60
+            - run:
+                name: Release build clang
+                command: ./ci/run_commands.sh
+
+
+    build-starexec-debug:
+        docker:
+            - image: usiverify/verify-env:starexec
+              auth:
+                username: mydockerhub-user
+                password: $DOCKERHUB_PASSWORD
+              environment:
+                CMAKE_BUILD_TYPE: Debug
+                FLAGS: -Wall -Wextra -Werror
+
+        steps:
+            - checkout
+            - run:
+                name: Debug build gcc under devtoolset-8
+                command: |
+                    cat ./ci/run_commands.sh | scl enable devtoolset-8 bash
+
+
+    build-starexec-release:
+        docker:
+            - image: usiverify/verify-env:starexec
               auth:
                 username: mydockerhub-user
                 password: $DOCKERHUB_PASSWORD
@@ -59,48 +103,12 @@ jobs:
                 FLAGS: -Wall -Wextra -Werror
 
         steps:
-            - run:
-                name: Install the environment
-                command: |
-                    yum -y install centos-release-scl
-                    yum -y install devtoolset-8
-                    yum -y install gmp-devel
-                    yum -y install gmp-static
-                    yum -y install bison
-                    yum -y install git
-                    yum -y install wget
-                    yum -y install python3-pip
-                    pip3 install --upgrade pip
-                    yum -y install bzip2
-                    yum -y install glibc-static
-                    yum -y install libstdc++-static
-            - run:
-                name: Set up newer version of cmake
-                command: pip3 install cmake
-            - run:
-                name: Set up newer version of flex
-                command: |
-                    cd ~
-                    wget --no-verbose "https://github.com/westes/flex/files/981163/flex-2.6.4.tar.gz"
-                    tar -xvzf flex-2.6.4.tar.gz
-                    cd flex-2.6.4
-                    echo "./configure --prefix=/usr/local; make -j4; make install" | scl enable devtoolset-8 bash
-                    cd ..
-                    rm -rf flex-*
-                    flex --version
             - checkout
-            - run:
-                name: Debug build gcc under devtoolset-8
-                command: |
-                    cat ./ci/run_commands.sh | scl enable devtoolset-8 bash
-                environment:
-                    CMAKE_BUILD_TYPE: Debug
             - run:
                 name: Release build gcc under devtoolset-8
                 command: |
-                  cat ./ci/build_maximally_static.sh |scl enable devtoolset-8 bash
-                environment:
-                    CMAKE_BUILD_TYPE: Release
+                    cat ./ci/build_maximally_static.sh | scl enable devtoolset-8 bash
+
 
     build-macos:
         macos:
@@ -128,11 +136,23 @@ jobs:
 workflows:
   build-test:
       jobs:
-        - build-starexec:
+        - build-starexec-debug:
           filters: &filters-build-test
             tags:
               only: /^v.*/
-        - build-recent:
+        - build-starexec-release:
+          filters:
+            <<: *filters-build-test
+        - build-recent-clang-debug:
+          filters:
+            <<: *filters-build-test
+        - build-recent-clang-release:
+          filters:
+            <<: *filters-build-test
+        - build-recent-gcc-debug:
+          filters:
+            <<: *filters-build-test
+        - build-recent-gcc-release:
           filters:
             <<: *filters-build-test
         - build-macos:
