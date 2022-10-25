@@ -60,6 +60,7 @@ class Normalizer{
 
     PTRef eliminateItes(PTRef fla);
     PTRef eliminateDivMod(PTRef fla);
+    PTRef eliminateDistincts(PTRef fla);
 
 public:
     Normalizer(Logic& logic) : logic(logic), timeMachine(logic), canonicalPredicateRepresentation(logic) {}

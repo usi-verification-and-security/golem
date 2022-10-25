@@ -1,6 +1,8 @@
-//
-// Created by Martin Blicha on 13.08.21.
-//
+/*
+ * Copyright (c) 2021-2022, Martin Blicha <martin.blicha@gmail.com>
+ *
+ * SPDX-License-Identifier: MIT
+ */
 
 #ifndef GOLEM_OSMT_TERMS_H
 #define GOLEM_OSMT_TERMS_H
@@ -13,6 +15,7 @@
 #include "BoolRewriting.h"
 #include "Substitutor.h"
 #include "DivModRewriter.h"
+#include "DistinctRewriter.h"
 #include "IteHandler.h"
 #else
 #include "opensmt/ArithLogic.h"
@@ -22,6 +25,7 @@
 #include "opensmt/BoolRewriting.h"
 #include "opensmt/Substitutor.h"
 #include "opensmt/DivModRewriter.h"
+#include "opensmt/DistinctRewriter.h"
 #include "opensmt/IteHandler.h"
 #endif // OPENSMT_LOCAL_BUILD
 

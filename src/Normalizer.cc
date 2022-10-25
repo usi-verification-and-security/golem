@@ -138,6 +138,7 @@ ChcBody Normalizer::normalize(const ChcBody & body) {
 
     newInterpretedPart = eliminateItes(newInterpretedPart);
     newInterpretedPart = eliminateDivMod(newInterpretedPart);
+    newInterpretedPart = eliminateDistincts(newInterpretedPart);
     return ChcBody{InterpretedFla{newInterpretedPart}, std::move(newUninterpretedPart)};
 }
 
@@ -151,4 +152,8 @@ PTRef Normalizer::eliminateDivMod(PTRef fla) {
 
 PTRef Normalizer::eliminateItes(PTRef fla) {
     return IteHandler(logic).rewrite(fla);
+}
+
+PTRef Normalizer::eliminateDistincts(PTRef fla) {
+    return DistinctRewriter(logic).rewrite(fla);
 }
