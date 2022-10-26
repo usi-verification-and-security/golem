@@ -47,10 +47,10 @@ public:
     public:
     	struct DerivationStep {
             enum class StepType {INPUT, DERIVED};
-            std::size_t index;
+            std::size_t index {0};
             StepType type;
             std::vector<std::size_t> satellites;
-            std::size_t nucleus;
+            std::size_t nucleus {0};
             ChClause clause;
         };
 
