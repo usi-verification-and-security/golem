@@ -34,7 +34,7 @@ Golem currently supports 5 different backend algorithms for solving CHCs.
 - split-tpa
 
 Spacer engine is the default one.
-It represents are own implementation of the algorithm from [this paper](https://link.springer.com/article/10.1007/s10703-016-0249-4). You might be familiar with the original implementation of Spacer inside [Z3](https://github.com/z3Prover/z3/).
+It represents our own implementation of the algorithm from [this paper](https://link.springer.com/article/10.1007/s10703-016-0249-4). You might be familiar with the original implementation of Spacer inside [Z3](https://github.com/z3Prover/z3/).
 
 BMC engine implements the simple bounded model checking algorithm which checks for existence of increasingly longer counterexample paths in a given transition system.
 It uses incremental capibilities of the underlying SMT solver to speed up the process.
