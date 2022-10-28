@@ -15,12 +15,16 @@
 class Kind : public Engine {
     Logic & logic;
 //    Options const & options;
-    int verbosity = 0;
+    int verbosity {0};
+    bool computeWitness {false};
 public:
 
     Kind(Logic & logic, Options const & options) : logic(logic) {
         if (options.hasOption(Options::VERBOSE)) {
             verbosity = std::stoi(options.getOption(Options::VERBOSE));
+        }
+        if (options.hasOption(Options::COMPUTE_WITNESS)) {
+            computeWitness = options.getOption(Options::COMPUTE_WITNESS) == "true";
         }
     }
 
@@ -36,6 +40,11 @@ public:
 
 private:
     GraphVerificationResult solveTransitionSystem(TransitionSystem const & system, ChcDirectedGraph const & graph);
+
+    PTRef kinductiveToInductive(PTRef invariant, unsigned long k, TransitionSystem const & system) const;
+
+    ValidityWitness witnessFromForwardInduction(ChcDirectedGraph const & graph,
+                                                TransitionSystem const & transitionSystem, unsigned long k) const;
 };
 
 

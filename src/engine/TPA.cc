@@ -1693,24 +1693,5 @@ InvalidityWitness TPAEngine::computeInvalidityWitness(ChcDirectedGraph const & g
 }
 
 ValidityWitness TPAEngine::computeValidityWitness(ChcDirectedGraph const & graph, TransitionSystem const & ts, PTRef inductiveInvariant) const {
-    auto vertices = graph.getVertices();
-    assert(vertices.size() == 3);
-    auto vertex = vertices[2];
-    assert(vertex != graph.getEntry() and vertex != graph.getExit());
-    TermUtils utils(logic);
-    TimeMachine timeMachine(logic);
-    TermUtils::substitutions_map subs;
-    auto graphVars = utils.predicateArgsInOrder(graph.getStateVersion(vertex));
-    auto systemVars = ts.getStateVars();
-    vec<PTRef> unversionedVars;
-    assert(graphVars.size() == systemVars.size());
-    for (std::size_t i = 0; i < graphVars.size(); ++i) {
-        unversionedVars.push(timeMachine.getUnversioned(graphVars[i]));
-        subs.insert({systemVars[i], unversionedVars.last()});
-    }
-    PTRef graphInvariant = utils.varSubstitute(inductiveInvariant, subs);
-//    std::cout << "Graph invariant: " << logic.printTerm(graphInvariant) << std::endl;
-    PTRef unversionedPredicate = logic.mkUninterpFun(vertex, std::move(unversionedVars));
-    ValidityWitness::definitions_t definitions{{unversionedPredicate, graphInvariant}};
-    return ValidityWitness(std::move(definitions));
+    return ValidityWitness::fromTransitionSystem(logic, graph, ts, inductiveInvariant);
 }

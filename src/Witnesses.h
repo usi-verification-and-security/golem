@@ -8,6 +8,7 @@
 #define GOLEM_WITNESSES_H
 
 #include "ChcGraph.h"
+#include "TransitionSystem.h"
 
 #include "osmt_solver.h"
 
@@ -104,6 +105,9 @@ public:
     definitions_t getDefinitions() const { return interpretations; }
 
     void print(std::ostream & out, Logic & logic) const;
+
+    static ValidityWitness fromTransitionSystem(Logic & logic, ChcDirectedGraph const & graph,
+                                                TransitionSystem const & transitionSystem, PTRef invariant);
 };
 
 enum class VerificationResult {SAFE, UNSAFE, UNKNOWN};

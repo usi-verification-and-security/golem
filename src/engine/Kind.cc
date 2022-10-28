@@ -7,6 +7,7 @@
 
 #include "Kind.h"
 
+#include "QuantifierElimination.h"
 #include "TermUtils.h"
 #include "TransformationUtils.h"
 
@@ -94,7 +95,11 @@ GraphVerificationResult Kind::solveTransitionSystem(TransitionSystem const & sys
             if (verbosity > 0) {
                  std::cout << "; KIND: Bug found in depth: " << k << std::endl;
             }
-            return GraphVerificationResult(VerificationResult::UNSAFE, InvalidityWitness::fromTransitionSystem(graph, k));
+            if (computeWitness) {
+                return GraphVerificationResult(VerificationResult::UNSAFE, InvalidityWitness::fromTransitionSystem(graph, k));
+            } else {
+                return GraphVerificationResult(VerificationResult::UNSAFE);
+            }
         }
         if (verbosity > 1) {
             std::cout << "; KIND: No path of length " << k << " found!" << std::endl;
@@ -110,7 +115,11 @@ GraphVerificationResult Kind::solveTransitionSystem(TransitionSystem const & sys
             if (verbosity > 0) {
                 std::cout << "; KIND: Found invariant with forward induction, which is " << k << "-inductive" << std::endl;
             }
-            return GraphVerificationResult(VerificationResult::SAFE);
+            if (computeWitness) {
+                return GraphVerificationResult(VerificationResult::SAFE, witnessFromForwardInduction(graph, system, k));
+            } else {
+                return GraphVerificationResult(VerificationResult::SAFE);
+            }
         }
         PTRef versionedBackwardTransition = tm.sendFlaThroughTime(backwardTransition, k);
         solverStepForward.push();
@@ -130,4 +139,65 @@ GraphVerificationResult Kind::solveTransitionSystem(TransitionSystem const & sys
         solverStepBackward.insertFormula(tm.sendFlaThroughTime(negInit, k+1));
     }
     return GraphVerificationResult(VerificationResult::UNKNOWN);
+}
+
+ValidityWitness Kind::witnessFromForwardInduction(ChcDirectedGraph const & graph, TransitionSystem const & transitionSystem, unsigned long k) const {
+    PTRef kinductiveInvariant = logic.mkNot(transitionSystem.getQuery());
+    PTRef inductiveInvariant = kinductiveToInductive(kinductiveInvariant, k, transitionSystem);
+    return ValidityWitness::fromTransitionSystem(logic, graph, transitionSystem, inductiveInvariant);
+}
+
+// TODO: Unify this with TPA
+PTRef Kind::kinductiveToInductive(PTRef invariant, unsigned long k, TransitionSystem const & system) const {
+    /*
+     * If P(x) is k-inductive invariant then the following formula is 1-inductive invariant:
+     * P(x_0)
+     * \land \forall x_1 (Tr(x_0,x_1) \implies P(x_1)
+     * \land \forall x_1,x_2 (Tr(x_0,x_1 \land P(x_1) \land Tr(x_1,x_2) \implies P(x_2))
+     * ...
+     * \land \forall x_1,x_2,\ldots,x_{k-1}(Tr(x_0,x_1) \land p(x_1) \land \ldots \land P(x_{k-2}) \land Tr(x_{k-2},x_{k-1} \implies P(x_{k_1}))
+     *
+     * This is equivalent to
+     * * P(x_0)
+     * \land \neg \exists x_1 (Tr(x_0,x_1) \land \neg P(x_1)
+     * \land \neg \exists x_1,x_2 (Tr(x_0,x_1 \land P(x_1) \land Tr(x_1,x_2) \land \neg P(x_2))
+     * ...
+     * \land \neg \exists x_1,x_2,\ldots,x_{k-1}(Tr(x_0,x_1) \land p(x_1) \land \ldots \land P(x_{k-2}) \land Tr(x_{k-2},x_{k-1} \land \neg P(x_{k_1}))
+     *
+     * Some computation can be re-used between iteration as going from one iteration to another (ignoring the last negated P(x_i)) we only and
+     * next version of P(x_i) and Tr(x_i, x_{i+1})
+     */
+    vec<PTRef> stateVars = system.getStateVars();
+    vec<PTRef> resArgs;
+    // step 0
+    resArgs.push(invariant);
+    vec<PTRef> helpers;
+    helpers.push(PTRef_Undef);
+    PTRef transition = system.getTransition();
+    auto getNextVersion = [this](PTRef fla, int shift) {
+        return TimeMachine(logic).sendFlaThroughTime(fla, shift);
+    };
+    auto getStateVars = [this, &stateVars](int version) {
+        vec<PTRef> versioned;
+        TimeMachine timeMachine(logic);
+        for (PTRef var : stateVars) {
+            versioned.push(timeMachine.sendVarThroughTime(var, version));
+        }
+        return versioned;
+    };
+    // step 1
+//    std::cout << "Step 1 out of " << k << std::endl;
+    PTRef afterElimination = QuantifierElimination(logic).keepOnly(logic.mkAnd(transition, logic.mkNot(getNextVersion(invariant, 1))), stateVars);
+    resArgs.push(logic.mkNot(afterElimination));
+    helpers.push(transition);
+    // steps 2 to k-1
+    for (unsigned long i = 2; i < k; ++i) {
+//        std::cout << "Step " << i << " out of " << k << std::endl;
+        PTRef helper = logic.mkAnd({helpers[i-1], getNextVersion(invariant, i-1), getNextVersion(transition, i-1)});
+        helper = QuantifierElimination(logic).eliminate(helper, getStateVars(i-1));
+        helpers.push(helper);
+        afterElimination = QuantifierElimination(logic).keepOnly(logic.mkAnd(helper, logic.mkNot(getNextVersion(invariant, i))), stateVars);
+        resArgs.push(logic.mkNot(afterElimination));
+    }
+    return logic.mkAnd(resArgs);
 }
