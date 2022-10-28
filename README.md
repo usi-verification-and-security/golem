@@ -29,6 +29,7 @@ We plan to remove this requirement and automatically detect the theory in the fu
 Golem currently supports 5 different backend algorithms for solving CHCs.
 - spacer [default]
 - bmc
+- kind
 - lawi
 - tpa
 - split-tpa
@@ -38,6 +39,9 @@ It represents our own implementation of the algorithm from [this paper](https://
 
 BMC engine implements the simple bounded model checking algorithm which checks for existence of increasingly longer counterexample paths in a given transition system.
 It uses incremental capibilities of the underlying SMT solver to speed up the process.
+
+KIND engine implements very basic k-induction algorithm from [this paper](https://link.springer.com/chapter/10.1007/3-540-40922-X_8).
+Currently, it only supports transition systems.
 
 LAWI stands for Lazy Abstraction With Interpolants. The algorithm is described in [this paper](https://link.springer.com/chapter/10.1007/11817963_14).
 It is also known as `Impact`, which was the first tool where the algorithm was implemented.
