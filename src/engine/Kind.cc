@@ -99,7 +99,11 @@ GraphVerificationResult Kind::solveTransitionSystem(TransitionSystem const & sys
             if (verbosity > 0) {
                 std::cout << "; KIND: Found invariant with backward induction, which is " << k << "-inductive" << std::endl;
             }
-            return GraphVerificationResult(VerificationResult::SAFE);
+            if (computeWitness) {
+                return GraphVerificationResult(VerificationResult::SAFE, witnessFromBackwardInduction(graph, system, k));
+            } else {
+                return GraphVerificationResult(VerificationResult::SAFE);
+            }
         }
         solverStepBackward.push();
         solverStepBackward.insertFormula(versionedTransition);
@@ -108,10 +112,20 @@ GraphVerificationResult Kind::solveTransitionSystem(TransitionSystem const & sys
     return GraphVerificationResult(VerificationResult::UNKNOWN);
 }
 
-ValidityWitness Kind::witnessFromForwardInduction(ChcDirectedGraph const & graph, TransitionSystem const & transitionSystem, unsigned long k) const {
+ValidityWitness Kind::witnessFromForwardInduction(ChcDirectedGraph const & graph,
+                                                  TransitionSystem const & transitionSystem, unsigned long k) const {
     PTRef kinductiveInvariant = logic.mkNot(transitionSystem.getQuery());
     PTRef inductiveInvariant = kinductiveToInductive(kinductiveInvariant, k, transitionSystem);
     return ValidityWitness::fromTransitionSystem(logic, graph, transitionSystem, inductiveInvariant);
+}
+
+ValidityWitness Kind::witnessFromBackwardInduction(ChcDirectedGraph const & graph,
+                                                   TransitionSystem const & transitionSystem, unsigned long k) const {
+    auto reversedSystem = TransitionSystem::reverse(transitionSystem);
+    PTRef kinductiveInvariant = logic.mkNot(reversedSystem.getQuery());
+    PTRef inductiveInvariant = kinductiveToInductive(kinductiveInvariant, k, reversedSystem);
+    PTRef originalInvariant = logic.mkNot(inductiveInvariant);
+    return ValidityWitness::fromTransitionSystem(logic, graph, transitionSystem, originalInvariant);
 }
 
 // TODO: Unify this with TPA

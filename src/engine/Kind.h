@@ -45,6 +45,9 @@ private:
 
     ValidityWitness witnessFromForwardInduction(ChcDirectedGraph const & graph,
                                                 TransitionSystem const & transitionSystem, unsigned long k) const;
+
+    ValidityWitness witnessFromBackwardInduction(ChcDirectedGraph const & graph,
+                                                 TransitionSystem const & transitionSystem, unsigned long k) const;
 };
 
 

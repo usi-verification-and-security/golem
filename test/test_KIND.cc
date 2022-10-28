@@ -119,7 +119,7 @@ TEST_F(KindTest, test_KIND_moreInductionBackward_safe)
 {
     Options options;
     options.addOption(Options::LOGIC, "QF_LIA");
-//    options.addOption(Options::COMPUTE_WITNESS, "true");
+    options.addOption(Options::COMPUTE_WITNESS, "true");
     SymRef s1 = mkPredicateSymbol("s1", {intSort()});
     PTRef current = instantiatePredicate(s1, {x});
     PTRef next = instantiatePredicate(s1, {xp});
@@ -140,5 +140,5 @@ TEST_F(KindTest, test_KIND_moreInductionBackward_safe)
             ChcBody{{logic.mkEq(x, logic.mkIntConst(15))}, {UninterpretedPredicate{current}}}
         }};
     Kind engine(logic, options);
-    solveSystem(clauses, engine, VerificationResult::SAFE, false);
+    solveSystem(clauses, engine, VerificationResult::SAFE, true);
 }
