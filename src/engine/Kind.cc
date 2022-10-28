@@ -1,4 +1,3 @@
-
 /*
  * Copyright (c) 2022, Martin Blicha <martin.blicha@gmail.com>
  *
@@ -19,44 +18,12 @@ GraphVerificationResult Kind::solve(ChcDirectedGraph const & system) {
     return GraphVerificationResult(VerificationResult::UNKNOWN);
 }
 
-namespace{
-PTRef reverseTransition(Logic & logic, PTRef transition, std::vector<PTRef> const & stateVars, std::vector<PTRef> const & nextStateVars) {
-    TimeMachine tm(logic);
-    std::vector<PTRef> helperVars;
-    helperVars.reserve(stateVars.size());
-    std::transform(stateVars.begin(), stateVars.end(), std::back_inserter(helperVars), [&](PTRef var) {
-        return tm.sendVarThroughTime(var,2);
-    });
-    TermUtils utils(logic);
-    TermUtils::substitutions_map subst;
-    std::size_t varCount = stateVars.size();
-    for (auto i = 0u; i < varCount; ++i) {
-        subst.insert({stateVars[i], helperVars[i]});
-    }
-    transition = utils.varSubstitute(transition, subst);
-
-    subst.clear();
-    for (auto i = 0u; i < varCount; ++i) {
-        subst.insert({nextStateVars[i], stateVars[i]});
-    }
-    transition = utils.varSubstitute(transition, subst);
-
-    subst.clear();
-    for (auto i = 0u; i < varCount; ++i) {
-        subst.insert({helperVars[i], nextStateVars[i]});
-    }
-    transition = utils.varSubstitute(transition, subst);
-
-    return transition;
-}
-}
-
 GraphVerificationResult Kind::solveTransitionSystem(TransitionSystem const & system, ChcDirectedGraph const & graph) {
     std::size_t maxK = std::numeric_limits<std::size_t>::max();
     PTRef init = system.getInit();
     PTRef query = system.getQuery();
     PTRef transition = system.getTransition();
-    PTRef backwardTransition = reverseTransition(logic, transition, system.getStateVars(), system.getNextStateVars());
+    PTRef backwardTransition = TransitionSystem::reverseTransitionRelation(system);
 
     // Base step: Init(x0) and Tr^k(x0,xk) and Query(xk), if SAT -> return UNSAFE
     // Inductive step forward:

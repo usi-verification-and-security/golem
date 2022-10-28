@@ -5,13 +5,12 @@
  */
 
 
-#ifndef OPENSMT_TRANSITIONSYSTEM_H
-#define OPENSMT_TRANSITIONSYSTEM_H
+#ifndef GOLEM_TRANSITIONSYSTEM_H
+#define GOLEM_TRANSITIONSYSTEM_H
 
 #include "osmt_terms.h"
 
 #include <vector>
-#include <unordered_map>
 #include <memory>
 
 class SystemType {
@@ -70,12 +69,16 @@ public:
     std::vector<PTRef> getNextStateVars() const;
     std::vector<PTRef> getAuxiliaryVars() const;
 
+    static TransitionSystem reverse(TransitionSystem const & original);
+
+    static PTRef reverseTransitionRelation(TransitionSystem const & original);
+
 private:
     bool isWellFormed();
 
     PTRef toNextStateVar(PTRef var) const;
-
 };
 
 
-#endif //OPENSMT_TRANSITIONSYSTEM_H
+
+#endif //GOLEM_TRANSITIONSYSTEM_H

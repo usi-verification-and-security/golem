@@ -121,3 +121,44 @@ std::vector<PTRef> TransitionSystem::getNextStateVars() const {
 std::vector<PTRef> TransitionSystem::getAuxiliaryVars() const {
     return this->systemType->getAuxiliaryVars();
 }
+
+TransitionSystem TransitionSystem::reverse(TransitionSystem const & original) {
+    PTRef reversedInitial = original.query;
+    PTRef reversedQuery = original.init;
+    PTRef reversedTransition = reverseTransitionRelation(original);
+    auto type = std::make_unique<SystemType>(*original.systemType);
+    return TransitionSystem(original.logic, std::move(type), reversedInitial, reversedTransition, reversedQuery);
+}
+
+PTRef TransitionSystem::reverseTransitionRelation(TransitionSystem const & transitionSystem) {
+    PTRef transition = transitionSystem.transition;
+    TimeMachine tm(transitionSystem.logic);
+    auto const & stateVars = transitionSystem.getStateVars();
+    auto const & nextStateVars = transitionSystem.getNextStateVars();
+    std::vector<PTRef> helperVars;
+    helperVars.reserve(stateVars.size());
+    std::transform(stateVars.begin(), stateVars.end(), std::back_inserter(helperVars), [&](PTRef var) {
+        return tm.sendVarThroughTime(var,2);
+    });
+    TermUtils utils(transitionSystem.logic);
+    TermUtils::substitutions_map subst;
+    std::size_t varCount = stateVars.size();
+    for (auto i = 0u; i < varCount; ++i) {
+        subst.insert({stateVars[i], helperVars[i]});
+    }
+    transition = utils.varSubstitute(transition, subst);
+
+    subst.clear();
+    for (auto i = 0u; i < varCount; ++i) {
+        subst.insert({nextStateVars[i], stateVars[i]});
+    }
+    transition = utils.varSubstitute(transition, subst);
+
+    subst.clear();
+    for (auto i = 0u; i < varCount; ++i) {
+        subst.insert({helperVars[i], nextStateVars[i]});
+    }
+    transition = utils.varSubstitute(transition, subst);
+
+    return transition;
+}
