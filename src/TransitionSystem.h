@@ -1,6 +1,9 @@
-//
-// Created by Martin Blicha on 21.07.20.
-//
+/*
+ * Copyright (c) 2020-2022, Martin Blicha <martin.blicha@gmail.com>
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 
 #ifndef OPENSMT_TRANSITIONSYSTEM_H
 #define OPENSMT_TRANSITIONSYSTEM_H
@@ -34,31 +37,6 @@ public:
     std::vector<PTRef> const & getAuxiliaryVars() const { return auxiliaryVars; }
 };
 
-class TransitionSystemHelper {
-    struct Frame {
-        std::vector<PTRef> frameVars;
-        std::unordered_map<PTRef, PTRef, PTRefHash> stateToFrameVarMap;
-        std::unordered_map<PTRef, PTRef, PTRefHash> frameToStateVarMap;
-    };
-    SystemType const & systemType;
-    std::vector<Frame> frames;
-
-    Logic & logic;
-
-    std::string framePrefix = "f::";
-
-    void ensureFrames(std::size_t k);
-
-    PTRef toFrameVar(PTRef var, std::size_t frameNum);
-
-public:
-    TransitionSystemHelper(Logic & logic, SystemType const & systemType) : systemType(systemType), logic(logic) {}
-
-    PTRef getFutureStateFormula(PTRef fla, std::size_t k);
-
-    PTRef getFutureTransitionFormula(PTRef fla, std::size_t k);
-};
-
 class TransitionSystem {
 
     Logic & logic;
@@ -68,9 +46,6 @@ class TransitionSystem {
     PTRef init;
     PTRef transition;
     PTRef query;
-
-    std::unique_ptr<TransitionSystemHelper> helper;
-
 
 
 public:
@@ -82,13 +57,10 @@ public:
         transition(transitionRelation),
         query(badStates)
     {
-        helper = std::unique_ptr<TransitionSystemHelper>(new TransitionSystemHelper(logic, *this->systemType));
         if (not isWellFormed()) {
             throw std::logic_error("Transition system not created correctly");
         }
     }
-
-    PTRef getPathFormula(std::size_t unrollingNumber);
 
     PTRef getInit() const;
     PTRef getQuery() const;
