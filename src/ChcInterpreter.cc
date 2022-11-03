@@ -9,6 +9,7 @@
 #include <engine/Lawi.h>
 #include <engine/Spacer.h>
 #include <engine/TPA.h>
+#include <engine/Uroboros.h>
 #include "ChcInterpreter.h"
 #include "ChcGraph.h"
 #include "graph/GraphTransformations.h"
@@ -438,6 +439,8 @@ std::unique_ptr<Engine> ChcInterpreterContext::getEngine() const {
         return std::unique_ptr<Engine>(new Spacer(logic, opts));
     } else if (engineStr == "kind") {
         return std::unique_ptr<Engine>(new Kind(logic, opts));
+    } else if (engineStr == "uroboros") {
+        return std::unique_ptr<Engine>(new Uroboros(logic, opts));
     } else {
         throw std::invalid_argument("Unknown engine specified");
     }
