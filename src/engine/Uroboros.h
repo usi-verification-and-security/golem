@@ -32,6 +32,8 @@ public:
 
 private:
     GraphVerificationResult solveTransitionSystem(TransitionSystem const & system, ChcDirectedGraph const & graph);
+    PTRef lastIterationInterpolant(MainSolver & solver);
+    sstat checkItp(PTRef & itp, PTRef & itpsOld, Logic & logic);
 };
 
 
