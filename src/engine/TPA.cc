@@ -538,6 +538,7 @@ TPASplit::QueryResult TPASplit::reachabilityQueryExact(PTRef from, PTRef to, uns
                     result.refinedTarget = refineTwoStepTarget(from, logic.mkAnd(previousTransition, translatedPreviousTransition), goal, *model);
                     result.steps = 2;
                     TRACE(3, "Exact: Truly reachable states are " << result.refinedTarget.x)
+                    TRACE(4, "Exact: Truly reachable states are " << logic.pp(result.refinedTarget))
                     assert(result.refinedTarget != logic.getTerm_false());
                     queryCache[power].insert({{from, to}, result});
                     return result;
