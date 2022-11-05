@@ -473,13 +473,14 @@ PTRef ModelBasedProjection::project(PTRef fla, const vec<PTRef> & varsToEliminat
 //    dumpImplicant(std::cout, implicant);
     checkImplicant(implicant, logic, model);
     if (logic.hasIntegers()) {
-        PTRef projection = projectIntegerVars(boolEndIt, tmp.end(), std::move(implicant), model);
+        implicant = projectIntegerVars(boolEndIt, tmp.end(), std::move(implicant), model);
+        implicant.insert(implicant.end(), withoutVarsToEliminate.begin(), withoutVarsToEliminate.end());
+        postprocess(implicant, dynamic_cast<ArithLogic&>(logic));
         tmp.clear();
-        for (PtAsgn literal : withoutVarsToEliminate) {
+        for (PtAsgn literal : implicant) {
             tmp.push(literal.sgn == l_True ? literal.tr : logic.mkNot(literal.tr));
         }
-        tmp.push(projection);
-        return logic.mkAnd(tmp);
+        return logic.mkAnd(std::move(tmp));
     }
     for (auto it = boolEndIt; it != tmp.end(); ++it) {
         PTRef var = *it;
@@ -494,7 +495,7 @@ PTRef ModelBasedProjection::project(PTRef fla, const vec<PTRef> & varsToEliminat
     for (PtAsgn literal : implicant) {
         tmp.push(literal.sgn == l_True ? literal.tr : logic.mkNot(literal.tr));
     }
-    return logic.mkAnd(tmp);
+    return logic.mkAnd(std::move(tmp));
 }
 
 void ModelBasedProjection::dumpImplicant(std::ostream & out, implicant_t const& implicant) {
@@ -503,7 +504,7 @@ void ModelBasedProjection::dumpImplicant(std::ostream & out, implicant_t const& 
     out << std::endl;
 }
 
-PTRef ModelBasedProjection::projectIntegerVars(PTRef * beg, PTRef * end, implicant_t implicant, Model & model) {
+ModelBasedProjection::implicant_t ModelBasedProjection::projectIntegerVars(PTRef * beg, PTRef * end, implicant_t implicant, Model & model) {
     auto & lialogic = dynamic_cast<ArithLogic&>(logic);
     assert(lialogic.hasIntegers());
     div_constraints_t divConstraints;
@@ -549,18 +550,16 @@ PTRef ModelBasedProjection::projectIntegerVars(PTRef * beg, PTRef * end, implica
         }
         checkImplicant(implicant, logic, model);
     }
-    vec<PTRef> tmp;
-    for (PtAsgn literal : implicant) {
-        tmp.push(literal.sgn == l_True ? literal.tr : logic.mkNot(literal.tr));
-    }
+
     if (not divConstraints.empty()) {
         for (auto const & constraint : divConstraints) {
             assert(lialogic.isConstant(constraint.constant));
             PTRef mod = lialogic.mkMod(constraint.term, constraint.constant);
-            tmp.push(logic.mkEq(mod, lialogic.getTerm_IntZero()));
+            PTRef modConstraint = logic.mkEq(mod, lialogic.getTerm_IntZero());
+            implicant.emplace_back(modConstraint, l_True);
         }
     }
-    return logic.mkAnd(tmp);
+    return implicant;
 }
 
 namespace {

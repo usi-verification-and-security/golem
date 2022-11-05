@@ -47,7 +47,7 @@ private:
 
     using div_constraints_t = std::vector<DivisibilityConstraint>;
 
-    PTRef projectIntegerVars(PTRef* beg, PTRef* end, implicant_t implicant, Model & model);
+    implicant_t projectIntegerVars(PTRef* beg, PTRef* end, implicant_t implicant, Model & model);
 
     void processDivConstraints(PTRef var, div_constraints_t & divConstraints, implicant_t & implicant, Model & model);
 
