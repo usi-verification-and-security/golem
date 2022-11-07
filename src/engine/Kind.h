@@ -28,13 +28,7 @@ public:
         }
     }
 
-    virtual GraphVerificationResult solve(ChcDirectedHyperGraph & graph) override {
-        if (graph.isNormalGraph()) {
-            auto normalGraph = graph.toNormalGraph();
-            return solve(*normalGraph);
-        }
-        return GraphVerificationResult(VerificationResult::UNKNOWN);
-    }
+    virtual GraphVerificationResult solve(ChcDirectedHyperGraph & graph) override;
 
     GraphVerificationResult solve(ChcDirectedGraph const & system);
 
