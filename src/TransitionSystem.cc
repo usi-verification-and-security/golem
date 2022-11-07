@@ -75,6 +75,14 @@ SystemType::SystemType(std::vector<PTRef> stateVars, std::vector<PTRef> auxiliar
     this->auxiliaryVars = std::move(auxiliaryVars);
 }
 
+SystemType::SystemType(vec<PTRef> const & stateVars, vec<PTRef> const & auxiliaryVars, Logic & logic) : logic(logic) {
+    std::transform(stateVars.begin(), stateVars.end(), std::back_inserter(nextStateVars), [&logic](PTRef var) {
+        return TimeMachine(logic).sendVarThroughTime(var, 1);
+    });
+    std::copy(stateVars.begin(), stateVars.end(), std::back_inserter(this->stateVars));
+    std::copy(auxiliaryVars.begin(), auxiliaryVars.end(), std::back_inserter(this->auxiliaryVars));
+}
+
 bool SystemType::isStateFormula(PTRef fla) const {
     auto const & currentStateVars = stateVars;
     vec<PTRef> vars = TermUtils(logic).getVars(fla);
@@ -108,6 +116,10 @@ PTRef TransitionSystem::getQuery() const {
 
 PTRef TransitionSystem::getTransition() const {
     return transition;
+}
+
+Logic & TransitionSystem::getLogic() const {
+    return logic;
 }
 
 std::vector<PTRef> TransitionSystem::getStateVars() const {

@@ -26,6 +26,7 @@ public:
     SystemType(std::vector<SRef> stateVarTypes, Logic & logic);
     SystemType(std::vector<SRef> stateVarTypes, std::vector<SRef> auxiliaryVarTypes, Logic & logic);
     SystemType(std::vector<PTRef> stateVars, std::vector<PTRef> auxiliaryVars, Logic & logic);
+    SystemType(vec<PTRef> const & stateVars, vec<PTRef> const & auxiliaryVars, Logic & logic);
 
     bool isStateFormula(PTRef fla) const;
 
@@ -64,6 +65,8 @@ public:
     PTRef getInit() const;
     PTRef getQuery() const;
     PTRef getTransition() const;
+
+    Logic & getLogic() const;
 
     std::vector<PTRef> getStateVars() const;
     std::vector<PTRef> getNextStateVars() const;
