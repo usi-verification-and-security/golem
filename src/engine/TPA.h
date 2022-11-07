@@ -178,7 +178,6 @@ protected:
     bool isPureTransitionFormula(PTRef fla) const;
 
     bool verifyKinductiveInvariant(PTRef invariant, unsigned long k) const;
-    PTRef kinductiveToInductive(PTRef invariant, unsigned long k) const;
 
     PTRef refineTwoStepTarget(PTRef start, PTRef transition, PTRef goal, Model& model);
 

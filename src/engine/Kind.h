@@ -41,8 +41,6 @@ public:
 private:
     GraphVerificationResult solveTransitionSystem(TransitionSystem const & system, ChcDirectedGraph const & graph);
 
-    PTRef kinductiveToInductive(PTRef invariant, unsigned long k, TransitionSystem const & system) const;
-
     ValidityWitness witnessFromForwardInduction(ChcDirectedGraph const & graph,
                                                 TransitionSystem const & transitionSystem, unsigned long k) const;
 

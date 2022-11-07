@@ -82,6 +82,8 @@ private:
     PTRef toNextStateVar(PTRef var) const;
 };
 
+PTRef kinductiveToInductive(PTRef invariant, unsigned long k, TransitionSystem const & system);
+
 
 
 #endif //GOLEM_TRANSITIONSYSTEM_H
