@@ -129,7 +129,7 @@ std::unique_ptr<ChcDirectedGraph> ChcDirectedHyperGraph::toNormalGraph() const {
     return std::make_unique<ChcDirectedGraph>(std::move(normalEdges), std::move(newPredicates), logic);
 }
 
-void ChcDirectedGraph::toDot(std::ostream & out) const {
+void ChcDirectedGraph::toDot(std::ostream & out, bool full) const {
 
     out << "digraph proof {" << '\n';
 
@@ -138,12 +138,12 @@ void ChcDirectedGraph::toDot(std::ostream & out) const {
     for (SymRef sym : getVertices()) {
         auto pred = this->getStateVersion(sym);
         dotIds.insert(std::make_pair(sym, "n" + std::to_string(sym.x)));
-        std::string label = logic.printTerm(pred);
+        std::string label = full ? logic.printTerm(pred) : logic.printSym(sym);
         out << dotIds[sym] << "\t[label =  \"" << label << "\"];\n";
     }
 
     forEachEdge([&](auto const & edge) {
-        out << dotIds[edge.from] << " -> " << dotIds[edge.to] << " [label = \"" << logic.printTerm(edge.fla.fla) << "\"];\n";
+        out << dotIds[edge.from] << " -> " << dotIds[edge.to] << " [label = \"" << (full ? logic.printTerm(edge.fla.fla) : "") << "\"];\n";
     });
 
     out << "}" << std::endl;

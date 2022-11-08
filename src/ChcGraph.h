@@ -140,7 +140,7 @@ public:
 
     Logic & getLogic() { return logic; }
     Logic const & getLogic() const { return logic; }
-    void toDot(std::ostream& out) const;
+    void toDot(std::ostream& out, bool full = false) const;
     ChcDirectedGraph reverse() const;
     DirectedEdge reverseEdge(DirectedEdge const & edge, TermUtils & utils) const;
 
