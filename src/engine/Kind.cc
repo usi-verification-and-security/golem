@@ -8,18 +8,11 @@
 
 #include "QuantifierElimination.h"
 #include "TermUtils.h"
-#include "transformers/TransformationPipeline.h"
-#include "transformers/NonLoopEliminator.h"
-#include "transformers/FalseClauseRemoval.h"
-#include "transformers/MultiEdgeMerger.h"
+#include "transformers/BasicTransformationPipelines.h"
 #include "TransformationUtils.h"
 
 GraphVerificationResult Kind::solve(ChcDirectedHyperGraph & graph) {
-    TransformationPipeline::pipeline_t stages;
-    stages.push_back(std::make_unique<NonLoopEliminator>());
-    stages.push_back(std::make_unique<FalseClauseRemoval>());
-    stages.push_back(std::make_unique<MultiEdgeMerger>());
-    TransformationPipeline pipeline(std::move(stages));
+    auto pipeline = Transformations::towardsTransitionSystems();
     auto transformationResult = pipeline.transform(std::make_unique<ChcDirectedHyperGraph>(graph));
     auto transformedGraph = std::move(transformationResult.first);
     auto translator = std::move(transformationResult.second);

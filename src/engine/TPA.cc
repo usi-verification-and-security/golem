@@ -5,15 +5,13 @@
  */
 
 #include "TPA.h"
+
 #include "TransformationUtils.h"
 #include "TransitionSystem.h"
 #include "ModelBasedProjection.h"
 #include "QuantifierElimination.h"
 #include "graph/GraphTransformations.h"
-#include "transformers/FalseClauseRemoval.h"
-#include "transformers/MultiEdgeMerger.h"
-#include "transformers/NonLoopEliminator.h"
-#include "transformers/TransformationPipeline.h"
+#include "transformers/BasicTransformationPipelines.h"
 
 #define TRACE_LEVEL 0
 
@@ -35,11 +33,7 @@ std::unique_ptr<TPABase> TPAEngine::mkSolver() {
 }
 
 GraphVerificationResult TPAEngine::solve(ChcDirectedHyperGraph & graph) {
-    TransformationPipeline::pipeline_t stages;
-    stages.push_back(std::make_unique<NonLoopEliminator>());
-    stages.push_back(std::make_unique<FalseClauseRemoval>());
-    stages.push_back(std::make_unique<MultiEdgeMerger>());
-    TransformationPipeline pipeline(std::move(stages));
+    auto pipeline = Transformations::towardsTransitionSystems();
     auto transformationResult = pipeline.transform(std::make_unique<ChcDirectedHyperGraph>(graph));
     auto transformedGraph = std::move(transformationResult.first);
     auto translator = std::move(transformationResult.second);
