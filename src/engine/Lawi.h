@@ -1,13 +1,13 @@
-//
-// Created by Martin Blicha on 10.08.20.
-//
+/*
+ * Copyright (c) 2020-2022, Martin Blicha <martin.blicha@gmail.com>
+ *
+ * SPDX-License-Identifier: MIT
+ */
 
-#ifndef OPENSMT_LAWI_H
-#define OPENSMT_LAWI_H
+#ifndef GOLEM_LAWI_H
+#define GOLEM_LAWI_H
 
 #include "Engine.h"
-
-#include "TransitionSystem.h"
 
 /*
  * Implementation of Lazy Abstraction with Interpolants (also known as IMPACT algorithm)
@@ -32,4 +32,4 @@ private:
 };
 
 
-#endif //OPENSMT_LAWI_H
+#endif //GOLEM_LAWI_H

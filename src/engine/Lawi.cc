@@ -1,6 +1,8 @@
-//
-// Created by Martin Blicha on 10.08.20.
-//
+/*
+ * Copyright (c) 2020-2022, Martin Blicha <martin.blicha@gmail.com>
+ *
+ * SPDX-License-Identifier: MIT
+ */
 
 #include "Lawi.h"
 
