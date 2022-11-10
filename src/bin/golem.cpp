@@ -1,6 +1,8 @@
-//
-// Created by Martin Blicha on 15.07.20.
-//
+/*
+ * Copyright (c) 2020-2022, Martin Blicha <martin.blicha@gmail.com>
+ *
+ * SPDX-License-Identifier: MIT
+ */
 
 #include "ChcInterpreter.h"
 #include "Options.h"
@@ -22,11 +24,11 @@ int main( int argc, char * argv[] ) {
     auto options = parser.parse(argc, argv);
     auto inputFile = options.getOption(Options::INPUT_FILE);
     auto logicToUse = options.getOption(Options::LOGIC);
-    auto logic = [](std::string const & logic_str) {
+    auto logic = [](std::string const & logic_str) -> std::unique_ptr<Logic> {
         if (logic_str == std::string("QF_LRA")) {
-            return std::unique_ptr<Logic>(new ArithLogic(opensmt::Logic_t::QF_LRA));
+            return std::make_unique<ArithLogic>(opensmt::Logic_t::QF_LRA);
         } else if (logic_str == std::string("QF_LIA")) {
-            return std::unique_ptr<Logic>(new ArithLogic(opensmt::Logic_t::QF_LIA));
+            return std::make_unique<ArithLogic>(opensmt::Logic_t::QF_LIA);
         } else {
             error("Unknown logic specified: " + logic_str);
             exit(1);
