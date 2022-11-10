@@ -13,6 +13,11 @@ class Uroboros : public Engine {
 //    Options const & options;
     int verbosity = 0;
 public:
+    struct InterpolantResult{
+        lbool result;
+        int depth;
+        PTRef interpolant;
+    };
 
     Uroboros(Logic & logic, Options const & options) : logic(logic) {
         if (options.hasOption(Options::VERBOSE)) {
@@ -31,9 +36,10 @@ public:
     GraphVerificationResult solve(ChcDirectedGraph const & system);
 
 private:
+    InterpolantResult finiteRun(PTRef & init, PTRef & transition, PTRef & query, int & k);
     GraphVerificationResult solveTransitionSystem(TransitionSystem const & system, ChcDirectedGraph const & graph);
-    PTRef lastIterationInterpolant(MainSolver & solver);
-    sstat checkItp(PTRef & itp, PTRef & itpsOld, Logic & logic);
+    PTRef lastIterationInterpolant(MainSolver& solver, ipartitions_t mask);
+    sstat checkItp(PTRef itp, PTRef itpsOld);
 };
 
 
