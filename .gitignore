@@ -4,3 +4,5 @@ build
 ## idea
 cmake-build-debug
 .idea
+*.log
+run_benchmark.sh
