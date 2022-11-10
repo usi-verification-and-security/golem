@@ -7,13 +7,9 @@
 #include "Lawi.h"
 
 #include <functional>
+#include <optional>
 
 namespace{
-
-struct OptionalVertex { // NOTE: replace with std::optional when C++17 is enabled
-    VId vertex;
-    bool valid;
-};
 
 class ArtPath {
     struct PathSegment {
@@ -339,7 +335,7 @@ class LawiContext{
 
     VerificationResult DFS(VId vertex);
 
-    OptionalVertex getUncoveredLeaf();
+    std::optional<VId> getUncoveredLeaf();
 
     std::unique_ptr<SMTConfig> createInterpolatingConfig() const {
         SMTConfig * config = new SMTConfig();
@@ -394,9 +390,9 @@ void LawiContext::close(VId vertex) {
 
 // Main method
 GraphVerificationResult LawiContext::unwind() {
-    OptionalVertex optionalVertex = getUncoveredLeaf();
-    while (optionalVertex.valid) {
-        auto uncoveredVertex = optionalVertex.vertex;
+    auto optionalVertex = getUncoveredLeaf();
+    while (optionalVertex.has_value()) {
+        auto uncoveredVertex = optionalVertex.value();
         closeAllAncestors(uncoveredVertex);
         auto res = DFS(uncoveredVertex);
         if (res == VerificationResult::UNSAFE) { return GraphVerificationResult(VerificationResult::UNSAFE, std::move(invalidityWitness)); }
@@ -796,14 +792,15 @@ VId AbstractReachabilityTree::nearestCommonAncestor(VId v1, VId v2) const {
 
 }
 
-OptionalVertex LawiContext::getUncoveredLeaf() {
+std::optional<VId> LawiContext::getUncoveredLeaf() {
     for (auto it = leavesToCheck.rbegin(); it != leavesToCheck.rend(); ++it) {
-        assert(art.isLeaf(*it));
-        if (not coveringRelation.isCovered(*it)) {
-            return OptionalVertex{.vertex = *it, .valid = true};
+        VId vid = *it;
+        assert(art.isLeaf(vid));
+        if (not coveringRelation.isCovered(vid)) {
+            return vid;
         }
     }
-    return OptionalVertex{.vertex = VId(), .valid = false};
+    return std::nullopt;
 }
 
 vec<PTRef> LawiContext::normalizeInterpolants(const vec<PTRef> & itps) const {
