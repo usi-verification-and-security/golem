@@ -12,6 +12,50 @@
 
 #include <memory>
 
+namespace{
+std::string tryDetectLogic(ASTNode const * root) {
+    if (not root or not root->children) { return ""; }
+    auto const & children = *(root->children);
+    bool hasReals = false;
+    bool hasIntegers = false;
+    unsigned short examined = 0;
+    constexpr unsigned short limit = 5;
+    auto decide = [&] {
+        if (hasReals ^ hasIntegers) {
+            return hasReals ? "QF_LRA" : "QF_LIA";
+        }
+        return "";
+    };
+    for (ASTNode * child : children) {
+        const osmttokens::smt2token token = child->getToken();
+        switch (token.x) {
+            case osmttokens::t_declarefun:
+            {
+                auto it = child->children->begin();
+                ASTNode const & name_node = **(it++); (void)name_node;
+                ASTNode const & args_node = **(it++);
+                ASTNode const & ret_node  = **(it++); (void)ret_node;
+                assert(it == child->children->end());
+                for (auto argNode : *(args_node.children)) {
+                    if (argNode->getType() == SYM_T) {
+                        hasReals = hasReals or strcmp(argNode->getValue(), "Real") == 0;
+                        hasIntegers = hasIntegers or strcmp(argNode->getValue(), "Int") == 0;
+                    }
+                }
+                ++examined;
+                if (examined == limit) { return decide(); }
+                break;
+            }
+            case osmttokens::t_assert:
+                return decide();
+            default:
+                ;
+        }
+    }
+    return "";
+}
+}
+
 void error(std::string const & msg) {
     std::cerr << msg << '\n';
     exit(1);
@@ -23,8 +67,7 @@ int main( int argc, char * argv[] ) {
     CommandLineParser parser;
     auto options = parser.parse(argc, argv);
     auto inputFile = options.getOption(Options::INPUT_FILE);
-    auto logicToUse = options.getOption(Options::LOGIC);
-    auto logic = [](std::string const & logic_str) -> std::unique_ptr<Logic> {
+    auto logicFromString = [](std::string const & logic_str) -> std::unique_ptr<Logic> {
         if (logic_str == std::string("QF_LRA")) {
             return std::make_unique<ArithLogic>(opensmt::Logic_t::QF_LRA);
         } else if (logic_str == std::string("QF_LIA")) {
@@ -33,7 +76,7 @@ int main( int argc, char * argv[] ) {
             error("Unknown logic specified: " + logic_str);
             exit(1);
         }
-    }(logicToUse);
+    };
 
     if (inputFile.empty()) {
         error("No input file provided");
@@ -56,6 +99,8 @@ int main( int argc, char * argv[] ) {
                 fclose(fin);
                 error("Eror when parsing input file");
             }
+            auto logicStr = options.hasOption(Options::LOGIC) ? options.getOption(Options::LOGIC) : tryDetectLogic(context.getRoot());
+            auto logic = logicFromString(logicStr);
             ChcInterpreter interpreter(options);
             interpreter.interpretSystemAst(*logic, context.getRoot());
             fclose(fin);
