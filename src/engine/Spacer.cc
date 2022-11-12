@@ -164,14 +164,9 @@ class SpacerContext {
         PTRef mustSummary = PTRef_Undef;
     };
 
-    struct MayReachResult {
-        bool blocked = false;
-        PTRef maySummary = PTRef_Undef;
-    };
-
     MustReachResult mustReachable(EId eid, PTRef targetConstraint, std::size_t bound);
 
-    MayReachResult mayReachable(EId eid, PTRef targetConstraint, std::size_t bound);
+    bool mayReachable(EId eid, PTRef targetConstraint, std::size_t bound);
 
     PTRef projectFormula(PTRef fla, vec<PTRef> const & vars, Model & model);
 
@@ -278,8 +273,8 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
                 mustReached = true;
                 break;
             } else {
-                auto result = mayReachable(edgeId, pob.constraint, pob.bound - 1);
-                if (result.blocked) {
+                bool maybeReachable = mayReachable(edgeId, pob.constraint, pob.bound - 1);
+                if (not maybeReachable) {
                     TRACE(2, "Edge blocked by current may-summaries")
                     continue; // This edge has been blocked, we can continue
                 }
@@ -430,18 +425,14 @@ SpacerContext::MustReachResult SpacerContext::mustReachable(EId eid, PTRef targe
     return res;
 }
 
-SpacerContext::MayReachResult SpacerContext::mayReachable(EId eid, PTRef targetConstraint, std::size_t bound) {
+bool SpacerContext::mayReachable(EId eid, PTRef targetConstraint, std::size_t bound) {
     PTRef maySummary = getEdgeMaySummary(eid, bound);
-    auto implCheckRes = interpolatingImplies(maySummary, logic.mkNot(targetConstraint));
-    MayReachResult res;
-    if (implCheckRes.answer == SpacerContext::QueryAnswer::VALID) {
-        res.blocked = true;
-        res.maySummary = implCheckRes.interpolant;
-    } else {
-        res.blocked = false;
-        res.maySummary = PTRef_Undef;
+    if (maySummary == logic.getTerm_false()) { return false; }
+    auto implCheckRes = implies(maySummary, logic.mkNot(targetConstraint));
+    if (implCheckRes.answer != SpacerContext::QueryAnswer::INVALID and implCheckRes.answer != SpacerContext::QueryAnswer::VALID) {
+        throw std::logic_error("Spacer: Error in checking implication in mayReachable");
     }
-    return res;
+    return implCheckRes.answer == SpacerContext::QueryAnswer::INVALID;
 }
 
 // *********** INDUCTIVE CHECK *****************************
