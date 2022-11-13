@@ -116,6 +116,10 @@ class SpacerContext {
     };
     VertexInstances vertexInstances;
 
+    void addMaySummary(SymRef vid, std::size_t bound, PTRef summary) {
+        over.insert(vid, bound, summary);
+    }
+
     PTRef getMustSummary(SymRef vid, std::size_t bound) const {
         return logic.mkOr(under.getComponents(vid, bound));
     }
@@ -176,7 +180,7 @@ public:
         auto vertices = graph.getVertices();
         for (auto vid : vertices) {
             PTRef toInsert = vid == graph.getEntry() ? logic.getTerm_true() : logic.getTerm_false();
-            over.insert(vid, 0, toInsert);
+            addMaySummary(vid, 0, toInsert);
             under.insert(vid, 0, toInsert);
         }
     }
@@ -191,8 +195,9 @@ GraphVerificationResult Spacer::solve(ChcDirectedHyperGraph & system) {
 GraphVerificationResult SpacerContext::run() {
     std::size_t currentBound = 1;
     while(true) {
-        over.insert(graph.getEntry(), currentBound, logic.getTerm_true());
+        addMaySummary(graph.getEntry(), currentBound, logic.getTerm_true());
         under.insert(graph.getEntry(), currentBound, logic.getTerm_true());
+        TRACE(1, "Checking bound safety for " << currentBound)
         auto boundedResult = boundSafety(currentBound);
         switch (boundedResult) {
             case BoundedSafetyResult::UNSAFE:
@@ -328,7 +333,7 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
                 }
                 PTRef newLemma = VersionManager(logic).targetFormulaToBase(res.interpolant);
                 TRACE(2, "Learnt new lemma for " << pob.vertex.x << " at level " << pob.bound << " - " << logic.pp(newLemma))
-                over.insert(pob.vertex, pob.bound, newLemma);
+                addMaySummary(pob.vertex, pob.bound, newLemma);
                 if (pob.bound < lowestChangedLevel) {
                     lowestChangedLevel = pob.bound;
                 }
@@ -483,7 +488,7 @@ bool SpacerContext::tryPushComponents(SymRef vid, std::size_t level, PTRef body)
         solver.insertFormula(logic.mkNot(nextStateComponent));
         auto res = solver.check();
         if (res == s_False) {
-            over.insert(vid, level + 1, component);
+            addMaySummary(vid, level + 1, component);
         } else {
             allPushed = false;
         }
