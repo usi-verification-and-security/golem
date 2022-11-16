@@ -447,6 +447,7 @@ SpacerContext::InductiveCheckResult SpacerContext::isInductive(std::size_t maxLe
         bool inductive = true;
 //        std::cout << "Checking level " << level << std::endl;
         for (auto vid : graph.getVertices()) {
+            if (vid == graph.getEntry()) { continue; }
 //            std::cout << " Checking vertex " << vid.id << std::endl;
             // encode body as disjunction over all the incoming edges
             vec<PTRef> edgeRepresentations;
