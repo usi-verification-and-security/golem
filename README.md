@@ -13,7 +13,7 @@ Golem can be compiled on Linux and MacOS.
 It uses `CMake` for build configuration.
 Golem depends on [OpenSMT](https://github.com/usi-verification-and-security/opensmt/) for SMT solving and interpolation.
 If you already have OpenSMT installed, you can pass the path using `-DOPENSMT_HOME` option to `cmake` command.
-Note that Golem requires a specific version of OpenSMT, currently v2.4.2.
+Note that Golem requires a specific version of OpenSMT, currently v2.4.3.
 Otherwise, `cmake` will download the latest compatible version of OpenSMT and build it as a subproject.
 
 ## Usage
@@ -22,8 +22,8 @@ You can view the usage in the help message after running
 $ golem -h
 ```
 
-At the moment, you must specified the SMT theory used in the CHC encoding with `-l` option. The supported theories are `QF_LRA` and `QF_LIA`, i.e., the linear arithmetic over reals or integers.
-We plan to remove this requirement and automatically detect the theory in the future.
+At the moment, you should specified the SMT theory used in the CHC encoding with `-l` option. The supported theories are `QF_LRA` and `QF_LIA`, i.e., the linear arithmetic over reals or integers.
+Golem now has limited support to automatically detect the theory from the script, so the option is no longer mandatory, but still recommended.
 
 ### Backend engines
 Golem currently supports 5 different backend algorithms for solving CHCs.
