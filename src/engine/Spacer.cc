@@ -90,9 +90,9 @@ struct PriorityQueue {
     void push(ProofObligation pob) { pqueue.push(pob); }
     ProofObligation const & peek() const { return pqueue.top(); }
     void pop() { pqueue.pop(); }
-    bool empty() const { return pqueue.empty(); }
+    [[nodiscard]] bool empty() const { return pqueue.empty(); }
 private:
-    std::priority_queue<ProofObligation, std::vector<ProofObligation>, std::greater<ProofObligation>> pqueue;
+    std::priority_queue<ProofObligation, std::vector<ProofObligation>, std::greater<>> pqueue;
 };
 
 class SpacerContext {
@@ -108,7 +108,7 @@ class SpacerContext {
     class VertexInstances {
         std::map<EId, std::vector<unsigned>> instanceCounter;
     public:
-        VertexInstances(ChcDirectedHyperGraph const & graph);
+        explicit VertexInstances(ChcDirectedHyperGraph const & graph);
 
         unsigned getInstanceNumber(EId eid, unsigned sourceIndex) const {
             return instanceCounter.at(eid)[sourceIndex];
@@ -145,12 +145,12 @@ class SpacerContext {
         std::size_t inductiveLevel;
     };
 
-    InductiveCheckResult isInductive(std::size_t currentBound);
+    InductiveCheckResult isInductive(std::size_t);
 
     bool tryPushComponents(SymRef, std::size_t, PTRef);
 
 
-    enum class QueryAnswer {VALID, INVALID, ERROR, UNKNOWN};
+    enum class QueryAnswer : char {UNKNOWN, VALID, INVALID, ERROR};
     struct QueryResult {
         QueryAnswer answer;
         std::unique_ptr<Model> model;
@@ -222,7 +222,7 @@ GraphVerificationResult SpacerContext::run() {
                             throw std::logic_error("Duplicate definition for a predicate encountered!");
                         }
                     }
-                    return GraphVerificationResult(VerificationResult::SAFE, ValidityWitness(std::move(solution)));
+                    return {VerificationResult::SAFE, ValidityWitness(std::move(solution))};
                 }
                 ++currentBound;
                 break;
@@ -561,7 +561,7 @@ PTRef SpacerContext::getEdgeMixedSummary(EId eid, std::size_t bound, std::size_t
     auto const & sources = graph.getSources(eid);
     auto sourceCount = sources.size();
     vec<PTRef> components;
-    components.capacity(sourceCount + 1);
+    components.capacity(static_cast<int>(sourceCount) + 1);
     for (std::size_t i = 0; i <= lastMayIndex; ++i) {
         PTRef maySummary = getMaySummary(sources[i], bound);
         PTRef summaryAsSource = VersionManager(logic).baseFormulaToSource(maySummary, vertexInstances.getInstanceNumber(eid, i));
