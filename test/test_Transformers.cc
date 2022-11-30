@@ -110,6 +110,7 @@ TEST_F(Transformer_test, test_TwoChains_WithLoop) {
 
 TEST_F(Transformer_test, test_OutputFromEngine) {
     ChcSystem system;
+    Options options;
     system.addUninterpretedPredicate(s1);
     system.addUninterpretedPredicate(s2);
     system.addUninterpretedPredicate(s3);
@@ -138,7 +139,7 @@ TEST_F(Transformer_test, test_OutputFromEngine) {
 //    hypergraph->forEachEdge([&](auto const & edge) {
 //       std::cout << logic.pp(edge.fla.fla) << std::endl;
 //    });
-    auto res = Spacer(logic).solve(*hypergraph);
+    auto res = Spacer(logic, options).solve(*hypergraph);
     ASSERT_EQ(res.getAnswer(), VerificationResult::SAFE);
     res = translator->translate(res);
     Validator validator(logic);
