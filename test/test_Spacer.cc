@@ -107,6 +107,7 @@ TEST_F(Spacer_LRA_Test, test_BasicNonLinearSystem_Safe)
 
 TEST_F(Spacer_LRA_Test, test_BasicNonLinearSystem_Unsafe)
 {
+    options.addOption(Options::COMPUTE_WITNESS, "true");
     SymRef invx_sym = mkPredicateSymbol("Invx", {realSort()});
     SymRef invy_sym = mkPredicateSymbol("Invy", {realSort()});
     PTRef y = mkRealVar("y");
@@ -136,11 +137,12 @@ TEST_F(Spacer_LRA_Test, test_BasicNonLinearSystem_Unsafe)
         }
     };
     Spacer engine(*logic, options);
-    solveSystem(clauses, engine, VerificationAnswer::UNSAFE, false);
+    solveSystem(clauses, engine, VerificationAnswer::UNSAFE, true);
 }
 
 TEST_F(Spacer_LRA_Test, test_NonLinearSystem_Bug)
 {
+    options.addOption(Options::COMPUTE_WITNESS, "true");
     SymRef M = mkPredicateSymbol("M", {realSort()});
     SymRef B = mkPredicateSymbol("B", {boolSort()});
     std::vector<ChClause> clauses{
@@ -170,6 +172,35 @@ TEST_F(Spacer_LRA_Test, test_NonLinearSystem_Bug)
         }
     };
     Spacer engine(*logic, options);
-    solveSystem(clauses, engine, VerificationAnswer::UNSAFE, false);
+    solveSystem(clauses, engine, VerificationAnswer::UNSAFE, true);
+}
+
+TEST_F(Spacer_LRA_Test, test_UnsatProofNondeterministicSystem)
+{
+    options.addOption(Options::COMPUTE_WITNESS, "true");
+    SymRef P = mkPredicateSymbol("P", {realSort()});
+    SymRef M = mkPredicateSymbol("M", {realSort()});
+    PTRef y = mkRealVar("y");
+    std::vector<ChClause> clauses{
+        { // x < 0 => M(x)
+            ChcHead{UninterpretedPredicate{instantiatePredicate(M, {xp})}},
+            ChcBody{InterpretedFla{logic->mkLt(xp, zero)}, {}}
+        },
+        { // x > 0 => P(x)
+            ChcHead{UninterpretedPredicate{instantiatePredicate(P, {xp})}},
+            ChcBody{InterpretedFla{logic->mkGt(xp, zero)}, {}}
+        },
+        { // M(x) and P(y) and x + y = 0 => false
+            ChcHead{UninterpretedPredicate{logic->getTerm_false()}},
+            ChcBody{InterpretedFla{logic->mkEq(zero, logic->mkPlus(x,y))},
+                {
+                    UninterpretedPredicate{instantiatePredicate(M, {x})},
+                    UninterpretedPredicate{instantiatePredicate(P, {y})}
+                }
+            }
+        },
+    };
+    Spacer engine(*logic, options);
+    solveSystem(clauses, engine, VerificationAnswer::UNSAFE, true);
 }
 

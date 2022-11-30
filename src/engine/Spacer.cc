@@ -95,12 +95,74 @@ private:
     std::priority_queue<ProofObligation, std::vector<ProofObligation>, std::greater<>> pqueue;
 };
 
+class DerivationDatabase {
+public:
+    using ID = std::size_t;
+    struct DerivedFact {
+        PTRef fact;
+        SymRef node;
+    };
+
+    [[nodiscard]] ID getIdFor(DerivedFact fact) const;
+
+    struct Entry {
+        DerivedFact derivedFact;
+        EId incomingEdge;
+        std::vector<ID> premises;
+    };
+
+    void newDerivation(DerivedFact fact, EId edge, std::vector<ID> premises);
+
+    Entry const & getEntry(ID index) const { assert(index < table.size()); return table.at(index); }
+
+    // DEBUG
+    void print(Logic & logic) const {
+        for (auto const & entry : *this) {
+            std::cout << logic.printSym(entry.derivedFact.node) << " " << logic.pp(entry.derivedFact.fact) << " " << entry.incomingEdge.id << " | ";
+            for (auto premise : entry.premises) {
+                std::cout << premise << " ";
+            }
+            std::cout << std::endl;
+        }
+    }
+
+private:
+    std::vector<Entry> table;
+
+public:
+    using const_iterator = decltype(table)::const_iterator;
+
+    const_iterator begin() const { return table.begin(); }
+    const_iterator end() const { return table.end(); }
+
+};
+
+bool operator==(DerivationDatabase::DerivedFact const & first, DerivationDatabase::DerivedFact const & second) {
+    return first.node == second.node and first.fact == second.fact;
+}
+
+DerivationDatabase::ID DerivationDatabase::getIdFor(DerivationDatabase::DerivedFact fact) const {
+    for (std::size_t i = 0u; i < table.size(); ++i) {
+        if (table[i].derivedFact == fact) {
+            return i;
+        }
+    }
+    throw std::logic_error("Given fact not found in the database of derived facts");
+}
+
+void DerivationDatabase::newDerivation(DerivationDatabase::DerivedFact fact, EId edge, std::vector<ID> premises) {
+    table.push_back({.derivedFact = fact, .incomingEdge = edge, .premises = std::move(premises)});
+}
+
 class SpacerContext {
     Logic & logic;
     ChcDirectedHyperGraph const & graph;
 
     UnderApproxMap under;
     OverApproxMap over;
+
+    DerivationDatabase database;
+    bool logProof;
 
     std::size_t lowestChangedLevel = 0;
 
@@ -155,8 +217,9 @@ class SpacerContext {
     ItpQueryResult interpolatingImplies(PTRef antecedent, PTRef consequent);
 
     struct MustReachResult {
-        bool applied = false;
         PTRef mustSummary = PTRef_Undef;
+        bool applied = false;
+        std::unique_ptr<Model> model {nullptr};
     };
 
     MustReachResult mustReachable(EId eid, PTRef targetConstraint, std::size_t bound);
@@ -165,22 +228,29 @@ class SpacerContext {
 
     PTRef projectFormula(PTRef fla, vec<PTRef> const & vars, Model & model);
 
+    void logNewFactIntoDatabase(PTRef fact, SymRef vertex, std::size_t sourceLevel, EId eid, Model & model);
 
+    InvalidityWitness reconstructInvalidityWitness() const;
 public:
-    SpacerContext(Logic & logic, ChcDirectedHyperGraph const & graph): logic(logic), graph(graph), vertexInstances(graph) {
-        auto vertices = graph.getVertices();
-        for (auto vid : vertices) {
-            PTRef toInsert = vid == graph.getEntry() ? logic.getTerm_true() : logic.getTerm_false();
-            addMaySummary(vid, 0, toInsert);
-            under.insert(vid, 0, toInsert);
-        }
-    }
+    SpacerContext(Logic & logic, ChcDirectedHyperGraph const & graph, bool logProof);
 
     VerificationResult run();
 };
 
 VerificationResult Spacer::solve(ChcDirectedHyperGraph & system) {
-    return SpacerContext(logic, system).run();
+    bool logProof = options.hasOption(Options::COMPUTE_WITNESS) and options.getOption(Options::COMPUTE_WITNESS) == "true";
+    return SpacerContext(logic, system, logProof).run();
+}
+
+SpacerContext::SpacerContext(Logic & logic, ChcDirectedHyperGraph const & graph, bool logProof)
+    : logic(logic), graph(graph), logProof(logProof), vertexInstances(graph) {
+    auto vertices = graph.getVertices();
+    for (auto vid : vertices) {
+        PTRef toInsert = vid == graph.getEntry() ? logic.getTerm_true() : logic.getTerm_false();
+        addMaySummary(vid, 0, toInsert);
+        under.insert(vid, 0, toInsert);
+    }
+    database.newDerivation({.fact = logic.getTerm_true(), .node = graph.getEntry()}, {static_cast<std::size_t>(-1)}, {});
 }
 
 VerificationResult SpacerContext::run() {
@@ -192,7 +262,7 @@ VerificationResult SpacerContext::run() {
         auto boundedResult = boundSafety(currentBound);
         switch (boundedResult) {
             case BoundedSafetyResult::UNSAFE:
-                return VerificationResult(VerificationAnswer::UNSAFE);
+                return VerificationResult(VerificationAnswer::UNSAFE, reconstructInvalidityWitness());
             case BoundedSafetyResult::SAFE: {
                 auto inductiveResult = isInductive(currentBound);
                 if (inductiveResult.answer == InductiveCheckAnswer::INDUCTIVE) {
@@ -262,6 +332,10 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
                 assert(result.mustSummary != PTRef_Undef);
                 PTRef definitelyReachable = VersionManager(logic).targetFormulaToBase(result.mustSummary);
                 under.insert(pob.vertex, pob.bound, definitelyReachable);
+                if (logProof) {
+                    assert(result.model);
+                    logNewFactIntoDatabase(definitelyReachable, pob.vertex, pob.bound - 1, edgeId, *result.model);
+                }
                 if (pob.vertex == query) {
                     return BoundedSafetyResult::UNSAFE; // query is reachable
                 }
@@ -414,9 +488,11 @@ SpacerContext::MustReachResult SpacerContext::mustReachable(EId eid, PTRef targe
         auto predicateVars = TermUtils(logic).getVars(graph.getNextStateVersion(target));
         PTRef newMustSummary = projectFormula(edgeMustSummary, predicateVars, *implCheckRes.model); // TODO: is body OK, or do I need to project also the head?
         res.mustSummary = newMustSummary;
+        res.model = std::move(implCheckRes.model);
     } else {
         res.applied = false;
         res.mustSummary = PTRef_Undef;
+        res.model = nullptr;
     }
     return res;
 }
@@ -565,4 +641,149 @@ PTRef SpacerContext::getEdgeMixedSummary(EId eid, std::size_t bound, std::size_t
     }
     components.push(graph.getEdgeLabel(eid));
     return logic.mkAnd(std::move(components));
+}
+
+void SpacerContext::logNewFactIntoDatabase(PTRef fact, SymRef vertex, std::size_t level, EId edgeId, Model & model) {
+    DerivationDatabase::DerivedFact newFact = {fact, vertex};
+    std::vector<DerivationDatabase::ID> premises;
+    // figure out the premises
+    VersionManager versionManager(logic);
+    auto const & sourceNodes = graph.getSources(edgeId);
+    for (std::size_t index = 0; index < sourceNodes.size(); ++index) {
+        auto sourceNode = sourceNodes[index];
+        auto components = under.getComponents(sourceNode, level);
+        auto instanceNumber = vertexInstances.getInstanceNumber(edgeId, index);
+        bool found = false;
+        for (PTRef component : components) {
+            PTRef versionedComponent = versionManager.baseFormulaToSource(component, instanceNumber);
+            if (model.evaluate(versionedComponent) == logic.getTerm_true()) {
+                premises.push_back(database.getIdFor({component, sourceNode}));
+                found = true;
+                break;
+            }
+        }
+        assert(found);
+        if (not found) {
+            throw std::logic_error("Unreachable!");
+        }
+    }
+    database.newDerivation(newFact, edgeId, std::move(premises));
+}
+
+namespace { // Helper for SpacerContext::reconstructInvalidityWitness
+struct Entry {
+    DerivationDatabase::ID databaseEntryId;
+    PTRef factInstance;
+    std::vector<PTRef> premiseInstances;
+};
+
+void computePremiseInstances(DerivationDatabase::Entry const & databaseEntry, Entry & entry,
+                             DerivationDatabase const & database,
+                             ChcDirectedHyperGraph const & graph,
+                             ChcDirectedHyperGraph::VertexInstances const & vertexInstances) {
+    // Simplest way: Compute a model for a formula consisting of
+    //  1. Constraint of the edge
+    //  2. Premise constraints
+    //  3. The fact we want to derive
+    // This will give us a model from which we can compute the instances of the premises
+
+    assert(entry.premiseInstances.empty());
+    Logic & logic = graph.getLogic();
+    EId edge = databaseEntry.incomingEdge;
+    SMTConfig config;
+    MainSolver solver(logic, config, "");
+    PTRef edgeConstraint = graph.getEdgeLabel(edge);
+    solver.insertFormula(edgeConstraint);
+//    std::cout << logic.pp(edgeConstraint) << '\n';
+    VersionManager versionManager(logic);
+    vec<PTRef> sourcePredicates;
+    for (std::size_t i = 0; i < databaseEntry.premises.size(); ++i) {
+        auto premiseEntry = database.getEntry(databaseEntry.premises[i]);
+        assert(premiseEntry.derivedFact.node == graph.getSources(edge)[i]);
+        auto instanceNumber = vertexInstances.getInstanceNumber(edge, i);
+        PTRef premiseConstraint = versionManager.baseFormulaToSource(premiseEntry.derivedFact.fact, instanceNumber);
+        sourcePredicates.push(graph.getStateVersion(premiseEntry.derivedFact.node, instanceNumber));
+        solver.insertFormula(premiseConstraint);
+//        std::cout << logic.pp(premiseConstraint) << '\n';
+    }
+    PTRef factInstance = entry.factInstance;
+    auto targetNode = graph.getTarget(edge);
+    if (targetNode != graph.getExit()) {
+        assert(targetNode == logic.getSymRef(factInstance));
+        PTRef targetVersion = graph.getNextStateVersion(graph.getTarget(edge));
+        TermUtils::substitutions_map mapping;
+        TermUtils(logic).mapFromPredicate(targetVersion, factInstance, mapping);
+        vec<PTRef> factValues;
+        for (auto const & varValue : mapping) {
+            factValues.push(logic.mkEq(varValue.first, varValue.second));
+        }
+        PTRef factConstraint = logic.mkAnd(std::move(factValues));
+        solver.insertFormula(factConstraint);
+//        std::cout << logic.pp(factConstraint) << std::endl;
+    }
+    auto res = solver.check();
+    if (res != s_True) {
+        throw std::logic_error("Error in computing derivation!");
+    }
+    auto model = solver.getModel();
+    std::transform(sourcePredicates.begin(), sourcePredicates.end(), std::back_inserter(entry.premiseInstances), [&](PTRef premise){
+        PTRef premiseInstance = model->evaluate(premise);
+//        std::cout << logic.pp(premiseInstance) << std::endl;
+        return premiseInstance;
+    });
+}
+}
+
+InvalidityWitness SpacerContext::reconstructInvalidityWitness() const {
+    if (not logProof) { return {}; }
+//    database.print(logic);
+    // We make a DFS style traversal of the database, starting from the derivation of FALSE
+    // After the premises of a derived fact has been processed, we can add the fact to the InvalidityWitness
+    InvalidityWitness::Derivation witnessingDerivation;
+    std::unordered_map<PTRef, std::size_t, PTRefHash> derivationSteps;
+    DerivationDatabase::DerivedFact root{.fact = logic.getTerm_true(), .node = graph.getExit()};
+    auto rootIndex = database.getIdFor(root);
+    std::deque<Entry> toProcess; // MB: We use deque to have stable references
+    toProcess.push_back({rootIndex, logic.getTerm_true(), {}});
+    while (not toProcess.empty()) {
+        auto & entry = toProcess.back();
+        if (entry.databaseEntryId != rootIndex and derivationSteps.count(entry.factInstance) > 0) {
+            toProcess.pop_back();
+            continue;
+        }
+        auto const & databaseEntry = database.getEntry(entry.databaseEntryId);
+        if (not databaseEntry.premises.empty() and entry.premiseInstances.empty()) {
+            computePremiseInstances(databaseEntry, entry, database, graph, vertexInstances);
+        }
+        bool allPremissesProcessed = true;
+        assert(databaseEntry.premises.size() == entry.premiseInstances.size());
+        for (std::size_t i = 0; i < databaseEntry.premises.size(); ++i) {
+            auto it = derivationSteps.find(entry.premiseInstances[i]);
+            if (it == derivationSteps.end()) {
+                allPremissesProcessed = false;
+                toProcess.push_back({databaseEntry.premises[i], entry.premiseInstances[i], {}});
+            }
+        }
+        if (not allPremissesProcessed) { continue; }
+        // all premises processed, we can process this step
+        InvalidityWitness::Derivation::DerivationStep step;
+        step.index = witnessingDerivation.size();
+        step.derivedFact = entry.factInstance;
+        step.clauseId = databaseEntry.incomingEdge;
+        std::transform(entry.premiseInstances.begin(), entry.premiseInstances.end(), std::back_inserter(step.premises), [&](auto id) {
+            auto it = derivationSteps.find(id);
+            assert(it != derivationSteps.end());
+            return it->second;
+        });
+        if (databaseEntry.derivedFact.node == graph.getExit()) { // MB: Patch the final derivation step
+            assert(step.derivedFact == logic.getTerm_true());
+            step.derivedFact = logic.getTerm_false();
+        }
+        derivationSteps.insert({step.derivedFact, step.index});
+        witnessingDerivation.addDerivationStep(std::move(step));
+        toProcess.pop_back();
+    }
+    InvalidityWitness witness;
+    witness.setDerivation(std::move(witnessingDerivation));
+    return witness;
 }

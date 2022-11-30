@@ -11,11 +11,10 @@
 
 class Spacer : public Engine {
     Logic & logic;
+    Options const & options;
 
 public:
-    Spacer(Logic & logic, Options const &): logic(logic) {}
-
-    explicit Spacer(Logic & logic) : logic(logic) {}
+    Spacer(Logic & logic, Options const & options) : logic(logic), options(options) {}
 
     [[nodiscard]] VerificationResult solve(ChcDirectedHyperGraph & system) override;
 };
