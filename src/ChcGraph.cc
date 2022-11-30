@@ -155,9 +155,9 @@ DirectedEdge ChcDirectedGraph::reverseEdge(DirectedEdge const & edge, TermUtils 
     PTRef ofla = edge.fla.fla;
     std::unordered_map<PTRef, PTRef, PTRefHash> subst;
     // variables from 'from' are expressed as state vars, they must be changed to next state
-    utils.insertVarPairsFromPredicates(this->getStateVersion(edge.from), this->getNextStateVersion(edge.from), subst);
+    utils.mapFromPredicate(this->getStateVersion(edge.from), this->getNextStateVersion(edge.from), subst);
     // variables from 'to' are expressed as next state vars, they must be changed to state
-    utils.insertVarPairsFromPredicates(this->getNextStateVersion(edge.to), this->getStateVersion(edge.to), subst);
+    utils.mapFromPredicate(this->getNextStateVersion(edge.to), this->getStateVersion(edge.to), subst);
     // simulataneous substitution
     PTRef rfla = utils.varSubstitute(ofla, subst);
     return DirectedEdge{.from = rfrom, .to = rto, .fla = InterpretedFla{rfla}, .id = edge.id};
@@ -201,7 +201,7 @@ PTRef ChcDirectedGraph::mergeLabels(const DirectedEdge & incoming, const Directe
     PTRef outgoingLabel = outgoing.fla.fla;
     TermUtils utils(logic);
     TermUtils::substitutions_map subMap;
-    utils.insertVarPairsFromPredicates(getNextStateVersion(incoming.to), getStateVersion(outgoing.from), subMap);
+    utils.mapFromPredicate(getNextStateVersion(incoming.to), getStateVersion(outgoing.from), subMap);
     PTRef updatedIncomingLabel = utils.varSubstitute(incomingLabel, subMap);
     PTRef combinedLabel = logic.mkAnd(updatedIncomingLabel, outgoingLabel);
 //    std::cout << logic.pp(combinedLabel) << '\n';
@@ -374,7 +374,7 @@ PTRef ChcDirectedHyperGraph::mergeLabels(std::vector<EId> const & chain) {
         auto common = getTarget(incoming);
         assert(getSources(outgoing).size() == 1 and getSources(outgoing).front() == common);
         // MB: Simply casting the target variables to current state from next state is only possible because this is trivial chain
-        utils.insertVarPairsFromPredicates(getNextStateVersion(common), getStateVersion(common), subMap);
+        utils.mapFromPredicate(getNextStateVersion(common), getStateVersion(common), subMap);
     }
     PTRef combinedLabel = logic.mkAnd(std::move(labels));
 //    std::cout << "Original labels: " << logic.pp(combinedLabel) << '\n';
@@ -402,6 +402,14 @@ std::vector<SymRef> ChcDirectedHyperGraph::getVertices() const {
     });
     vertices.insert(getEntry());
     return std::vector<SymRef>(vertices.begin(), vertices.end());
+}
+
+std::vector<DirectedHyperEdge> ChcDirectedHyperGraph::getEdges() const {
+    std::vector<DirectedHyperEdge> edges;
+    forEachEdge([&](DirectedHyperEdge const & edge){
+        edges.push_back(edge);
+    });
+    return edges;
 }
 
 void ChcDirectedHyperGraph::contractVertex(SymRef sym) {
@@ -444,4 +452,17 @@ bool ChcDirectedHyperGraph::mergeMultiEdges() {
 
 void ChcDirectedHyperGraph::deleteFalseEdges() {
     deleteMatchingEdges([this](auto const & edge) { return edge.fla.fla == logic.getTerm_false(); });
+}
+
+ChcDirectedHyperGraph::VertexInstances::VertexInstances(ChcDirectedHyperGraph const & graph) {
+    graph.forEachEdge([&](DirectedHyperEdge const & edge) {
+        auto const & sources = edge.from;
+        instanceCounter[edge.id].resize(sources.size());
+        std::unordered_map<SymRef, unsigned, SymRefHash> edgeCounter;
+        for (unsigned sourceIndex = 0; sourceIndex < sources.size(); ++sourceIndex) {
+            auto source = sources[sourceIndex];
+            unsigned instance = edgeCounter[source]++;
+            instanceCounter.at(edge.id)[sourceIndex] = instance;
+        }
+    });
 }

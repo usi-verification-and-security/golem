@@ -306,42 +306,48 @@ PTRef ChcInterpreterContext::parseTerm(const ASTNode & termNode) {
 }
 
 void ChcInterpreterContext::interpretCheckSat() {
+    bool validateWitness = opts.hasOption(Options::VALIDATE_RESULT);
+    assert(not validateWitness || opts.getOption(Options::VALIDATE_RESULT) == std::string("true"));
+    bool printWitness = opts.hasOption(Options::PRINT_WITNESS);
+    assert(not printWitness || opts.getOption(Options::PRINT_WITNESS) == std::string("true"));
+
 //    ChcPrinter(logic).print(*system, std::cout);
     auto normalizedSystem = Normalizer(logic).normalize(*system);
     auto hypergraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
+    std::unique_ptr<ChcDirectedHyperGraph> originalGraph {nullptr};
+    if (validateWitness) { // Store copy of the original graph for validating purposes
+        originalGraph = std::make_unique<ChcDirectedHyperGraph>(*hypergraph);
+    }
 
     TransformationPipeline::pipeline_t transformations;
     transformations.push_back(std::make_unique<SimpleChainSummarizer>(logic));
     transformations.push_back(std::make_unique<RemoveUnreachableNodes>());
     auto [newGraph, translator] = TransformationPipeline(std::move(transformations)).transform(std::move(hypergraph));
     hypergraph = std::move(newGraph);
-    bool validateWitness = opts.hasOption(Options::VALIDATE_RESULT);
-    assert(not validateWitness || opts.getOption(Options::VALIDATE_RESULT) == std::string("true"));
-    bool printWitness = opts.hasOption(Options::PRINT_WITNESS);
-    assert(not printWitness || opts.getOption(Options::PRINT_WITNESS) == std::string("true"));
+
     auto engine = getEngine();
-    auto res = engine->solve(*hypergraph);
-    switch (res.getAnswer()) {
-        case VerificationResult::SAFE: {
+    auto result = engine->solve(*hypergraph);
+    switch (result.getAnswer()) {
+        case VerificationAnswer::SAFE: {
             std::cout << "sat" << std::endl;
             break;
         }
-        case VerificationResult::UNSAFE: {
+        case VerificationAnswer::UNSAFE: {
             std::cout << "unsat" << std::endl;
             break;
         }
-        case VerificationResult::UNKNOWN:
+        case VerificationAnswer::UNKNOWN:
             std::cout << "unknown" << std::endl;
             return;
     }
     if (validateWitness || printWitness) {
-        res = translator->translate(std::move(res));
-        SystemVerificationResult systemResult (std::move(res), *hypergraph);
+        result = translator->translate(std::move(result));
         if (printWitness) {
-            systemResult.printWitness(std::cout, logic);
+            result.printWitness(std::cout, logic);
         }
         if (validateWitness) {
-            auto validationResult = Validator(logic).validate(*normalizedSystem.normalizedSystem, systemResult);
+            assert(originalGraph);
+            auto validationResult = Validator(logic).validate(*originalGraph, result);
             switch (validationResult) {
                 case Validator::Result::VALIDATED: {
                     std::cout << "Internal witness validation successful!" << std::endl;

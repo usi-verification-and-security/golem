@@ -22,18 +22,18 @@ public:
         }
     }
 
-    virtual GraphVerificationResult solve(ChcDirectedHyperGraph & graph) override {
+    virtual VerificationResult solve(ChcDirectedHyperGraph & graph) override {
         if (graph.isNormalGraph()) {
             auto normalGraph = graph.toNormalGraph();
             return solve(*normalGraph);
         }
-        return GraphVerificationResult(VerificationResult::UNKNOWN);
+        return VerificationResult(VerificationAnswer::UNKNOWN);
     }
 
-    GraphVerificationResult solve(ChcDirectedGraph const & system);
+    VerificationResult solve(ChcDirectedGraph const & system);
 
 private:
-    GraphVerificationResult solveTransitionSystem(TransitionSystem const & system, ChcDirectedGraph const & graph);
+    VerificationResult solveTransitionSystem(TransitionSystem const & system, ChcDirectedGraph const & graph);
 };
 
 

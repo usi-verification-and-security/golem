@@ -28,12 +28,12 @@ public:
         }
     }
 
-    virtual GraphVerificationResult solve(ChcDirectedHyperGraph & graph) override;
+    virtual VerificationResult solve(ChcDirectedHyperGraph & graph) override;
 
-    GraphVerificationResult solve(ChcDirectedGraph const & system);
+    VerificationResult solve(ChcDirectedGraph const & system);
 
 private:
-    GraphVerificationResult solveTransitionSystem(TransitionSystem const & system, ChcDirectedGraph const & graph);
+    VerificationResult solveTransitionSystem(TransitionSystem const & system, ChcDirectedGraph const & graph);
 
     ValidityWitness witnessFromForwardInduction(ChcDirectedGraph const & graph,
                                                 TransitionSystem const & transitionSystem, unsigned long k) const;

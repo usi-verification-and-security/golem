@@ -11,7 +11,7 @@
 #include "transformers/BasicTransformationPipelines.h"
 #include "TransformationUtils.h"
 
-GraphVerificationResult Kind::solve(ChcDirectedHyperGraph & graph) {
+VerificationResult Kind::solve(ChcDirectedHyperGraph & graph) {
     auto pipeline = Transformations::towardsTransitionSystems();
     auto transformationResult = pipeline.transform(std::make_unique<ChcDirectedHyperGraph>(graph));
     auto transformedGraph = std::move(transformationResult.first);
@@ -21,18 +21,18 @@ GraphVerificationResult Kind::solve(ChcDirectedHyperGraph & graph) {
         auto res = solve(*normalGraph);
         return computeWitness ? translator->translate(std::move(res)) : res;
     }
-    return GraphVerificationResult(VerificationResult::UNKNOWN);
+    return VerificationResult(VerificationAnswer::UNKNOWN);
 }
 
-GraphVerificationResult Kind::solve(ChcDirectedGraph const & system) {
+VerificationResult Kind::solve(ChcDirectedGraph const & system) {
     if (isTransitionSystem(system)) {
         auto ts = toTransitionSystem(system, logic);
         return solveTransitionSystem(*ts, system);
     }
-    return GraphVerificationResult(VerificationResult::UNKNOWN);
+    return VerificationResult(VerificationAnswer::UNKNOWN);
 }
 
-GraphVerificationResult Kind::solveTransitionSystem(TransitionSystem const & system, ChcDirectedGraph const & graph) {
+VerificationResult Kind::solveTransitionSystem(TransitionSystem const & system, ChcDirectedGraph const & graph) {
     std::size_t maxK = std::numeric_limits<std::size_t>::max();
     PTRef init = system.getInit();
     PTRef query = system.getQuery();
@@ -61,7 +61,7 @@ GraphVerificationResult Kind::solveTransitionSystem(TransitionSystem const & sys
     { // Check for system with empty initial states
         auto res = solverBase.check();
         if (res == s_False) {
-            return GraphVerificationResult{VerificationResult::SAFE};
+            return VerificationResult{VerificationAnswer::SAFE};
         }
     }
 
@@ -77,9 +77,9 @@ GraphVerificationResult Kind::solveTransitionSystem(TransitionSystem const & sys
                  std::cout << "; KIND: Bug found in depth: " << k << std::endl;
             }
             if (computeWitness) {
-                return GraphVerificationResult(VerificationResult::UNSAFE, InvalidityWitness::fromTransitionSystem(graph, k));
+                return VerificationResult(VerificationAnswer::UNSAFE, InvalidityWitness::fromTransitionSystem(graph, k));
             } else {
-                return GraphVerificationResult(VerificationResult::UNSAFE);
+                return VerificationResult(VerificationAnswer::UNSAFE);
             }
         }
         if (verbosity > 1) {
@@ -97,9 +97,9 @@ GraphVerificationResult Kind::solveTransitionSystem(TransitionSystem const & sys
                 std::cout << "; KIND: Found invariant with forward induction, which is " << k << "-inductive" << std::endl;
             }
             if (computeWitness) {
-                return GraphVerificationResult(VerificationResult::SAFE, witnessFromForwardInduction(graph, system, k));
+                return VerificationResult(VerificationAnswer::SAFE, witnessFromForwardInduction(graph, system, k));
             } else {
-                return GraphVerificationResult(VerificationResult::SAFE);
+                return VerificationResult(VerificationAnswer::SAFE);
             }
         }
         PTRef versionedBackwardTransition = tm.sendFlaThroughTime(backwardTransition, k);
@@ -114,16 +114,16 @@ GraphVerificationResult Kind::solveTransitionSystem(TransitionSystem const & sys
                 std::cout << "; KIND: Found invariant with backward induction, which is " << k << "-inductive" << std::endl;
             }
             if (computeWitness) {
-                return GraphVerificationResult(VerificationResult::SAFE, witnessFromBackwardInduction(graph, system, k));
+                return VerificationResult(VerificationAnswer::SAFE, witnessFromBackwardInduction(graph, system, k));
             } else {
-                return GraphVerificationResult(VerificationResult::SAFE);
+                return VerificationResult(VerificationAnswer::SAFE);
             }
         }
         solverStepBackward.push();
         solverStepBackward.insertFormula(versionedTransition);
         solverStepBackward.insertFormula(tm.sendFlaThroughTime(negInit, k+1));
     }
-    return GraphVerificationResult(VerificationResult::UNKNOWN);
+    return VerificationResult(VerificationAnswer::UNKNOWN);
 }
 
 ValidityWitness Kind::witnessFromForwardInduction(ChcDirectedGraph const & graph,

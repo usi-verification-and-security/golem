@@ -147,13 +147,14 @@ public:
 
     PTRef conjoin (PTRef what, PTRef to);
 
-    void insertVarPairsFromPredicates(PTRef domain, PTRef codomain, substitutions_map & subst) const {
+    void mapFromPredicate(PTRef domain, PTRef codomain, substitutions_map & subst) const {
         assert(isUPOrConstant(domain) and isUPOrConstant(codomain));
+        assert(logic.getSymName(domain) == logic.getSymName(codomain));
         auto domainVars = predicateArgsInOrder(domain);
         auto codomainVars = predicateArgsInOrder(codomain);
         assert(domainVars.size() == codomainVars.size());
         for (std::size_t i = 0; i < domainVars.size(); ++i) {
-            assert(logic.isVar(domainVars[i]) and logic.isVar(codomainVars[i]));
+            assert(logic.isVar(domainVars[i]));
             subst.insert({domainVars[i], codomainVars[i]});
         }
     }

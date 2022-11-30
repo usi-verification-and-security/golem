@@ -23,14 +23,11 @@ public:
     Validator(Logic & logic) : logic(logic) {}
 
     enum class Result {VALIDATED, NOT_VALIDATED};
-    Result validate(ChcSystem const & system, SystemVerificationResult const & result);
+    Result validate(ChcDirectedHyperGraph const & system, VerificationResult const & result);
 
 private:
-    Result validateValidityWitness(ChcDirectedGraph const & graph, ValidityWitness const & witness);
-    Result validateValidityWitness(ChcSystem const & system, ValidityWitness const & witness);
-    Result validateInvalidityWitness(ChcSystem const & system, SystemInvalidityWitness const & witness);
-
-    bool isPresentInSystem(ChClause const & clause, ChcSystem const & system) const;
+    Result validateValidityWitness(ChcDirectedHyperGraph const & graph, ValidityWitness const & witness);
+    Result validateInvalidityWitness(ChcDirectedHyperGraph const & graph, InvalidityWitness const & witness);
 };
 
 

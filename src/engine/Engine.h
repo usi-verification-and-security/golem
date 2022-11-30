@@ -16,8 +16,8 @@
 
 class Engine {
 public:
-    virtual GraphVerificationResult solve(ChcDirectedHyperGraph &) {
-        return GraphVerificationResult(VerificationResult::UNKNOWN);
+    virtual VerificationResult solve(ChcDirectedHyperGraph &) {
+        return VerificationResult(VerificationAnswer::UNKNOWN);
     }
 
     virtual ~Engine() = default;

@@ -32,7 +32,7 @@ std::unique_ptr<TPABase> TPAEngine::mkSolver() {
     }
 }
 
-GraphVerificationResult TPAEngine::solve(ChcDirectedHyperGraph & graph) {
+VerificationResult TPAEngine::solve(ChcDirectedHyperGraph & graph) {
     auto pipeline = Transformations::towardsTransitionSystems();
     auto transformationResult = pipeline.transform(std::make_unique<ChcDirectedHyperGraph>(graph));
     auto transformedGraph = std::move(transformationResult.first);
@@ -42,30 +42,30 @@ GraphVerificationResult TPAEngine::solve(ChcDirectedHyperGraph & graph) {
         auto res = solve(*normalGraph);
         return options.hasOption(Options::COMPUTE_WITNESS) ? translator->translate(std::move(res)) : res;
     }
-    return GraphVerificationResult(VerificationResult::UNKNOWN);
+    return VerificationResult(VerificationAnswer::UNKNOWN);
 }
 
-GraphVerificationResult TPAEngine::solve(const ChcDirectedGraph & graph) {
+VerificationResult TPAEngine::solve(const ChcDirectedGraph & graph) {
     if (isTransitionSystem(graph)) {
         auto ts = toTransitionSystem(graph, logic);
         auto solver = mkSolver();
         auto res = solver->solveTransitionSystem(*ts);
         if (not options.hasOption(Options::COMPUTE_WITNESS)) {
-            return GraphVerificationResult(res);
+            return VerificationResult(res);
         }
         switch (res) {
-            case VerificationResult::UNSAFE:
-                return GraphVerificationResult(res, computeInvalidityWitness(graph, solver->getTransitionStepCount()));
-            case VerificationResult::SAFE:
+            case VerificationAnswer::UNSAFE:
+                return VerificationResult(res, computeInvalidityWitness(graph, solver->getTransitionStepCount()));
+            case VerificationAnswer::SAFE:
             {
                 PTRef inductiveInvariant = solver->getInductiveInvariant();
                 if (inductiveInvariant == PTRef_Undef) {
-                    return GraphVerificationResult(res);
+                    return VerificationResult(res);
                 }
 //                std::cout << "TS invariant: " << logic.printTerm(inductiveInvariant) << std::endl;
-                return GraphVerificationResult(res, computeValidityWitness(graph, *ts, inductiveInvariant));
+                return VerificationResult(res, computeValidityWitness(graph, *ts, inductiveInvariant));
             }
-            case VerificationResult::UNKNOWN:
+            case VerificationAnswer::UNKNOWN:
             default:
                 assert(false);
                 throw std::logic_error("Unreachable!");
@@ -73,7 +73,7 @@ GraphVerificationResult TPAEngine::solve(const ChcDirectedGraph & graph) {
     } else if (isTransitionSystemChain(graph)) {
             return solveTransitionSystemChain(graph);
     }
-    return GraphVerificationResult(VerificationResult::UNKNOWN);
+    return VerificationResult(VerificationAnswer::UNKNOWN);
 }
 
 class SolverWrapperSingleUse : public SolverWrapper {
@@ -386,53 +386,53 @@ SolverWrapper* TPASplit::getExactReachabilitySolver(unsigned short power) const 
 }
 
 
-VerificationResult TPABase::solveTransitionSystem(TransitionSystem & system) {
+VerificationAnswer TPABase::solveTransitionSystem(TransitionSystem & system) {
     resetTransitionSystem(system);
     return solve();
 }
 
-VerificationResult TPABase::solve() {
+VerificationAnswer TPABase::solve() {
     unsigned short power = 0;
     while (true) {
         auto res = checkPower(power);
         switch (res) {
-            case VerificationResult::UNSAFE:
-            case VerificationResult::SAFE:
+            case VerificationAnswer::UNSAFE:
+            case VerificationAnswer::SAFE:
                 return res;
-            case VerificationResult::UNKNOWN:
+            case VerificationAnswer::UNKNOWN:
                 ++power;
         }
     }
 }
 
 
-VerificationResult TPASplit::checkPower(unsigned short power) {
+VerificationAnswer TPASplit::checkPower(unsigned short power) {
     TRACE(1, "Checking power " << power)
     queryCache.emplace_back();
     auto res = reachabilityQueryLessThan(init, query, power);
     if (isReachable(res)) {
         reachedStates = ReachedStates{res.refinedTarget, res.steps};
-        return VerificationResult::UNSAFE;
+        return VerificationAnswer::UNSAFE;
     } else if (isUnreachable(res)) {
         if (explanation.invariantType != SafetyExplanation::TransitionInvariantType::NONE) {
             // MB: Transition invariant found in the previous iteration from Equals relation
             // However, at that point we were not sure yet if it is also safe, now we are.
             assert(explanation.relationType == TPAType::EQUALS);
             assert(explanation.power == power);
-            return VerificationResult::SAFE;
+            return VerificationAnswer::SAFE;
         }
         if (verbose() > 0) {
             std::cout << "; System is safe up to <2^" << power + 1 << " steps" << std::endl;
         }
         bool fixedPointReached = checkLessThanFixedPoint(power);
         if (fixedPointReached) {
-            return VerificationResult::SAFE;
+            return VerificationAnswer::SAFE;
         }
     }
     res = reachabilityQueryExact(init, query, power);
     if (isReachable(res)) {
         reachedStates = ReachedStates{res.refinedTarget, res.steps};
-        return VerificationResult::UNSAFE;
+        return VerificationAnswer::UNSAFE;
     } else if (isUnreachable(res)) {
         if (verbose() > 0) {
             std::cout << "; System is safe up to 2^" << power + 1 << " steps" << std::endl;
@@ -440,9 +440,9 @@ VerificationResult TPASplit::checkPower(unsigned short power) {
         bool fixedPointReached = checkExactFixedPoint(power);
         if (fixedPointReached and explanation.power <= power) {
             assert(explanation.invariantType != SafetyExplanation::TransitionInvariantType::NONE);
-            return VerificationResult::SAFE;
+            return VerificationAnswer::SAFE;
         }
-        return VerificationResult::UNKNOWN;
+        return VerificationAnswer::UNKNOWN;
     } else {
         assert(false);
         throw std::logic_error("Unreachable code!");
@@ -1115,13 +1115,13 @@ SolverWrapper* TPABasic::getReachabilitySolver(unsigned short power) const {
     return reachabilitySolvers[power];
 }
 
-VerificationResult TPABasic::checkPower(unsigned short power) {
+VerificationAnswer TPABasic::checkPower(unsigned short power) {
     TRACE(1, "Checking power " << power)
     queryCache.emplace_back();
     auto res = reachabilityQuery(init, query, power);
     if (isReachable(res)) {
         reachedStates = ReachedStates{res.refinedTarget, res.steps};
-        return VerificationResult::UNSAFE;
+        return VerificationAnswer::UNSAFE;
     } else if (isUnreachable(res)) {
         if (verbose() > 0) {
             std::cout << "; System is safe up to <=2^" << power + 1 << " steps" << std::endl;
@@ -1129,10 +1129,10 @@ VerificationResult TPABasic::checkPower(unsigned short power) {
         // Check if we have not reached fixed point.
         bool fixedPointReached = checkLessThanFixedPoint(power);
         if (fixedPointReached) {
-            return VerificationResult::SAFE;
+            return VerificationAnswer::SAFE;
         }
     }
-    return VerificationResult::UNKNOWN;
+    return VerificationAnswer::UNKNOWN;
 }
 
 /*
@@ -1298,7 +1298,7 @@ public:
         adjacencyRepresentation(AdjacencyListsGraphRepresentation::from(graph))
         {}
 
-    GraphVerificationResult solve() &&;
+    VerificationResult solve() &&;
 
 private:
     struct NetworkNode {
@@ -1348,7 +1348,7 @@ private:
     InvalidityWitness computeInvalidityWitness() const;
 };
 
-GraphVerificationResult TPAEngine::solveTransitionSystemChain(const ChcDirectedGraph & graph) {
+VerificationResult TPAEngine::solveTransitionSystemChain(const ChcDirectedGraph & graph) {
     return TransitionSystemNetworkManager(*this, graph).solve();
 }
 
@@ -1399,7 +1399,7 @@ void TransitionSystemNetworkManager::initNetwork() {
     }
 }
 
-GraphVerificationResult TransitionSystemNetworkManager::solve() && {
+VerificationResult TransitionSystemNetworkManager::solve() && {
     initNetwork();
 
     auto current = getChainStart();
@@ -1407,7 +1407,7 @@ GraphVerificationResult TransitionSystemNetworkManager::solve() && {
         auto [res,explanation] = queryTransitionSystem(networkMap.at(current));
         if (reachable(res)) {
             if (current == getChainEnd()) {
-                return {VerificationResult::UNSAFE, computeInvalidityWitness()};
+                return {VerificationAnswer::UNSAFE, computeInvalidityWitness()};
             }
             EId nextEdge = getOutgoingEdge(current);
 //            std::cout << "Reached states in node " << current.id << ": " << logic.pp(explanation) << std::endl;
@@ -1429,7 +1429,7 @@ GraphVerificationResult TransitionSystemNetworkManager::solve() && {
             }
         } else { // TS cannot propagate forward
             if (current == getChainStart()) {
-                return {VerificationResult::SAFE, ValidityWitness{}};
+                return {VerificationAnswer::SAFE, ValidityWitness{}};
             }
             assert(getNode(current).trulySafe != PTRef_Undef);
 //            std::cout << "Query not reachable in " << current.id << ". These states are safe: " << logic.pp(explanation) << std::endl;
@@ -1472,10 +1472,8 @@ InvalidityWitness TransitionSystemNetworkManager::computeInvalidityWitness() con
     }
     errorPath.push_back(getNode(current).next);
     InvalidityWitness witness;
-    InvalidityWitness::ErrorPath path;
-    path.setPath(std::move(errorPath));
-    witness.setErrorPath(std::move(path));
-    return witness;
+    ErrorPath path(std::move(errorPath));
+    return InvalidityWitness::fromErrorPath(path, graph);
 
 }
 
@@ -1528,15 +1526,15 @@ TransitionSystemNetworkManager::QueryResult TransitionSystemNetworkManager::quer
 
 TransitionSystemNetworkManager::QueryResult TransitionSystemNetworkManager::queryTransitionSystem(NetworkNode & node) {
     auto res = node.solver->solve();
-    assert(res != VerificationResult::UNKNOWN);
+    assert(res != VerificationAnswer::UNKNOWN);
     switch (res) {
-        case VerificationResult::UNSAFE: {
+        case VerificationAnswer::UNSAFE: {
             PTRef explanation = node.solver->getReachedStates();
             assert(explanation != PTRef_Undef);
             TRACE(1, "TS propagates reachable states to " << logic.pp(explanation))
             return {ReachabilityResult::REACHABLE, explanation};
         }
-        case VerificationResult::SAFE: {
+        case VerificationAnswer::SAFE: {
             PTRef explanation = node.solver->getSafetyExplanation();
             assert(explanation != PTRef_Undef);
             TRACE(1, "TS blocks " << logic.pp(explanation))

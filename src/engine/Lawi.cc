@@ -292,7 +292,7 @@ class LawiContext{
     bool usingForcedCovering;
     std::size_t forceCoveringLimit = 1;
 
-    InvalidityWitness invalidityWitness;
+    ErrorPath errorPath;
 
     void removeLeaf(VId leaf) {
         leavesToCheck.erase(std::remove(leavesToCheck.begin(), leavesToCheck.end(), leaf), leavesToCheck.end());
@@ -320,7 +320,7 @@ class LawiContext{
     void expand(VId vertex);
 
     struct RefinementResult {
-        VerificationResult verificationResult;
+        VerificationAnswer verificationAnswer;
         std::vector<VId> refinedVertices;
     };
 
@@ -333,7 +333,7 @@ class LawiContext{
 
     void close(VId vertex);
 
-    VerificationResult DFS(VId vertex);
+    VerificationAnswer DFS(VId vertex);
 
     std::optional<VId> getUncoveredLeaf();
 
@@ -356,7 +356,7 @@ class LawiContext{
 
     bool useForcedCovering() const { return usingForcedCovering; }
 
-    InvalidityWitness::ErrorPath buildGraphPathFromTreePath(ArtPath const & path) const;
+    ErrorPath buildGraphPathFromTreePath(ArtPath const & path) const;
 public:
     LawiContext(Logic & logic, ChcDirectedGraph const& graph, Options const & options)
         : logic(logic), graph(graph), options(options), art(graph), coveringRelation(art), implicationChecker(logic) {
@@ -365,7 +365,7 @@ public:
         usingForcedCovering = options.hasOption(Options::FORCED_COVERING);
     }
 
-    GraphVerificationResult unwind();
+    VerificationResult unwind();
 
     vec<PTRef> getPathInterpolants(MainSolver & solver, ArtPath const &) const;
 
@@ -389,17 +389,17 @@ void LawiContext::close(VId vertex) {
 
 
 // Main method
-GraphVerificationResult LawiContext::unwind() {
+VerificationResult LawiContext::unwind() {
     auto optionalVertex = getUncoveredLeaf();
     while (optionalVertex.has_value()) {
         auto uncoveredVertex = optionalVertex.value();
         closeAllAncestors(uncoveredVertex);
         auto res = DFS(uncoveredVertex);
-        if (res == VerificationResult::UNSAFE) { return GraphVerificationResult(VerificationResult::UNSAFE, std::move(invalidityWitness)); }
+        if (res == VerificationAnswer::UNSAFE) { return VerificationResult(VerificationAnswer::UNSAFE, InvalidityWitness::fromErrorPath(errorPath, graph)); }
         optionalVertex = getUncoveredLeaf();
     }
     bool computeWitness = options.hasOption(Options::COMPUTE_WITNESS);
-    if (not computeWitness) { return GraphVerificationResult(VerificationResult::SAFE); }
+    if (not computeWitness) { return VerificationResult(VerificationAnswer::SAFE); }
     // Solution found!
     // Map original locations to disjunction of labels of not covered vertices
     std::unordered_map<SymRef, std::vector<PTRef>, SymRefHash> finalLabels;
@@ -432,20 +432,20 @@ GraphVerificationResult LawiContext::unwind() {
             throw std::logic_error("Duplicate definition for a predicate encountered!");
         }
     }
-    return GraphVerificationResult(VerificationResult::SAFE, ValidityWitness(std::move(solution)));
+    return VerificationResult(VerificationAnswer::SAFE, ValidityWitness(std::move(solution)));
 }
 
 // Processing of a single leaf
-VerificationResult LawiContext::DFS(VId vertex) {
+VerificationAnswer LawiContext::DFS(VId vertex) {
     close(vertex);
     if (coveringRelation.isCovered(vertex)) {
         // this vertex is covered, no need to process
-        return VerificationResult::UNKNOWN;
+        return VerificationAnswer::UNKNOWN;
     }
     // if it is an error location, we need to check the path
     if (art.isErrorLocation(vertex)) {
         auto res = refine(vertex);
-        if (res.verificationResult == VerificationResult::UNSAFE) { return VerificationResult::UNSAFE; }
+        if (res.verificationAnswer == VerificationAnswer::UNSAFE) { return VerificationAnswer::UNSAFE; }
         for (VId strengthened : res.refinedVertices) {
             close(strengthened);
         }
@@ -463,10 +463,10 @@ VerificationResult LawiContext::DFS(VId vertex) {
         // run on children in DFS manner
         for (VId child : children) {
             auto res = DFS(child);
-            if (res == VerificationResult::UNSAFE) { return VerificationResult::UNSAFE; }
+            if (res == VerificationAnswer::UNSAFE) { return VerificationAnswer::UNSAFE; }
         }
     }
-    return VerificationResult::UNKNOWN;
+    return VerificationAnswer::UNKNOWN;
 }
 
 void LawiContext::applyForcedCovering(VId vertex) {
@@ -541,9 +541,8 @@ LawiContext::RefinementResult LawiContext::refine(VId errVertex) {
     }
     auto res = solver.check();
     if (res == s_True) {
-        auto errorPath = buildGraphPathFromTreePath(path);
-        invalidityWitness.setErrorPath(std::move(errorPath));
-        return RefinementResult{VerificationResult::UNSAFE, {}};
+        errorPath = buildGraphPathFromTreePath(path);
+        return RefinementResult{VerificationAnswer::UNSAFE, {}};
     } else if (res == s_False) {
 		auto edges = path.getEdges();
 		assert(not edges.empty() and art.getSource(edges.front()) == this->art.getRoot()
@@ -554,7 +553,7 @@ LawiContext::RefinementResult LawiContext::refine(VId errVertex) {
         auto strengthened = strengthenLabelsAlongPath(path, normalizedInterpolants);
         // this vertex does not have to be considered anymore
         removeLeaf(errVertex);
-        return RefinementResult{VerificationResult::UNKNOWN, std::move(strengthened)};
+        return RefinementResult{VerificationAnswer::UNKNOWN, std::move(strengthened)};
     } else {
         throw std::logic_error("Error in the SMT solver");
     }
@@ -833,14 +832,12 @@ std::vector<VId> LawiContext::strengthenLabelsAlongPath(const ArtPath & path, co
     return refinedVertices;
 }
 
-InvalidityWitness::ErrorPath LawiContext::buildGraphPathFromTreePath(const ArtPath & path) const {
+ErrorPath LawiContext::buildGraphPathFromTreePath(const ArtPath & path) const {
     auto edges = path.getEdges();
 	std::vector<EId> originalEdges;
     std::transform(edges.begin(), edges.end(), std::back_inserter(originalEdges),
 				   [this](EId eid) { return art.getOriginalEdge(eid); });
-    InvalidityWitness::ErrorPath errorPath;
-    errorPath.setPath(std::move(originalEdges));
-    return errorPath;
+    return ErrorPath(std::move(originalEdges));
 }
 
 }
@@ -849,16 +846,16 @@ InvalidityWitness::ErrorPath LawiContext::buildGraphPathFromTreePath(const ArtPa
 // LAWI methods
 //
 
-GraphVerificationResult Lawi::solve(ChcDirectedHyperGraph & graph) {
+VerificationResult Lawi::solve(ChcDirectedHyperGraph & graph) {
     if (graph.isNormalGraph()) {
         auto normalGraph = graph.toNormalGraph();
         return solve(*normalGraph);
     }
-    return GraphVerificationResult(VerificationResult::UNKNOWN);
+    return VerificationResult(VerificationAnswer::UNKNOWN);
 }
 
 
-GraphVerificationResult Lawi::solve(ChcDirectedGraph const & graph) {
+VerificationResult Lawi::solve(ChcDirectedGraph const & graph) {
     LawiContext ctx(logic, graph, options);
     return ctx.unwind();
 }

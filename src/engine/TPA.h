@@ -34,16 +34,16 @@ class TPAEngine : public Engine {
 public:
     TPAEngine(Logic & logic, Options options) : logic(logic), options(std::move(options)) {}
 
-    GraphVerificationResult solve(ChcDirectedHyperGraph & graph) override;
+    VerificationResult solve(ChcDirectedHyperGraph & graph) override;
 
     static const std::string TPA;
     static const std::string SPLIT_TPA;
 private:
-    GraphVerificationResult solve(const ChcDirectedGraph & system);
+    VerificationResult solve(const ChcDirectedGraph & system);
 
     std::unique_ptr<TPABase> mkSolver();
     
-    GraphVerificationResult solveTransitionSystemChain(ChcDirectedGraph const & graph);
+    VerificationResult solveTransitionSystemChain(ChcDirectedGraph const & graph);
 
     ValidityWitness computeValidityWitness(ChcDirectedGraph const & graph, TransitionSystem const & ts, PTRef inductiveInvariant) const;
 
@@ -111,11 +111,11 @@ public:
 
     virtual ~TPABase() = default;
 
-    virtual VerificationResult solveTransitionSystem(TransitionSystem & system);
+    virtual VerificationAnswer solveTransitionSystem(TransitionSystem & system);
 
     void resetTransitionSystem(TransitionSystem const & system);
 
-    VerificationResult solve();
+    VerificationAnswer solve();
 
     void resetInitialStates(PTRef);
 
@@ -132,7 +132,7 @@ public:
 
 protected:
 
-    virtual VerificationResult checkPower(unsigned short power) = 0;
+    virtual VerificationAnswer checkPower(unsigned short power) = 0;
 
     virtual void resetPowers() = 0;
 
@@ -216,7 +216,7 @@ public:
 private:
     void resetPowers() override;
 
-    VerificationResult checkPower(unsigned short power) override;
+    VerificationAnswer checkPower(unsigned short power) override;
     PTRef getPower(unsigned short power, TPAType relationType) const override;
     bool verifyPower(unsigned short power, TPAType relationType) const override;
 
@@ -252,7 +252,7 @@ public:
 private:
     void resetPowers() override;
 
-    VerificationResult checkPower(unsigned short power) override;
+    VerificationAnswer checkPower(unsigned short power) override;
 
     PTRef getPower(unsigned short power, TPAType relationType) const override;
     bool verifyPower(unsigned short power, TPAType relationType) const override;

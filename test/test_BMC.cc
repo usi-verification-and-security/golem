@@ -38,9 +38,8 @@ TEST(BMC_test, test_BMC_simple) {
     BMC bmc(logic, options);
     auto res = bmc.solve(*graph);
     auto answer = res.getAnswer();
-    ASSERT_EQ(answer, VerificationResult::UNSAFE);
+    ASSERT_EQ(answer, VerificationAnswer::UNSAFE);
     auto witness = res.getInvalidityWitness();
-    SystemVerificationResult systemResult (std::move(res), *hypergraph);
-    auto validationResult = Validator(logic).validate(*normalizedSystem.normalizedSystem, systemResult);
+    auto validationResult = Validator(logic).validate(*hypergraph, res);
     ASSERT_EQ(validationResult, Validator::Result::VALIDATED);
 }

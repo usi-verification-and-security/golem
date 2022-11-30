@@ -21,38 +21,33 @@ public:
     PTRef evaluate(PTRef fla) const { return model->evaluate(fla); }
 };
 
-class InvalidityWitness {
+class ErrorPath {
+    std::vector<EId> path;
 public:
-    class ErrorPath {
-        std::vector<EId> path;
-    public:
-        std::vector<EId> getEdges() const { return path; }
-        void setPath(std::vector<EId> npath) { this->path = std::move(npath); }
-        bool isEmpty() const { return path.empty(); }
-    };
-    void setErrorPath(ErrorPath path) { errorPath = std::move(path); }
+    ErrorPath() = default;
+    ErrorPath(std::vector<EId> path) : path(std::move(path)) {}
 
-    ErrorPath const & getErrorPath() const { return errorPath; }
+    std::vector<EId> getEdges() const { return path; }
+    void setPath(std::vector<EId> npath) { this->path = std::move(npath); }
+    bool isEmpty() const { return path.empty(); }
 
-    static InvalidityWitness fromTransitionSystem(ChcDirectedGraph const & graph, std::size_t unrollings);
-
-private:
-    ErrorPath errorPath;
+    static ErrorPath fromTransitionSystem(ChcDirectedGraph const & graph, std::size_t unrollings);
 };
 
-class SystemInvalidityWitness {
+
+
+class InvalidityWitness {
 public:
-    class Derivation { // Terminology based on Interpolation Strength Revisited
-        // Derivation rule is 'positive hyper-resolution'
-        // Antecedents are: one nucleus (with n negative literals) and n satellites, each with single positive literal
+    class Derivation {
+        // Each derivation step derived a fact: fully instantiated predicate
+        // Additionally, derivation step remembers its premises (ids) and edge/clause
     public:
+        using id_t = EId;
     	struct DerivationStep {
-            enum class StepType {INPUT, DERIVED};
             std::size_t index {0};
-            StepType type;
-            std::vector<std::size_t> satellites;
-            std::size_t nucleus {0};
-            ChClause clause;
+            std::vector<std::size_t> premises;
+            PTRef derivedFact;
+            id_t clauseId;
         };
 
         void addDerivationStep(DerivationStep step) {
@@ -63,26 +58,23 @@ public:
         DerivationStep &        last()       { assert(size() > 0); return derivationSteps[size() - 1]; }
         DerivationStep const &  last() const { assert(size() > 0); return derivationSteps[size() - 1]; }
         std::size_t size() const { return derivationSteps.size(); }
-    
 private:
         std::vector<DerivationStep> derivationSteps;
     };
 
 private:
     Derivation derivation;
-    WitnessModel model;
 
 public:
-    void setModel(WitnessModel model_) { model = std::move(model_); }
     void setDerivation(Derivation derivation_) { derivation = std::move(derivation_); }
 
     Derivation const & getDerivation() const { return derivation; }
-    WitnessModel const & getModel() const { return model; }
+
+    static InvalidityWitness fromErrorPath(ErrorPath const & errorPath, ChcDirectedGraph const & graph);
+    static InvalidityWitness fromTransitionSystem(ChcDirectedGraph const & graph, std::size_t unrollings);
 
     void print(std::ostream & out, Logic & logic) const;
 };
-
-SystemInvalidityWitness graphToSystemInvalidityWitness(InvalidityWitness const & witness, ChcDirectedGraph & graph);
 
 class ValidityWitness {
     std::unordered_map<PTRef, PTRef, PTRefHash> interpretations;
@@ -110,76 +102,29 @@ public:
                                                 TransitionSystem const & transitionSystem, PTRef invariant);
 };
 
-enum class VerificationResult {SAFE, UNSAFE, UNKNOWN};
+enum class VerificationAnswer : char {SAFE, UNSAFE, UNKNOWN};
 
-class GraphVerificationResult {
-    VerificationResult answer;
+class VerificationResult {
+    VerificationAnswer answer;
     // TODO: use variant from c++17
     ValidityWitness validityWitness;
     InvalidityWitness invalidityWitness;
 
 public:
-    GraphVerificationResult(VerificationResult answer, ValidityWitness validityWitness)
+    VerificationResult(VerificationAnswer answer, ValidityWitness validityWitness)
         : answer(answer), validityWitness(std::move(validityWitness)) {}
 
-    GraphVerificationResult(VerificationResult answer, InvalidityWitness invalidityWitness)
+    VerificationResult(VerificationAnswer answer, InvalidityWitness invalidityWitness)
         : answer(answer), invalidityWitness(std::move(invalidityWitness)) {}
 
-    explicit GraphVerificationResult(VerificationResult answer) : answer(answer) {}
+    explicit VerificationResult(VerificationAnswer answer) : answer(answer) {}
 
-    VerificationResult getAnswer() const { return answer; }
+    VerificationAnswer getAnswer() const { return answer; }
 
-    ValidityWitness const & getValidityWitness() const { assert(answer == VerificationResult::SAFE); return validityWitness; }
-    InvalidityWitness const & getInvalidityWitness() const { assert(answer == VerificationResult::UNSAFE); return invalidityWitness; }
-};
+    ValidityWitness const & getValidityWitness() const { assert(answer == VerificationAnswer::SAFE); return validityWitness; }
+    InvalidityWitness const & getInvalidityWitness() const { assert(answer == VerificationAnswer::UNSAFE); return invalidityWitness; }
 
-class SystemVerificationResult {
-    VerificationResult answer;
-    // TODO: use variant from c++17
-    ValidityWitness validityWitness;
-    SystemInvalidityWitness invalidityWitness;
-
-public:
-    SystemVerificationResult(GraphVerificationResult && graphResult, ChcDirectedHyperGraph & graph) {
-        answer = graphResult.getAnswer();
-        if (answer == VerificationResult::SAFE) {
-            validityWitness = graphResult.getValidityWitness();
-        }
-        if (answer == VerificationResult::UNSAFE) {
-            if (graph.isNormalGraph()) {
-                auto simpleGraph = graph.toNormalGraph();
-                invalidityWitness = graphToSystemInvalidityWitness(graphResult.getInvalidityWitness(), *simpleGraph);
-            }
-        }
-    }
-
-    SystemVerificationResult(GraphVerificationResult && graphResult) {
-        answer = graphResult.getAnswer();
-        if (answer == VerificationResult::SAFE) {
-            validityWitness = graphResult.getValidityWitness();
-        }
-    }
-
-    VerificationResult getAnswer() const { return answer; }
-
-    ValidityWitness const & getValidityWitness() const { return validityWitness; }
-    SystemInvalidityWitness const & getInvalidityWitness() const { return invalidityWitness; }
-
-    void printWitness(std::ostream & out, Logic & logic) const {
-        switch (answer) {
-            case VerificationResult::SAFE: {
-                TermUtils utils(logic);
-                validityWitness.print(out, logic);
-                return;
-            }
-            case VerificationResult::UNSAFE: {
-                invalidityWitness.print(out, logic);
-                return;
-            }
-            default:
-                return;
-        }
-    }
+    void printWitness(std::ostream & out, Logic & logic) const;
 };
 
 #endif // GOLEM_WITNESSES_H

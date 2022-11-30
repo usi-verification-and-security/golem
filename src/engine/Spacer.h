@@ -17,7 +17,7 @@ public:
 
     explicit Spacer(Logic & logic) : logic(logic) {}
 
-    [[nodiscard]] GraphVerificationResult solve(ChcDirectedHyperGraph & system) override;
+    [[nodiscard]] VerificationResult solve(ChcDirectedHyperGraph & system) override;
 };
 
 

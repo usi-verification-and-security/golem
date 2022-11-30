@@ -105,16 +105,7 @@ class SpacerContext {
     std::size_t lowestChangedLevel = 0;
 
     // Helper data structures to get the versioning right
-    class VertexInstances {
-        std::map<EId, std::vector<unsigned>> instanceCounter;
-    public:
-        explicit VertexInstances(ChcDirectedHyperGraph const & graph);
-
-        unsigned getInstanceNumber(EId eid, unsigned sourceIndex) const {
-            return instanceCounter.at(eid)[sourceIndex];
-        }
-    };
-    VertexInstances vertexInstances;
+    ChcDirectedHyperGraph::VertexInstances vertexInstances;
 
     void addMaySummary(SymRef vid, std::size_t bound, PTRef summary) {
         over.insert(vid, bound, summary);
@@ -185,14 +176,14 @@ public:
         }
     }
 
-    GraphVerificationResult run();
+    VerificationResult run();
 };
 
-GraphVerificationResult Spacer::solve(ChcDirectedHyperGraph & system) {
+VerificationResult Spacer::solve(ChcDirectedHyperGraph & system) {
     return SpacerContext(logic, system).run();
 }
 
-GraphVerificationResult SpacerContext::run() {
+VerificationResult SpacerContext::run() {
     std::size_t currentBound = 1;
     while(true) {
         addMaySummary(graph.getEntry(), currentBound, logic.getTerm_true());
@@ -201,7 +192,7 @@ GraphVerificationResult SpacerContext::run() {
         auto boundedResult = boundSafety(currentBound);
         switch (boundedResult) {
             case BoundedSafetyResult::UNSAFE:
-                return GraphVerificationResult(VerificationResult::UNSAFE);
+                return VerificationResult(VerificationAnswer::UNSAFE);
             case BoundedSafetyResult::SAFE: {
                 auto inductiveResult = isInductive(currentBound);
                 if (inductiveResult.answer == InductiveCheckAnswer::INDUCTIVE) {
@@ -222,7 +213,7 @@ GraphVerificationResult SpacerContext::run() {
                             throw std::logic_error("Duplicate definition for a predicate encountered!");
                         }
                     }
-                    return {VerificationResult::SAFE, ValidityWitness(std::move(solution))};
+                    return {VerificationAnswer::SAFE, ValidityWitness(std::move(solution))};
                 }
                 ++currentBound;
                 break;
@@ -574,17 +565,4 @@ PTRef SpacerContext::getEdgeMixedSummary(EId eid, std::size_t bound, std::size_t
     }
     components.push(graph.getEdgeLabel(eid));
     return logic.mkAnd(std::move(components));
-}
-
-SpacerContext::VertexInstances::VertexInstances(const ChcDirectedHyperGraph & graph) {
-    graph.forEachEdge([&](DirectedHyperEdge const & edge) {
-        auto const & sources = edge.from;
-        instanceCounter[edge.id].resize(sources.size());
-        std::unordered_map<SymRef, unsigned, SymRefHash> edgeCounter;
-        for (unsigned sourceIndex = 0; sourceIndex < sources.size(); ++sourceIndex) {
-            auto source = sources[sourceIndex];
-            unsigned instance = edgeCounter[source]++;
-            instanceCounter.at(edge.id)[sourceIndex] = instance;
-        }
-    });
 }

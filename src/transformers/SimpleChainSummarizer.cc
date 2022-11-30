@@ -83,7 +83,7 @@ ValidityWitness SimpleChainSummarizer::SimpleChainBackTranslator::translate(Vali
         for (auto const & edge : chain) {
             TermUtils::substitutions_map substitutionsMap;
             auto target = edge.to;
-            utils.insertVarPairsFromPredicates(predicateRepresentation.getTargetTermFor(target), predicateRepresentation.getSourceTermFor(target), substitutionsMap);
+            utils.mapFromPredicate(predicateRepresentation.getTargetTermFor(target), predicateRepresentation.getSourceTermFor(target), substitutionsMap);
             PTRef updatedLabel = utils.varSubstitute(edge.fla.fla, substitutionsMap);
             solver.insertFormula(updatedLabel);
         }

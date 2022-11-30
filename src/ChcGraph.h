@@ -138,8 +138,7 @@ public:
 
     std::vector<SymRef> getVertices() const;
 
-    Logic & getLogic() { return logic; }
-    Logic const & getLogic() const { return logic; }
+    Logic & getLogic() const { return logic; }
     void toDot(std::ostream& out, bool full = false) const;
     ChcDirectedGraph reverse() const;
     DirectedEdge reverseEdge(DirectedEdge const & edge, TermUtils & utils) const;
@@ -209,6 +208,16 @@ class ChcDirectedHyperGraph {
     EId freshId() const { return EId{freeId++}; }
 
 public:
+    class VertexInstances {
+        std::map<EId, std::vector<unsigned>> instanceCounter;
+    public:
+        explicit VertexInstances(ChcDirectedHyperGraph const & graph);
+
+        unsigned getInstanceNumber(EId eid, unsigned sourceIndex) const {
+            return instanceCounter.at(eid)[sourceIndex];
+        }
+    };
+
     ChcDirectedHyperGraph(std::vector<DirectedHyperEdge> edges,
                           NonlinearCanonicalPredicateRepresentation predicates,
                           Logic & logic) :
@@ -222,8 +231,8 @@ public:
     }
 
     std::vector<SymRef> getVertices() const;
-    Logic & getLogic() { return logic; }
-    Logic const & getLogic() const { return logic; }
+    std::vector<DirectedHyperEdge> getEdges() const;
+    Logic & getLogic() const { return logic; }
     NonlinearCanonicalPredicateRepresentation const & predicateRepresentation() const { return predicates; }
     bool isNormalGraph() const;
     std::unique_ptr<ChcDirectedGraph> toNormalGraph() const;

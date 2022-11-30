@@ -63,13 +63,14 @@ TEST_F(Transformer_test, test_SingleChain_NoLoop) {
         ChcHead{UninterpretedPredicate{logic.getTerm_false()}},
         ChcBody{{logic.mkLt(y, logic.getTerm_IntZero())}, {UninterpretedPredicate{logic.mkUninterpFun(s3, {y})}}}
     );
-    auto hypergraph = systemToGraph(system);
-    auto [newGraph, translator] = SimpleChainSummarizer(logic).transform(std::move(hypergraph));
+    auto hyperGraph = systemToGraph(system);
+    auto originalGraph = *hyperGraph;
+    auto [summarizedGraph, translator] = SimpleChainSummarizer(logic).transform(std::move(hyperGraph));
     ValidityWitness witness{};
     auto translatedWitness = translator->translate(witness);
     Validator validator(logic);
-    SystemVerificationResult result(GraphVerificationResult(VerificationResult::SAFE, translatedWitness));
-    ASSERT_EQ(validator.validate(system, result), Validator::Result::VALIDATED);
+    VerificationResult result(VerificationAnswer::SAFE, translatedWitness);
+    ASSERT_EQ(validator.validate(originalGraph, result), Validator::Result::VALIDATED);
 }
 
 TEST_F(Transformer_test, test_TwoChains_WithLoop) {
@@ -97,6 +98,7 @@ TEST_F(Transformer_test, test_TwoChains_WithLoop) {
         ChcBody{{logic.mkLt(y, logic.getTerm_IntZero())}, {UninterpretedPredicate{logic.mkUninterpFun(s3, {y})}}}
     );
     auto hypergraph = systemToGraph(system);
+    auto originalGraph = *hypergraph;
     auto [newGraph, translator] = SimpleChainSummarizer(logic).transform(std::move(hypergraph));
     VersionManager manager{logic};
     PTRef predicate = manager.sourceFormulaToBase(newGraph->getStateVersion(s2));
@@ -104,8 +106,8 @@ TEST_F(Transformer_test, test_TwoChains_WithLoop) {
     ValidityWitness witness{{{predicate, logic.mkGeq(var,zero)}}};
     auto translatedWitness = translator->translate(witness);
     Validator validator(logic);
-    SystemVerificationResult result(GraphVerificationResult(VerificationResult::SAFE, translatedWitness));
-    ASSERT_EQ(validator.validate(system, result), Validator::Result::VALIDATED);
+    VerificationResult result(VerificationAnswer::SAFE, translatedWitness);
+    ASSERT_EQ(validator.validate(originalGraph, result), Validator::Result::VALIDATED);
 }
 
 TEST_F(Transformer_test, test_OutputFromEngine) {
@@ -134,15 +136,16 @@ TEST_F(Transformer_test, test_OutputFromEngine) {
         ChcBody{{logic.mkLt(y, logic.getTerm_IntZero())}, {UninterpretedPredicate{logic.mkUninterpFun(s3, {y})}}}
     );
     auto hypergraph = systemToGraph(system);
+    auto originalGraph = *hypergraph;
     auto [newGraph, translator] = SimpleChainSummarizer(logic).transform(std::move(hypergraph));
     hypergraph = std::move(newGraph);
 //    hypergraph->forEachEdge([&](auto const & edge) {
 //       std::cout << logic.pp(edge.fla.fla) << std::endl;
 //    });
     auto res = Spacer(logic, options).solve(*hypergraph);
-    ASSERT_EQ(res.getAnswer(), VerificationResult::SAFE);
+    ASSERT_EQ(res.getAnswer(), VerificationAnswer::SAFE);
     res = translator->translate(res);
     Validator validator(logic);
-    SystemVerificationResult result(std::move(res));
-    EXPECT_EQ(validator.validate(system, result), Validator::Result::VALIDATED);
+    VerificationResult result(std::move(res));
+    EXPECT_EQ(validator.validate(originalGraph, result), Validator::Result::VALIDATED);
 }

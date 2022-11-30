@@ -18,13 +18,13 @@ public:
     virtual InvalidityWitness translate(InvalidityWitness witness) = 0;
     virtual ValidityWitness translate(ValidityWitness witness) = 0;
     virtual ~WitnessBackTranslator() = default;
-    GraphVerificationResult translate(GraphVerificationResult const & result) {
+    VerificationResult translate(VerificationResult const & result) {
         switch (result.getAnswer()) {
-            case VerificationResult::SAFE:
-                return GraphVerificationResult(result.getAnswer(), translate(result.getValidityWitness()));
-            case VerificationResult::UNSAFE:
-                return GraphVerificationResult(result.getAnswer(), translate(result.getInvalidityWitness()));
-            case VerificationResult::UNKNOWN:
+            case VerificationAnswer::SAFE:
+                return VerificationResult(result.getAnswer(), translate(result.getValidityWitness()));
+            case VerificationAnswer::UNSAFE:
+                return VerificationResult(result.getAnswer(), translate(result.getInvalidityWitness()));
+            case VerificationAnswer::UNKNOWN:
                 return result;
         }
         throw std::logic_error("Unreachable");

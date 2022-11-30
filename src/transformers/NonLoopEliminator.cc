@@ -84,7 +84,7 @@ ValidityWitness NonLoopEliminator::BackTranslator::translate(ValidityWitness wit
             outgoingFormulas.push(logic.mkAnd(edge.fla.fla, logic.mkNot(targetDef)));
         }
         TermUtils::substitutions_map substitutionsMap;
-        utils.insertVarPairsFromPredicates(predicateRepresentation.getSourceTermFor(vertex), predicateRepresentation.getTargetTermFor(vertex), substitutionsMap);
+        utils.mapFromPredicate(predicateRepresentation.getSourceTermFor(vertex), predicateRepresentation.getTargetTermFor(vertex), substitutionsMap);
         PTRef incomingPart = logic.mkOr(std::move(incomingFormulas));
         PTRef outgoingPart = logic.mkOr(std::move(outgoingFormulas));
         outgoingPart = utils.varSubstitute(outgoingPart, substitutionsMap);
