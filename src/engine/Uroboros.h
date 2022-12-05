@@ -1,6 +1,8 @@
-//
-// Created by Konstantin Britikov on 03.11.22.
-//
+/*
+ * Copyright (c) 2022, Konstantin Britikov <britikovki@gmail.com>
+ *
+ * SPDX-License-Identifier: MIT
+ */
 
 #ifndef GOLEM_UROBOROS_H
 #define GOLEM_UROBOROS_H
@@ -36,7 +38,7 @@ public:
     GraphVerificationResult solve(ChcDirectedGraph const & system);
 
 private:
-    InterpolantResult finiteRun(PTRef & init, PTRef & transition, PTRef & query, int & k);
+    InterpolantResult finiteRun(PTRef init, PTRef transition, PTRef query, int k);
     GraphVerificationResult solveTransitionSystem(TransitionSystem const & system, ChcDirectedGraph const & graph);
     PTRef lastIterationInterpolant(MainSolver& solver, ipartitions_t mask);
     sstat checkItp(PTRef itp, PTRef itpsOld);
