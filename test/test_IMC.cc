@@ -5,12 +5,12 @@
  */
 
 #include <gtest/gtest.h>
-#include "engine/Uroboros.h"
+#include "engine/IMC.h"
 #include "Validator.h"
 
 
 
-class UroborosTest : public ::testing::Test {
+class IMCTest : public ::testing::Test {
 protected:
     ArithLogic logic{opensmt::Logic_t::QF_LIA};
     Options options;
@@ -20,7 +20,7 @@ protected:
     PTRef two;
     PTRef x, xp;
 
-    UroborosTest() {
+    IMCTest() {
         zero = logic.getTerm_IntZero();
         one = logic.getTerm_IntOne();
         two = logic.mkIntConst(2);
@@ -61,7 +61,7 @@ protected:
 };
 
 
-TEST_F(UroborosTest, test_Uroboros_simple) {
+TEST_F(IMCTest, test_IMC_simple) {
     ArithLogic logic {opensmt::Logic_t::QF_LIA};
     Options options;
     options.addOption(Options::LOGIC, "QF_LIA");
@@ -88,8 +88,8 @@ TEST_F(UroborosTest, test_Uroboros_simple) {
     auto hypergraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
     ASSERT_TRUE(hypergraph->isNormalGraph());
     auto graph = hypergraph->toNormalGraph();
-    Uroboros uroboros(logic, options);
-    auto res = uroboros.solve(*graph);
+    IMC imc(logic, options);
+    auto res = imc.solve(*graph);
     auto answer = res.getAnswer();
     ASSERT_EQ(answer, VerificationResult::UNSAFE);
     auto witness = res.getInvalidityWitness();
@@ -99,7 +99,7 @@ TEST_F(UroborosTest, test_Uroboros_simple) {
 }
 
 
-TEST_F(UroborosTest, test_Uroboros_simple_safe)
+TEST_F(IMCTest, test_IMC_simple_safe)
 {
     Options options;
     options.addOption(Options::LOGIC, "QF_LIA");
@@ -123,11 +123,11 @@ TEST_F(UroborosTest, test_Uroboros_simple_safe)
                     ChcHead{UninterpretedPredicate{logic.getTerm_false()}},
                     ChcBody{{logic.mkLt(x, zero)}, {UninterpretedPredicate{current}}}
             }};
-    Uroboros engine(logic, options);
+    IMC engine(logic, options);
     solveSystem(clauses, engine, VerificationResult::SAFE, true);
 }
 
-TEST_F(UroborosTest, test_Uroboros_moreInductionForward_safe)
+TEST_F(IMCTest, test_IMC_moreInductionForward_safe)
 {
     Options options;
     options.addOption(Options::LOGIC, "QF_LIA");
@@ -151,11 +151,11 @@ TEST_F(UroborosTest, test_Uroboros_moreInductionForward_safe)
                     ChcHead{UninterpretedPredicate{logic.getTerm_false()}},
                     ChcBody{{logic.mkEq(x, logic.mkIntConst(15))}, {UninterpretedPredicate{current}}}
             }};
-    Uroboros engine(logic, options);
+    IMC engine(logic, options);
     solveSystem(clauses, engine, VerificationResult::SAFE, true);
 }
 
-TEST_F(UroborosTest, test_Uroboros_moreInductionBackward_safe)
+TEST_F(IMCTest, test_IMC_moreInductionBackward_safe)
 {
     Options options;
     options.addOption(Options::LOGIC, "QF_LIA");
@@ -179,6 +179,6 @@ TEST_F(UroborosTest, test_Uroboros_moreInductionBackward_safe)
                     ChcHead{UninterpretedPredicate{logic.getTerm_false()}},
                     ChcBody{{logic.mkEq(x, logic.mkIntConst(15))}, {UninterpretedPredicate{current}}}
             }};
-    Uroboros engine(logic, options);
+    IMC engine(logic, options);
     solveSystem(clauses, engine, VerificationResult::SAFE, true);
 }

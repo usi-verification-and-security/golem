@@ -4,13 +4,13 @@
  * SPDX-License-Identifier: MIT
  */
 
-#ifndef GOLEM_UROBOROS_H
-#define GOLEM_UROBOROS_H
+#ifndef GOLEM_IMC_H
+#define GOLEM_IMC_H
 
 #include "Engine.h"
 #include "TransitionSystem.h"
 
-class Uroboros : public Engine {
+class IMC : public Engine {
     Logic & logic;
 //    Options const & options;
     int verbosity = 0;
@@ -21,7 +21,7 @@ public:
         PTRef interpolant;
     };
 
-    Uroboros(Logic & logic, Options const & options) : logic(logic) {
+    IMC(Logic & logic, Options const & options) : logic(logic) {
         if (options.hasOption(Options::VERBOSE)) {
             verbosity = std::stoi(options.getOption(Options::VERBOSE));
         }
@@ -44,5 +44,4 @@ private:
     sstat checkItp(PTRef itp, PTRef itpsOld);
 };
 
-
-#endif //GOLEM_UROBOROS_H
+#endif //GOLEM_IMC_H

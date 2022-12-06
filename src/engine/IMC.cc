@@ -4,11 +4,11 @@
  * SPDX-License-Identifier: MIT
  */
 
-#include "Uroboros.h"
+#include "IMC.h"
 #include "TermUtils.h"
 #include "TransformationUtils.h"
 
-GraphVerificationResult Uroboros::solve(ChcDirectedGraph const & system) {
+GraphVerificationResult IMC::solve(ChcDirectedGraph const & system) {
     if (isTransitionSystem(system)) {
         auto ts = toTransitionSystem(system, logic);
         return solveTransitionSystem(*ts, system);
@@ -16,7 +16,7 @@ GraphVerificationResult Uroboros::solve(ChcDirectedGraph const & system) {
     return GraphVerificationResult(VerificationResult::UNKNOWN);
 }
 
-GraphVerificationResult Uroboros::solveTransitionSystem(TransitionSystem const & system, ChcDirectedGraph const & graph) {
+GraphVerificationResult IMC::solveTransitionSystem(TransitionSystem const & system, ChcDirectedGraph const & graph) {
     std::size_t maxLoopUnrollings = std::numeric_limits<std::size_t>::max();
     PTRef init = system.getInit();
     PTRef query = system.getQuery();
@@ -27,7 +27,7 @@ GraphVerificationResult Uroboros::solveTransitionSystem(TransitionSystem const &
     config.setOption(SMTConfig::o_produce_inter, SMTOption(true), msg);
     config.setSimplifyInterpolant(4);
     TimeMachine tm{logic};
-    MainSolver initSolver(logic, config, "Uroboros");
+    MainSolver initSolver(logic, config, "IMC");
     initSolver.insertFormula(init);
     PTRef versionedQuery = tm.sendFlaThroughTime(query, 0);
     initSolver.insertFormula(versionedQuery);
@@ -47,7 +47,7 @@ GraphVerificationResult Uroboros::solveTransitionSystem(TransitionSystem const &
 }
 
 //procedure FiniteRun(M=(I,T,F), k>0)
-Uroboros::InterpolantResult Uroboros::finiteRun(PTRef init, PTRef transition, PTRef query, int k) {
+IMC::InterpolantResult IMC::finiteRun(PTRef init, PTRef transition, PTRef query, int k) {
     SMTConfig config;
     const char * msg = "ok";
     config.setOption(SMTConfig::o_produce_inter, SMTOption(true), msg);
@@ -58,7 +58,7 @@ Uroboros::InterpolantResult Uroboros::finiteRun(PTRef init, PTRef transition, PT
     int iter = 0;
     // while true
     while(true){
-        MainSolver solver(logic, config, "Uroboros");
+        MainSolver solver(logic, config, "IMC");
         //A = CNF(PREF1(M'), U1)
         PTRef A = logic.mkAnd(movingInit, tm.sendFlaThroughTime(transition, iter));
         solver.insertFormula(A);
@@ -98,7 +98,7 @@ Uroboros::InterpolantResult Uroboros::finiteRun(PTRef init, PTRef transition, PT
     }
 }
 
-PTRef Uroboros::lastIterationInterpolant(MainSolver& solver, ipartitions_t mask) {
+PTRef IMC::lastIterationInterpolant(MainSolver& solver, ipartitions_t mask) {
     auto itpContext = solver.getInterpolationContext();
     vec<PTRef> itps;
     itpContext->getSingleInterpolant(itps, mask);
@@ -106,7 +106,7 @@ PTRef Uroboros::lastIterationInterpolant(MainSolver& solver, ipartitions_t mask)
     return itps[0];
 }
 
-sstat Uroboros::checkItp(PTRef itp, PTRef itpsOld){
+sstat IMC::checkItp(PTRef itp, PTRef itpsOld){
     SMTConfig itp_config;
     PTRef cmp = logic.mkAnd(itp, logic.mkNot(itpsOld));
     MainSolver itpSolver(logic, itp_config, "Interpolant");
