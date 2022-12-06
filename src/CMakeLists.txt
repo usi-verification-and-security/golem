@@ -38,7 +38,7 @@ target_sources(golem_lib
     PRIVATE engine/Lawi.cc
     PRIVATE engine/Spacer.cc
     PRIVATE engine/TPA.cc
-    PRIVATE engine/Uroboros.cc
+    PRIVATE engine/IMC.cc
     PRIVATE TransitionSystem.cc
     PRIVATE Options.cc
     PRIVATE TermUtils.cc
