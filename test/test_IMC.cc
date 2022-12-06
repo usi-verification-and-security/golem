@@ -44,7 +44,7 @@ protected:
 
     PTRef instantiatePredicate(SymRef symbol, vec<PTRef> const & args) { return logic.mkUninterpFun(symbol, args); }
 
-    void solveSystem(std::vector<ChClause> const & clauses, Engine & engine, VerificationResult expectedResult, bool validate) {
+    void solveSystem(std::vector<ChClause> const & clauses, Engine & engine, VerificationAnswer expectedResult, bool validate) {
         for (auto const & clause : clauses) { system.addClause(clause); }
 
         auto normalizedSystem = Normalizer(logic).normalize(system);
@@ -53,8 +53,7 @@ protected:
         auto answer = res.getAnswer();
         ASSERT_EQ(answer, expectedResult);
         if (validate) {
-            SystemVerificationResult systemResult(std::move(res), *hypergraph);
-            auto validationResult = Validator(logic).validate(*normalizedSystem.normalizedSystem, systemResult);
+            auto validationResult = Validator(logic).validate(*hypergraph, res);
             ASSERT_EQ(validationResult, Validator::Result::VALIDATED);
         }
     }
@@ -91,10 +90,9 @@ TEST_F(IMCTest, test_IMC_simple) {
     IMC imc(logic, options);
     auto res = imc.solve(*graph);
     auto answer = res.getAnswer();
-    ASSERT_EQ(answer, VerificationResult::UNSAFE);
+    ASSERT_EQ(answer, VerificationAnswer::UNSAFE);
     auto witness = res.getInvalidityWitness();
-    SystemVerificationResult systemResult (std::move(res), *hypergraph);
-    auto validationResult = Validator(logic).validate(*normalizedSystem.normalizedSystem, systemResult);
+    auto validationResult = Validator(logic).validate(*hypergraph, res);
     ASSERT_EQ(validationResult, Validator::Result::VALIDATED);
 }
 
@@ -124,7 +122,7 @@ TEST_F(IMCTest, test_IMC_simple_safe)
                     ChcBody{{logic.mkLt(x, zero)}, {UninterpretedPredicate{current}}}
             }};
     IMC engine(logic, options);
-    solveSystem(clauses, engine, VerificationResult::SAFE, true);
+    solveSystem(clauses, engine, VerificationAnswer::SAFE, true);
 }
 
 TEST_F(IMCTest, test_IMC_moreInductionForward_safe)
@@ -152,7 +150,7 @@ TEST_F(IMCTest, test_IMC_moreInductionForward_safe)
                     ChcBody{{logic.mkEq(x, logic.mkIntConst(15))}, {UninterpretedPredicate{current}}}
             }};
     IMC engine(logic, options);
-    solveSystem(clauses, engine, VerificationResult::SAFE, true);
+    solveSystem(clauses, engine, VerificationAnswer::SAFE, true);
 }
 
 TEST_F(IMCTest, test_IMC_moreInductionBackward_safe)
@@ -180,5 +178,5 @@ TEST_F(IMCTest, test_IMC_moreInductionBackward_safe)
                     ChcBody{{logic.mkEq(x, logic.mkIntConst(15))}, {UninterpretedPredicate{current}}}
             }};
     IMC engine(logic, options);
-    solveSystem(clauses, engine, VerificationResult::SAFE, true);
+    solveSystem(clauses, engine, VerificationAnswer::SAFE, true);
 }
