@@ -8,15 +8,15 @@
 #include "TermUtils.h"
 #include "TransformationUtils.h"
 
-GraphVerificationResult IMC::solve(ChcDirectedGraph const & system) {
+VerificationResult IMC::solve(ChcDirectedGraph const & system) {
     if (isTransitionSystem(system)) {
         auto ts = toTransitionSystem(system, logic);
         return solveTransitionSystem(*ts, system);
     }
-    return GraphVerificationResult(VerificationResult::UNKNOWN);
+    return VerificationResult(VerificationAnswer::UNKNOWN);
 }
 
-GraphVerificationResult IMC::solveTransitionSystem(TransitionSystem const & system, ChcDirectedGraph const & graph) {
+VerificationResult IMC::solveTransitionSystem(TransitionSystem const & system, ChcDirectedGraph const & graph) {
     std::size_t maxLoopUnrollings = std::numeric_limits<std::size_t>::max();
     PTRef init = system.getInit();
     PTRef query = system.getQuery();
@@ -33,17 +33,17 @@ GraphVerificationResult IMC::solveTransitionSystem(TransitionSystem const & syst
     initSolver.insertFormula(versionedQuery);
     //if I /\ F is Satisfiable, return true
     if(initSolver.check() == s_True){
-        GraphVerificationResult{VerificationResult::UNSAFE,  InvalidityWitness::fromTransitionSystem(graph, 0)};
+        VerificationResult{VerificationAnswer::UNSAFE,  InvalidityWitness::fromTransitionSystem(graph, 0)};
     }
     for (uint32_t k = 1; k < maxLoopUnrollings; ++k) {
         InterpolantResult res = finiteRun(init, transition, query, k);
         if(res.result == l_True){
-            return GraphVerificationResult{VerificationResult::UNSAFE,  InvalidityWitness::fromTransitionSystem(graph, res.depth)};
+            return VerificationResult{VerificationAnswer::UNSAFE,  InvalidityWitness::fromTransitionSystem(graph, res.depth)};
         } if (res.result == l_False){
-            return GraphVerificationResult{VerificationResult::SAFE, ValidityWitness::fromTransitionSystem(logic, graph, system, res.interpolant)};
+            return VerificationResult{VerificationAnswer::SAFE, ValidityWitness::fromTransitionSystem(logic, graph, system, res.interpolant)};
         }
     }
-    return GraphVerificationResult(VerificationResult::UNKNOWN);
+    return VerificationResult(VerificationAnswer::UNKNOWN);
 }
 
 //procedure FiniteRun(M=(I,T,F), k>0)
