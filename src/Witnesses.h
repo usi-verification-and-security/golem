@@ -58,8 +58,18 @@ public:
         DerivationStep &        last()       { assert(size() > 0); return derivationSteps[size() - 1]; }
         DerivationStep const &  last() const { assert(size() > 0); return derivationSteps[size() - 1]; }
         std::size_t size() const { return derivationSteps.size(); }
-private:
+    private:
         std::vector<DerivationStep> derivationSteps;
+
+    public:
+        Derivation() = default;
+        Derivation(std::vector<DerivationStep> derivationSteps) : derivationSteps(std::move(derivationSteps)) {}
+
+        using const_iterator = decltype(derivationSteps)::const_iterator;
+
+        const_iterator begin() const { return derivationSteps.begin(); }
+        const_iterator end() const { return derivationSteps.end(); }
+
     };
 
 private:

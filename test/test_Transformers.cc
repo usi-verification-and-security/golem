@@ -139,9 +139,6 @@ TEST_F(Transformer_test, test_OutputFromEngine) {
     auto originalGraph = *hypergraph;
     auto [newGraph, translator] = SimpleChainSummarizer(logic).transform(std::move(hypergraph));
     hypergraph = std::move(newGraph);
-//    hypergraph->forEachEdge([&](auto const & edge) {
-//       std::cout << logic.pp(edge.fla.fla) << std::endl;
-//    });
     auto res = Spacer(logic, options).solve(*hypergraph);
     ASSERT_EQ(res.getAnswer(), VerificationAnswer::SAFE);
     res = translator->translate(res);
@@ -149,3 +146,158 @@ TEST_F(Transformer_test, test_OutputFromEngine) {
     VerificationResult result(std::move(res));
     EXPECT_EQ(validator.validate(originalGraph, result), Validator::Result::VALIDATED);
 }
+
+TEST_F(Transformer_test, test_ChainSummarizer_TwoStepChain_Unsafe) {
+    ChcSystem system;
+    system.addUninterpretedPredicate(s1);
+    system.addClause( // x' >= 0 => S1(x')
+        ChcHead{UninterpretedPredicate{nextS1}},
+        ChcBody{{logic.mkGeq(xp, zero)}, {}});
+    system.addClause( // S1(y) and y >= 10 => false
+        ChcHead{UninterpretedPredicate{logic.getTerm_false()}},
+        ChcBody{{logic.mkGeq(y, logic.mkIntConst(10))}, {UninterpretedPredicate{logic.mkUninterpFun(s1, {y})}}}
+    );
+    auto hyperGraph = systemToGraph(system);
+    auto originalGraph = *hyperGraph;
+    auto [summarizedGraph, translator] = SimpleChainSummarizer(logic).transform(std::move(hyperGraph));
+    Options options;
+    options.addOption(Options::COMPUTE_WITNESS, "true");
+    auto res = Spacer(logic, options).solve(*summarizedGraph);
+    ASSERT_EQ(res.getAnswer(), VerificationAnswer::UNSAFE);
+    Validator validator(logic);
+    ASSERT_EQ(validator.validate(*summarizedGraph, res), Validator::Result::VALIDATED);
+    auto translatedWitness = translator->translate(res.getInvalidityWitness());
+    VerificationResult result(VerificationAnswer::UNSAFE, translatedWitness);
+    ASSERT_EQ(validator.validate(originalGraph, result), Validator::Result::VALIDATED);
+}
+
+TEST_F(Transformer_test, test_ChainSummarizer_ThreeStepChain_Unsafe) {
+    ChcSystem system;
+    system.addUninterpretedPredicate(s1);
+    system.addUninterpretedPredicate(s2);
+    system.addClause( // x' < 0 => S1(x')
+        ChcHead{UninterpretedPredicate{nextS1}},
+        ChcBody{{logic.mkLt(xp, zero)}, {}});
+    system.addClause( // S1(x) and x' = x - 1 => S2(x')
+        ChcHead{UninterpretedPredicate{nextS2}},
+        ChcBody{{logic.mkEq(xp, logic.mkMinus(x, one))}, {UninterpretedPredicate{currentS1}}}
+    );
+    system.addClause( // S2(y) and y < -10 => false
+        ChcHead{UninterpretedPredicate{logic.getTerm_false()}},
+        ChcBody{{logic.mkLt(y, logic.mkIntConst(-10))}, {UninterpretedPredicate{logic.mkUninterpFun(s2, {y})}}}
+    );
+    auto hyperGraph = systemToGraph(system);
+    auto originalGraph = *hyperGraph;
+    auto [summarizedGraph, translator] = SimpleChainSummarizer(logic).transform(std::move(hyperGraph));
+    Options options;
+    options.addOption(Options::COMPUTE_WITNESS, "true");
+    auto res = Spacer(logic, options).solve(*summarizedGraph);
+    ASSERT_EQ(res.getAnswer(), VerificationAnswer::UNSAFE);
+    Validator validator(logic);
+    ASSERT_EQ(validator.validate(*summarizedGraph, res), Validator::Result::VALIDATED);
+    auto translatedWitness = translator->translate(res.getInvalidityWitness());
+    VerificationResult result(VerificationAnswer::UNSAFE, translatedWitness);
+    ASSERT_EQ(validator.validate(originalGraph, result), Validator::Result::VALIDATED);
+}
+
+TEST_F(Transformer_test, test_ChainSummarizer_TwoChains_Unsafe) {
+    ChcSystem system;
+    SymRef s4 = logic.declareFun("s4", logic.getSort_bool(), {logic.getSort_int()});
+    system.addUninterpretedPredicate(s1);
+    system.addUninterpretedPredicate(s2);
+    system.addUninterpretedPredicate(s3);
+    system.addUninterpretedPredicate(s4);
+    system.addClause( // x' < 0 => S1(x')
+        ChcHead{UninterpretedPredicate{nextS1}},
+        ChcBody{{logic.mkLt(xp, zero)}, {}});
+    system.addClause( // S1(x) and x' = x - 1 => S2(x')
+        ChcHead{UninterpretedPredicate{nextS2}},
+        ChcBody{{logic.mkEq(xp, logic.mkMinus(x, one))}, {UninterpretedPredicate{currentS1}}}
+    );
+    system.addClause( // x' > 0 => S3(x')
+        ChcHead{UninterpretedPredicate{logic.mkUninterpFun(s3, {xp})}},
+        ChcBody{{logic.mkGt(xp, zero)}, {}});
+    system.addClause( // S3(x) and x' = x + 1 => S4(x')
+        ChcHead{UninterpretedPredicate{logic.mkUninterpFun(s4,{xp})}},
+        ChcBody{{logic.mkEq(xp, logic.mkPlus(x, one))}, {UninterpretedPredicate{logic.mkUninterpFun(s3, {x})}}}
+    );
+    system.addClause( // S2(x) and S4(y) and x + y = 0 => false
+        ChcHead{UninterpretedPredicate{logic.getTerm_false()}},
+        ChcBody{{logic.mkEq(logic.mkPlus(x,y), zero)}, {UninterpretedPredicate{logic.mkUninterpFun(s2, {x})}, UninterpretedPredicate{logic.mkUninterpFun(s4, {y})}}}
+    );
+    auto hyperGraph = systemToGraph(system);
+    auto originalGraph = *hyperGraph;
+    auto [summarizedGraph, translator] = SimpleChainSummarizer(logic).transform(std::move(hyperGraph));
+    Options options;
+    options.addOption(Options::COMPUTE_WITNESS, "true");
+    auto res = Spacer(logic, options).solve(*summarizedGraph);
+    ASSERT_EQ(res.getAnswer(), VerificationAnswer::UNSAFE);
+    Validator validator(logic);
+//    res.getInvalidityWitness().print(std::cout, logic);
+    ASSERT_EQ(validator.validate(*summarizedGraph, res), Validator::Result::VALIDATED);
+    auto translatedWitness = translator->translate(res.getInvalidityWitness());
+//    translatedWitness.print(std::cout, logic);
+    VerificationResult result(VerificationAnswer::UNSAFE, translatedWitness);
+    ASSERT_EQ(validator.validate(originalGraph, result), Validator::Result::VALIDATED);
+}
+
+TEST_F(Transformer_test, test_ChainSummarizer_SameChainTwice_SafeFact_Unsafe) {
+    ChcSystem system;
+    system.addUninterpretedPredicate(s1);
+    system.addClause( // x' >= 0 => S1(x')
+        ChcHead{UninterpretedPredicate{nextS1}},
+        ChcBody{{logic.mkGeq(xp, zero)}, {}});
+    system.addClause( // S1(x) and x' = x + 1 => S2(x')
+        ChcHead{UninterpretedPredicate{nextS2}},
+        ChcBody{{logic.mkEq(xp, logic.mkPlus(x, one))}, {UninterpretedPredicate{currentS1}}}
+    );
+    system.addClause( // S2(x) and  S2(y) and x = y => false
+        ChcHead{UninterpretedPredicate{logic.getTerm_false()}},
+        ChcBody{{logic.mkEq(x,y)}, {UninterpretedPredicate{currentS2}, UninterpretedPredicate{logic.mkUninterpFun(s2, {y})}}}
+    );
+    auto hyperGraph = systemToGraph(system);
+    auto originalGraph = *hyperGraph;
+    auto [summarizedGraph, translator] = SimpleChainSummarizer(logic).transform(std::move(hyperGraph));
+    Options options;
+    options.addOption(Options::COMPUTE_WITNESS, "true");
+    auto res = Spacer(logic, options).solve(*summarizedGraph);
+    ASSERT_EQ(res.getAnswer(), VerificationAnswer::UNSAFE);
+//    res.getInvalidityWitness().print(std::cout, logic);
+    Validator validator(logic);
+    ASSERT_EQ(validator.validate(*summarizedGraph, res), Validator::Result::VALIDATED);
+    auto translatedWitness = translator->translate(res.getInvalidityWitness());
+//    translatedWitness.print(std::cout, logic);
+    VerificationResult result(VerificationAnswer::UNSAFE, translatedWitness);
+    ASSERT_EQ(validator.validate(originalGraph, result), Validator::Result::VALIDATED);
+}
+
+TEST_F(Transformer_test, test_ChainSummarizer_SameChainTwice_DifferentFact_Unsafe) {
+    ChcSystem system;
+    system.addUninterpretedPredicate(s1);
+    system.addClause( // x' >= 0 => S1(x')
+        ChcHead{UninterpretedPredicate{nextS1}},
+        ChcBody{{logic.mkGeq(xp, zero)}, {}});
+    system.addClause( // S1(x) and x' = x + 1 => S2(x')
+        ChcHead{UninterpretedPredicate{nextS2}},
+        ChcBody{{logic.mkEq(xp, logic.mkPlus(x, one))}, {UninterpretedPredicate{currentS1}}}
+    );
+    system.addClause( // S2(x) and  S2(y) and x != y => false
+        ChcHead{UninterpretedPredicate{logic.getTerm_false()}},
+        ChcBody{{logic.mkNot(logic.mkEq(x,y))}, {UninterpretedPredicate{currentS2}, UninterpretedPredicate{logic.mkUninterpFun(s2, {y})}}}
+    );
+    auto hyperGraph = systemToGraph(system);
+    auto originalGraph = *hyperGraph;
+    auto [summarizedGraph, translator] = SimpleChainSummarizer(logic).transform(std::move(hyperGraph));
+    Options options;
+    options.addOption(Options::COMPUTE_WITNESS, "true");
+    auto res = Spacer(logic, options).solve(*summarizedGraph);
+    ASSERT_EQ(res.getAnswer(), VerificationAnswer::UNSAFE);
+//    res.getInvalidityWitness().print(std::cout, logic);
+    Validator validator(logic);
+    ASSERT_EQ(validator.validate(*summarizedGraph, res), Validator::Result::VALIDATED);
+    auto translatedWitness = translator->translate(res.getInvalidityWitness());
+//    translatedWitness.print(std::cout, logic);
+    VerificationResult result(VerificationAnswer::UNSAFE, translatedWitness);
+    ASSERT_EQ(validator.validate(originalGraph, result), Validator::Result::VALIDATED);
+}
+
