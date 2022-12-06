@@ -87,8 +87,10 @@ ValidityWitness SimpleChainSummarizer::SimpleChainBackTranslator::translate(Vali
             PTRef updatedLabel = utils.varSubstitute(edge.fla.fla, substitutionsMap);
             solver.insertFormula(updatedLabel);
         }
-        PTRef targetInterpretation = manager.baseFormulaToSource(
-            definitions.at(manager.sourceFormulaToBase(predicateRepresentation.getSourceTermFor(summary.to)))
+        PTRef predicate = predicateRepresentation.getSourceTermFor(summary.to);
+        // MB: We cannot try to rewrite 0-ary predicates
+        PTRef targetInterpretation = logic.isVar(predicate) ? definitions.at(predicate) : manager.baseFormulaToSource(
+            definitions.at(manager.sourceFormulaToBase(predicate))
         );
         solver.insertFormula(logic.mkNot(targetInterpretation));
         auto res = solver.check();
