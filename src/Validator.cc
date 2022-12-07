@@ -95,8 +95,6 @@ Validator::Result validateStep(
     };
     // get values for the variables from predicates
     auto sourceNodes = graph.getSources(edge);
-    // remove TOP from sources
-    sourceNodes.erase(std::remove(sourceNodes.begin(), sourceNodes.end(), logic.getSym_true()), sourceNodes.end());
     assert(sourceNodes.size() == step.premises.size());
     for (std::size_t i = 0; i < sourceNodes.size(); ++i) {
         auto source = sourceNodes[i];
@@ -122,7 +120,11 @@ Validator::validateInvalidityWitness(ChcDirectedHyperGraph const & graph, Invali
     auto derivationSize = derivation.size();
     if (derivationSize == 0) { return Result::NOT_VALIDATED; }
     ChcDirectedHyperGraph::VertexInstances vertexInstances(graph);
-    for (std::size_t i = 0; i < derivationSize; ++i) {
+    if (derivation[0].derivedFact != logic.getTerm_true()) {
+        assert(false);
+        return Result::NOT_VALIDATED;
+    }
+    for (std::size_t i = 1; i < derivationSize; ++i) {
         auto result = validateStep(i, derivation, graph, vertexInstances);
         if (result == Validator::Result::NOT_VALIDATED) { return result; }
     }

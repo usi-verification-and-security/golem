@@ -76,19 +76,19 @@ InvalidityWitness InvalidityWitness::fromErrorPath(ErrorPath const & errorPath, 
         return utils.varSubstitute(predicate, subst);
     };
 
-    // Drop the first predicate, which is TOP
-    vertexPredicates.erase(vertexPredicates.begin());
-
-    assert(vertexPredicates.size() == edgeIds.size());
+    assert(vertexPredicates.size() == edgeIds.size() + 1);
     std::size_t stepCounter = 0;
+    // Make the `true` the first step of the derivation
+    derivation.addDerivationStep({.index = stepCounter++, .premises = {}, .derivedFact = logic.getTerm_true(), .clauseId = {static_cast<id_t>(-1)}});
     for (std::size_t i = 0; i < edgeIds.size(); ++i) {
         auto id = edgeIds[i];
         DerivationStep step;
-        step.index = stepCounter++;
+        step.index = stepCounter;
         step.clauseId = id;
-        step.premises = i == 0 ? std::vector<size_t>{} : std::vector<size_t>{i - 1};
-        step.derivedFact = instantiate(vertexPredicates[i]);
+        step.premises = std::vector<size_t>{stepCounter - 1};
+        step.derivedFact = instantiate(vertexPredicates[i + 1]);
         derivation.addDerivationStep(std::move(step));
+        ++stepCounter;
     }
 
     InvalidityWitness witness;
