@@ -122,6 +122,11 @@ Validator::validateInvalidityWitness(ChcDirectedHyperGraph const & graph, Invali
     ChcDirectedHyperGraph::VertexInstances vertexInstances(graph);
     if (derivation[0].derivedFact != logic.getTerm_true()) {
         assert(false);
+        std::cerr << "; Validator: Invalidity witness does not start with TRUE!\n";
+        return Result::NOT_VALIDATED;
+    }
+    if (derivation.last().derivedFact != logic.getTerm_false()) {
+        std::cerr << "; Validator: Root of the invalidity witness is not FALSE!\n";
         return Result::NOT_VALIDATED;
     }
     for (std::size_t i = 1; i < derivationSize; ++i) {
