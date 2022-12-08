@@ -204,3 +204,21 @@ TEST_F(Spacer_LRA_Test, test_UnsatProofNondeterministicSystem)
     solveSystem(clauses, engine, VerificationAnswer::UNSAFE, true);
 }
 
+TEST_F(Spacer_LRA_Test, test_UnsatProof_FactWithNoConstraints)
+{
+    options.addOption(Options::COMPUTE_WITNESS, "true");
+    SymRef P = mkPredicateSymbol("P", {});
+    std::vector<ChClause> clauses{
+        { // true => P()
+            ChcHead{UninterpretedPredicate{instantiatePredicate(P, {})}},
+            ChcBody{InterpretedFla{logic->getTerm_true()}, {}}
+        },
+        { // P() => false
+            ChcHead{UninterpretedPredicate{logic->getTerm_false()}},
+            ChcBody{InterpretedFla{logic->getTerm_true()}, {UninterpretedPredicate{instantiatePredicate(P,{})}}}
+        },
+    };
+    Spacer engine(*logic, options);
+    solveSystem(clauses, engine, VerificationAnswer::UNSAFE, true);
+}
+

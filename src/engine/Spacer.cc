@@ -727,8 +727,11 @@ void computePremiseInstances(DerivationDatabase::Entry const & databaseEntry, En
     }
     auto model = solver.getModel();
     std::transform(sourcePredicates.begin(), sourcePredicates.end(), std::back_inserter(entry.premiseInstances), [&](PTRef premise){
-        PTRef premiseInstance = model->evaluate(premise);
-//        std::cout << logic.pp(premiseInstance) << std::endl;
+        auto vars = TermUtils(logic).predicateArgsInOrder(premise);
+        vec<PTRef> evaluatedVars(vars.size());
+        std::transform(vars.begin(), vars.end(), evaluatedVars.begin(), [&](PTRef var){ return model->evaluate(var); });
+        PTRef premiseInstance = logic.insertTerm(logic.getSymRef(premise), std::move(evaluatedVars));
+//        std::cout << logic.pp(premise) << " -> " << logic.pp(premiseInstance) << std::endl;
         return premiseInstance;
     });
 }
