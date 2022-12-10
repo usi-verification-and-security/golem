@@ -40,7 +40,7 @@ public:
 private:
     InterpolantResult finiteRun(PTRef init, PTRef transition, PTRef query, int k);
     VerificationResult solveTransitionSystem(TransitionSystem const & system, ChcDirectedGraph const & graph);
-    PTRef lastIterationInterpolant(MainSolver& solver, ipartitions_t mask);
+    PTRef lastIterationInterpolant(MainSolver & solver, ipartitions_t const & mask);
     sstat checkItp(PTRef itp, PTRef itpsOld);
 };
 
