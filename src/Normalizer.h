@@ -22,8 +22,12 @@ class Normalizer{
     Logic& logic;
     TimeMachine timeMachine;
     NonlinearCanonicalPredicateRepresentation canonicalPredicateRepresentation;
-    vec<PTRef> topLevelEqualities;
     long long counter = 0;
+    struct Equality {
+        PTRef normalizedVar;
+        PTRef originalArg;
+    };
+    vec<Equality> topLevelEqualities;
 
     ChClause normalize(ChClause const & clause);
 

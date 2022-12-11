@@ -48,25 +48,8 @@ ChClause Normalizer::eliminateRedundantVariables(ChClause && clause) {
         auto vars = utils.predicateArgsInOrder(pred.predicate);
         validVars.insert(vars.begin(), vars.end());
     }
-    // build substitution map
-    std::unordered_map<PTRef, PTRef, PTRefHash> subst;
-    for (PTRef eq : topLevelEqualities) {
-        if (not logic.isEquality(eq)) { continue; } // It could be the result of simplifying boolean equality to constant
-        PTRef lhs = logic.getPterm(eq)[0];
-        PTRef rhs = logic.getPterm(eq)[1];
-        if (logic.isVar(lhs) && validVars.find(lhs) == validVars.end()) {
-            if (subst.count(lhs) == 0) {
-                subst.insert({lhs, rhs});
-            }
-            continue;
-        }
-        if (logic.isVar(rhs) && validVars.find(rhs) == validVars.end()) {
-            if (subst.count(rhs) == 0) {
-                subst.insert({rhs, lhs});
-            }
-        }
-    }
-    PTRef newInterpretedBody = utils.varSubstitute(clause.body.interpretedPart.fla, subst);
+
+    PTRef newInterpretedBody = clause.body.interpretedPart.fla;
     ////////////////////// DEALING with LOCAL VARIABLES /////////////////////////
     {
         // Let's try to do variable elimination already here
@@ -87,7 +70,7 @@ ChClause Normalizer::eliminateRedundantVariables(ChClause && clause) {
         auto localVars = gatherVariables(newInterpretedBody);
         if (localVars.size() > 0) {
             // there are some local variables left, rename them and make them versioned
-            subst.clear();
+            TermUtils::substitutions_map subst;
             for (PTRef localVar : localVars) {
                 SRef sort = logic.getSortRef(localVar);
                 std::string uniq_name = "aux#" + std::to_string(counter++);
@@ -116,7 +99,7 @@ ChcHead Normalizer::normalize(ChcHead const& head) {
     for (int i = 0; i < size; ++i) {
         PTRef targetVar = logic.getPterm(targetTerm)[i];
         PTRef arg = logic.getPterm(predicate)[i];
-        topLevelEqualities.push(logic.mkEq(targetVar, arg));
+        topLevelEqualities.push({.normalizedVar = targetVar, .originalArg = arg});
     }
     return ChcHead{targetTerm};
 }
@@ -138,14 +121,28 @@ ChcBody Normalizer::normalize(const ChcBody & body) {
         assert(size == logic.getPterm(predicate).size());
         for (int i = 0; i < size; ++i) {
             PTRef arg = logic.getPterm(predicate)[i];
-            PTRef narg = logic.getPterm(sourceTerm)[i];
-            topLevelEqualities.push(logic.mkEq(narg, arg));
+            PTRef sourceVar = logic.getPterm(sourceTerm)[i];
+            topLevelEqualities.push({.normalizedVar = sourceVar, .originalArg = arg});
         }
         newUninterpretedPart.push_back(UninterpretedPredicate{sourceTerm});
     }
     // interpreted part
-    // just add the toplevel equalities collected for this clause; Here we assume 'head' has already been processed
-    PTRef newInterpretedPart = logic.mkAnd(body.interpretedPart.fla, logic.mkAnd(topLevelEqualities));
+    PTRef newInterpretedPart = body.interpretedPart.fla;
+
+    vec<PTRef> equalities;
+    equalities.capacity(topLevelEqualities.size());
+    TermUtils::substitutions_map subst;
+    for (auto [normalizedVar, originalArg] : topLevelEqualities) {
+        if (logic.isVar(originalArg) and subst.find(originalArg) == subst.end()) {
+            subst.insert({originalArg, normalizedVar});
+        } else {
+            equalities.push(logic.mkEq(normalizedVar, originalArg));
+        }
+    }
+    if (equalities.size() > 0) {
+        newInterpretedPart = logic.mkAnd(newInterpretedPart, logic.mkAnd(std::move(equalities)));
+    }
+    newInterpretedPart = TermUtils(logic).varSubstitute(newInterpretedPart, subst);
 
     newInterpretedPart = eliminateItes(newInterpretedPart);
     newInterpretedPart = eliminateDivMod(newInterpretedPart);
