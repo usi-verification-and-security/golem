@@ -133,8 +133,10 @@ ChcBody Normalizer::normalize(const ChcBody & body) {
     for (auto [normalizedVar, originalArg] : topLevelEqualities) {
         if (logic.isVar(originalArg) and subst.find(originalArg) == subst.end()) {
             subst.insert({originalArg, normalizedVar});
-        } else {
-            equalities.push(logic.mkEq(normalizedVar, originalArg));
+        } else { // originalArg is not variable or it has substitution assigned already
+            // MB: We try to avoid creating equalities with original arguments, which would need to be rewritten later
+            PTRef value = logic.isVar(originalArg) ? subst.at(originalArg) : originalArg;
+            equalities.push(logic.mkEq(normalizedVar, value));
         }
     }
     if (equalities.size() > 0) {
