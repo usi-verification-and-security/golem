@@ -1,9 +1,11 @@
-//
-// Created by Martin Blicha on 17.07.20.
-//
+/*
+ * Copyright (c) 2020-2022, Martin Blicha <martin.blicha@gmail.com>
+ *
+ * SPDX-License-Identifier: MIT
+ */
 
-#ifndef OPENSMT_CHCGRAPH_H
-#define OPENSMT_CHCGRAPH_H
+#ifndef GOLEM_CHCGRAPH_H
+#define GOLEM_CHCGRAPH_H
 
 #include "ChcSystem.h"
 #include "TermUtils.h"
@@ -342,4 +344,4 @@ public:
     }
 };
 
-#endif //OPENSMT_CHCGRAPH_H
+#endif //GOLEM_CHCGRAPH_H
