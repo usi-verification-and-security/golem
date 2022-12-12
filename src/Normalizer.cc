@@ -22,6 +22,17 @@ NormalizedChcSystem Normalizer::normalize(const ChcSystem & system) && {
     return NormalizedChcSystem{.normalizedSystem = std::move(newSystem), .canonicalPredicateRepresentation = std::move(cpr)};
 }
 
+ChClause Normalizer::normalize(ChClause const & clause) {
+    auto const & head = clause.head;
+    auto const & body = clause.body;
+    topLevelEqualities.clear();
+    ChcHead newHead = normalize(head);
+    ChcBody newBody = normalize(body);
+    ChClause res = eliminateRedundantVariables(ChClause{.head = std::move(newHead), .body = std::move(newBody)});
+    topLevelEqualities.clear();
+    return res;
+}
+
 ChClause Normalizer::eliminateRedundantVariables(ChClause && clause) {
     // For now we just eliminate variables left over after normalization
     // In the future we can do variable elimination here

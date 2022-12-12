@@ -25,20 +25,11 @@ class Normalizer{
     vec<PTRef> topLevelEqualities;
     long long counter = 0;
 
-    ChClause normalize(ChClause const& clause) {
-        auto const& head = clause.head;
-        auto const& body = clause.body;
-        topLevelEqualities.clear();
-        ChcHead newHead = normalize(head);
-        ChcBody newBody = normalize(body);
-        ChClause res = eliminateRedundantVariables(ChClause{.head = std::move(newHead), .body = std::move(newBody)});
-        topLevelEqualities.clear();
-        return res;
-    }
+    ChClause normalize(ChClause const & clause);
 
-    ChcHead normalize(ChcHead const& head);
+    ChcHead normalize(ChcHead const & head);
 
-    ChcBody normalize(ChcBody const& body);
+    ChcBody normalize(ChcBody const & body);
 
     void createUniqueRepresentation(PTRef predicate) {
         auto size = logic.getPterm(predicate).size();
