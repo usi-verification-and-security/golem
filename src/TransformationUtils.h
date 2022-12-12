@@ -5,9 +5,10 @@
 #ifndef OPENSMT_TRANSFORMATIONUTILS_H
 #define OPENSMT_TRANSFORMATIONUTILS_H
 
-#include "memory"
-#include "ChcGraph.h"
+#include "graph/ChcGraph.h"
 #include "TransitionSystem.h"
+
+#include <memory>
 
 bool isTransitionSystem(ChcDirectedGraph const & graph);
 

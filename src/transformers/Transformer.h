@@ -9,7 +9,7 @@
 #define GOLEM_TRANSFORMER_H
 
 #include "Witnesses.h"
-#include "ChcGraph.h"
+#include "graph/ChcGraph.h"
 
 #include <memory>
 

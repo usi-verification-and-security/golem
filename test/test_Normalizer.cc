@@ -7,7 +7,7 @@
 #include <gtest/gtest.h>
 
 #include "Normalizer.h"
-#include "ChcGraph.h"
+#include "graph/ChcGraph.h"
 
 TEST(NormalizerTest, test_boolean_equal_to_constant) {
     ArithLogic logic {opensmt::Logic_t::QF_LIA};

@@ -9,7 +9,7 @@
 
 
 #include "engine/Engine.h"
-#include "ChcGraph.h"
+#include "graph/ChcGraph.h"
 
 struct ValidationException : public std::runtime_error {
 public:

@@ -11,7 +11,7 @@
 #include <engine/TPA.h>
 #include <engine/IMC.h>
 #include "ChcInterpreter.h"
-#include "ChcGraph.h"
+#include "graph/ChcGraph.h"
 #include "graph/GraphTransformations.h"
 #include "Validator.h"
 #include "Normalizer.h"

@@ -32,7 +32,6 @@ target_link_libraries(golem_lib PUBLIC OpenSMT::OpenSMT)
 target_sources(golem_lib
     PRIVATE ChcSystem.cc
     PRIVATE ChcInterpreter.cc
-    PRIVATE ChcGraph.cc
     PRIVATE engine/Bmc.cc
     PRIVATE engine/Kind.cc
     PRIVATE engine/Lawi.cc
@@ -49,6 +48,7 @@ target_sources(golem_lib
     PRIVATE ModelBasedProjection.cc
     PRIVATE QuantifierElimination.cc
     PRIVATE graph/GraphTransformations.cc
+    PRIVATE graph/ChcGraph.cc
     PRIVATE transformers/SimpleChainSummarizer.cc
     PRIVATE transformers/NonLoopEliminator.cc
     PRIVATE transformers/MultiEdgeMerger.cc

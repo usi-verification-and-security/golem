@@ -7,7 +7,7 @@
 #ifndef GOLEM_WITNESSES_H
 #define GOLEM_WITNESSES_H
 
-#include "ChcGraph.h"
+#include "graph/ChcGraph.h"
 #include "TransitionSystem.h"
 
 #include "osmt_solver.h"

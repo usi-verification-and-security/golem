@@ -6,8 +6,8 @@
 #define OPENSMT_ENGINE_H
 
 #include "Witnesses.h"
-#include "ChcGraph.h"
 #include "Options.h"
+#include "graph/ChcGraph.h"
 
 #include "osmt_solver.h"
 #include "osmt_terms.h"
