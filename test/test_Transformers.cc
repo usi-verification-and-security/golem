@@ -5,6 +5,7 @@
  */
 
 #include <gtest/gtest.h>
+#include "graph/ChcGraphBuilder.h"
 #include "transformers/SimpleChainSummarizer.h"
 #include "Validator.h"
 #include "engine/Spacer.h"

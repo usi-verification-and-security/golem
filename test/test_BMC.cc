@@ -6,6 +6,7 @@
 
 #include <gtest/gtest.h>
 #include "engine/Bmc.h"
+#include "graph/ChcGraphBuilder.h"
 #include "Validator.h"
 
 TEST(BMC_test, test_BMC_simple) {

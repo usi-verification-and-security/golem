@@ -47,8 +47,9 @@ target_sources(golem_lib
     PRIVATE Witnesses.cc
     PRIVATE ModelBasedProjection.cc
     PRIVATE QuantifierElimination.cc
-    PRIVATE graph/GraphTransformations.cc
     PRIVATE graph/ChcGraph.cc
+    PRIVATE graph/ChcGraphBuilder.cc
+    PRIVATE graph/GraphTransformations.cc
     PRIVATE transformers/SimpleChainSummarizer.cc
     PRIVATE transformers/NonLoopEliminator.cc
     PRIVATE transformers/MultiEdgeMerger.cc

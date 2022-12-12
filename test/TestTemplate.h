@@ -8,6 +8,7 @@
 #define GOLEM_TESTTEMPLATE_H
 
 #include "engine/Engine.h"
+#include "graph/ChcGraphBuilder.h"
 #include "Validator.h"
 
 #include <gtest/gtest.h>

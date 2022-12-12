@@ -12,6 +12,7 @@
 #include <engine/IMC.h>
 #include "ChcInterpreter.h"
 #include "graph/ChcGraph.h"
+#include "graph/ChcGraphBuilder.h"
 #include "graph/GraphTransformations.h"
 #include "Validator.h"
 #include "Normalizer.h"

@@ -9,7 +9,6 @@
 
 #include "ChcSystem.h"
 #include "TermUtils.h"
-#include "Normalizer.h"
 
 #include <iosfwd>
 #include <map>
@@ -296,14 +295,6 @@ private:
 
     DirectedHyperEdge mergeEdges(std::vector<EId> const & chain);
     PTRef mergeLabels(std::vector<EId> const & chain);
-};
-
-class ChcGraphBuilder {
-    Logic& logic;
-public:
-    ChcGraphBuilder(Logic& logic) : logic(logic) {}
-
-    std::unique_ptr<ChcDirectedHyperGraph> buildGraph(NormalizedChcSystem const & system);
 };
 
 std::optional<EId> getSelfLoopFor(SymRef, ChcDirectedGraph const & graph, AdjacencyListsGraphRepresentation const & adjacencyRepresentation);
