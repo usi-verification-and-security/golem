@@ -53,13 +53,11 @@ ChClause Normalizer::eliminateRedundantVariables(ChClause && clause) {
     ////////////////////// DEALING with LOCAL VARIABLES /////////////////////////
     {
         // Let's try to do variable elimination already here
-        auto isNotValidVar = [&validVars](PTRef var) {
-            return validVars.find(var) == validVars.end();
+        auto isVarToEliminate = [&](PTRef var) {
+            return logic.isVar(var) and validVars.find(var) == validVars.end();
         };
         auto gatherVariables = [&](PTRef fla) {
-            VariableGathererConfig<decltype(isNotValidVar)> config(logic, isNotValidVar);
-            TermVisitor<decltype(config)>(logic, config).visit(fla);
-            return config.extractGatheredVariables();
+            return matchingSubTerms(logic, fla, isVarToEliminate);
         };
         auto toEliminateVars = gatherVariables(newInterpretedBody);
         if (toEliminateVars.size() > 0) {
