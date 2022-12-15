@@ -26,9 +26,10 @@ At the moment, you should specified the SMT theory used in the CHC encoding with
 Golem now has limited support to automatically detect the theory from the script, so the option is no longer mandatory, but still recommended.
 
 ### Backend engines
-Golem currently supports 5 different backend algorithms for solving CHCs.
+Golem currently supports 6 different backend algorithms for solving CHCs.
 - spacer [default]
 - bmc
+- imc
 - kind
 - lawi
 - tpa
@@ -39,6 +40,9 @@ It represents our own implementation of the algorithm from [this paper](https://
 
 BMC engine implements the simple bounded model checking algorithm which checks for existence of increasingly longer counterexample paths in a given transition system.
 It uses incremental capibilities of the underlying SMT solver to speed up the process.
+
+IMC engine implements the original McMillan's interpolation-based model-checking algorithm from [this paper](https://link.springer.com/chapter/10.1007/978-3-540-45069-6_1).
+Currently, it only supports transition systems.
 
 KIND engine implements very basic k-induction algorithm from [this paper](https://link.springer.com/chapter/10.1007/3-540-40922-X_8).
 Currently, it only supports transition systems.
@@ -56,6 +60,6 @@ split-TPA is a different instantiation of the TPA paradigm and is typically more
 Golem supports internal validation of witnesses for its answer using `--validate` option.
 Witness for `sat` is a model, an interpretation of the predicates.
 Witness for `unsat` is a proof.
-This option is still experimental. For example, `spacer` engine does not computes `unsat` witnesses yet. Also `tpa/split-tpa` does not always produce the witness yet.
+This option is still experimental. For example, `tpa/split-tpa` does not always produce the witness yet.
  
 To obtain the produced model or proof of unsatisfiability, use `--print-witness` option.
