@@ -208,7 +208,7 @@ class SpacerContext {
         QueryAnswer answer;
         std::unique_ptr<Model> model;
     };
-    QueryResult implies(PTRef antecedent, PTRef consequent);
+    QueryResult implies(PTRef antecedent, PTRef consequent) const;
 
     struct ItpQueryResult {
         QueryAnswer answer;
@@ -414,7 +414,7 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
     return BoundedSafetyResult::SAFE; // not reachable at this bound
 }
 
-SpacerContext::QueryResult SpacerContext::implies(PTRef antecedent, PTRef consequent) {
+SpacerContext::QueryResult SpacerContext::implies(PTRef antecedent, PTRef consequent) const {
     QueryResult qres;
     if (antecedent == logic.getTerm_false()) {
         qres.answer = QueryAnswer::VALID;
