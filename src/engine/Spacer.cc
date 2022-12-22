@@ -415,12 +415,16 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
 }
 
 SpacerContext::QueryResult SpacerContext::implies(PTRef antecedent, PTRef consequent) {
+    QueryResult qres;
+    if (antecedent == logic.getTerm_false()) {
+        qres.answer = QueryAnswer::VALID;
+        return qres;
+    }
     SMTConfig config;
     MainSolver solver(logic, config, "checker");
     solver.insertFormula(antecedent);
     solver.insertFormula(logic.mkNot(consequent));
     auto res = solver.check();
-    QueryResult qres;
     if (res == s_True) {
         qres.answer = QueryAnswer::INVALID;
         qres.model = solver.getModel();
