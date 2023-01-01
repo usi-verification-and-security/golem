@@ -49,14 +49,14 @@ InvalidityWitness InvalidityWitness::fromErrorPath(ErrorPath const & errorPath, 
     struct UPHelper{
         int counter = 0;
         ChcDirectedGraph const & graph;
-        TimeMachine timeMachine;
+        LinearPredicateVersioning predicateVersioning;
 
         PTRef operator()(SymRef vertex) {
             PTRef term = graph.getStateVersion(vertex);
-            return timeMachine.sendFlaThroughTime(term, counter++);
+            return predicateVersioning.sendPredicateThroughTime(term, counter++);
         }
 
-        UPHelper(ChcDirectedGraph const & graph, Logic & logic) : graph(graph), timeMachine(logic) {}
+        UPHelper(ChcDirectedGraph const & graph, Logic & logic) : graph(graph), predicateVersioning(logic) {}
     };
     assert(graph.getSource(edgeIds[0]) == logic.getSym_true());
     std::vector<SymRef> vertices;
