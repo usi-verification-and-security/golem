@@ -390,15 +390,21 @@ void LawiContext::close(VId vertex) {
 
 // Main method
 VerificationResult LawiContext::unwind() {
+    bool computeWitness = options.hasOption(Options::COMPUTE_WITNESS);
     auto optionalVertex = getUncoveredLeaf();
     while (optionalVertex.has_value()) {
         auto uncoveredVertex = optionalVertex.value();
         closeAllAncestors(uncoveredVertex);
         auto res = DFS(uncoveredVertex);
-        if (res == VerificationAnswer::UNSAFE) { return VerificationResult(VerificationAnswer::UNSAFE, InvalidityWitness::fromErrorPath(errorPath, graph)); }
+        if (res == VerificationAnswer::UNSAFE) {
+            if (computeWitness) {
+                return VerificationResult(VerificationAnswer::UNSAFE, InvalidityWitness::fromErrorPath(errorPath, graph));
+            } else {
+                return VerificationResult(VerificationAnswer::UNSAFE);
+            }
+        }
         optionalVertex = getUncoveredLeaf();
     }
-    bool computeWitness = options.hasOption(Options::COMPUTE_WITNESS);
     if (not computeWitness) { return VerificationResult(VerificationAnswer::SAFE); }
     // Solution found!
     // Map original locations to disjunction of labels of not covered vertices
