@@ -394,6 +394,24 @@ public:
     }
 };
 
+/*
+ * Helper class for obtaining correct versioned predicates for linear paths
+ *
+ * 0-ary predicates represent a special case, as they are viewed as boolean variables by the term system.
+ * 0-ary predicates do not have any versioned variables and thus are not effected by sending then through time.
+ * This class wraps the check for this special case.
+ */
+class LinearPredicateVersioning {
+    Logic & logic;
+public:
+    LinearPredicateVersioning(Logic & logic) : logic{logic} {}
+
+    PTRef sendPredicateThroughTime(PTRef predicate, int steps) {
+        assert(logic.getSortRef(predicate) == logic.getSort_bool());
+        return logic.isVar(predicate) ? predicate : TimeMachine(logic).sendFlaThroughTime(predicate, steps);
+    }
+};
+
 class LinearCanonicalPredicateRepresentation {
     using VariableRepresentation = std::unordered_map<SymRef, std::vector<PTRef>, SymRefHash>;
     using TermRepresentation = std::unordered_map<SymRef, PTRef, SymRefHash>;
