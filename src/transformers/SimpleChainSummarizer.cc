@@ -148,11 +148,8 @@ InvalidityWitness SimpleChainSummarizer::SimpleChainBackTranslator::translate(In
             assert(logic.getSymRef(summarizedStep.derivedFact) == replacingEdge.to);
             assert(logic.getSymRef(derivation[summarizedStep.premises.front()].derivedFact) == replacingEdge.from[0]);
             VersionedPredicate versionPredicate(logic, predicateRepresentation);
-            PTRef sourcePredicate = versionPredicate(replacingEdge.from[0]);
-            PTRef targetPredicate = versionPredicate(replacingEdge.to);
-            // MB: We cannot try to rewrite 0-ary predicates
-            // TODO: Find a better way to handle 0-ary predicates
-            targetPredicate = logic.isVar(targetPredicate) ? targetPredicate : TimeMachine(logic).sendFlaThroughTime(targetPredicate, simpleChain.size());
+            const PTRef sourcePredicate = versionPredicate(replacingEdge.from[0]);
+            const PTRef targetPredicate = LinearPredicateVersioning(logic).sendPredicateThroughTime(versionPredicate(replacingEdge.to),simpleChain.size());
             utils.mapFromPredicate(targetPredicate, summarizedStep.derivedFact, subst);
             utils.mapFromPredicate(sourcePredicate, derivation[summarizedStep.premises.front()].derivedFact, subst);
             SMTConfig config;
@@ -169,9 +166,7 @@ InvalidityWitness SimpleChainSummarizer::SimpleChainBackTranslator::translate(In
             std::vector<PTRef> intermediatePredicateInstances;
             for (std::size_t i = 1; i < simpleChain.size(); ++i) {
                 SymRef sourceSymbol = simpleChain[i].from;
-                // TODO: Find a better way to handle 0-ary predicates
-                PTRef predicate = versionPredicate(sourceSymbol);
-                predicate = logic.isVar(predicate) ? predicate : TimeMachine(logic).sendFlaThroughTime(predicate, i);
+                const PTRef predicate = LinearPredicateVersioning(logic).sendPredicateThroughTime(versionPredicate(sourceSymbol),i);
                 auto vars = utils.predicateArgsInOrder(predicate);
                 subst.clear();
                 for (PTRef var : vars) {
