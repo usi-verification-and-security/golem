@@ -248,3 +248,21 @@ TEST_F(LAWI_LIA_Test, test_LAWI_bug) {
     Lawi engine(*logic, options);
     solveSystem(clauses, engine, VerificationAnswer::UNSAFE, true);
 }
+
+TEST_F(LAWI_LIA_Test, test_LAWI_zeroary_predicate) {
+    options.addOption(Options::COMPUTE_WITNESS, "true");
+    SymRef s = mkPredicateSymbol("s", {});
+    PTRef current = instantiatePredicate(s, {});
+    std::vector<ChClause> clauses{
+        { //  true => S()
+            ChcHead{UninterpretedPredicate{current}},
+            ChcBody{{logic->getTerm_true()},{}}
+        },
+        { // S() => false
+            ChcHead{UninterpretedPredicate{logic->getTerm_false()}},
+            ChcBody{{logic->getTerm_true()}, {UninterpretedPredicate{current}}}
+        }
+    };
+    Lawi engine(*logic, options);
+    solveSystem(clauses, engine, VerificationAnswer::UNSAFE, true);
+}
