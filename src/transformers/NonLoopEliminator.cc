@@ -6,9 +6,9 @@
 
 #include "NonLoopEliminator.h"
 
-void NonLoopEliminator::BackTranslator::notifyRemovedVertex(SymRef sym, Entry edges) {
+void NonLoopEliminator::BackTranslator::notifyRemovedVertex(SymRef sym, ContractionResult && contractionResult) {
     assert(removedNodes.count(sym) == 0);
-    removedNodes.insert({sym, std::move(edges)});
+    removedNodes.insert({sym, std::move(contractionResult)});
 }
 
 Transformer::TransformationResult NonLoopEliminator::transform(std::unique_ptr<ChcDirectedHyperGraph> graph) {
@@ -29,14 +29,8 @@ Transformer::TransformationResult NonLoopEliminator::transform(std::unique_ptr<C
         });
         if (candidateForRemovalIt == nonLoopingVertices.end()) { break; }
         auto vertexToRemove = *candidateForRemovalIt;
-        BackTranslator::Entry removedEdges;
-        auto getEdge = [&](EId eid) { return graph->getEdge(eid); };
-        auto const & incomingEdges = adjancencyRepresentation.getIncomingEdgesFor(vertexToRemove);
-        std::transform(incomingEdges.begin(), incomingEdges.end(), std::back_inserter(removedEdges.incoming), getEdge);
-        auto const & outgoingEdges = adjancencyRepresentation.getOutgoingEdgesFor(vertexToRemove);
-        std::transform(outgoingEdges.begin(), outgoingEdges.end(), std::back_inserter(removedEdges.outgoing), getEdge);
-        backTranslator->notifyRemovedVertex(vertexToRemove, std::move(removedEdges));
-        graph->contractVertex(vertexToRemove);
+        auto contractionResult = graph->contractVertex(vertexToRemove);
+        backTranslator->notifyRemovedVertex(vertexToRemove, std::move(contractionResult));
     }
     return {std::move(graph), std::move(backTranslator)};
 }

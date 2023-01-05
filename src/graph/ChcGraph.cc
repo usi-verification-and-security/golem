@@ -391,18 +391,29 @@ std::vector<DirectedHyperEdge> ChcDirectedHyperGraph::getEdges() const {
     return edges;
 }
 
-void ChcDirectedHyperGraph::contractVertex(SymRef sym) {
+ChcDirectedHyperGraph::VertexContractionResult ChcDirectedHyperGraph::contractVertex(SymRef sym) {
+    VertexContractionResult result;
     auto adjacencyList = AdjacencyListsGraphRepresentation::from(*this);
     auto const & incomingEdges = adjacencyList.getIncomingEdgesFor(sym);
     auto const & outgoingEdges = adjacencyList.getOutgoingEdgesFor(sym);
+    std::transform(incomingEdges.begin(), incomingEdges.end(), std::back_inserter(result.incoming), [this](EId eid) {
+        return this->getEdge(eid);
+    });
+    std::transform(outgoingEdges.begin(), outgoingEdges.end(), std::back_inserter(result.outgoing), [this](EId eid) {
+        return this->getEdge(eid);
+    });
+    std::size_t incomingIndex = 0;
     for (EId incomingId : incomingEdges) {
         if (getSources(incomingId).size() > 1) { throw std::logic_error("Unable to contract vertex with hyperedge!"); }
+        std::size_t outgoingIndex = 0;
         for (EId outgoingId : outgoingEdges) {
             if (getSources(outgoingId).size() > 1) { throw std::logic_error("Unable to contract vertex with hyperedge!"); }
-            mergeEdges({incomingId, outgoingId});
+            auto replacingEdge = mergeEdges({incomingId, outgoingId});
+            result.replacing.emplace_back(std::move(replacingEdge), std::make_pair(incomingIndex, outgoingIndex));
         }
     }
     deleteNode(sym);
+    return result;
 }
 
 bool ChcDirectedHyperGraph::mergeMultiEdges() {

@@ -219,6 +219,12 @@ public:
         }
     };
 
+    struct VertexContractionResult {
+        std::vector<DirectedHyperEdge> incoming;
+        std::vector<DirectedHyperEdge> outgoing;
+        std::vector<std::pair<DirectedHyperEdge, std::pair<std::size_t, std::size_t>>> replacing;
+    };
+
     ChcDirectedHyperGraph(std::vector<DirectedHyperEdge> edges,
                           NonlinearCanonicalPredicateRepresentation predicates,
                           Logic & logic) :
@@ -261,7 +267,7 @@ public:
         return getEdge(eid).to;
     }
     DirectedHyperEdge contractTrivialChain(std::vector<EId> const & trivialChain);
-    void contractVertex(SymRef sym);
+    VertexContractionResult contractVertex(SymRef sym);
     // FIXME: Return more information about what happened
     bool mergeMultiEdges();
 

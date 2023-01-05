@@ -18,10 +18,7 @@ public:
 
     class BackTranslator : public WitnessBackTranslator {
     public:
-        struct Entry {
-            std::vector<DirectedHyperEdge> incoming;
-            std::vector<DirectedHyperEdge> outgoing;
-        };
+        using ContractionResult = ChcDirectedHyperGraph::VertexContractionResult;
 
         BackTranslator(Logic & logic, NonlinearCanonicalPredicateRepresentation predicateRepresentation)
         : logic(logic), predicateRepresentation(std::move(predicateRepresentation)) {}
@@ -30,9 +27,9 @@ public:
 
         ValidityWitness translate(ValidityWitness witness) override;
 
-        void notifyRemovedVertex(SymRef sym, Entry edges);
+        void notifyRemovedVertex(SymRef sym, ContractionResult && edges);
     private:
-        std::unordered_map<SymRef, Entry, SymRefHash> removedNodes;
+        std::unordered_map<SymRef, ContractionResult, SymRefHash> removedNodes;
         Logic & logic;
         NonlinearCanonicalPredicateRepresentation predicateRepresentation;
     };
