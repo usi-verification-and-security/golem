@@ -285,7 +285,6 @@ TEST_F(TPATest, test_transformContractVertex_safe) {
             ChcBody{{logic->mkEq(x, zero)}, {UninterpretedPredicate{predS2Current}}}
         }};
     TPAEngine engine(*logic, options);
-    // FIXME: Enable validation when TPA can compute witnesses for chains
     solveSystem(clauses, engine, VerificationAnswer::SAFE, true);
 }
 
