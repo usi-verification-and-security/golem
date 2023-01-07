@@ -130,11 +130,12 @@ public:
     ChcDirectedGraph(std::vector<DirectedEdge> edges, LinearCanonicalPredicateRepresentation predicates,
                      Logic & logic) :
          predicates(std::move(predicates)), logic(logic) {
+        std::size_t maxId = 0;
         for (auto & edge : edges) {
-            EId eid = freshId();
-            edge.id = eid;
-            this->edges.emplace(eid, edge);
+            maxId = std::max(maxId, edge.id.id);
+            this->edges.emplace(edge.id, edge);
         }
+        this->freeId = maxId + 1;
     }
 
     std::vector<SymRef> getVertices() const;

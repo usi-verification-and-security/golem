@@ -103,7 +103,7 @@ std::unique_ptr<ChcDirectedGraph> ChcDirectedHyperGraph::toNormalGraph() const {
         }
 
         PTRef newLabel = TermUtils(logic).varSubstitute(edge.fla.fla, subst);
-        normalEdges.emplace_back(DirectedEdge{.from = edge.from[0], .to = edge.to, .fla = {newLabel}, .id = {0}});
+        normalEdges.emplace_back(DirectedEdge{.from = edge.from[0], .to = edge.to, .fla = {newLabel}, .id = edge.id});
     });
     return std::make_unique<ChcDirectedGraph>(std::move(normalEdges), std::move(newPredicates), logic);
 }
