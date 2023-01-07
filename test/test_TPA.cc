@@ -248,7 +248,7 @@ TEST_F(TPATest, test_TPA_chain_regression) {
     solveSystem(clauses, engine, VerificationAnswer::SAFE, false);
 }
 
-TEST_F(TPATest, test_transformContractVertex) {
+TEST_F(TPATest, test_transformContractVertex_safe) {
     Options options;
     options.addOption(Options::LOGIC, "QF_LIA");
     options.addOption(Options::COMPUTE_WITNESS, "true");
@@ -259,10 +259,11 @@ TEST_F(TPATest, test_transformContractVertex) {
     PTRef predS1Next = instantiatePredicate(s1, {xp});
     PTRef predS2Current = instantiatePredicate(s2, {x});
     PTRef predS2Next = instantiatePredicate(s2, {xp});
-    std::vector<ChClause> clauses{{ // x < 0 => S1(x)
+    std::vector<ChClause> clauses{
+        { // x < 0 => S1(x)
         ChcHead{UninterpretedPredicate{predS1Next}},
         ChcBody{{logic->mkLt(xp, zero)}, {}}
-    },
+        },
         { // x > 0 => S1(x)
             ChcHead{UninterpretedPredicate{predS1Next}},
             ChcBody{{logic->mkGt(xp, zero)}, {}}
@@ -286,4 +287,36 @@ TEST_F(TPATest, test_transformContractVertex) {
     TPAEngine engine(*logic, options);
     // FIXME: Enable validation when TPA can compute witnesses for chains
     solveSystem(clauses, engine, VerificationAnswer::SAFE, true);
+}
+
+TEST_F(TPATest, test_transformContractVertex_unsafe) {
+    Options options;
+    options.addOption(Options::LOGIC, "QF_LIA");
+    options.addOption(Options::COMPUTE_WITNESS, "true");
+    options.addOption(Options::ENGINE, TPAEngine::SPLIT_TPA);
+    SymRef s1 = mkPredicateSymbol("s1", {intSort()});
+    SymRef s2 = mkPredicateSymbol("s2", {intSort()});
+    PTRef predS1Current = instantiatePredicate(s1, {x});
+    PTRef predS1Next = instantiatePredicate(s1, {xp});
+    PTRef predS2Current = instantiatePredicate(s2, {x});
+    PTRef predS2Next = instantiatePredicate(s2, {xp});
+    std::vector<ChClause> clauses{
+        { // x > 0 => S1(x)
+            ChcHead{UninterpretedPredicate{predS1Next}},
+            ChcBody{{logic->mkGt(xp, zero)}, {}}
+        },
+        { // S1(x) => S2(x)
+            ChcHead{UninterpretedPredicate{predS2Current}},
+            ChcBody{{logic->getTerm_true()}, {UninterpretedPredicate{predS1Current}}}
+        },
+        { // S2(x) and x' = x - 1 => S2(x')
+            ChcHead{UninterpretedPredicate{predS2Next}},
+            ChcBody{{logic->mkEq(xp, logic->mkMinus(x, one))},{UninterpretedPredicate{predS2Current}}}
+        },
+        { // S2(x) & x = 0 => false
+            ChcHead{UninterpretedPredicate{logic->getTerm_false()}},
+            ChcBody{{logic->mkEq(x, zero)}, {UninterpretedPredicate{predS2Current}}}
+        }};
+    TPAEngine engine(*logic, options);
+    solveSystem(clauses, engine, VerificationAnswer::UNSAFE, true);
 }
