@@ -8,6 +8,7 @@
 #define GOLEM_COMMONUTILS_H
 
 #include "graph/ChcGraph.h"
+#include "Witnesses.h"
 
 class EdgeConverter {
     Logic & logic;
@@ -64,5 +65,14 @@ public:
         return logic.insertTerm(predicateSymbol, std::move(baseVars));
     }
 };
+
+InvalidityWitness::Derivation replaceSummarizingStep(
+    InvalidityWitness::Derivation const & derivation,
+    std::size_t stepIndex,
+    std::vector<DirectedHyperEdge> const & replacedChain,
+    DirectedHyperEdge const & replacingEdge,
+    NonlinearCanonicalPredicateRepresentation const & predicateRepresentation,
+    Logic & logic
+    );
 
 #endif //GOLEM_COMMONUTILS_H
