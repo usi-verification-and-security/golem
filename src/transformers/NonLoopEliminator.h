@@ -33,10 +33,6 @@ public:
         Logic & logic;
         NonlinearCanonicalPredicateRepresentation predicateRepresentation;
     };
-
-private:
-    std::vector<SymRef> nonloopingVertices(ChcDirectedHyperGraph const & graph, AdjacencyListsGraphRepresentation const &);
-
 };
 
 

@@ -17,8 +17,12 @@ Transformer::TransformationResult NonLoopEliminator::transform(std::unique_ptr<C
     auto backTranslator = std::make_unique<BackTranslator>(graph->getLogic(), graph->predicateRepresentation());
     while(true) {
         auto adjancencyRepresentation = AdjacencyListsGraphRepresentation::from(*graph);
-        auto nonLoopingVertices = this->nonloopingVertices(*graph, adjancencyRepresentation);
-        auto candidateForRemovalIt = std::find_if(nonLoopingVertices.begin(), nonLoopingVertices.end(), [&](SymRef vertex){
+        auto vertices = adjancencyRepresentation.getNodes();
+        // ignore entry and exit, those should never be removed
+        vertices.erase(std::remove_if(vertices.begin(), vertices.end(),[&graph](SymRef vertex) {
+            return vertex == graph->getEntry() or vertex == graph->getExit();
+        }), vertices.end());
+        auto candidateForRemovalIt = std::find_if(vertices.begin(), vertices.end(), [&](SymRef vertex){
             // Vertex can be contracted if
             // 1. It does not have a self-loop
             // 2. If it does not have a hyperedge; TODO: Remove this constraint
@@ -29,7 +33,7 @@ Transformer::TransformationResult NonLoopEliminator::transform(std::unique_ptr<C
             auto const & incoming = adjancencyRepresentation.getIncomingEdgesFor(vertex);
             return std::none_of(incoming.begin(), incoming.end(), [&](EId eid){ return graph->getSources(eid).size() > 1; });
         });
-        if (candidateForRemovalIt == nonLoopingVertices.end()) { break; }
+        if (candidateForRemovalIt == vertices.end()) { break; }
         auto vertexToRemove = *candidateForRemovalIt;
         auto contractionResult = graph->contractVertex(vertexToRemove);
         backTranslator->notifyRemovedVertex(vertexToRemove, std::move(contractionResult));
@@ -141,16 +145,4 @@ ValidityWitness NonLoopEliminator::BackTranslator::translate(ValidityWitness wit
         definitions.insert({predicate, vertexSolution});
     }
     return ValidityWitness(std::move(definitions));
-}
-
-std::vector<SymRef> NonLoopEliminator::nonloopingVertices(ChcDirectedHyperGraph const & graph, AdjacencyListsGraphRepresentation const & adjancencyRepresentation) {
-    std::vector<SymRef> nonLoopingVertices;
-    ReverseDFS(graph, adjancencyRepresentation).run([&](SymRef vertex){
-        if (vertex == graph.getEntry() or vertex == graph.getExit()) { return; }
-        auto const & outgoing = adjancencyRepresentation.getOutgoingEdgesFor(vertex);
-        if (std::none_of(outgoing.begin(), outgoing.end(), [&](EId eid) { return graph.getTarget(eid) == vertex; })) {
-            nonLoopingVertices.push_back(vertex);
-        }
-    }, [](SymRef){});
-    return nonLoopingVertices;
 }
