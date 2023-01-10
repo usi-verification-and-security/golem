@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2022, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2020-2023, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
@@ -18,6 +18,7 @@
 #include "Normalizer.h"
 #include "transformers/RemoveUnreachableNodes.h"
 #include "transformers/SimpleChainSummarizer.h"
+#include "transformers/NodeEliminator.h"
 #include "transformers/TransformationPipeline.h"
 
 using namespace osmttokens;
@@ -324,6 +325,7 @@ void ChcInterpreterContext::interpretCheckSat() {
     TransformationPipeline::pipeline_t transformations;
     transformations.push_back(std::make_unique<SimpleChainSummarizer>(logic));
     transformations.push_back(std::make_unique<RemoveUnreachableNodes>());
+    transformations.push_back(std::make_unique<SimpleNodeEliminator>());
     auto [newGraph, translator] = TransformationPipeline(std::move(transformations)).transform(std::move(hypergraph));
     hypergraph = std::move(newGraph);
 
