@@ -42,14 +42,22 @@ public:
     predicate_t shouldEliminateNode;
 };
 
-struct IsNonLoopNode {
+struct NonLoopEliminatorPredicate {
     bool operator()(SymRef, AdjacencyListsGraphRepresentation const &, ChcDirectedHyperGraph const & graph) const;
 };
 
 class NonLoopEliminator : public NodeEliminator {
 public:
-    NonLoopEliminator() : NodeEliminator(IsNonLoopNode()) {}
+    NonLoopEliminator() : NodeEliminator(NonLoopEliminatorPredicate{}) {}
 };
 
+struct SimpleNodeEliminatorPredicate {
+    bool operator()(SymRef, AdjacencyListsGraphRepresentation const &, ChcDirectedHyperGraph const & graph) const;
+};
+
+class SimpleNodeEliminator : public NodeEliminator {
+public:
+    SimpleNodeEliminator() : NodeEliminator(SimpleNodeEliminatorPredicate()) {}
+};
 
 #endif //GOLEM_NODEELIMINATOR_H

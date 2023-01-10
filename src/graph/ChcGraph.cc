@@ -456,3 +456,32 @@ ChcDirectedHyperGraph::VertexInstances::VertexInstances(ChcDirectedHyperGraph co
         }
     });
 }
+
+bool hasHyperEdge(
+    SymRef vertex,
+    AdjacencyListsGraphRepresentation const & adjacencyRepresentation,
+    ChcDirectedHyperGraph const & graph
+) {
+    auto const & incoming = adjacencyRepresentation.getIncomingEdgesFor(vertex);
+    auto const & outgoing = adjacencyRepresentation.getOutgoingEdgesFor(vertex);
+    return std::any_of(incoming.begin(), incoming.end(), [&](EId eid){ return graph.getSources(eid).size() > 1; }) or
+           std::any_of(outgoing.begin(), outgoing.end(), [&](EId eid){ return graph.getSources(eid).size() > 1; });
+}
+
+bool isNonLoopNode(
+    SymRef vertex,
+    AdjacencyListsGraphRepresentation const & adjacencyRepresentation,
+    ChcDirectedHyperGraph const & graph
+) {
+    auto const & outgoing = adjacencyRepresentation.getOutgoingEdgesFor(vertex);
+    return std::none_of(outgoing.begin(), outgoing.end(), [&](EId eid){ return graph.getTarget(eid) == vertex; });
+}
+
+bool isSimpleNode(
+    SymRef vertex,
+    AdjacencyListsGraphRepresentation const & adjacencyRepresentation
+) {
+    auto const & outgoing = adjacencyRepresentation.getOutgoingEdgesFor(vertex);
+    auto const & incoming = adjacencyRepresentation.getIncomingEdgesFor(vertex);
+    return incoming.size() == 1 or outgoing.size() == 1;
+}

@@ -342,4 +342,10 @@ public:
     }
 };
 
+bool isNonLoopNode(SymRef, AdjacencyListsGraphRepresentation const &, ChcDirectedHyperGraph const & graph);
+
+bool hasHyperEdge(SymRef, AdjacencyListsGraphRepresentation const &, ChcDirectedHyperGraph const & graph);
+
+bool isSimpleNode(SymRef, AdjacencyListsGraphRepresentation const &);
+
 #endif //GOLEM_CHCGRAPH_H

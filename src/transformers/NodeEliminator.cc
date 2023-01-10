@@ -34,22 +34,21 @@ Transformer::TransformationResult NodeEliminator::transform(std::unique_ptr<ChcD
     return {std::move(graph), std::move(backTranslator)};
 }
 
-bool IsNonLoopNode::operator()(
+bool NonLoopEliminatorPredicate::operator()(
     SymRef vertex,
-    AdjacencyListsGraphRepresentation const & adjacencyRepresentation,
-    ChcDirectedHyperGraph const & graph
-    ) const {
-    // Vertex can be contracted if
-    // 1. It does not have a self-loop
-    // 2. If it does not have a hyperedge; TODO: Remove this constraint
-    auto const & outgoing = adjacencyRepresentation.getOutgoingEdgesFor(vertex);
-    if (std::any_of(outgoing.begin(), outgoing.end(), [&](EId eid){ return graph.getTarget(eid) == vertex or graph.getSources(eid).size() > 1; })) {
-        return false;
-    }
-    auto const & incoming = adjacencyRepresentation.getIncomingEdgesFor(vertex);
-    return std::none_of(incoming.begin(), incoming.end(), [&](EId eid){ return graph.getSources(eid).size() > 1; });
+    AdjacencyListsGraphRepresentation const & ar,
+    ChcDirectedHyperGraph const & graph) const {
+    // TODO: Remove the constraint about hyperEdge
+    return not hasHyperEdge(vertex, ar, graph) and isNonLoopNode(vertex, ar, graph);
 }
 
+bool SimpleNodeEliminatorPredicate::operator()(
+    SymRef vertex,
+    AdjacencyListsGraphRepresentation const & ar,
+    ChcDirectedHyperGraph const & graph) const {
+    // TODO: Remove the constraint about hyperEdge
+    return not hasHyperEdge(vertex, ar, graph) and isSimpleNode(vertex, ar) and isNonLoopNode(vertex, ar, graph);
+}
 InvalidityWitness NodeEliminator::BackTranslator::translate(InvalidityWitness witness) {
     if (this->removedNodes.empty()) { return witness; }
 
