@@ -7,6 +7,7 @@
 #include <gtest/gtest.h>
 #include "graph/ChcGraphBuilder.h"
 #include "transformers/SimpleChainSummarizer.h"
+#include "transformers/NonLoopEliminator.h"
 #include "Validator.h"
 #include "engine/Spacer.h"
 
@@ -302,3 +303,47 @@ TEST_F(Transformer_test, test_ChainSummarizer_SameChainTwice_DifferentFact_Unsaf
     ASSERT_EQ(validator.validate(originalGraph, result), Validator::Result::VALIDATED);
 }
 
+TEST_F(Transformer_test, test_NonLoopEliminator_SuccessfulElimination) {
+    ChcSystem system;
+    system.addUninterpretedPredicate(s1);
+    system.addClause( // x' >= 0 => S1(x')
+        ChcHead{UninterpretedPredicate{nextS1}},
+        ChcBody{{logic.mkGeq(xp, zero)}, {}});
+    system.addClause( // S1(x) => false
+        ChcHead{UninterpretedPredicate{logic.getTerm_false()}},
+        ChcBody{{logic.getTerm_true()}, {UninterpretedPredicate{currentS1}}}
+    );
+    auto hyperGraph = systemToGraph(system);
+    auto entry = hyperGraph->getEntry();
+    auto exit = hyperGraph->getExit();
+    ASSERT_EQ(hyperGraph->getEdges().size(), 2);
+    NonLoopEliminator transformation;
+    auto [transformedGraph, backtranslator] = transformation.transform(std::move(hyperGraph));
+    auto edges = transformedGraph->getEdges();
+    ASSERT_EQ(edges.size(), 1);
+    auto const & edge = edges[0];
+    ASSERT_EQ(edge.from.size(), 1);
+    EXPECT_EQ(edge.to, exit);
+    EXPECT_EQ(edge.from[0], entry);
+}
+
+TEST_F(Transformer_test, test_NonLoopEliminator_NoElimination) {
+    ChcSystem system;
+    system.addUninterpretedPredicate(s1);
+    system.addClause( // x' >= 0 => S1(x')
+        ChcHead{UninterpretedPredicate{nextS1}},
+        ChcBody{{logic.mkGeq(xp, zero)}, {}});
+    system.addClause( // S1(x) and x' = x + 1 => S1(x')
+        ChcHead{UninterpretedPredicate{nextS1}},
+        ChcBody{{logic.mkEq(xp, logic.mkPlus(x, one))}, {UninterpretedPredicate{currentS1}}});
+    system.addClause( // S1(x) => false
+        ChcHead{UninterpretedPredicate{logic.getTerm_false()}},
+        ChcBody{{logic.getTerm_true()}, {UninterpretedPredicate{currentS1}}}
+    );
+    auto hyperGraph = systemToGraph(system);
+    ASSERT_EQ(hyperGraph->getEdges().size(), 3);
+    NonLoopEliminator transformation;
+    auto [transformedGraph, backtranslator] = transformation.transform(std::move(hyperGraph));
+    auto edges = transformedGraph->getEdges();
+    ASSERT_EQ(edges.size(), 3);
+}
