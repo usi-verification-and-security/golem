@@ -4,16 +4,16 @@
  * SPDX-License-Identifier: MIT
  */
 
-#include "NonLoopEliminator.h"
+#include "NodeEliminator.h"
 
 #include "CommonUtils.h"
 
-void NonLoopEliminator::BackTranslator::notifyRemovedVertex(SymRef sym, ContractionResult && contractionResult) {
+void NodeEliminator::BackTranslator::notifyRemovedVertex(SymRef sym, ContractionResult && contractionResult) {
     assert(removedNodes.count(sym) == 0);
     removedNodes.insert({sym, std::move(contractionResult)});
 }
 
-Transformer::TransformationResult NonLoopEliminator::transform(std::unique_ptr<ChcDirectedHyperGraph> graph) {
+Transformer::TransformationResult NodeEliminator::transform(std::unique_ptr<ChcDirectedHyperGraph> graph) {
     auto backTranslator = std::make_unique<BackTranslator>(graph->getLogic(), graph->predicateRepresentation());
     while(true) {
         auto adjancencyRepresentation = AdjacencyListsGraphRepresentation::from(*graph);
@@ -22,17 +22,10 @@ Transformer::TransformationResult NonLoopEliminator::transform(std::unique_ptr<C
         vertices.erase(std::remove_if(vertices.begin(), vertices.end(),[&graph](SymRef vertex) {
             return vertex == graph->getEntry() or vertex == graph->getExit();
         }), vertices.end());
-        auto candidateForRemovalIt = std::find_if(vertices.begin(), vertices.end(), [&](SymRef vertex){
-            // Vertex can be contracted if
-            // 1. It does not have a self-loop
-            // 2. If it does not have a hyperedge; TODO: Remove this constraint
-            auto const & outgoing = adjancencyRepresentation.getOutgoingEdgesFor(vertex);
-            if (std::any_of(outgoing.begin(), outgoing.end(), [&](EId eid){ return graph->getTarget(eid) == vertex or graph->getSources(eid).size() > 1; })) {
-                return false;
-            }
-            auto const & incoming = adjancencyRepresentation.getIncomingEdgesFor(vertex);
-            return std::none_of(incoming.begin(), incoming.end(), [&](EId eid){ return graph->getSources(eid).size() > 1; });
-        });
+        auto predicateWrapper = [&](SymRef vertex) {
+            return this->shouldEliminateNode(vertex, adjancencyRepresentation, *graph);
+        };
+        auto candidateForRemovalIt = std::find_if(vertices.begin(), vertices.end(), predicateWrapper);
         if (candidateForRemovalIt == vertices.end()) { break; }
         auto vertexToRemove = *candidateForRemovalIt;
         auto contractionResult = graph->contractVertex(vertexToRemove);
@@ -41,7 +34,23 @@ Transformer::TransformationResult NonLoopEliminator::transform(std::unique_ptr<C
     return {std::move(graph), std::move(backTranslator)};
 }
 
-InvalidityWitness NonLoopEliminator::BackTranslator::translate(InvalidityWitness witness) {
+bool IsNonLoopNode::operator()(
+    SymRef vertex,
+    AdjacencyListsGraphRepresentation const & adjacencyRepresentation,
+    ChcDirectedHyperGraph const & graph
+    ) const {
+    // Vertex can be contracted if
+    // 1. It does not have a self-loop
+    // 2. If it does not have a hyperedge; TODO: Remove this constraint
+    auto const & outgoing = adjacencyRepresentation.getOutgoingEdgesFor(vertex);
+    if (std::any_of(outgoing.begin(), outgoing.end(), [&](EId eid){ return graph.getTarget(eid) == vertex or graph.getSources(eid).size() > 1; })) {
+        return false;
+    }
+    auto const & incoming = adjacencyRepresentation.getIncomingEdgesFor(vertex);
+    return std::none_of(incoming.begin(), incoming.end(), [&](EId eid){ return graph.getSources(eid).size() > 1; });
+}
+
+InvalidityWitness NodeEliminator::BackTranslator::translate(InvalidityWitness witness) {
     if (this->removedNodes.empty()) { return witness; }
 
     using ContractionInfo = std::pair<DirectedHyperEdge, std::pair<DirectedHyperEdge, DirectedHyperEdge>>;
@@ -82,7 +91,7 @@ InvalidityWitness NonLoopEliminator::BackTranslator::translate(InvalidityWitness
     return witness;
 }
 
-ValidityWitness NonLoopEliminator::BackTranslator::translate(ValidityWitness witness) {
+ValidityWitness NodeEliminator::BackTranslator::translate(ValidityWitness witness) {
     if (this->removedNodes.empty()) { return witness; }
     auto definitions = witness.getDefinitions();
 

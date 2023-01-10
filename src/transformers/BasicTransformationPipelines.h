@@ -9,7 +9,7 @@
 
 #include "FalseClauseRemoval.h"
 #include "MultiEdgeMerger.h"
-#include "NonLoopEliminator.h"
+#include "NodeEliminator.h"
 #include "TransformationPipeline.h"
 
 namespace Transformations {

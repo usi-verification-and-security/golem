@@ -7,7 +7,7 @@
 #include <gtest/gtest.h>
 #include "graph/ChcGraphBuilder.h"
 #include "transformers/SimpleChainSummarizer.h"
-#include "transformers/NonLoopEliminator.h"
+#include "transformers/NodeEliminator.h"
 #include "Validator.h"
 #include "engine/Spacer.h"
 

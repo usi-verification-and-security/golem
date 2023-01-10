@@ -52,7 +52,7 @@ target_sources(golem_lib
     PRIVATE graph/GraphTransformations.cc
     PRIVATE transformers/CommonUtils.cc
     PRIVATE transformers/SimpleChainSummarizer.cc
-    PRIVATE transformers/NonLoopEliminator.cc
+    PRIVATE transformers/NodeEliminator.cc
     PRIVATE transformers/MultiEdgeMerger.cc
     PRIVATE transformers/FalseClauseRemoval.cc
     PRIVATE transformers/RemoveUnreachableNodes.cc
