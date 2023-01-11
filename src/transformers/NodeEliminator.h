@@ -9,10 +9,10 @@
 
 #include "Transformer.h"
 
-
-
 /*
- * Tries to eliminate all nodes that do not have a self-loop edge
+ * Transformation pass that eliminates some nodes from the graph, using contraction.
+ *
+ * The predicate determining the nodes to eliminate is passed to the constructor.
  */
 class NodeEliminator : public Transformer {
     using predicate_t = std::function<bool(SymRef,AdjacencyListsGraphRepresentation const &, ChcDirectedHyperGraph const &)>;
