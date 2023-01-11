@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2022-2023, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
@@ -9,7 +9,7 @@
 #include "CommonUtils.h"
 
 Transformer::TransformationResult SimpleChainSummarizer::transform(std::unique_ptr<ChcDirectedHyperGraph> graph) {
-    auto translator = std::make_unique<SimpleChainBackTranslator>(logic, graph->predicateRepresentation());
+    auto translator = std::make_unique<BackTranslator>(graph->getLogic(), graph->predicateRepresentation());
     while(true) {
         AdjacencyListsGraphRepresentation adjacencyList = AdjacencyListsGraphRepresentation::from(*graph);
         auto isTrivial = [&](SymRef sym) {
@@ -55,7 +55,7 @@ Transformer::TransformationResult SimpleChainSummarizer::transform(std::unique_p
     return {std::move(graph), std::move(translator)};
 }
 
-InvalidityWitness SimpleChainSummarizer::SimpleChainBackTranslator::translate(InvalidityWitness witness) {
+InvalidityWitness SimpleChainSummarizer::BackTranslator::translate(InvalidityWitness witness) {
     if (summarizedChains.empty()) { return witness; }
 
     for (auto const & [chain, replacingEdge] : summarizedChains) {
@@ -73,7 +73,7 @@ InvalidityWitness SimpleChainSummarizer::SimpleChainBackTranslator::translate(In
     return witness;
 }
 
-ValidityWitness SimpleChainSummarizer::SimpleChainBackTranslator::translate(ValidityWitness witness) {
+ValidityWitness SimpleChainSummarizer::BackTranslator::translate(ValidityWitness witness) {
     if (summarizedChains.empty()) { return witness; }
     auto definitions = witness.getDefinitions();
     // TODO: assert that we have true and false already

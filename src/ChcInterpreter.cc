@@ -323,7 +323,7 @@ void ChcInterpreterContext::interpretCheckSat() {
     }
 
     TransformationPipeline::pipeline_t transformations;
-    transformations.push_back(std::make_unique<SimpleChainSummarizer>(logic));
+    transformations.push_back(std::make_unique<SimpleChainSummarizer>());
     transformations.push_back(std::make_unique<RemoveUnreachableNodes>());
     transformations.push_back(std::make_unique<SimpleNodeEliminator>());
     auto [newGraph, translator] = TransformationPipeline(std::move(transformations)).transform(std::move(hypergraph));

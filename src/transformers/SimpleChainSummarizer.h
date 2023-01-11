@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2022-2023, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
@@ -13,11 +13,11 @@ class SimpleChainSummarizer : public Transformer {
 public:
     TransformationResult transform(std::unique_ptr<ChcDirectedHyperGraph> graph) override;
 
-    SimpleChainSummarizer(Logic & logic) : logic(logic) {}
+    SimpleChainSummarizer() = default;
 
-    class SimpleChainBackTranslator : public WitnessBackTranslator {
+    class BackTranslator : public WitnessBackTranslator {
     public:
-        SimpleChainBackTranslator(Logic & logic, NonlinearCanonicalPredicateRepresentation predicateRepresentation)
+        BackTranslator(Logic & logic, NonlinearCanonicalPredicateRepresentation predicateRepresentation)
         : logic(logic), predicateRepresentation(std::move(predicateRepresentation)) {}
 
         InvalidityWitness translate(InvalidityWitness witness) override;
@@ -33,9 +33,6 @@ public:
         Logic & logic;
         NonlinearCanonicalPredicateRepresentation predicateRepresentation;
     };
-private:
-    Logic & logic;
-
 };
 
 

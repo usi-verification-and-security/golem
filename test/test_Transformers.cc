@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2022-2023, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
@@ -67,7 +67,7 @@ TEST_F(Transformer_test, test_SingleChain_NoLoop) {
     );
     auto hyperGraph = systemToGraph(system);
     auto originalGraph = *hyperGraph;
-    auto [summarizedGraph, translator] = SimpleChainSummarizer(logic).transform(std::move(hyperGraph));
+    auto [summarizedGraph, translator] = SimpleChainSummarizer().transform(std::move(hyperGraph));
     ValidityWitness witness{};
     auto translatedWitness = translator->translate(witness);
     Validator validator(logic);
@@ -101,7 +101,7 @@ TEST_F(Transformer_test, test_TwoChains_WithLoop) {
     );
     auto hypergraph = systemToGraph(system);
     auto originalGraph = *hypergraph;
-    auto [newGraph, translator] = SimpleChainSummarizer(logic).transform(std::move(hypergraph));
+    auto [newGraph, translator] = SimpleChainSummarizer().transform(std::move(hypergraph));
     VersionManager manager{logic};
     PTRef predicate = manager.sourceFormulaToBase(newGraph->getStateVersion(s2));
     PTRef var = logic.getPterm(predicate)[0];
@@ -139,7 +139,7 @@ TEST_F(Transformer_test, test_OutputFromEngine) {
     );
     auto hypergraph = systemToGraph(system);
     auto originalGraph = *hypergraph;
-    auto [newGraph, translator] = SimpleChainSummarizer(logic).transform(std::move(hypergraph));
+    auto [newGraph, translator] = SimpleChainSummarizer().transform(std::move(hypergraph));
     hypergraph = std::move(newGraph);
     auto res = Spacer(logic, options).solve(*hypergraph);
     ASSERT_EQ(res.getAnswer(), VerificationAnswer::SAFE);
@@ -161,7 +161,7 @@ TEST_F(Transformer_test, test_ChainSummarizer_TwoStepChain_Unsafe) {
     );
     auto hyperGraph = systemToGraph(system);
     auto originalGraph = *hyperGraph;
-    auto [summarizedGraph, translator] = SimpleChainSummarizer(logic).transform(std::move(hyperGraph));
+    auto [summarizedGraph, translator] = SimpleChainSummarizer().transform(std::move(hyperGraph));
     Options options;
     options.addOption(Options::COMPUTE_WITNESS, "true");
     auto res = Spacer(logic, options).solve(*summarizedGraph);
@@ -190,7 +190,7 @@ TEST_F(Transformer_test, test_ChainSummarizer_ThreeStepChain_Unsafe) {
     );
     auto hyperGraph = systemToGraph(system);
     auto originalGraph = *hyperGraph;
-    auto [summarizedGraph, translator] = SimpleChainSummarizer(logic).transform(std::move(hyperGraph));
+    auto [summarizedGraph, translator] = SimpleChainSummarizer().transform(std::move(hyperGraph));
     Options options;
     options.addOption(Options::COMPUTE_WITNESS, "true");
     auto res = Spacer(logic, options).solve(*summarizedGraph);
@@ -229,7 +229,7 @@ TEST_F(Transformer_test, test_ChainSummarizer_TwoChains_Unsafe) {
     );
     auto hyperGraph = systemToGraph(system);
     auto originalGraph = *hyperGraph;
-    auto [summarizedGraph, translator] = SimpleChainSummarizer(logic).transform(std::move(hyperGraph));
+    auto [summarizedGraph, translator] = SimpleChainSummarizer().transform(std::move(hyperGraph));
     Options options;
     options.addOption(Options::COMPUTE_WITNESS, "true");
     auto res = Spacer(logic, options).solve(*summarizedGraph);
@@ -259,7 +259,7 @@ TEST_F(Transformer_test, test_ChainSummarizer_SameChainTwice_SafeFact_Unsafe) {
     );
     auto hyperGraph = systemToGraph(system);
     auto originalGraph = *hyperGraph;
-    auto [summarizedGraph, translator] = SimpleChainSummarizer(logic).transform(std::move(hyperGraph));
+    auto [summarizedGraph, translator] = SimpleChainSummarizer().transform(std::move(hyperGraph));
     Options options;
     options.addOption(Options::COMPUTE_WITNESS, "true");
     auto res = Spacer(logic, options).solve(*summarizedGraph);
@@ -289,7 +289,7 @@ TEST_F(Transformer_test, test_ChainSummarizer_SameChainTwice_DifferentFact_Unsaf
     );
     auto hyperGraph = systemToGraph(system);
     auto originalGraph = *hyperGraph;
-    auto [summarizedGraph, translator] = SimpleChainSummarizer(logic).transform(std::move(hyperGraph));
+    auto [summarizedGraph, translator] = SimpleChainSummarizer().transform(std::move(hyperGraph));
     Options options;
     options.addOption(Options::COMPUTE_WITNESS, "true");
     auto res = Spacer(logic, options).solve(*summarizedGraph);
