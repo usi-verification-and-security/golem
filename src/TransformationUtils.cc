@@ -4,6 +4,7 @@
 
 #include "TransformationUtils.h"
 #include "QuantifierElimination.h"
+#include <set>
 
 bool isTransitionSystem(ChcDirectedGraph const & graph) {
     auto graphRepresentation = AdjacencyListsGraphRepresentation::from(graph);
@@ -82,25 +83,86 @@ std::unique_ptr<TransitionSystem> toTransitionSystem(ChcDirectedGraph const & gr
     return ts;
 }
 
+//void strongconnect (SymRef v){
+//
+//}
+
+bool strongConnection(
+        std::set<int>& visitedVertices,
+        std::set<int>& verticesOnStack,
+        AdjacencyListsGraphRepresentation& graphRepresentation,
+        ChcDirectedGraph const & graph,
+        SymRef node)
+        {
+    visitedVertices.insert(node.x);
+    verticesOnStack.insert(node.x);
+    auto const & outEdges = graphRepresentation.getOutgoingEdgesFor(node);
+
+    for (EId eid : outEdges) {
+        if(size(outEdges) <= 1){
+            return false;
+        }
+        if(graph.getTarget(eid) != node){
+            auto nextVertice = graph.getTarget(eid);
+            if(visitedVertices.find(nextVertice.x) == visitedVertices.end()){
+                bool loop_found = strongConnection( visitedVertices,
+                                                    verticesOnStack,
+                                                    graphRepresentation,
+                                                    graph,
+                                                    nextVertice);
+                if(loop_found){
+                    return true;
+                }
+            } else if (verticesOnStack.find(nextVertice.x) != verticesOnStack.end()){
+                return true;
+            }
+        } else {
+            continue;
+        }
+    }
+
+    verticesOnStack.erase(node.x);
+
+    return false;
+}
+
+bool TarjanLoopDetection(ChcDirectedGraph const & graph) {
+    if (graph.getVertices().size() < 3) { return false; }
+    auto graphRepresentation = AdjacencyListsGraphRepresentation::from(graph);
+    auto vertices = reversePostOrder(graph, graphRepresentation);
+    std::set<int> visitedVertices;
+    std::set<int> verticesOnStack;
+
+
+    for(uint i = 1; i < vertices.size()-1; i++){
+        if(visitedVertices.find(vertices[i].x) == visitedVertices.end()){
+            bool loop_detected = strongConnection(visitedVertices,
+                                                  verticesOnStack,
+                                                  graphRepresentation,
+                                                  graph,
+                                                  vertices[i]);
+            if (loop_detected) return true;
+        }
+    }
+    return false;
+}
+
 bool isTransitionSystemChain(ChcDirectedGraph const & graph) {
     if (graph.getVertices().size() < 3) { return false; }
     auto graphRepresentation = AdjacencyListsGraphRepresentation::from(graph);
     auto vertices = reversePostOrder(graph, graphRepresentation);
     assert(graph.getEntry() == vertices[0]);
     assert(graph.getExit() == vertices.back());
-    if (graphRepresentation.getOutgoingEdgesFor(vertices[0]).size() != 1
-        or graphRepresentation.getIncomingEdgesFor(vertices.back()).size() != 1) {
-        return false;
-    }
+    bool hasLoop = TarjanLoopDetection(graph);
+    if (hasLoop) {return false;}
     for (unsigned i = 1; i < vertices.size() - 1; ++i) {
         auto current = vertices[i];
         auto const & outEdges = graphRepresentation.getOutgoingEdgesFor(current);
-        if (outEdges.size() != 2) { return false; }
         bool hasSelfLoop = false;
         bool hasEdgeToNext = false;
         for (EId eid : outEdges) {
             hasSelfLoop |= graph.getTarget(eid) == current;
-            hasEdgeToNext |= graph.getTarget(eid) == vertices[i+1];
+            hasEdgeToNext |= graph.getTarget(eid) != current;
         }
         if (not (hasSelfLoop and hasEdgeToNext)) { return false; }
     }
