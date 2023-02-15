@@ -71,7 +71,7 @@ VerificationResult TPAEngine::solve(const ChcDirectedGraph & graph) {
                 throw std::logic_error("Unreachable!");
         }
     } else if (isTransitionSystemDAG(graph)) {
-            return solveTransitionSystemChain(graph);
+            return solveTransitionSystemGraph(graph);
     }
     return VerificationResult(VerificationAnswer::UNKNOWN);
 }
@@ -1305,7 +1305,7 @@ PTRef TPABase::safeSupersetOfInitialStates(PTRef start, PTRef transitionInvarian
 }
 
 /*
- * Extension for chain (or DAG) of transition systems
+ * Extension for DAG of transition systems
  */
 
 class TransitionSystemNetworkManager {
@@ -1357,9 +1357,21 @@ private:
     NetworkNode & getNode(SymRef vid) { return networkMap.at(vid); }
     NetworkNode const & getNode(SymRef vid) const { return networkMap.at(vid); }
 
-    SymRef getChainStart() const { return graph.getTarget(adjacencyRepresentation.getOutgoingEdgesFor(graph.getEntry())[0]); }
+    vec<SymRef> getGraphStarts() const {
+        vec<SymRef> graphStarts;
+        for (uint i = 0; i < adjacencyRepresentation.getOutgoingEdgesFor(graph.getEntry()).size(); i++) {
+            graphStarts.push(graph.getTarget(adjacencyRepresentation.getOutgoingEdgesFor(graph.getEntry())[i]));
+        }
+        return graphStarts;
+    }
 
-    SymRef getChainEnd() const { return graph.getSource(adjacencyRepresentation.getIncomingEdgesFor(graph.getExit())[0]); }
+    vec<SymRef> getGraphEnds() const {
+        vec<SymRef> graphEnds;
+        for (uint i = 0; i < adjacencyRepresentation.getOutgoingEdgesFor(graph.getEntry()).size(); i++) {
+            graphEnds.push(graph.getSource(adjacencyRepresentation.getIncomingEdgesFor(graph.getExit())[i]));
+        }
+        return graphEnds;
+    }
 
     EId getIncomingEdge(SymRef vid, int id) const { return getNode(vid).parents[id]; }
 
@@ -1393,7 +1405,7 @@ void TransitionSystemNetworkManager::updateRestrictions(SymRef node) {
     getNode(node).accumulatedRestrictions = logic.getTerm_true();
 }
 
-VerificationResult TPAEngine::solveTransitionSystemChain(const ChcDirectedGraph & graph) {
+VerificationResult TPAEngine::solveTransitionSystemGraph(const ChcDirectedGraph & graph) {
     return TransitionSystemNetworkManager(*this, graph).solve();
 }
 
@@ -1447,59 +1459,71 @@ void TransitionSystemNetworkManager::initNetwork() {
 
 VerificationResult TransitionSystemNetworkManager::solve() && {
     initNetwork();
-
-    auto current = getChainStart();
-    activePath.push(getIncomingEdge(current, 0));
-    while (true) {
-        if (getNode(current).blocked_children == getNode(current).children.size()) {
-            getNode(current).trulyReached = PTRef_Undef;
-            getNode(current).blocked_children = 0;
-            updateRestrictions(current);
-        }
-        auto [res,explanation] = queryTransitionSystem(networkMap.at(current));
-        if (reachable(res)) {
-            getNode(current).trulyReached = explanation;
-            if (current == getChainEnd()) {
-                return {VerificationAnswer::UNSAFE, computeInvalidityWitness()};
+    auto graphStarts = getGraphStarts();
+    auto graphEnds = getGraphEnds();
+    bool safe;
+    for(auto init: graphStarts){
+        auto current = init;
+        activePath.shrink(activePath.size());
+        activePath.push(getIncomingEdge(current, 0));
+        safe = false;
+        while (!safe) {
+            if (getNode(current).blocked_children == getNode(current).children.size()) {
+                getNode(current).trulyReached = PTRef_Undef;
+                getNode(current).blocked_children = 0;
+                updateRestrictions(current);
             }
-            EId nextEdge;
-            while (getNode(current).blocked_children < getNode(current).children.size()) {
-                nextEdge = (getOutgoingEdges(current))[getNode(current).blocked_children];
-                PTRef nextConditions = getInitialStates(graph.getTarget(nextEdge));
-                auto [edgeRes, edgeExplanation] = queryEdge(nextEdge, explanation, nextConditions);
-                getNode(current).blocked_children ++;
-                if (reachable(edgeRes)) { // Edge propagates forward
-                    auto next = graph.getTarget(nextEdge);
-                    networkMap.at(next).solver->resetInitialStates(edgeExplanation);
-                    activePath.push(nextEdge);
-                    current = next;
-                    break; // Information has been propagated to the next node, switch to the new node
-
-                } else { // Edge cannot propagate forward
-                    addRestrictions(current, logic.mkNot(edgeExplanation));
-                    continue; // Repeat the query for the same TS with stronger query
+            auto [res,explanation] = queryTransitionSystem(networkMap.at(current));
+            if (reachable(res)) {
+                getNode(current).trulyReached = explanation;
+                for(auto end: graphEnds){
+                    if (current == end) {
+                        return {VerificationAnswer::UNSAFE, computeInvalidityWitness()};
+                    }
                 }
-            }
-        } else { // TS cannot propagate forward
-            if (current == getChainStart()) {
-                return {VerificationAnswer::SAFE, ValidityWitness{}};
-            }
-            assert(getNode(current).trulySafe != PTRef_Undef);
-            getNode(current).trulySafe = logic.mkOr(getNode(current).trulySafe, explanation);
-            auto previousEdge = activePath.last();
-            auto &previousNode = getNode(graph.getSource(previousEdge));
-            assert(previousNode.trulyReached != PTRef_Undef);
-            PTRef updatedConditions = logic.mkNot(getNode(current).trulySafe);
-            auto [edgeRes, edgeExplanation] = queryEdge(previousEdge, previousNode.trulyReached, updatedConditions);
-            if (reachable(edgeRes)) { // New reached, not refuted yet, states
-                getNode(current).solver->resetInitialStates(edgeExplanation);
-                continue; // Repeat the query for the same TS with new initial states
-            } else { // Cannot continue from currently computed truly reached states
-                previousNode.trulyReached = PTRef_Undef;
-                addRestrictions(graph.getSource(previousEdge), logic.mkNot(edgeExplanation));
-                activePath.pop();
-                current = graph.getSource(previousEdge);
-                continue; // Blocked states have been propagated to the previous node, repeat the query there.
+                EId nextEdge;
+                while (getNode(current).blocked_children < getNode(current).children.size()) {
+                    nextEdge = (getOutgoingEdges(current))[getNode(current).blocked_children];
+                    PTRef nextConditions = getInitialStates(graph.getTarget(nextEdge));
+                    auto [edgeRes, edgeExplanation] = queryEdge(nextEdge, explanation, nextConditions);
+                    getNode(current).blocked_children ++;
+                    if (reachable(edgeRes)) { // Edge propagates forward
+                        auto next = graph.getTarget(nextEdge);
+                        networkMap.at(next).solver->resetInitialStates(edgeExplanation);
+                        activePath.push(nextEdge);
+                        current = next;
+                        break; // Information has been propagated to the next node, switch to the new node
+
+                    } else { // Edge cannot propagate forward
+                        addRestrictions(current, logic.mkNot(edgeExplanation));
+                        continue; // Repeat the query for the same TS with stronger query
+                    }
+                }
+            } else { // TS cannot propagate forward
+                if (current == init) {
+                    if (init == graphStarts[graphStarts.size() - 1]) {
+                        return {VerificationAnswer::SAFE, ValidityWitness{}};
+                    }
+                    safe = true;
+                    continue;
+                }
+                assert(getNode(current).trulySafe != PTRef_Undef);
+                getNode(current).trulySafe = logic.mkOr(getNode(current).trulySafe, explanation);
+                auto previousEdge = activePath.last();
+                auto &previousNode = getNode(graph.getSource(previousEdge));
+                assert(previousNode.trulyReached != PTRef_Undef);
+                PTRef updatedConditions = logic.mkNot(getNode(current).trulySafe);
+                auto [edgeRes, edgeExplanation] = queryEdge(previousEdge, previousNode.trulyReached, updatedConditions);
+                if (reachable(edgeRes)) { // New reached, not refuted yet, states
+                    getNode(current).solver->resetInitialStates(edgeExplanation);
+                    continue; // Repeat the query for the same TS with new initial states
+                } else { // Cannot continue from currently computed truly reached states
+                    previousNode.trulyReached = PTRef_Undef;
+                    addRestrictions(graph.getSource(previousEdge), logic.mkNot(edgeExplanation));
+                    activePath.pop();
+                    current = graph.getSource(previousEdge);
+                    continue; // Blocked states have been propagated to the previous node, repeat the query there.
+                }
             }
         }
     }
@@ -1509,18 +1533,19 @@ VerificationResult TransitionSystemNetworkManager::solve() && {
 InvalidityWitness TransitionSystemNetworkManager::computeInvalidityWitness() const {
     std::vector<EId> errorPath;
     SymRef current;
-    for(int i = 0; i < activePath.size(); i++){
+    auto graphEnds = getGraphEnds();
+    for (int i = 0; i < activePath.size(); i++) {
         EId next = activePath[i];
         errorPath.push_back(next);
         current = graph.getTarget(next);
         auto steps = getNode(current).solver->getTransitionStepCount();
         errorPath.insert(errorPath.end(), steps, getSelfLoopFor(current, graph, adjacencyRepresentation).value());
-        if (current == getChainEnd()) {
-            break;
-        }
-
     }
-    errorPath.push_back(getNode(current).children[0]);
+    for (auto node: getNode(current).children) {
+        if (graph.getTarget(node) == graph.getExit()) {
+            errorPath.push_back(node);
+        }
+    }
     InvalidityWitness witness;
     ErrorPath path(std::move(errorPath));
     return InvalidityWitness::fromErrorPath(path, graph);

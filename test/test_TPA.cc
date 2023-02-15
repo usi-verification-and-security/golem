@@ -165,6 +165,47 @@ TEST_F(TPATest, test_TPA_chain_of_two_unsafe) {
     solveSystem(clauses, engine, VerificationAnswer::UNSAFE, true);
 }
 
+TEST_F(TPATest, test_TPA_graph_of_two_unsafe) {
+    Options options;
+    options.addOption(Options::LOGIC, "QF_LIA");
+    options.addOption(Options::COMPUTE_WITNESS, "true");
+    options.addOption(Options::ENGINE, TPAEngine::SPLIT_TPA);
+    SymRef s1 = mkPredicateSymbol("s1", {intSort()});
+    SymRef s2 = mkPredicateSymbol("s2", {intSort()});
+    PTRef predS1Current = instantiatePredicate(s1, {x});
+    PTRef predS1Next = instantiatePredicate(s1, {xp});
+    PTRef predS2Current = instantiatePredicate(s2, {x});
+    PTRef predS2Next = instantiatePredicate(s2, {xp});
+    std::vector<ChClause> clauses{{ // x = 0 => S1(x)
+                                          ChcHead{UninterpretedPredicate{predS1Current}},
+                                          ChcBody{{logic->mkEq(x, zero)}, {}}
+                                  },
+                                  { // x = 0 => S2(x)
+                                          ChcHead{UninterpretedPredicate{predS2Current}},
+                                          ChcBody{{logic->mkEq(x, zero)}, {}}
+                                  },
+                                  { // S2(x) & x' = x + 1 => S2(x')
+                                          ChcHead{UninterpretedPredicate{predS2Next}},
+                                          ChcBody{{logic->mkEq(xp, logic->mkPlus(x, logic->mkIntConst(FastRational(1))))},
+                                                  {UninterpretedPredicate{predS2Current}}}
+                                  },
+                                  { // S1(x) & x' = x + 1 => S1(x')
+                                          ChcHead{UninterpretedPredicate{predS1Next}},
+                                          ChcBody{{logic->mkEq(xp, logic->mkPlus(x, logic->mkIntConst(FastRational(1))))},
+                                                  {UninterpretedPredicate{predS1Current}}}
+                                  },
+                                  { // S1(x) & x < 0 => false
+                                          ChcHead{UninterpretedPredicate{logic->getTerm_false()}},
+                                          ChcBody{{logic->mkLt(x, zero)}, {UninterpretedPredicate{predS1Current}}}
+                                  },
+                                  { // S2(x) & x <= 0 => false
+                                          ChcHead{UninterpretedPredicate{logic->getTerm_false()}},
+                                          ChcBody{{logic->mkLeq(x, zero)}, {UninterpretedPredicate{predS2Current}}}
+                                  }};
+    TPAEngine engine(*logic, options);
+    solveSystem(clauses, engine, VerificationAnswer::UNSAFE, true);
+}
+
 TEST_F(TPATest, test_TPA_chain_of_two_safe) {
     Options options;
     options.addOption(Options::LOGIC, "QF_LIA");

@@ -43,7 +43,7 @@ private:
 
     std::unique_ptr<TPABase> mkSolver();
     
-    VerificationResult solveTransitionSystemChain(ChcDirectedGraph const & graph);
+    VerificationResult solveTransitionSystemGraph(ChcDirectedGraph const & graph);
 
     ValidityWitness computeValidityWitness(ChcDirectedGraph const & graph, TransitionSystem const & ts, PTRef inductiveInvariant) const;
 
