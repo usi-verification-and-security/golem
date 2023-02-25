@@ -1,5 +1,18 @@
 version: 2.1
 jobs:
+    formatter:
+      docker:
+        - image: usiverify/verify-env:current
+          auth:
+            username: mydockerhub-user
+            password: $DOCKERHUB_PASSWORD
+
+      steps:
+        - checkout
+        - run:
+            name: run clang formatter
+            command: cat .clang-files | xargs clang-format --Werror --dry-run
+
     build-recent-gcc-debug:
         docker:
           - image: usiverify/verify-env:current
@@ -136,6 +149,7 @@ jobs:
 workflows:
   build-test:
       jobs:
+        - formatter
         - build-starexec-debug:
           filters: &filters-build-test
             tags:
