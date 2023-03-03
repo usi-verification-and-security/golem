@@ -248,6 +248,51 @@ TEST_F(TPATest, test_TPA_chain_regression) {
     solveSystem(clauses, engine, VerificationAnswer::SAFE, false);
 }
 
+TEST_F(TPATest, test_TPA_chain_regression_2) {
+    Options options;
+    options.addOption(Options::LOGIC, "QF_LIA");
+    options.addOption(Options::COMPUTE_WITNESS, "true");
+    options.addOption(Options::ENGINE, TPAEngine::SPLIT_TPA);
+    SymRef s1 = mkPredicateSymbol("inv1", {intSort()});
+    SymRef s2 = mkPredicateSymbol("inv2", {intSort()});
+    PTRef predS1Current = instantiatePredicate(s1, {x});
+    PTRef predS1Next = instantiatePredicate(s1, {xp});
+    PTRef predS2Current = instantiatePredicate(s2, {x});
+    PTRef predS2Next = instantiatePredicate(s2, {xp});
+    PTRef five = logic->mkIntConst(FastRational(5));
+    PTRef three = logic->mkIntConst(FastRational(3));
+    std::vector<ChClause> clauses{{ // x = 5 => S1(x)
+        ChcHead{UninterpretedPredicate{predS1Next}},
+        ChcBody{{logic->mkEq(xp, five)}, {}}
+    },
+        { // S1(x) and (x' = x + 1 or x' = x - 1) => S1(x')
+            ChcHead{UninterpretedPredicate{predS1Next}},
+            ChcBody{{logic->mkOr({logic->mkEq(xp, logic->mkPlus(x, one)), logic->mkEq(xp, logic->mkMinus(x, one))})},
+                {UninterpretedPredicate{predS1Current}}
+            }
+        },
+        { // S1(x) => S2(x)
+            ChcHead{UninterpretedPredicate{predS2Current}},
+            ChcBody{{logic->getTerm_true()}, {UninterpretedPredicate{predS1Current}}}
+        },
+        { // S2(x) and x > 5 and x' = x + 1 => S2(x')
+            ChcHead{UninterpretedPredicate{predS2Next}},
+            ChcBody{{logic->mkAnd(
+                logic->mkGt(x, five),
+                logic->mkEq(xp, logic->mkPlus(x, one))
+            )
+            },
+                {UninterpretedPredicate{predS2Current}}}
+        },
+        { // S2(x) and x = 3 => false
+            ChcHead{UninterpretedPredicate{logic->getTerm_false()}},
+            ChcBody{{logic->mkEq(x, three)},
+                {UninterpretedPredicate{predS2Current}}}
+        }};
+    TPAEngine engine(*logic, options);
+    solveSystem(clauses, engine, VerificationAnswer::UNSAFE);
+}
+
 TEST_F(TPATest, test_transformContractVertex_safe) {
     Options options;
     options.addOption(Options::LOGIC, "QF_LIA");

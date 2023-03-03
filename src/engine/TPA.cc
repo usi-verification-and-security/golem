@@ -1412,7 +1412,7 @@ VerificationResult TransitionSystemNetworkManager::solve() && {
             EId nextEdge = getOutgoingEdge(current);
 //            std::cout << "Reached states in node " << current.id << ": " << logic.pp(explanation) << std::endl;
             getNode(current).trulyReached = explanation;
-            PTRef nextConditions = getInitialStates(graph.getTarget(nextEdge));
+            PTRef nextConditions = logic.mkNot(getNode(graph.getTarget(nextEdge)).trulySafe);
             auto [edgeRes, edgeExplanation] = queryEdge(nextEdge, explanation, nextConditions);
             if (reachable(edgeRes)) { // Edge propagates forward
                 auto next = graph.getTarget(nextEdge);
