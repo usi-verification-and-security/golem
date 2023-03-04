@@ -293,6 +293,52 @@ TEST_F(TPATest, test_TPA_chain_regression_2) {
     solveSystem(clauses, engine, VerificationAnswer::UNSAFE);
 }
 
+TEST_F(TPATest, test_TPA_chain_unsatisfiable_transition) {
+    Options options;
+    options.addOption(Options::LOGIC, "QF_LIA");
+    options.addOption(Options::COMPUTE_WITNESS, "true");
+    options.addOption(Options::ENGINE, TPAEngine::SPLIT_TPA);
+    SymRef s1 = mkPredicateSymbol("inv1", {intSort()});
+    SymRef s2 = mkPredicateSymbol("inv2", {intSort(), intSort()});
+    PTRef y = mkIntVar("y");
+    PTRef yp = mkIntVar("yp");
+    PTRef predS1Current = instantiatePredicate(s1, {x});
+    PTRef predS1Next = instantiatePredicate(s1, {xp});
+    PTRef predS2Current = instantiatePredicate(s2, {x, y});
+    PTRef predS2Next = instantiatePredicate(s2, {xp, yp});
+    PTRef two = logic->mkIntConst(FastRational(2));
+    std::vector<ChClause> clauses{{ // x' <= 1 => S1(x')
+        ChcHead{UninterpretedPredicate{predS1Next}},
+        ChcBody{{logic->mkLeq(xp, one)}, {}}
+    },
+        { // S1(x) and (x' = x + 2 and x' > 1) => S1(x')
+            ChcHead{UninterpretedPredicate{predS1Next}},
+            ChcBody{{logic->mkAnd(logic->mkEq(xp, logic->mkPlus(x, two)), logic->mkGt(xp, one))},
+                {UninterpretedPredicate{predS1Current}}
+            }
+        },
+        { // S1(x) and x' <= 1 and y' > 1 and y' = x => S2(x',y')
+            ChcHead{UninterpretedPredicate{predS2Next}},
+            ChcBody{{logic->mkAnd({logic->mkLeq(xp, one), logic->mkGt(yp, one), logic->mkEq(x, yp)})}, {UninterpretedPredicate{predS1Current}}}
+        },
+        { // S2(x,y) and x > 1 and y > 1 => S2(x,y)
+            ChcHead{UninterpretedPredicate{predS2Current}},
+            ChcBody{{logic->mkAnd(
+                logic->mkGt(x, one),
+                logic->mkGt(y, one)
+            )
+            },
+                {UninterpretedPredicate{predS2Current}}}
+        },
+        { // S2(x,y) and x = y and x > 0 => false
+            ChcHead{UninterpretedPredicate{logic->getTerm_false()}},
+            ChcBody{{logic->mkAnd(logic->mkEq(x, y), logic->mkGt(x, zero))},
+                {UninterpretedPredicate{predS2Current}}}
+        }};
+    TPAEngine engine(*logic, options);
+    solveSystem(clauses, engine, VerificationAnswer::SAFE, false);
+}
+
 TEST_F(TPATest, test_transformContractVertex_safe) {
     Options options;
     options.addOption(Options::LOGIC, "QF_LIA");

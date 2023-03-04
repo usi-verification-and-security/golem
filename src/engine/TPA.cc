@@ -392,6 +392,11 @@ VerificationAnswer TPABase::solveTransitionSystem(TransitionSystem & system) {
 }
 
 VerificationAnswer TPABase::solve() {
+    auto res = checkTrivialUnreachability();
+    assert(res != VerificationAnswer::UNSAFE);
+    if (res == VerificationAnswer::SAFE) {
+        return res;
+    }
     unsigned short power = 0;
     while (true) {
         auto res = checkPower(power);
@@ -405,6 +410,25 @@ VerificationAnswer TPABase::solve() {
     }
 }
 
+VerificationAnswer TPABase::checkTrivialUnreachability() {
+    if (query == logic.getTerm_false()) {
+        // TODO: Check UNSAT with solver?
+        explanation.power = 0;
+        explanation.relationType = TPAType::LESS_THAN;
+        explanation.invariantType = SafetyExplanation::TransitionInvariantType::RESTRICTED_TO_QUERY;
+        explanation.fixedPointType = SafetyExplanation::FixedPointType::LEFT;
+        return VerificationAnswer::SAFE;
+    }
+    if (init == logic.getTerm_false()) {
+        // TODO: Check UNSAT with solver?
+        explanation.power = 0;
+        explanation.relationType = TPAType::LESS_THAN;
+        explanation.invariantType = SafetyExplanation::TransitionInvariantType::RESTRICTED_TO_INIT;
+        explanation.fixedPointType = SafetyExplanation::FixedPointType::RIGHT;
+        return VerificationAnswer::SAFE;
+    }
+    return VerificationAnswer::UNKNOWN;
+}
 
 VerificationAnswer TPASplit::checkPower(unsigned short power) {
     TRACE(1, "Checking power " << power)

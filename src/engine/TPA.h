@@ -197,6 +197,8 @@ protected:
     PTRef computeIdentity() const;
 
     void resetExplanation();
+
+    VerificationAnswer checkTrivialUnreachability();
 };
 
 class TPASplit : public TPABase {
