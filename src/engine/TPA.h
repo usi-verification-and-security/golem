@@ -11,7 +11,7 @@
 
 class TransitionSystem;
 
-enum class ReachabilityResult {REACHABLE, UNREACHABLE};
+enum class ReachabilityResult { REACHABLE, UNREACHABLE };
 
 class SolverWrapper {
 protected:
@@ -31,6 +31,7 @@ class TPAEngine : public Engine {
     Logic & logic;
     Options options;
     friend class TransitionSystemNetworkManager;
+
 public:
     TPAEngine(Logic & logic, Options options) : logic(logic), options(std::move(options)) {}
 
@@ -38,45 +39,36 @@ public:
 
     static const std::string TPA;
     static const std::string SPLIT_TPA;
+
 private:
     VerificationResult solve(const ChcDirectedGraph & system);
 
     std::unique_ptr<TPABase> mkSolver();
-    
+
     VerificationResult solveTransitionSystemGraph(ChcDirectedGraph const & graph);
 
-    ValidityWitness computeValidityWitness(ChcDirectedGraph const & graph, TransitionSystem const & ts, PTRef inductiveInvariant) const;
+    ValidityWitness computeValidityWitness(ChcDirectedGraph const & graph, TransitionSystem const & ts,
+                                           PTRef inductiveInvariant) const;
 
     InvalidityWitness computeInvalidityWitness(ChcDirectedGraph const & graph, unsigned steps) const;
 };
 
-enum class TPAType : char {
-    LESS_THAN,
-    EQUALS
-};
+enum class TPAType : char { LESS_THAN, EQUALS };
 
 struct SafetyExplanation {
-    enum class TransitionInvariantType : char {
-        NONE,
-        UNRESTRICTED,
-        RESTRICTED_TO_INIT,
-        RESTRICTED_TO_QUERY
-    };
+    enum class TransitionInvariantType : char { NONE, UNRESTRICTED, RESTRICTED_TO_INIT, RESTRICTED_TO_QUERY };
 
-    enum class FixedPointType : char {
-        LEFT,
-        RIGHT
-    };
+    enum class FixedPointType : char { LEFT, RIGHT };
 
-    TransitionInvariantType invariantType { TransitionInvariantType::NONE };
-    TPAType relationType { TPAType::LESS_THAN };
-    FixedPointType fixedPointType { FixedPointType::LEFT };
-    unsigned power { 0 };
+    TransitionInvariantType invariantType{TransitionInvariantType::NONE};
+    TPAType relationType{TPAType::LESS_THAN};
+    FixedPointType fixedPointType{FixedPointType::LEFT};
+    unsigned power{0};
 };
 
 struct ReachedStates {
-    PTRef reachedStates { PTRef_Undef };
-    unsigned steps { 0 };
+    PTRef reachedStates{PTRef_Undef};
+    unsigned steps{0};
 };
 
 class TPABase {
@@ -88,7 +80,6 @@ protected:
     SafetyExplanation explanation;
     ReachedStates reachedStates;
 
-
     // Versioned representation of the transition system
     PTRef init;
     PTRef transition;
@@ -96,17 +87,12 @@ protected:
     vec<PTRef> stateVariables;
     vec<PTRef> auxiliaryVariables;
 
-    PTRef identity {PTRef_Undef};
+    PTRef identity{PTRef_Undef};
 
 public:
-
-    TPABase(Logic& logic, Options const & options) : logic(logic), options(options) {
-        if (options.hasOption(Options::VERBOSE)) {
-            verbosity = std::stoi(options.getOption(Options::VERBOSE));
-        }
-        if (options.hasOption(Options::TPA_USE_QE)) {
-            useQE = true;
-        }
+    TPABase(Logic & logic, Options const & options) : logic(logic), options(options) {
+        if (options.hasOption(Options::VERBOSE)) { verbosity = std::stoi(options.getOption(Options::VERBOSE)); }
+        if (options.hasOption(Options::TPA_USE_QE)) { useQE = true; }
     }
 
     virtual ~TPABase() = default;
@@ -131,7 +117,6 @@ public:
     PTRef getInductiveInvariant() const;
 
 protected:
-
     virtual VerificationAnswer checkPower(unsigned short power) = 0;
 
     virtual void resetPowers() = 0;
@@ -141,14 +126,14 @@ protected:
 
     struct QueryResult {
         ReachabilityResult result;
-        PTRef refinedTarget { PTRef_Undef };
-        unsigned steps { 0 };
+        PTRef refinedTarget{PTRef_Undef};
+        unsigned steps{0};
     };
 
-    static bool isReachable (QueryResult res) { return res.result == ReachabilityResult::REACHABLE; };
-    static bool isUnreachable (QueryResult res) { return res.result == ReachabilityResult::UNREACHABLE; };
-    static PTRef extractReachableTarget (QueryResult res) { return res.refinedTarget; };
-    static unsigned extractStepsTaken (QueryResult res) { return res.steps; };
+    static bool isReachable(QueryResult res) { return res.result == ReachabilityResult::REACHABLE; };
+    static bool isUnreachable(QueryResult res) { return res.result == ReachabilityResult::UNREACHABLE; };
+    static PTRef extractReachableTarget(QueryResult res) { return res.refinedTarget; };
+    static unsigned extractStepsTaken(QueryResult res) { return res.steps; };
 
     using CacheType = std::unordered_map<std::pair<PTRef, PTRef>, QueryResult, PTRefPairHash>;
     std::vector<CacheType> queryCache;
@@ -160,7 +145,7 @@ protected:
     };
     mutable std::unordered_map<std::pair<PTRef, int>, PTRef, VersionHasher> versioningCache;
 
-    PTRef getNextVersion(PTRef currentVersion, int) const ;
+    PTRef getNextVersion(PTRef currentVersion, int) const;
     PTRef getNextVersion(PTRef currentVersion) const { return getNextVersion(currentVersion, 1); };
 
     vec<PTRef> getStateVars(int version) const;
@@ -179,9 +164,9 @@ protected:
 
     bool verifyKinductiveInvariant(PTRef invariant, unsigned long k) const;
 
-    PTRef refineTwoStepTarget(PTRef start, PTRef transition, PTRef goal, Model& model);
+    PTRef refineTwoStepTarget(PTRef start, PTRef transition, PTRef goal, Model & model);
 
-    PTRef extractMidPoint(PTRef start, PTRef firstTransition, PTRef secondTransition, PTRef goal, Model& model);
+    PTRef extractMidPoint(PTRef start, PTRef firstTransition, PTRef secondTransition, PTRef goal, Model & model);
 
     PTRef eliminateVars(PTRef fla, vec<PTRef> const & vars, Model & model);
 
@@ -206,10 +191,10 @@ class TPASplit : public TPABase {
     vec<PTRef> exactPowers;
     vec<PTRef> lessThanPowers;
 
-    vec<SolverWrapper*> reachabilitySolvers;
+    vec<SolverWrapper *> reachabilitySolvers;
 
 public:
-    TPASplit(Logic& logic, Options const & options) : TPABase(logic, options) {}
+    TPASplit(Logic & logic, Options const & options) : TPABase(logic, options) {}
 
     ~TPASplit() override;
 
@@ -228,7 +213,7 @@ private:
     PTRef getLessThanPower(unsigned short power) const;
     void storeLessThanPower(unsigned short power, PTRef tr);
 
-    SolverWrapper* getExactReachabilitySolver(unsigned short power) const;
+    SolverWrapper * getExactReachabilitySolver(unsigned short power) const;
 
     QueryResult reachabilityQueryExact(PTRef from, PTRef to, unsigned short power);
     QueryResult reachabilityQueryLessThan(PTRef from, PTRef to, unsigned short power);
@@ -243,13 +228,12 @@ class TPABasic : public TPABase {
 
     vec<PTRef> transitionHierarchy;
 
-    vec<SolverWrapper*> reachabilitySolvers;
+    vec<SolverWrapper *> reachabilitySolvers;
 
 public:
-    TPABasic(Logic& logic, Options const & options) : TPABase(logic, options) {}
+    TPABasic(Logic & logic, Options const & options) : TPABase(logic, options) {}
 
     ~TPABasic() override;
-
 
 private:
     void resetPowers() override;
@@ -262,12 +246,11 @@ private:
     PTRef getLevelTransition(unsigned short) const;
     void storeLevelTransition(unsigned short, PTRef);
 
-    SolverWrapper* getReachabilitySolver(unsigned short power) const;
+    SolverWrapper * getReachabilitySolver(unsigned short power) const;
 
     QueryResult reachabilityQuery(PTRef from, PTRef to, unsigned short power);
 
     bool verifyPower(unsigned short level) const;
 };
 
-
-#endif //GOLEM_TPA_H
+#endif // GOLEM_TPA_H
