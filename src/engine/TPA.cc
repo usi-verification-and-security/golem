@@ -609,7 +609,8 @@ TPASplit::QueryResult TPASplit::reachabilityQueryExact(PTRef from, PTRef to, uns
 //                std::cout << std::endl;
                 TRACE(3, "Learning " << itp.x)
                 TRACE(4, "Learning " << logic.pp(itp))
-                assert(itp != logic.getTerm_true());
+                // If itp == logic.getTerm_true, then the error states were trivially unreachable
+                if (itp == logic.getTerm_true()) { assert(power == 0); }
                 storeExactPower(power + 1, itp);
                 result.result = ReachabilityResult::UNREACHABLE;
                 return result;
@@ -675,7 +676,8 @@ TPASplit::QueryResult TPASplit::reachabilityQueryLessThan(PTRef from, PTRef to, 
             itp = cleanInterpolant(itp);
             TRACE(3, "Learning " << itp.x)
             TRACE(4, "Learning " << logic.pp(itp))
-            assert(itp != logic.getTerm_true());
+            // If itp == logic.getTerm_true, then the error states were trivially unreachable
+            if (itp == logic.getTerm_true()) { assert(power == 0); }
             storeLessThanPower(power + 1, itp);
             result.result = ReachabilityResult::UNREACHABLE;
             return result;
@@ -1249,7 +1251,8 @@ TPABasic::QueryResult TPABasic::reachabilityQuery(PTRef from, PTRef to, unsigned
                 //                std::cout << std::endl;
                 TRACE(3, "Learning " << itp.x)
                 TRACE(4, "Learning " << logic.pp(itp))
-                assert(itp != logic.getTerm_true());
+                // If itp == logic.getTerm_true, then the error states were trivially unreachable
+                if (itp == logic.getTerm_true()) { assert(power == 0); }
                 storeLevelTransition(power + 1, itp);
                 result.result = ReachabilityResult::UNREACHABLE;
                 return result;
@@ -1498,7 +1501,6 @@ VerificationResult TransitionSystemNetworkManager::solve() && {
                     if (graph.getTarget(nextEdge) == graph.getExit()) {
                         return {VerificationAnswer::UNSAFE, computeInvalidityWitness()};
                     }
-                    printf("%s\n", logic.pp(edgeExplanation).c_str());
                     auto next = graph.getTarget(nextEdge);
                     networkMap.at(next).solver->resetInitialStates(edgeExplanation);
                     activePath.push(nextEdge);
@@ -1515,11 +1517,6 @@ VerificationResult TransitionSystemNetworkManager::solve() && {
         auto [res,explanation] = queryTransitionSystem(networkMap.at(current));
         if (reachable(res)) {
             getNode(current).trulyReached = explanation;
-//                for (auto end : graphEnds) {
-//                    if (current == end) {
-//                        return {VerificationAnswer::UNSAFE, computeInvalidityWitness()};
-//                    }
-//                }
             while (getNode(current).blocked_children < getNode(current).children.size()) {
                 EId nextEdge = getOutgoingEdge(current, getNode(current).blocked_children);
                 PTRef nextConditions = logic.getTerm_true();
@@ -1528,9 +1525,6 @@ VerificationResult TransitionSystemNetworkManager::solve() && {
                 }
                 auto [edgeRes, edgeExplanation] = queryEdge(nextEdge, explanation, nextConditions);
                 getNode(current).blocked_children ++;
-                printf("Explanations: %s\n", logic.pp(explanation).c_str());
-                printf("Conditions: %s\n", logic.pp(nextConditions).c_str());
-                printf("Edge explanation: %s\n", logic.pp(edgeExplanation).c_str());
                 if (reachable(edgeRes)) { // Edge propagates forward
                     if (graph.getTarget(nextEdge) == graph.getExit()) {
                         return {VerificationAnswer::UNSAFE, computeInvalidityWitness()};
@@ -1547,13 +1541,6 @@ VerificationResult TransitionSystemNetworkManager::solve() && {
                 }
             }
         } else { // TS cannot propagate forward
-//            if (current == init) {
-//                if (init == graphStarts[graphStarts.size() - 1]) {
-//                    return {VerificationAnswer::SAFE, ValidityWitness{}};
-//                }
-//                safe = true;
-//                continue;
-//            }
             assert(getNode(current).trulySafe != PTRef_Undef);
             getNode(current).trulySafe = logic.mkOr(getNode(current).trulySafe, explanation);
             auto previousEdge = activePath.last();
