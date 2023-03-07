@@ -19,19 +19,18 @@ bool isTransitionSystem(ChcDirectedGraph const & graph) {
     if (begOutEdges.size() != 1 || graph.getTarget(begOutEdges[0]) != loop) { return false; }
     auto const & loopOutEdges = graphRepresentation.getOutgoingEdgesFor(loop);
     if (loopOutEdges.size() != 2) { return false; }
-    bool selfLoop = std::find_if(loopOutEdges.begin(), loopOutEdges.end(),
-                                 [&graph, loop](EId eid) { return graph.getTarget(eid) == loop; }) !=
-                    loopOutEdges.end();
+    bool selfLoop = std::find_if(loopOutEdges.begin(), loopOutEdges.end(), [&graph, loop](EId eid) {
+                        return graph.getTarget(eid) == loop;
+                    }) != loopOutEdges.end();
     if (not selfLoop) { return false; }
     bool edgeToEnd = std::find_if(loopOutEdges.begin(), loopOutEdges.end(),
-                                  [&graph, end](EId eid) { return graph.getTarget(eid) == end; }) !=
-                     loopOutEdges.end();
+                                  [&graph, end](EId eid) { return graph.getTarget(eid) == end; }) != loopOutEdges.end();
     if (not edgeToEnd) { return false; }
     if (not graphRepresentation.getOutgoingEdgesFor(end).empty()) { return false; }
     return true;
 }
 
-std::unique_ptr<TransitionSystem> toTransitionSystem(ChcDirectedGraph const & graph, Logic& logic) {
+std::unique_ptr<TransitionSystem> toTransitionSystem(ChcDirectedGraph const & graph, Logic & logic) {
     auto adjacencyRepresentation = AdjacencyListsGraphRepresentation::from(graph);
     auto vertices = reversePostOrder(graph, adjacencyRepresentation);
     assert(vertices.size() == 3);
@@ -59,56 +58,48 @@ std::unique_ptr<TransitionSystem> toTransitionSystem(ChcDirectedGraph const & gr
         TermUtils utils(logic);
         if (isInit) {
             std::unordered_map<PTRef, PTRef, PTRefHash> subMap;
-            std::transform(edgeVars.nextStateVars.begin(), edgeVars.nextStateVars.end(), stateVars.begin(), std::inserter(subMap, subMap.end()),
+            std::transform(edgeVars.nextStateVars.begin(), edgeVars.nextStateVars.end(), stateVars.begin(),
+                           std::inserter(subMap, subMap.end()),
                            [](PTRef key, PTRef value) { return std::make_pair(key, value); });
             init = utils.varSubstitute(fla, subMap);
             init = QuantifierElimination(logic).keepOnly(init, stateVars);
-//            std::cout << logic.printTerm(init) << std::endl;
+            //            std::cout << logic.printTerm(init) << std::endl;
         }
         if (isLoop) {
             transitionRelation = transitionFormulaInSystemType(*systemType, edgeVars, fla, logic);
-//            std::cout << logic.printTerm(transitionRelation) << std::endl;
+            //            std::cout << logic.printTerm(transitionRelation) << std::endl;
         }
         if (isEnd) {
             std::unordered_map<PTRef, PTRef, PTRefHash> subMap;
-            std::transform(edgeVars.stateVars.begin(), edgeVars.stateVars.end(), stateVars.begin(), std::inserter(subMap, subMap.end()),
+            std::transform(edgeVars.stateVars.begin(), edgeVars.stateVars.end(), stateVars.begin(),
+                           std::inserter(subMap, subMap.end()),
                            [](PTRef key, PTRef value) { return std::make_pair(key, value); });
             bad = utils.varSubstitute(fla, subMap);
             bad = QuantifierElimination(logic).keepOnly(bad, stateVars);
-//            std::cout << logic.printTerm(bad) << std::endl;
+            //            std::cout << logic.printTerm(bad) << std::endl;
         }
     });
     assert(init != PTRef_Undef && transitionRelation != PTRef_Undef && bad != PTRef_Undef);
-    auto ts = std::unique_ptr<TransitionSystem>(new TransitionSystem(logic, std::move(systemType), init, transitionRelation, bad));
+    auto ts = std::unique_ptr<TransitionSystem>(
+        new TransitionSystem(logic, std::move(systemType), init, transitionRelation, bad));
     return ts;
 }
 
-bool strongConnection(
-        std::set<int>& visitedVertices,
-        std::set<int>& verticesOnStack,
-        AdjacencyListsGraphRepresentation& graphRepresentation,
-        ChcDirectedGraph const & graph,
-        SymRef node)
-        {
+bool strongConnection(std::set<int> & visitedVertices, std::set<int> & verticesOnStack,
+                      AdjacencyListsGraphRepresentation & graphRepresentation, ChcDirectedGraph const & graph,
+                      SymRef node) {
     visitedVertices.insert(node.x);
     verticesOnStack.insert(node.x);
     auto const & outEdges = graphRepresentation.getOutgoingEdgesFor(node);
 
     for (EId eid : outEdges) {
-        if (size(outEdges) <= 1) {
-            return false;
-        }
+        if (size(outEdges) <= 1) { return false; }
         if (graph.getTarget(eid) != node) {
             auto nextVertice = graph.getTarget(eid);
-            if(visitedVertices.find(nextVertice.x) == visitedVertices.end()){
-                bool loop_found = strongConnection(visitedVertices,
-                                                   verticesOnStack,
-                                                   graphRepresentation,
-                                                   graph,
-                                                   nextVertice);
-                if (loop_found) {
-                    return true;
-                }
+            if (visitedVertices.find(nextVertice.x) == visitedVertices.end()) {
+                bool loop_found =
+                    strongConnection(visitedVertices, verticesOnStack, graphRepresentation, graph, nextVertice);
+                if (loop_found) { return true; }
             } else if (verticesOnStack.find(nextVertice.x) != verticesOnStack.end()) {
                 return true;
             }
@@ -127,14 +118,10 @@ bool TarjanLoopDetection(ChcDirectedGraph const & graph) {
     std::set<int> visitedVertices;
     std::set<int> verticesOnStack;
 
-
-    for (uint i = 1; i < vertices.size()-1; i++) {
+    for (uint i = 1; i < vertices.size() - 1; i++) {
         if (visitedVertices.find(vertices[i].x) == visitedVertices.end()) {
-            bool loop_detected = strongConnection(visitedVertices,
-                                                  verticesOnStack,
-                                                  graphRepresentation,
-                                                  graph,
-                                                  vertices[i]);
+            bool loop_detected =
+                strongConnection(visitedVertices, verticesOnStack, graphRepresentation, graph, vertices[i]);
             if (loop_detected) { return true; }
         }
     }
@@ -146,9 +133,8 @@ bool isTransitionSystemDAG(ChcDirectedGraph const & graph) {
     auto graphRepresentation = AdjacencyListsGraphRepresentation::from(graph);
     auto vertices = reversePostOrder(graph, graphRepresentation);
     assert(graph.getEntry() == vertices[0]);
-    assert(graph.getExit() == vertices.back());
     bool hasLoop = TarjanLoopDetection(graph);
-    if (hasLoop) {return false;}
+    if (hasLoop) { return false; }
     for (unsigned i = 1; i < vertices.size() - 1; ++i) {
         auto current = vertices[i];
         auto const & outEdges = graphRepresentation.getOutgoingEdgesFor(current);
@@ -158,7 +144,7 @@ bool isTransitionSystemDAG(ChcDirectedGraph const & graph) {
             hasSelfLoop |= graph.getTarget(eid) == current;
             hasEdgeToNext |= graph.getTarget(eid) != current;
         }
-        if (not (hasSelfLoop and hasEdgeToNext)) { return false; }
+        if (not(hasSelfLoop and hasEdgeToNext)) { return false; }
     }
     return true;
 }
@@ -181,23 +167,30 @@ EdgeVariables getVariablesFromEdge(Logic & logic, ChcDirectedGraph const & graph
     return res;
 }
 
-std::unique_ptr<SystemType> systemTypeFrom(vec<PTRef> const & stateVars, vec<PTRef> const & auxiliaryVars, Logic & logic) {
+std::unique_ptr<SystemType> systemTypeFrom(vec<PTRef> const & stateVars, vec<PTRef> const & auxiliaryVars,
+                                           Logic & logic) {
     std::vector<SRef> stateVarTypes;
-    std::transform(stateVars.begin(), stateVars.end(), std::back_inserter(stateVarTypes), [&logic](PTRef var){ return logic.getSortRef(var); });
+    std::transform(stateVars.begin(), stateVars.end(), std::back_inserter(stateVarTypes),
+                   [&logic](PTRef var) { return logic.getSortRef(var); });
     std::vector<SRef> auxVarTypes;
-    std::transform(auxiliaryVars.begin(), auxiliaryVars.end(), std::back_inserter(auxVarTypes), [&logic](PTRef var){ return logic.getSortRef(var); });
+    std::transform(auxiliaryVars.begin(), auxiliaryVars.end(), std::back_inserter(auxVarTypes),
+                   [&logic](PTRef var) { return logic.getSortRef(var); });
     return std::make_unique<SystemType>(std::move(stateVarTypes), std::move(auxVarTypes), logic);
 }
 
-PTRef transitionFormulaInSystemType(SystemType const & systemType, EdgeVariables const & edgeVars, PTRef edgeLabel, Logic & logic) {
+PTRef transitionFormulaInSystemType(SystemType const & systemType, EdgeVariables const & edgeVars, PTRef edgeLabel,
+                                    Logic & logic) {
     std::unordered_map<PTRef, PTRef, PTRefHash> subMap;
-    std::transform(edgeVars.stateVars.begin(), edgeVars.stateVars.end(), systemType.getStateVars().begin(), std::inserter(subMap, subMap.end()),
+    std::transform(edgeVars.stateVars.begin(), edgeVars.stateVars.end(), systemType.getStateVars().begin(),
+                   std::inserter(subMap, subMap.end()),
                    [](PTRef key, PTRef value) { return std::make_pair(key, value); });
 
-    std::transform(edgeVars.nextStateVars.begin(), edgeVars.nextStateVars.end(), systemType.getNextStateVars().begin(), std::inserter(subMap, subMap.end()),
+    std::transform(edgeVars.nextStateVars.begin(), edgeVars.nextStateVars.end(), systemType.getNextStateVars().begin(),
+                   std::inserter(subMap, subMap.end()),
                    [](PTRef key, PTRef value) { return std::make_pair(key, value); });
 
-    std::transform(edgeVars.auxiliaryVars.begin(), edgeVars.auxiliaryVars.end(), systemType.getAuxiliaryVars().begin(), std::inserter(subMap, subMap.end()),
+    std::transform(edgeVars.auxiliaryVars.begin(), edgeVars.auxiliaryVars.end(), systemType.getAuxiliaryVars().begin(),
+                   std::inserter(subMap, subMap.end()),
                    [](PTRef key, PTRef value) { return std::make_pair(key, value); });
     return TermUtils(logic).varSubstitute(edgeLabel, subMap);
 }
