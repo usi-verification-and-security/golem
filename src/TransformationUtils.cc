@@ -112,7 +112,6 @@ bool strongConnection(std::set<int> & visitedVertices, std::set<int> & verticesO
 }
 
 bool TarjanLoopDetection(ChcDirectedGraph const & graph) {
-    if (graph.getVertices().size() < 3) { return false; }
     auto graphRepresentation = AdjacencyListsGraphRepresentation::from(graph);
     auto vertices = reversePostOrder(graph, graphRepresentation);
     std::set<int> visitedVertices;
