@@ -597,8 +597,7 @@ TPASplit::QueryResult TPASplit::reachabilityQueryExact(PTRef from, PTRef to, uns
                 //                << " :"; TermUtils(logic).printTermWithLets(std::cout, itp); std::cout << std::endl;
                 TRACE(3, "Learning " << itp.x)
                 TRACE(4, "Learning " << logic.pp(itp))
-                // If itp == logic.getTerm_true, then the error states were trivially unreachable
-                if (itp == logic.getTerm_true()) { assert(power == 0); }
+                assert(itp != logic.getTerm_true());
                 storeExactPower(power + 1, itp);
                 result.result = ReachabilityResult::UNREACHABLE;
                 return result;
