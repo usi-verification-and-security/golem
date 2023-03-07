@@ -221,7 +221,7 @@ class SolverWrapperIncrementalWithRestarts : public SolverWrapperIncremental {
 
 public:
     SolverWrapperIncrementalWithRestarts(Logic & logic, PTRef transition)
-            : SolverWrapperIncremental(logic, transition) {
+        : SolverWrapperIncremental(logic, transition) {
         transitionComponents.push(transition);
     }
 
@@ -349,7 +349,7 @@ void TPASplit::storeExactPower(unsigned short power, PTRef tr) {
     PTRef nextLevelTransitionStrengthening = logic.mkAnd(tr, getNextVersion(tr));
     if (not reachabilitySolvers[power + 1]) {
         reachabilitySolvers[power + 1] =
-                new SolverWrapperIncrementalWithRestarts(logic, nextLevelTransitionStrengthening);
+            new SolverWrapperIncrementalWithRestarts(logic, nextLevelTransitionStrengthening);
         //        reachabilitySolvers[power + 1] = new SolverWrapperIncremental(logic,
         //        nextLevelTransitionStrengthening); reachabilitySolvers[power + 1] = new SolverWrapperSingleUse(logic,
         //        nextLevelTransitionStrengthening);
@@ -529,7 +529,7 @@ TPASplit::QueryResult TPASplit::reachabilityQueryExact(PTRef from, PTRef to, uns
     while (true) {
         TRACE(3, "Exact: Iteration " << ++counter << " on level " << power)
         auto solver =
-                getExactReachabilitySolver(power + 1); // Solver at n+1 contains reachability in two steps of ATr^{=n}
+            getExactReachabilitySolver(power + 1); // Solver at n+1 contains reachability in two steps of ATr^{=n}
         assert(solver);
         auto res = solver->checkConsistent(logic.mkAnd(from, goal));
         switch (res) {
@@ -541,7 +541,7 @@ TPASplit::QueryResult TPASplit::reachabilityQueryExact(PTRef from, PTRef to, uns
                 if (power == 0) { // Base case, the 2 steps of the exact transition relation have been used
                     result.result = ReachabilityResult::REACHABLE;
                     result.refinedTarget = refineTwoStepTarget(
-                            from, logic.mkAnd(previousTransition, translatedPreviousTransition), goal, *model);
+                        from, logic.mkAnd(previousTransition, translatedPreviousTransition), goal, *model);
                     result.steps = 2;
                     TRACE(3, "Exact: Truly reachable states are " << result.refinedTarget.x)
                     TRACE(4, "Exact: Truly reachable states are " << logic.pp(result.refinedTarget))
@@ -582,7 +582,7 @@ TPASplit::QueryResult TPASplit::reachabilityQueryExact(PTRef from, PTRef to, uns
                 }
                 assert(isReachable(subQueryRes));
                 TRACE(3, "Exact: Second half was reachable, reachable states are "
-                        << extractReachableTarget(subQueryRes).x)
+                             << extractReachableTarget(subQueryRes).x)
                 // both halves of the found path are feasible => this path is feasible!
                 subQueryRes.steps += stepsToMidpoint;
                 queryCache[power].insert({{from, to}, subQueryRes});
@@ -701,13 +701,13 @@ TPASplit::QueryResult TPASplit::reachabilityQueryLessThan(PTRef from, PTRef to, 
                     result.result = ReachabilityResult::REACHABLE;
                     // TODO: simplify to refine only one step of exact relation (which is just Tr)
                     result.refinedTarget = refineTwoStepTarget(
-                            from, logic.mkAnd(previousLessThanTransition, translatedExactTransition), goal, *model);
+                        from, logic.mkAnd(previousLessThanTransition, translatedExactTransition), goal, *model);
                     result.steps = 1;
                     TRACE(3, "Less-than: Truly reachable states are " << result.refinedTarget.x)
                     return result;
                 }
                 PTRef nextState =
-                        extractMidPoint(from, previousLessThanTransition, translatedExactTransition, goal, *model);
+                    extractMidPoint(from, previousLessThanTransition, translatedExactTransition, goal, *model);
                 TRACE(3, "Midpoint is " << nextState.x)
                 TRACE(4, "Midpoint is " << logic.pp(nextState));
                 // check the reachability using lower level abstraction
@@ -738,7 +738,7 @@ TPASplit::QueryResult TPASplit::reachabilityQueryLessThan(PTRef from, PTRef to, 
                 }
                 assert(isReachable(subQueryRes));
                 TRACE(3, "Less-than: Second half was reachable, reachable states are "
-                        << extractReachableTarget(subQueryRes).x)
+                             << extractReachableTarget(subQueryRes).x)
                 // both halves of the found path are feasible => this path is feasible!
                 subQueryRes.steps += stepsToMidpoint;
                 return subQueryRes;
@@ -956,8 +956,8 @@ bool TPABase::checkLessThanFixedPoint(unsigned short power) {
                               << std::endl;
                 }
                 explanation.invariantType = restrictedInvariant
-                                            ? SafetyExplanation::TransitionInvariantType::RESTRICTED_TO_INIT
-                                            : SafetyExplanation::TransitionInvariantType::UNRESTRICTED;
+                                                ? SafetyExplanation::TransitionInvariantType::RESTRICTED_TO_INIT
+                                                : SafetyExplanation::TransitionInvariantType::UNRESTRICTED;
                 explanation.relationType = TPAType::LESS_THAN;
                 explanation.power = i;
                 explanation.fixedPointType = SafetyExplanation::FixedPointType::RIGHT;
@@ -987,8 +987,8 @@ bool TPABase::checkLessThanFixedPoint(unsigned short power) {
                               << std::endl;
                 }
                 explanation.invariantType = restrictedInvariant
-                                            ? SafetyExplanation::TransitionInvariantType::RESTRICTED_TO_QUERY
-                                            : SafetyExplanation::TransitionInvariantType::UNRESTRICTED;
+                                                ? SafetyExplanation::TransitionInvariantType::RESTRICTED_TO_QUERY
+                                                : SafetyExplanation::TransitionInvariantType::UNRESTRICTED;
                 explanation.relationType = TPAType::LESS_THAN;
                 explanation.power = i;
                 explanation.fixedPointType = SafetyExplanation::FixedPointType::LEFT;
@@ -1044,9 +1044,9 @@ bool TPASplit::checkExactFixedPoint(unsigned short power) {
                 std::cout << std::endl;
             }
             explanation.invariantType =
-                    restrictedInvariant == 0   ? SafetyExplanation::TransitionInvariantType::UNRESTRICTED
-                                               : restrictedInvariant == 1 ? SafetyExplanation::TransitionInvariantType::RESTRICTED_TO_INIT
-                                                                          : SafetyExplanation::TransitionInvariantType::RESTRICTED_TO_QUERY;
+                restrictedInvariant == 0   ? SafetyExplanation::TransitionInvariantType::UNRESTRICTED
+                : restrictedInvariant == 1 ? SafetyExplanation::TransitionInvariantType::RESTRICTED_TO_INIT
+                                           : SafetyExplanation::TransitionInvariantType::RESTRICTED_TO_QUERY;
             explanation.relationType = TPAType::EQUALS;
             explanation.power = i;
             return true;
@@ -1120,7 +1120,7 @@ void TPABasic::storeLevelTransition(unsigned short power, PTRef tr) {
     PTRef nextLevelTransitionStrengthening = logic.mkAnd(tr, getNextVersion(tr));
     if (not reachabilitySolvers[power + 1]) {
         reachabilitySolvers[power + 1] =
-                new SolverWrapperIncrementalWithRestarts(logic, nextLevelTransitionStrengthening);
+            new SolverWrapperIncrementalWithRestarts(logic, nextLevelTransitionStrengthening);
         //        reachabilitySolvers[power + 1] = new SolverWrapperIncremental(logic,
         //        nextLevelTransitionStrengthening); reachabilitySolvers[power + 1] = new SolverWrapperSingleUse(logic,
         //        nextLevelTransitionStrengthening);
@@ -1184,10 +1184,10 @@ TPABasic::QueryResult TPABasic::reachabilityQuery(PTRef from, PTRef to, unsigned
                     bool firstStepTaken = model->evaluate(identity) == logic.getTerm_false();
                     bool secondStepTaken = model->evaluate(getNextVersion(identity)) == logic.getTerm_false();
                     assert(
-                            (not firstStepTaken or model->evaluate(transition) == logic.getTerm_true()) and
-                            (not secondStepTaken or model->evaluate(getNextVersion(transition)) == logic.getTerm_true()));
+                        (not firstStepTaken or model->evaluate(transition) == logic.getTerm_true()) and
+                        (not secondStepTaken or model->evaluate(getNextVersion(transition)) == logic.getTerm_true()));
                     result.refinedTarget = refineTwoStepTarget(
-                            from, logic.mkAnd(previousTransition, translatedPreviousTransition), goal, *model);
+                        from, logic.mkAnd(previousTransition, translatedPreviousTransition), goal, *model);
                     result.steps = firstStepTaken + secondStepTaken;
                     // MB: Refined steps are computed from the whole formula representing 0-2 steps.
                     //     It might be possible that the step count is not correct ?!
@@ -1226,7 +1226,7 @@ TPABasic::QueryResult TPABasic::reachabilityQuery(PTRef from, PTRef to, unsigned
                 }
                 assert(isReachable(subQueryRes));
                 TRACE(3, "Exact: Second half was reachable, reachable states are "
-                        << extractReachableTarget(subQueryRes).x)
+                             << extractReachableTarget(subQueryRes).x)
                 // both halves of the found path are feasible => this path is feasible!
                 subQueryRes.steps += stepsToMidpoint;
                 queryCache[power].insert({{from, to}, subQueryRes});
@@ -1307,8 +1307,8 @@ class TransitionSystemNetworkManager {
 
 public:
     TransitionSystemNetworkManager(TPAEngine & owner, ChcDirectedGraph const & graph)
-            : owner(owner), logic(owner.logic), graph(graph),
-              adjacencyRepresentation(AdjacencyListsGraphRepresentation::from(graph)) {}
+        : owner(owner), logic(owner.logic), graph(graph),
+          adjacencyRepresentation(AdjacencyListsGraphRepresentation::from(graph)) {}
 
     VerificationResult solve() &&;
 
@@ -1424,9 +1424,9 @@ void TransitionSystemNetworkManager::initNetwork() {
         if (vid != graph.getExit()) {
             auto outGoingEdges = adjacencyRepresentation.getOutgoingEdgesFor(vid);
             outGoingEdges.erase(
-                    std::remove_if(outGoingEdges.begin(), outGoingEdges.end(),
-                                   [this](EId eid) { return graph.getSource(eid) == graph.getTarget(eid); }),
-                    outGoingEdges.end());
+                std::remove_if(outGoingEdges.begin(), outGoingEdges.end(),
+                               [this](EId eid) { return graph.getSource(eid) == graph.getTarget(eid); }),
+                outGoingEdges.end());
             for (auto edge : outGoingEdges) {
                 getNode(graph.getTarget(edge)).parents.push(edge);
             }
@@ -1434,9 +1434,9 @@ void TransitionSystemNetworkManager::initNetwork() {
         if (vid != graph.getEntry()) {
             auto incomingEdges = adjacencyRepresentation.getIncomingEdgesFor(vid);
             incomingEdges.erase(
-                    std::remove_if(incomingEdges.begin(), incomingEdges.end(),
-                                   [this](EId eid) { return graph.getSource(eid) == graph.getTarget(eid); }),
-                    incomingEdges.end());
+                std::remove_if(incomingEdges.begin(), incomingEdges.end(),
+                               [this](EId eid) { return graph.getSource(eid) == graph.getTarget(eid); }),
+                incomingEdges.end());
             for (auto edge : incomingEdges) {
                 getNode(graph.getSource(edge)).children.push(edge);
             }
@@ -1651,13 +1651,13 @@ PTRef TPABase::getSafetyExplanation() const {
     }
     auto power = explanation.power;
     PTRef transitionInvariant = explanation.relationType == TPAType::LESS_THAN
-                                ? getPower(power, explanation.relationType)
-                                : logic.mkOr(shiftOnlyNextVars(getPower(power, TPAType::LESS_THAN)),
-                                             logic.mkAnd(getPower(power, TPAType::LESS_THAN),
-                                                         getNextVersion(getPower(power, TPAType::EQUALS))));
+                                    ? getPower(power, explanation.relationType)
+                                    : logic.mkOr(shiftOnlyNextVars(getPower(power, TPAType::LESS_THAN)),
+                                                 logic.mkAnd(getPower(power, TPAType::LESS_THAN),
+                                                             getNextVersion(getPower(power, TPAType::EQUALS))));
     return safeSupersetOfInitialStates(
-            getInit(), transitionInvariant,
-            getNextVersion(getQuery(), explanation.relationType == TPAType::LESS_THAN ? 1 : 2));
+        getInit(), transitionInvariant,
+        getNextVersion(getQuery(), explanation.relationType == TPAType::LESS_THAN ? 1 : 2));
 }
 
 PTRef TPABase::getInductiveInvariant() const {
@@ -1667,11 +1667,11 @@ PTRef TPABase::getInductiveInvariant() const {
         switch (explanation.fixedPointType) {
             case SafetyExplanation::FixedPointType::LEFT:
                 return logic.mkNot(QuantifierElimination(logic).keepOnly(
-                        logic.mkAnd(transitionAbstraction, getNextVersion(query)), getStateVars(0)));
+                    logic.mkAnd(transitionAbstraction, getNextVersion(query)), getStateVars(0)));
             case SafetyExplanation::FixedPointType::RIGHT:
                 return getNextVersion(
-                        QuantifierElimination(logic).keepOnly(logic.mkAnd(init, transitionAbstraction), getStateVars(1)),
-                        -1);
+                    QuantifierElimination(logic).keepOnly(logic.mkAnd(init, transitionAbstraction), getStateVars(1)),
+                    -1);
         }
     } else if (explanation.relationType == TPAType::EQUALS) {
         if (explanation.invariantType == SafetyExplanation::TransitionInvariantType::RESTRICTED_TO_QUERY) {
@@ -1697,7 +1697,7 @@ PTRef TPASplit::inductiveInvariantFromEqualsTransitionInvariant() const {
                                            logic.mkAnd(getLessThanPower(power), getNextVersion(getExactPower(power))));
     //    std::cout << "Transition invariant: " << logic.printTerm(transitionInvariant) << std::endl;
     PTRef stateInvariant =
-            QuantifierElimination(logic).eliminate(logic.mkAnd(init, transitionInvariant), getStateVars(0));
+        QuantifierElimination(logic).eliminate(logic.mkAnd(init, transitionInvariant), getStateVars(0));
     //    std::cout << "After eliminating current state vars: " << logic.printTerm(stateInvariant) << std::endl;
     stateInvariant = QuantifierElimination(logic).eliminate(stateInvariant, getStateVars(1));
     stateInvariant = getNextVersion(stateInvariant, -2);
