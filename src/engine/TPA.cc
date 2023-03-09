@@ -1344,7 +1344,7 @@ private:
 
     vec<SymRef> getGraphStarts() const {
         vec<SymRef> graphStarts;
-        for (auto outgoingEdge: adjacencyRepresentation.getOutgoingEdgesFor(graph.getEntry())) {
+        for (auto outgoingEdge : adjacencyRepresentation.getOutgoingEdgesFor(graph.getEntry())) {
             graphStarts.push(graph.getTarget(outgoingEdge));
         }
         return graphStarts;
@@ -1352,7 +1352,7 @@ private:
 
     vec<SymRef> getGraphEnds() const {
         vec<SymRef> graphEnds;
-        for (auto incomingEdge:adjacencyRepresentation.getIncomingEdgesFor(graph.getExit())) {
+        for (auto incomingEdge : adjacencyRepresentation.getIncomingEdgesFor(graph.getExit())) {
             graphEnds.push(graph.getSource(incomingEdge));
         }
         return graphEnds;
