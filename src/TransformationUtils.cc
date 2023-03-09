@@ -91,7 +91,10 @@ bool strongConnection(std::unordered_set<int> & visitedVertices, std::unordered_
     visitedVertices.insert(node.x);
     verticesOnStack.insert(node.x);
     auto const & outEdges = graphRepresentation.getOutgoingEdgesFor(node);
-    if (size(outEdges) <= 1) { return false; }
+    if (size(outEdges) <= 1) {
+        verticesOnStack.erase(node.x);
+        return false;
+    }
 
     for (EId eid : outEdges) {
         if (graph.getTarget(eid) != node) {
@@ -107,6 +110,7 @@ bool strongConnection(std::unordered_set<int> & visitedVertices, std::unordered_
     }
 
     verticesOnStack.erase(node.x);
+
     return false;
 }
 
