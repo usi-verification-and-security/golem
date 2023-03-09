@@ -1344,16 +1344,16 @@ private:
 
     vec<SymRef> getGraphStarts() const {
         vec<SymRef> graphStarts;
-        for (uint i = 0; i < adjacencyRepresentation.getOutgoingEdgesFor(graph.getEntry()).size(); i++) {
-            graphStarts.push(graph.getTarget(adjacencyRepresentation.getOutgoingEdgesFor(graph.getEntry())[i]));
+        for (auto outgoingEdge: adjacencyRepresentation.getOutgoingEdgesFor(graph.getEntry())) {
+            graphStarts.push(graph.getTarget(outgoingEdge));
         }
         return graphStarts;
     }
 
     vec<SymRef> getGraphEnds() const {
         vec<SymRef> graphEnds;
-        for (uint i = 0; i < adjacencyRepresentation.getIncomingEdgesFor(graph.getExit()).size(); i++) {
-            graphEnds.push(graph.getSource(adjacencyRepresentation.getIncomingEdgesFor(graph.getExit())[i]));
+        for (auto incomingEdge:adjacencyRepresentation.getIncomingEdgesFor(graph.getExit())) {
+            graphEnds.push(graph.getSource(incomingEdge));
         }
         return graphEnds;
     }

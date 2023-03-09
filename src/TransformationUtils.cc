@@ -85,37 +85,36 @@ std::unique_ptr<TransitionSystem> toTransitionSystem(ChcDirectedGraph const & gr
     return ts;
 }
 
-bool strongConnection(std::set<int> & visitedVertices, std::set<int> & verticesOnStack,
-                      AdjacencyListsGraphRepresentation & graphRepresentation, ChcDirectedGraph const & graph,
+bool strongConnection(std::unordered_set<int> & visitedVertices, std::unordered_set<int> & verticesOnStack,
+                      AdjacencyListsGraphRepresentation const & graphRepresentation, ChcDirectedGraph const & graph,
                       SymRef node) {
     visitedVertices.insert(node.x);
     verticesOnStack.insert(node.x);
     auto const & outEdges = graphRepresentation.getOutgoingEdgesFor(node);
+    if (size(outEdges) <= 1) { return false; }
 
     for (EId eid : outEdges) {
-        if (size(outEdges) <= 1) { return false; }
         if (graph.getTarget(eid) != node) {
-            auto nextVertice = graph.getTarget(eid);
-            if (visitedVertices.find(nextVertice.x) == visitedVertices.end()) {
-                bool loop_found =
-                    strongConnection(visitedVertices, verticesOnStack, graphRepresentation, graph, nextVertice);
-                if (loop_found) { return true; }
-            } else if (verticesOnStack.find(nextVertice.x) != verticesOnStack.end()) {
+            auto nextVertex = graph.getTarget(eid);
+            if (visitedVertices.find(nextVertex.x) == visitedVertices.end()) {
+                bool loopFound =
+                    strongConnection(visitedVertices, verticesOnStack, graphRepresentation, graph, nextVertex);
+                if (loopFound) { return true; }
+            } else if (verticesOnStack.find(nextVertex.x) != verticesOnStack.end()) {
                 return true;
             }
         }
     }
 
     verticesOnStack.erase(node.x);
-
     return false;
 }
 
 bool TarjanLoopDetection(ChcDirectedGraph const & graph) {
     auto graphRepresentation = AdjacencyListsGraphRepresentation::from(graph);
     auto vertices = reversePostOrder(graph, graphRepresentation);
-    std::set<int> visitedVertices;
-    std::set<int> verticesOnStack;
+    std::unordered_set<int> visitedVertices;
+    std::unordered_set<int> verticesOnStack;
 
     for (uint i = 1; i < vertices.size() - 1; i++) {
         if (visitedVertices.find(vertices[i].x) == visitedVertices.end()) {
