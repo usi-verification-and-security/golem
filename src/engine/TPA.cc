@@ -1056,7 +1056,9 @@ bool TPASplit::checkExactFixedPoint(unsigned short power) {
 
 bool TPABase::verifyKinductiveInvariant(PTRef fla, unsigned long k) const {
     constexpr int trace_level = 1;
-    TRACE(trace_level, "Verifying k-inductive invariant for k = " << k) { // Inductive case:
+    TRACE(trace_level, "Verifying k-inductive invariant for k = " << k)
+
+    { // Inductive case:
         SMTConfig config;
         MainSolver solver(logic, config, "k-induction inductive step checker");
         for (unsigned long i = 0; i < k; ++i) {
