@@ -506,3 +506,31 @@ TEST_F(TPATest, test_transformContractVertex_unsafe) {
     TPAEngine engine(*logic, options);
     solveSystem(clauses, engine, VerificationAnswer::UNSAFE, true);
 }
+
+TEST_F(TPATest, test_trivialSystem_unsafe) {
+    Options options;
+    options.addOption(Options::LOGIC, "QF_LIA");
+    options.addOption(Options::COMPUTE_WITNESS, "true");
+    options.addOption(Options::ENGINE, TPAEngine::SPLIT_TPA);
+    std::vector<ChClause> clauses{
+        { // x > 0  => false
+            ChcHead{UninterpretedPredicate{logic->getTerm_false()}},
+            ChcBody{{logic->mkGt(xp, zero)}, {}}
+        }};
+    TPAEngine engine(*logic, options);
+    solveSystem(clauses, engine, VerificationAnswer::UNSAFE, true);
+}
+
+TEST_F(TPATest, test_trivialSystem_safe) {
+    Options options;
+    options.addOption(Options::LOGIC, "QF_LIA");
+    options.addOption(Options::COMPUTE_WITNESS, "true");
+    options.addOption(Options::ENGINE, TPAEngine::SPLIT_TPA);
+    std::vector<ChClause> clauses{
+        { // x > 0  and x < -1 => false
+            ChcHead{UninterpretedPredicate{logic->getTerm_false()}},
+            ChcBody{{logic->mkAnd(logic->mkGt(xp, zero), logic->mkLt(xp, logic->mkNeg(one)))}, {}}
+        }};
+    TPAEngine engine(*logic, options);
+    solveSystem(clauses, engine, VerificationAnswer::SAFE, true);
+}
