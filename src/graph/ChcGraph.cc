@@ -374,6 +374,14 @@ std::vector<SymRef> ChcDirectedGraph::getVertices() const {
     return std::vector<SymRef>(vertices.begin(), vertices.end());
 }
 
+std::vector<EId> ChcDirectedGraph::getEdges() const {
+    std::vector<EId> retEdges;
+    forEachEdge([&](DirectedEdge const & edge){
+        retEdges.push_back(edge.id);
+    });
+    return retEdges;
+}
+
 std::vector<SymRef> ChcDirectedHyperGraph::getVertices() const {
     std::unordered_set<SymRef, SymRefHash> vertices;
     forEachEdge([&](DirectedHyperEdge const & edge){

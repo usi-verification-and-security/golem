@@ -139,6 +139,7 @@ public:
     }
 
     std::vector<SymRef> getVertices() const;
+    std::vector<EId> getEdges() const;
 
     Logic & getLogic() const { return logic; }
     void toDot(std::ostream& out, bool full = false) const;
