@@ -10,6 +10,7 @@
 #include "FalseClauseRemoval.h"
 #include "MultiEdgeMerger.h"
 #include "NodeEliminator.h"
+#include "RemoveUnreachableNodes.h"
 #include "TransformationPipeline.h"
 
 namespace Transformations {
@@ -19,6 +20,7 @@ inline TransformationPipeline towardsTransitionSystems() {
     stages.push_back(std::make_unique<MultiEdgeMerger>());
     stages.push_back(std::make_unique<NonLoopEliminator>());
     stages.push_back(std::make_unique<FalseClauseRemoval>());
+    stages.push_back(std::make_unique<RemoveUnreachableNodes>());
     stages.push_back(std::make_unique<MultiEdgeMerger>());
     TransformationPipeline pipeline(std::move(stages));
     return pipeline;
