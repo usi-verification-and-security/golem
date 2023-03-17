@@ -493,3 +493,14 @@ bool isSimpleNode(
     auto const & incoming = adjacencyRepresentation.getIncomingEdgesFor(vertex);
     return incoming.size() == 1 or outgoing.size() == 1;
 }
+
+std::unique_ptr<ChcDirectedHyperGraph> ChcDirectedHyperGraph::makeEmpty(Logic & logic) {
+    NonlinearCanonicalPredicateRepresentation predicateRepresentation(logic);
+    predicateRepresentation.addRepresentation(logic.getSym_true(), {});
+    predicateRepresentation.addRepresentation(logic.getSym_false(), {});
+    return std::make_unique<ChcDirectedHyperGraph>(
+        std::vector<DirectedHyperEdge>{},
+        std::move(predicateRepresentation),
+        logic
+        );
+}

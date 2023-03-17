@@ -221,6 +221,8 @@ public:
         }
     };
 
+    static std::unique_ptr<ChcDirectedHyperGraph> makeEmpty(Logic & logic);
+
     struct VertexContractionResult {
         std::vector<DirectedHyperEdge> incoming;
         std::vector<DirectedHyperEdge> outgoing;
