@@ -9,6 +9,22 @@
 Transformer::TransformationResult RemoveUnreachableNodes::transform(std::unique_ptr<ChcDirectedHyperGraph> graph) {
     auto adjacencyLists = AdjacencyListsGraphRepresentation::from(*graph);
     auto allNodes = adjacencyLists.getNodes();
+    auto & logic = graph->getLogic();
+
+    if (std::find(allNodes.begin(), allNodes.end(), graph->getExit()) == allNodes.end()) {
+        // There is no edge to exit, all edges can be removed
+        // We return empty graph, and remember all removed vertices for backtranslation
+
+
+        return Transformer::TransformationResult(
+            ChcDirectedHyperGraph::makeEmpty(logic),
+            std::make_unique<RemoveUnreachableNodes::BackTranslator>(
+                graph->getLogic(),
+                graph->predicateRepresentation(),
+                std::move(allNodes)
+            )
+        );
+    }
 
     std::unordered_set<SymRef, SymRefHash> backwardReachable;
 
