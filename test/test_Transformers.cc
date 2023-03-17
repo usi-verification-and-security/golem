@@ -347,3 +347,32 @@ TEST_F(Transformer_test, test_NonLoopEliminator_NoElimination) {
     auto edges = transformedGraph->getEdges();
     ASSERT_EQ(edges.size(), 3);
 }
+
+TEST_F(Transformer_test, test_NodeEliminator_PredicateWithoutVariables) {
+    SymRef t_sym = logic.declareFun("t", logic.getSort_bool(), {});
+    PTRef t = logic.mkUninterpFun(t_sym, {});
+    ChcSystem system;
+    system.addUninterpretedPredicate(s1);
+    system.addClause( // x' >= 0 => S1(x')
+        ChcHead{UninterpretedPredicate{nextS1}},
+        ChcBody{{logic.mkGeq(xp, zero)}, {}});
+    system.addClause( // S1(x) and x < 0 => S2(x)
+        ChcHead{UninterpretedPredicate{currentS2}},
+        ChcBody{{logic.mkLt(x, zero)}, {UninterpretedPredicate{currentS1}}});
+    system.addClause( // S2(x) => T
+        ChcHead{UninterpretedPredicate{t}},
+        ChcBody{{logic.getTerm_true()}, {UninterpretedPredicate{currentS2}}});
+    system.addClause( // T => false
+        ChcHead{UninterpretedPredicate{logic.getTerm_false()}},
+        ChcBody{{logic.getTerm_true()}, {UninterpretedPredicate{t}}}
+    );
+    auto hyperGraph = systemToGraph(system);
+    auto originalGraph = *hyperGraph;
+    SimpleNodeEliminator transformation;
+    auto [transformedGraph, backtranslator] = transformation.transform(std::move(hyperGraph));
+    ASSERT_EQ(transformedGraph->getEdges().size(), 1);
+    ValidityWitness witness = backtranslator->translate(ValidityWitness());
+    Validator validator(logic);
+    auto res = validator.validate(originalGraph, VerificationResult(VerificationAnswer::SAFE, witness));
+    ASSERT_EQ(res, Validator::Result::VALIDATED);
+}

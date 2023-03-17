@@ -148,7 +148,9 @@ ValidityWitness NodeEliminator::BackTranslator::translate(ValidityWitness witnes
         ipartitions_t Amask = 1;
         itpContext->getSingleInterpolant(itps, Amask);
         PTRef vertexSolution = manager.targetFormulaToBase(itps[0]);
-        PTRef predicate = manager.sourceFormulaToBase(predicateRepresentation.getSourceTermFor(vertex));
+        PTRef predicateSourceRepresentation = predicateRepresentation.getSourceTermFor(vertex);
+        // TODO: Fix handling of 0-ary predicates
+        PTRef predicate = logic.isVar(predicateSourceRepresentation) ? predicateSourceRepresentation : manager.sourceFormulaToBase(predicateSourceRepresentation);
         assert(definitions.count(predicate) == 0);
         definitions.insert({predicate, vertexSolution});
     }
