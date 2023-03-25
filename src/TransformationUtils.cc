@@ -1,6 +1,8 @@
-//
-// Created by Martin Blicha on 01.06.21.
-//
+/*
+ * Copyright (c) 2021-2023, Martin Blicha <martin.blicha@gmail.com>
+ *
+ * SPDX-License-Identifier: MIT
+ */
 
 #include "TransformationUtils.h"
 #include "QuantifierElimination.h"
@@ -195,4 +197,165 @@ PTRef transitionFormulaInSystemType(SystemType const & systemType, EdgeVariables
                    std::inserter(subMap, subMap.end()),
                    [](PTRef key, PTRef value) { return std::make_pair(key, value); });
     return TermUtils(logic).varSubstitute(edgeLabel, subMap);
+}
+
+/*
+ * General transformation from any Linear CHC system to a transition system 
+ */
+
+namespace {
+struct VarPosition {
+    SymRef vertex;
+    uint32_t pos;
+};
+struct VarPositionHasher {
+    std::size_t operator()(VarPosition pos) const {
+        std::hash<std::size_t> hasher;
+        std::size_t res = 0;
+        res ^= hasher(pos.vertex.x) + 0x9e3779b9 + (res<<6) + (res>>2);
+        res ^= hasher(pos.pos) + 0x9e3779b9 + (res<<6) + (res>>2);
+        return res;
+    }
+};
+
+bool operator==(VarPosition pos1, VarPosition pos2) { return pos1.vertex == pos2.vertex and pos1.pos == pos2.pos; }
+
+using LocationVarMap = std::unordered_map<SymRef, PTRef, SymRefHash>;
+using PositionVarMap = std::unordered_map<VarPosition, PTRef, VarPositionHasher>;
+
+struct EdgeTranslator {
+    ChcDirectedGraph const & graph;
+    LocationVarMap const & locationVarMap;
+    PositionVarMap const & positionVarMap;
+
+    PTRef translateEdge(DirectedEdge const & edge) const;
+};
+
+}
+
+PTRef EdgeTranslator::translateEdge(DirectedEdge const & edge) const {
+    auto source = edge.from;
+    auto target = edge.to;
+    PTRef label = edge.fla.fla;
+    TermUtils::substitutions_map substitutionsMap;
+    Logic & logic = graph.getLogic();
+    TimeMachine timeMachine(logic);
+
+    // TODO: prepare the substitution map in advance!
+    auto const & predicateRepresentation = graph.getPredicateRepresentation();
+    PTRef sourcePredicate = predicateRepresentation.getSourceTermFor(source);
+    auto size = logic.getPterm(sourcePredicate).nargs();
+    for (unsigned int i = 0; i < size; ++i) {
+        PTRef originalVar = logic.getPterm(sourcePredicate)[i];
+        VarPosition varPosition {source, i};
+        auto it = positionVarMap.find(varPosition);
+        assert(it != positionVarMap.end());
+        substitutionsMap.insert({originalVar, it->second});
+    }
+
+    PTRef targetPredicate = predicateRepresentation.getTargetTermFor(target);
+    size = logic.getPterm(targetPredicate).nargs();
+    for (unsigned int i = 0; i < size; ++i) {
+        PTRef originalVar = logic.getPterm(targetPredicate)[i];
+        VarPosition varPosition {target, i};
+        auto it = positionVarMap.find(varPosition);
+        assert(it != positionVarMap.end());
+        substitutionsMap.insert({originalVar, timeMachine.sendVarThroughTime(it->second, 1)});
+    }
+
+    // Translate the constraint
+    PTRef translatedConstraint = TermUtils(logic).varSubstitute(label, substitutionsMap);
+    PTRef sourceLocationVar = source == graph.getEntry() ? logic.getTerm_true() : locationVarMap.at(source);
+    PTRef targetLocationVar = locationVarMap.at(target);
+    PTRef updatedLocation = [&]() {
+        vec<PTRef> args;
+        args.capacity(locationVarMap.size() * 2);
+        for (auto && entry : locationVarMap) {
+            if (entry.second != targetLocationVar) {
+                args.push(logic.mkNot(timeMachine.sendVarThroughTime(entry.second, 1)));
+            }
+            if (entry.second != sourceLocationVar) {
+                args.push(logic.mkNot(entry.second));
+            }
+        }
+        return logic.mkAnd(std::move(args));
+    }();
+    PTRef frameEqualities = [&]() {
+        vec<PTRef> equalities;
+        for (auto && entry : positionVarMap) {
+            if (entry.first.vertex == target) { continue; }
+            PTRef var = timeMachine.sendVarThroughTime(entry.second, 1);
+            equalities.push(logic.mkEq(var, logic.getDefaultValuePTRef(var)));
+        }
+        return logic.mkAnd(std::move(equalities));
+    }();
+    vec<PTRef> components {
+        sourceLocationVar,
+        translatedConstraint,
+        timeMachine.sendVarThroughTime(targetLocationVar, 1),
+        updatedLocation,
+        frameEqualities
+    };
+    return logic.mkAnd(std::move(components));
+}
+
+std::unique_ptr<TransitionSystem> fromGeneralLinearCHCSystem(ChcDirectedGraph const & graph) {
+    Logic & logic = graph.getLogic();
+    TimeMachine timeMachine(logic);
+    auto vertices = graph.getVertices();
+    // MB: It is useful to have exit location, so we do not remove exit from the vertices
+    vertices.erase(std::remove_if(vertices.begin(), vertices.end(), [&](auto vertex) {
+        return vertex == graph.getEntry();
+    }));
+    LocationVarMap locationVars;
+    locationVars.reserve(vertices.size());
+    for (auto vertex : vertices) {
+        auto varName = std::string(".loc_") + std::to_string(vertex.x);
+        locationVars.insert({vertex, timeMachine.getVarVersionZero(varName, logic.getSort_bool())});
+    }
+
+    PositionVarMap argVars;
+    for (auto vertex : vertices) {
+        auto args_count = logic.getSym(vertex).nargs();
+        for (uint32_t i = 0; i < args_count; ++i) {
+            VarPosition pos = {vertex, i};
+            auto varName = std::string(".arg_") + std::to_string(vertex.x) + '_' + std::to_string(i);
+            PTRef var = timeMachine.getVarVersionZero(varName, logic.getSym(vertex)[i]);
+            argVars.insert({pos, var});
+        }
+    }
+
+    EdgeTranslator edgeTranslator{graph, locationVars, argVars};
+    vec<PTRef> transitionRelationComponent;
+    graph.forEachEdge([&](auto const & edge) {
+        transitionRelationComponent.push(edgeTranslator.translateEdge(edge));
+    });
+
+    PTRef transitionRelation = logic.mkOr(std::move(transitionRelationComponent));
+    PTRef initialStates = [&]() -> PTRef {
+        vec<PTRef> negatedLocations;
+        negatedLocations.capacity(locationVars.size());
+        for (auto && entry : locationVars) {
+            negatedLocations.push(logic.mkNot(entry.second));
+        }
+        return logic.mkAnd(std::move(negatedLocations));
+    }();
+
+    PTRef badStates = locationVars.at(graph.getExit());
+
+    vec<PTRef> stateVars = [&locationVars,&argVars]() {
+        vec<PTRef> ret;
+        ret.capacity(locationVars.size() + argVars.size());
+        for (auto && entry : locationVars) {
+            ret.push(entry.second);
+        }
+        for (auto && entry : argVars) {
+            ret.push(entry.second);
+        }
+        return ret;
+    }();
+    // TODO: Collect auxiliary variables
+    vec<PTRef> auxVars {};
+    auto systemType = std::make_unique<SystemType>(stateVars, auxVars, logic);
+    return std::make_unique<TransitionSystem>(logic, std::move(systemType), initialStates, transitionRelation, badStates);
 }

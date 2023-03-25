@@ -1,6 +1,8 @@
-//
-// Created by Martin Blicha on 10.08.20.
-//
+/*
+ * Copyright (c) 2020-2023, Martin Blicha <martin.blicha@gmail.com>
+ *
+ * SPDX-License-Identifier: MIT
+ */
 
 #ifndef OPENSMT_TRANSFORMATIONUTILS_H
 #define OPENSMT_TRANSFORMATIONUTILS_H
@@ -15,6 +17,8 @@ bool isTransitionSystem(ChcDirectedGraph const & graph);
 bool isTransitionSystemDAG(ChcDirectedGraph const & graph);
 
 std::unique_ptr<TransitionSystem> toTransitionSystem(ChcDirectedGraph const & graph, Logic & logic);
+
+std::unique_ptr<TransitionSystem> fromGeneralLinearCHCSystem(ChcDirectedGraph const & graph);
 
 struct EdgeVariables {
     std::vector<PTRef> stateVars;
