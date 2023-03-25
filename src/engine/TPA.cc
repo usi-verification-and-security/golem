@@ -10,7 +10,6 @@
 #include "QuantifierElimination.h"
 #include "TransformationUtils.h"
 #include "TransitionSystem.h"
-#include "graph/GraphTransformations.h"
 #include "transformers/BasicTransformationPipelines.h"
 
 #define TRACE_LEVEL 0

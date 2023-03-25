@@ -49,7 +49,6 @@ target_sources(golem_lib
     PRIVATE QuantifierElimination.cc
     PRIVATE graph/ChcGraph.cc
     PRIVATE graph/ChcGraphBuilder.cc
-    PRIVATE graph/GraphTransformations.cc
     PRIVATE transformers/CommonUtils.cc
     PRIVATE transformers/SimpleChainSummarizer.cc
     PRIVATE transformers/NodeEliminator.cc
