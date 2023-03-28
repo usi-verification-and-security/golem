@@ -6,6 +6,7 @@
 
 #include "Kind.h"
 
+#include "Common.h"
 #include "QuantifierElimination.h"
 #include "TermUtils.h"
 #include "transformers/BasicTransformationPipelines.h"
@@ -25,6 +26,9 @@ VerificationResult Kind::solve(ChcDirectedHyperGraph const & graph) {
 }
 
 VerificationResult Kind::solve(ChcDirectedGraph const & graph) {
+    if (isTrivial(graph)) {
+        return solveTrivial(graph, logic);
+    }
     if (isTransitionSystem(graph)) {
         return solveTransitionSystem(graph);
     }

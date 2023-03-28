@@ -199,6 +199,20 @@ PTRef transitionFormulaInSystemType(SystemType const & systemType, EdgeVariables
     return TermUtils(logic).varSubstitute(edgeLabel, subMap);
 }
 
+bool isTrivial(ChcDirectedGraph const & graph) {
+    auto vertices = graph.getVertices();
+    assert(not vertices.empty()); // NOTE: We always put Entry in the vertices, even if there are no edges
+    if (vertices.size() == 1) {
+        assert(vertices[0] == graph.getEntry());
+        return true;
+    }
+    if (vertices.size() != 2) { return false; }
+    // We have two vertices, they should be Entry and Exit
+    return (vertices[0] == graph.getEntry() or vertices[0] == graph.getExit()) and
+           (vertices[1] == graph.getEntry() or vertices[1] == graph.getExit());
+}
+
+
 /*
  * General transformation from any Linear CHC system to a transition system 
  */

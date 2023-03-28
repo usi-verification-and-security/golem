@@ -43,10 +43,6 @@ public:
 private:
     VerificationResult solve(const ChcDirectedGraph & system);
 
-    bool isTrivial(ChcDirectedGraph const & graph);
-
-    VerificationResult solveTrivial(ChcDirectedGraph const & graph);
-
     std::unique_ptr<TPABase> mkSolver();
 
     VerificationResult solveTransitionSystemGraph(ChcDirectedGraph const & graph);
