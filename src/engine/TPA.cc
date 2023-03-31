@@ -27,9 +27,18 @@ std::unique_ptr<TPABase> TPAEngine::mkSolver() {
         return std::unique_ptr<TPABase>(new TPASplit(logic, options));
     } else if (val == TPA) {
         return std::unique_ptr<TPABase>(new TPABasic(logic, options));
-    } else {
-        throw std::logic_error("Unexpected situation");
     }
+    std::string tmp;
+    std::stringstream ss(options.getOption(Options::ENGINE));
+    while (getline(ss, tmp, ',')) {
+        if (tmp == SPLIT_TPA) {
+            return std::unique_ptr<TPABase>(new TPASplit(logic, options));
+        } else if (tmp == TPA) {
+            return std::unique_ptr<TPABase>(new TPABasic(logic, options));
+        }
+    }
+
+    throw std::logic_error("Unexpected situation");
 }
 
 VerificationResult TPAEngine::solve(ChcDirectedHyperGraph & graph) {

@@ -9,6 +9,7 @@
 
 #include "ChcSystem.h"
 #include "Options.h"
+#include "transformers/Transformer.h"
 
 #include <engine/Engine.h> // TODO: remove this and create an engine factory
 
@@ -100,6 +101,12 @@ private:
 
     void reportError(std::string msg);
 
+    void solve(std::string engine,
+               std::unique_ptr<ChcDirectedHyperGraph>& hyperGraph,
+               bool validateWitness,
+               bool printWitness,
+               std::unique_ptr<WitnessBackTranslator>& translator);
+
     SRef sortFromASTNode(ASTNode const & node) const;
 
     PTRef parseTerm(ASTNode const& node);
@@ -110,7 +117,7 @@ private:
 
     bool isUninterpretedPredicate(PTRef ref) const;
 
-    std::unique_ptr<Engine> getEngine() const;
+    std::unique_ptr<Engine> getEngine(std::string engineSte) const;
 };
 
 class ChcInterpreter {

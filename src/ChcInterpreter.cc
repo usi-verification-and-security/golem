@@ -4,6 +4,10 @@
  * SPDX-License-Identifier: MIT
  */
 
+#include <signal.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/wait.h>
 #include <engine/Bmc.h>
 #include <engine/Kind.h>
 #include <engine/Lawi.h>
@@ -307,29 +311,16 @@ PTRef ChcInterpreterContext::parseTerm(const ASTNode & termNode) {
     }
 }
 
-void ChcInterpreterContext::interpretCheckSat() {
-    bool validateWitness = opts.hasOption(Options::VALIDATE_RESULT);
-    assert(not validateWitness || opts.getOption(Options::VALIDATE_RESULT) == std::string("true"));
-    bool printWitness = opts.hasOption(Options::PRINT_WITNESS);
-    assert(not printWitness || opts.getOption(Options::PRINT_WITNESS) == std::string("true"));
-
-//    ChcPrinter(logic).print(*system, std::cout);
-    auto normalizedSystem = Normalizer(logic).normalize(*system);
-    auto hypergraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
-    std::unique_ptr<ChcDirectedHyperGraph> originalGraph {nullptr};
-    if (validateWitness) { // Store copy of the original graph for validating purposes
-        originalGraph = std::make_unique<ChcDirectedHyperGraph>(*hypergraph);
-    }
-
-    TransformationPipeline::pipeline_t transformations;
-    transformations.push_back(std::make_unique<SimpleChainSummarizer>());
-    transformations.push_back(std::make_unique<RemoveUnreachableNodes>());
-    transformations.push_back(std::make_unique<SimpleNodeEliminator>());
-    auto [newGraph, translator] = TransformationPipeline(std::move(transformations)).transform(std::move(hypergraph));
-    hypergraph = std::move(newGraph);
-
-    auto engine = getEngine();
+void ChcInterpreterContext::solve(
+        std::string engine_s,
+        std::unique_ptr<ChcDirectedHyperGraph>& hypergraph,
+        bool validateWitness,
+        bool printWitness,
+        std::unique_ptr<WitnessBackTranslator>& translator
+    ){
+    auto engine = getEngine(engine_s);
     auto result = engine->solve(*hypergraph);
+    std::unique_ptr<ChcDirectedHyperGraph> originalGraph {nullptr};
     switch (result.getAnswer()) {
         case VerificationAnswer::SAFE: {
             std::cout << "sat" << std::endl;
@@ -342,6 +333,10 @@ void ChcInterpreterContext::interpretCheckSat() {
         case VerificationAnswer::UNKNOWN:
             std::cout << "unknown" << std::endl;
             return;
+    }
+
+    if (validateWitness) { // Store copy of the original graph for validating purposes
+        originalGraph = std::make_unique<ChcDirectedHyperGraph>(*hypergraph);
     }
     if (validateWitness || printWitness) {
         result = translator->translate(std::move(result));
@@ -365,6 +360,69 @@ void ChcInterpreterContext::interpretCheckSat() {
             }
         }
     }
+}
+
+void ChcInterpreterContext::interpretCheckSat() {
+    bool validateWitness = opts.hasOption(Options::VALIDATE_RESULT);
+    assert(not validateWitness || opts.getOption(Options::VALIDATE_RESULT) == std::string("true"));
+    bool printWitness = opts.hasOption(Options::PRINT_WITNESS);
+    assert(not printWitness || opts.getOption(Options::PRINT_WITNESS) == std::string("true"));
+
+    //    ChcPrinter(logic).print(*system, std::cout);
+    auto normalizedSystem = Normalizer(logic).normalize(*system);
+    auto hypergraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
+    std::unique_ptr<ChcDirectedHyperGraph> originalGraph {nullptr};
+    if (validateWitness) { // Store copy of the original graph for validating purposes
+        originalGraph = std::make_unique<ChcDirectedHyperGraph>(*hypergraph);
+    }
+
+    TransformationPipeline::pipeline_t transformations;
+    transformations.push_back(std::make_unique<SimpleChainSummarizer>());
+    transformations.push_back(std::make_unique<RemoveUnreachableNodes>());
+    transformations.push_back(std::make_unique<SimpleNodeEliminator>());
+    auto [newGraph, translator] = TransformationPipeline(std::move(transformations)).transform(std::move(hypergraph));
+    hypergraph = std::move(newGraph);
+    if(opts.getOption(Options::ENGINE).find(',')  != std::string::npos) {
+        std::string tmp;
+        std::vector<std::string> engines;
+        std::stringstream ss(opts.getOption(Options::ENGINE));
+        while(getline(ss, tmp, ',')){
+            engines.push_back(tmp);
+        }
+
+
+        pid_t parent = getpid();
+        std::vector<pid_t> processes;
+        for(uint i = 0; i < engines.size(); i++){
+            if (getpid() == parent) {
+                processes.push_back(fork());
+            }
+            if (processes[i] == 0) {
+                printf("%s process\n", engines[i].c_str());
+                solve(engines[i], hypergraph, validateWitness, printWitness, translator);
+                return ;
+            }
+        }
+
+        int status;
+        while (true){
+            for(auto p: processes){
+                pid_t result = waitpid(p, &status, WNOHANG);
+                if(result != 0 && result != -1) {
+                    for(auto k_p: processes){
+                        kill(k_p, SIGKILL);
+                    }
+                    return;
+                }
+            }
+        }
+    }
+
+    solve(opts.hasOption(Options::ENGINE) ? opts.getOption(Options::ENGINE) : "spacer",
+          hypergraph,
+          validateWitness,
+          printWitness,
+          translator);
 }
 
 void ChcInterpreterContext::reportError(std::string msg) {
@@ -429,8 +487,7 @@ bool ChcInterpreterContext::isUninterpretedPredicate(PTRef ref) const {
     return system->isUninterpretedPredicate(logic.getSymRef(ref));
 }
 
-std::unique_ptr<Engine> ChcInterpreterContext::getEngine() const {
-    std::string engineStr = opts.hasOption(Options::ENGINE) ? opts.getOption(Options::ENGINE) : "spacer";
+std::unique_ptr<Engine> ChcInterpreterContext::getEngine(std::string engineStr) const {
     if (engineStr == TPAEngine::TPA or engineStr == TPAEngine::SPLIT_TPA) {
         return std::unique_ptr<Engine>(new TPAEngine(logic, opts));
     } else if (engineStr == "bmc") {
