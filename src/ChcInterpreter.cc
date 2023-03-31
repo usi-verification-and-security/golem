@@ -19,6 +19,7 @@
 #include "transformers/SimpleChainSummarizer.h"
 #include "transformers/NodeEliminator.h"
 #include "transformers/TransformationPipeline.h"
+#include <thread>
 
 using namespace osmttokens;
 
@@ -307,6 +308,8 @@ PTRef ChcInterpreterContext::parseTerm(const ASTNode & termNode) {
     }
 }
 
+
+
 void ChcInterpreterContext::interpretCheckSat() {
     bool validateWitness = opts.hasOption(Options::VALIDATE_RESULT);
     assert(not validateWitness || opts.getOption(Options::VALIDATE_RESULT) == std::string("true"));
@@ -327,41 +330,77 @@ void ChcInterpreterContext::interpretCheckSat() {
     transformations.push_back(std::make_unique<SimpleNodeEliminator>());
     auto [newGraph, translator] = TransformationPipeline(std::move(transformations)).transform(std::move(hypergraph));
     hypergraph = std::move(newGraph);
+    // If we're running portfolio we'll need to run all the engines in the parallel
+    if(opts.getOption(Options::ENGINE) == "portfolio"){
+        std::vector<std::unique_ptr<Engine>> engines;
 
-    auto engine = getEngine();
-    auto result = engine->solve(*hypergraph);
-    switch (result.getAnswer()) {
-        case VerificationAnswer::SAFE: {
-            std::cout << "sat" << std::endl;
-            break;
+        engines.push_back(std::unique_ptr<Engine>(new TPAEngine(logic, opts)));
+        Logic bmcLogic = logic.clone();
+        Normalizer(bmcLogic).normalize(*system);
+        ChcGraphBuilder(bmcLogic).buildGraph(normalizedSystem);
+
+        engines.push_back(std::unique_ptr<Engine>(new BMC(bmcLogic, opts)));
+        Logic lawiLogic = logic.clone();
+        Normalizer(lawiLogic).normalize(*system);
+        ChcGraphBuilder(lawiLogic).buildGraph(normalizedSystem);
+        engines.push_back(std::unique_ptr<Engine>(new Lawi(lawiLogic, opts)));
+//        Logic spacerLogic = logic;
+//        engines.push_back(std::unique_ptr<Engine>(new Spacer(spacerLogic, opts)));
+//        Logic kindLogic = logic;
+//        engines.push_back(std::unique_ptr<Engine>(new Kind(kindLogic, opts)));
+//        Logic imcLogic = logic;
+//        engines.push_back(std::unique_ptr<Engine>(new IMC(imcLogic, opts)));
+
+        std::vector<VerificationResult> results;
+        std::vector<std::thread> threadsPool;
+        for(long id = 0; id < engines.size(); id++) {
+            threadsPool.emplace_back(&Engine::solve, engines[id].get(), std::ref(*hypergraph));
         }
-        case VerificationAnswer::UNSAFE: {
-            std::cout << "unsat" << std::endl;
-            break;
+        for(int id = 0; id < engines.size(); id++){
+            if(threadsPool[id].joinable()){
+                threadsPool[id].join();
+                printf("Thread %d finished work\n", id);
+            }
         }
-        case VerificationAnswer::UNKNOWN:
-            std::cout << "unknown" << std::endl;
-            return;
-    }
-    if (validateWitness || printWitness) {
-        result = translator->translate(std::move(result));
-        if (printWitness) {
-            result.printWitness(std::cout, logic);
+//        for(std::unique_ptr<Engine> engine: engines){
+//            results.push_back(engine->solve(*hypergraph));
+//        }
+    } else {
+        auto engine = getEngine();
+        auto result = engine->solve(*hypergraph);
+        switch (result.getAnswer()) {
+            case VerificationAnswer::SAFE: {
+                std::cout << "sat" << std::endl;
+                break;
+            }
+            case VerificationAnswer::UNSAFE: {
+                std::cout << "unsat" << std::endl;
+                break;
+            }
+            case VerificationAnswer::UNKNOWN:
+                std::cout << "unknown" << std::endl;
+                return;
         }
-        if (validateWitness) {
-            assert(originalGraph);
-            auto validationResult = Validator(logic).validate(*originalGraph, result);
-            switch (validationResult) {
-                case Validator::Result::VALIDATED: {
-                    std::cout << "Internal witness validation successful!" << std::endl;
-                    break;
+        if (validateWitness || printWitness) {
+            result = translator->translate(std::move(result));
+            if (printWitness) {
+                result.printWitness(std::cout, logic);
+            }
+            if (validateWitness) {
+                assert(originalGraph);
+                auto validationResult = Validator(logic).validate(*originalGraph, result);
+                switch (validationResult) {
+                    case Validator::Result::VALIDATED: {
+                        std::cout << "Internal witness validation successful!" << std::endl;
+                        break;
+                    }
+                    case Validator::Result::NOT_VALIDATED: {
+                        std::cout << "Internal witness validation failed!" << std::endl;
+                        break;
+                    }
+                    default:
+                        throw std::logic_error("Unexpected case in result validation!");
                 }
-                case Validator::Result::NOT_VALIDATED: {
-                    std::cout << "Internal witness validation failed!" << std::endl;
-                    break;
-                }
-                default:
-                    throw std::logic_error("Unexpected case in result validation!");
             }
         }
     }
@@ -443,7 +482,9 @@ std::unique_ptr<Engine> ChcInterpreterContext::getEngine() const {
         return std::unique_ptr<Engine>(new Kind(logic, opts));
     } else if (engineStr == "imc") {
         return std::unique_ptr<Engine>(new IMC(logic, opts));
-    } else {
+    } else if (engineStr == "portfolio") {
+        return std::unique_ptr<Engine>(new IMC(logic, opts));
+    }else {
         throw std::invalid_argument("Unknown engine specified");
     }
 }
