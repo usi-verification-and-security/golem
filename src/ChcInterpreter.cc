@@ -313,14 +313,14 @@ PTRef ChcInterpreterContext::parseTerm(const ASTNode & termNode) {
 
 void ChcInterpreterContext::solve(
         std::string engine_s,
-        std::unique_ptr<ChcDirectedHyperGraph>& hypergraph,
+        const std::unique_ptr<ChcDirectedHyperGraph>& hypergraph,
+        const std::unique_ptr<ChcDirectedHyperGraph>& originalGraph,
         bool validateWitness,
         bool printWitness,
         std::unique_ptr<WitnessBackTranslator>& translator
     ){
     auto engine = getEngine(engine_s);
     auto result = engine->solve(*hypergraph);
-    std::unique_ptr<ChcDirectedHyperGraph> originalGraph {nullptr};
     switch (result.getAnswer()) {
         case VerificationAnswer::SAFE: {
             std::cout << "sat" << std::endl;
@@ -333,10 +333,6 @@ void ChcInterpreterContext::solve(
         case VerificationAnswer::UNKNOWN:
             std::cout << "unknown" << std::endl;
             return;
-    }
-
-    if (validateWitness) { // Store copy of the original graph for validating purposes
-        originalGraph = std::make_unique<ChcDirectedHyperGraph>(*hypergraph);
     }
     if (validateWitness || printWitness) {
         result = translator->translate(std::move(result));
@@ -399,7 +395,7 @@ void ChcInterpreterContext::interpretCheckSat() {
             }
             if (processes[i] == 0) {
                 printf("%s process\n", engines[i].c_str());
-                solve(engines[i], hypergraph, validateWitness, printWitness, translator);
+                solve(engines[i], hypergraph, originalGraph, validateWitness, printWitness, translator);
                 return ;
             }
         }
@@ -420,6 +416,7 @@ void ChcInterpreterContext::interpretCheckSat() {
 
     solve(opts.hasOption(Options::ENGINE) ? opts.getOption(Options::ENGINE) : "spacer",
           hypergraph,
+          originalGraph,
           validateWitness,
           printWitness,
           translator);

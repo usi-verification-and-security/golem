@@ -102,7 +102,8 @@ private:
     void reportError(std::string msg);
 
     void solve(std::string engine,
-               std::unique_ptr<ChcDirectedHyperGraph>& hyperGraph,
+               const std::unique_ptr<ChcDirectedHyperGraph>& hyperGraph,
+               const std::unique_ptr<ChcDirectedHyperGraph>& originalGraph,
                bool validateWitness,
                bool printWitness,
                std::unique_ptr<WitnessBackTranslator>& translator);
