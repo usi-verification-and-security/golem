@@ -311,14 +311,10 @@ PTRef ChcInterpreterContext::parseTerm(const ASTNode & termNode) {
     }
 }
 
-void ChcInterpreterContext::solve(
+VerificationResult ChcInterpreterContext::solve(
         std::string engine_s,
-        const std::unique_ptr<ChcDirectedHyperGraph>& hypergraph,
-        const std::unique_ptr<ChcDirectedHyperGraph>& originalGraph,
-        bool validateWitness,
-        bool printWitness,
-        std::unique_ptr<WitnessBackTranslator>& translator
-    ){
+        const std::unique_ptr<ChcDirectedHyperGraph>& hypergraph
+    ) {
     auto engine = getEngine(engine_s);
     auto result = engine->solve(*hypergraph);
     switch (result.getAnswer()) {
@@ -332,28 +328,35 @@ void ChcInterpreterContext::solve(
         }
         case VerificationAnswer::UNKNOWN:
             std::cout << "unknown" << std::endl;
-            return;
+            break ;
     }
-    if (validateWitness || printWitness) {
-        result = translator->translate(std::move(result));
-        if (printWitness) {
-            result.printWitness(std::cout, logic);
-        }
-        if (validateWitness) {
-            assert(originalGraph);
-            auto validationResult = Validator(logic).validate(*originalGraph, result);
-            switch (validationResult) {
-                case Validator::Result::VALIDATED: {
-                    std::cout << "Internal witness validation successful!" << std::endl;
-                    break;
-                }
-                case Validator::Result::NOT_VALIDATED: {
-                    std::cout << "Internal witness validation failed!" << std::endl;
-                    break;
-                }
-                default:
-                    throw std::logic_error("Unexpected case in result validation!");
+    return result;
+
+}
+
+void ChcInterpreterContext::validate(VerificationResult result,
+              const std::unique_ptr<ChcDirectedHyperGraph>& originalGraph,
+              bool validateWitness,
+              bool printWitness,
+              std::unique_ptr<WitnessBackTranslator>& translator){
+    result = translator->translate(std::move(result));
+    if (printWitness) {
+        result.printWitness(std::cout, logic);
+    }
+    if (validateWitness) {
+        assert(originalGraph);
+        auto validationResult = Validator(logic).validate(*originalGraph, result);
+        switch (validationResult) {
+            case Validator::Result::VALIDATED: {
+                std::cout << "Internal witness validation successful!" << std::endl;
+                break;
             }
+            case Validator::Result::NOT_VALIDATED: {
+                std::cout << "Internal witness validation failed!" << std::endl;
+                break;
+            }
+            default:
+                throw std::logic_error("Unexpected case in result validation!");
         }
     }
 }
@@ -395,31 +398,39 @@ void ChcInterpreterContext::interpretCheckSat() {
             }
             if (processes[i] == 0) {
                 printf("%s process\n", engines[i].c_str());
-                solve(engines[i], hypergraph, originalGraph, validateWitness, printWitness, translator);
+                auto result = solve(engines[i], hypergraph);
+                if (result.getAnswer() == VerificationAnswer::UNKNOWN) { exit(1); }
+                if (validateWitness || printWitness) {
+                   validate(result, originalGraph, validateWitness, printWitness, translator);
+                }
                 return ;
             }
         }
 
         int status;
         while (true){
-            for(auto p: processes){
-                pid_t result = waitpid(p, &status, WNOHANG);
-                if(result != 0 && result != -1) {
-                    for(auto k_p: processes){
-                        kill(k_p, SIGKILL);
-                    }
-                    return;
+            pid_t done = wait(&status);
+            if (done == -1) {
+                if (errno == ECHILD) return;
+            } else {
+                if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
+                    continue ;
                 }
+                for(auto k_p: processes){
+                    kill(k_p, SIGKILL);
+                }
+                return ;
             }
         }
     }
 
-    solve(opts.hasOption(Options::ENGINE) ? opts.getOption(Options::ENGINE) : "spacer",
-          hypergraph,
-          originalGraph,
-          validateWitness,
-          printWitness,
-          translator);
+    auto result = solve(
+        opts.hasOption(Options::ENGINE) ? opts.getOption(Options::ENGINE) : "spacer",
+        hypergraph);
+    if (result.getAnswer() == VerificationAnswer::UNKNOWN) { return; }
+    if (validateWitness || printWitness) {
+        validate(result, originalGraph, validateWitness, printWitness, translator);
+    }
 }
 
 void ChcInterpreterContext::reportError(std::string msg) {

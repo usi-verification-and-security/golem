@@ -101,12 +101,13 @@ private:
 
     void reportError(std::string msg);
 
-    void solve(std::string engine,
-               const std::unique_ptr<ChcDirectedHyperGraph>& hyperGraph,
-               const std::unique_ptr<ChcDirectedHyperGraph>& originalGraph,
-               bool validateWitness,
-               bool printWitness,
-               std::unique_ptr<WitnessBackTranslator>& translator);
+    VerificationResult solve(std::string engine, const std::unique_ptr<ChcDirectedHyperGraph>& hyperGraph);
+
+    void validate(VerificationResult result,
+                  const std::unique_ptr<ChcDirectedHyperGraph>& originalGraph,
+                  bool validateWitness,
+                  bool printWitness,
+                  std::unique_ptr<WitnessBackTranslator>& translator);
 
     SRef sortFromASTNode(ASTNode const & node) const;
 
