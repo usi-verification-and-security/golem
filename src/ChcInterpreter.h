@@ -104,10 +104,10 @@ private:
     VerificationResult solve(std::string engine, const std::unique_ptr<ChcDirectedHyperGraph>& hyperGraph);
 
     void validate(VerificationResult result,
-                  const std::unique_ptr<ChcDirectedHyperGraph>& originalGraph,
+                  ChcDirectedHyperGraph const & originalGraph,
                   bool validateWitness,
                   bool printWitness,
-                  std::unique_ptr<WitnessBackTranslator>& translator);
+                  WitnessBackTranslator & translator);
 
     SRef sortFromASTNode(ASTNode const & node) const;
 

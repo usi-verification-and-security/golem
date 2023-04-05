@@ -327,25 +327,23 @@ VerificationResult ChcInterpreterContext::solve(
             break;
         }
         case VerificationAnswer::UNKNOWN:
-            std::cout << "unknown" << std::endl;
-            break ;
+            break;
     }
     return result;
 
 }
 
 void ChcInterpreterContext::validate(VerificationResult result,
-              const std::unique_ptr<ChcDirectedHyperGraph>& originalGraph,
-              bool validateWitness,
-              bool printWitness,
-              std::unique_ptr<WitnessBackTranslator>& translator){
-    result = translator->translate(std::move(result));
+                                     ChcDirectedHyperGraph const & originalGraph,
+                                     bool validateWitness,
+                                     bool printWitness,
+                                     WitnessBackTranslator & translator){
+    result = translator.translate(std::move(result));
     if (printWitness) {
         result.printWitness(std::cout, logic);
     }
     if (validateWitness) {
-        assert(originalGraph);
-        auto validationResult = Validator(logic).validate(*originalGraph, result);
+        auto validationResult = Validator(logic).validate(originalGraph, result);
         switch (validationResult) {
             case Validator::Result::VALIDATED: {
                 std::cout << "Internal witness validation successful!" << std::endl;
@@ -367,7 +365,6 @@ void ChcInterpreterContext::interpretCheckSat() {
     bool printWitness = opts.hasOption(Options::PRINT_WITNESS);
     assert(not printWitness || opts.getOption(Options::PRINT_WITNESS) == std::string("true"));
 
-    //    ChcPrinter(logic).print(*system, std::cout);
     auto normalizedSystem = Normalizer(logic).normalize(*system);
     auto hypergraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
     std::unique_ptr<ChcDirectedHyperGraph> originalGraph {nullptr};
@@ -381,6 +378,7 @@ void ChcInterpreterContext::interpretCheckSat() {
     transformations.push_back(std::make_unique<SimpleNodeEliminator>());
     auto [newGraph, translator] = TransformationPipeline(std::move(transformations)).transform(std::move(hypergraph));
     hypergraph = std::move(newGraph);
+    // This if is needed to run the portfolio of multiple engines
     if(opts.getOption(Options::ENGINE).find(',')  != std::string::npos) {
         std::string tmp;
         std::vector<std::string> engines;
@@ -397,26 +395,29 @@ void ChcInterpreterContext::interpretCheckSat() {
                 processes.push_back(fork());
             }
             if (processes[i] == 0) {
-                printf("%s process\n", engines[i].c_str());
                 auto result = solve(engines[i], hypergraph);
                 if (result.getAnswer() == VerificationAnswer::UNKNOWN) { exit(1); }
                 if (validateWitness || printWitness) {
-                   validate(result, originalGraph, validateWitness, printWitness, translator);
+                   validate(result, *originalGraph, validateWitness, printWitness, *translator);
                 }
                 return ;
             }
         }
 
-        int status;
-        while (true){
+        while (true) {
+            int status;
+            // Parent process waits until at least one child finishes
             pid_t done = wait(&status);
             if (done == -1) {
+                // If all of the children processes are finished the run, we stop
                 if (errno == ECHILD) return;
             } else {
+                // If some child process encountered error, we continue, otherwise if it returned
+                // SAT/UNSAT we stop all other children and exit the parent process
                 if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
                     continue ;
                 }
-                for(auto k_p: processes){
+                for (auto k_p: processes) {
                     kill(k_p, SIGKILL);
                 }
                 return ;
@@ -427,9 +428,12 @@ void ChcInterpreterContext::interpretCheckSat() {
     auto result = solve(
         opts.hasOption(Options::ENGINE) ? opts.getOption(Options::ENGINE) : "spacer",
         hypergraph);
-    if (result.getAnswer() == VerificationAnswer::UNKNOWN) { return; }
+    if (result.getAnswer() == VerificationAnswer::UNKNOWN) {
+            std::cout << "unknown" << std::endl;
+            return;
+    }
     if (validateWitness || printWitness) {
-        validate(result, originalGraph, validateWitness, printWitness, translator);
+        validate(result, *originalGraph, validateWitness, printWitness, *translator);
     }
 }
 
@@ -451,7 +455,7 @@ ChClause ChcInterpreterContext::chclauseFromPTRef(PTRef ref) {
             // 2. Empty head, single predicate in body
             if (isUninterpretedPredicate(argOfNot)) {
                 return ChClause{.head = PTRefToCHC::constructHead(logic.getTerm_false()), .body = PTRefToCHC::constructBody(logic.getTerm_true(), {argOfNot})};
-            } else if(logic.isAnd(argOfNot)) {
+            } else if (logic.isAnd(argOfNot)) {
                 // The clause is represented as negation of conjunction, turn it into disjunction
                 vec<PTRef> args;
                 for (int i = 0; i < logic.getPterm(argOfNot).size(); ++i) {
