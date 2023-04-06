@@ -56,6 +56,12 @@ TPA supports only a limited subset of linear CHC systems that represent chains o
 
 split-TPA is a different instantiation of the TPA paradigm and is typically more powerful than TPA on satisfiable (safe) CHC systems.
 
+Golem also supports multiprocessing run of the few engine simultaneously. For example, to run split-tpa, spacer and lawi in parralel golem should be called like this:
+
+```sh
+golem -l {Logic} -e split-tpa,spacer,lawi {File}
+```
+
 ### Witness validation and printing
 Golem supports internal validation of witnesses for its answer using `--validate` option.
 Witness for `sat` is a model, an interpretation of the predicates.
