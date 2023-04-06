@@ -101,7 +101,7 @@ private:
 
     void interpretCheckSat();
 
-    void reportError(std::string msg);
+    void reportError(std::string const & msg);
 
     VerificationResult solve(std::string engine, ChcDirectedHyperGraph const & hyperGraph);
 
@@ -118,7 +118,7 @@ private:
 
     bool isUninterpretedPredicate(PTRef ref) const;
 
-    std::unique_ptr<Engine> getEngine(std::string engineSte) const;
+    std::unique_ptr<Engine> getEngine(std::string const & engine) const;
 };
 
 class ChcInterpreter {

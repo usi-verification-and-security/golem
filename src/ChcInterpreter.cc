@@ -412,7 +412,7 @@ void ChcInterpreterContext::interpretCheckSat() {
     }
 }
 
-void ChcInterpreterContext::reportError(std::string msg) {
+void ChcInterpreterContext::reportError(std::string const & msg) {
     std::cout << "(error " << '"' << msg << '"' << ")\n";
 }
 
@@ -477,7 +477,7 @@ bool ChcInterpreterContext::isUninterpretedPredicate(PTRef ref) const {
     return system->isUninterpretedPredicate(logic.getSymRef(ref));
 }
 
-std::unique_ptr<Engine> ChcInterpreterContext::getEngine(std::string engineStr) const {
+std::unique_ptr<Engine> ChcInterpreterContext::getEngine(std::string const & engineStr) const {
     if (engineStr == TPAEngine::TPA or engineStr == TPAEngine::SPLIT_TPA) {
         return std::unique_ptr<Engine>(new TPAEngine(logic, opts));
     } else if (engineStr == "bmc") {
