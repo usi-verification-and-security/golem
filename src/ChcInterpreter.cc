@@ -302,10 +302,9 @@ PTRef ChcInterpreterContext::parseTerm(const ASTNode & termNode) {
     }
 }
 
-VerificationResult ChcInterpreterContext::solve(std::string engine_s,
-                                                const std::unique_ptr<ChcDirectedHyperGraph> & hypergraph) {
+VerificationResult ChcInterpreterContext::solve(std::string engine_s, ChcDirectedHyperGraph const & hypergraph) {
     auto engine = getEngine(engine_s);
-    auto result = engine->solve(*hypergraph);
+    auto result = engine->solve(hypergraph);
     switch (result.getAnswer()) {
         case VerificationAnswer::SAFE: {
             std::cout << "sat" << std::endl;
@@ -375,7 +374,7 @@ void ChcInterpreterContext::interpretCheckSat() {
         for (uint i = 0; i < engines.size(); i++) {
             if (getpid() == parent) { processes.push_back(fork()); }
             if (processes[i] == 0) {
-                auto result = solve(engines[i], hypergraph);
+                auto result = solve(engines[i], *hypergraph);
                 if (result.getAnswer() == VerificationAnswer::UNKNOWN) { exit(1); }
                 if (validateWitness || printWitness) {
                     validate(result, *originalGraph, validateWitness, printWitness, *translator);
@@ -403,7 +402,7 @@ void ChcInterpreterContext::interpretCheckSat() {
         }
     }
 
-    auto result = solve(opts.hasOption(Options::ENGINE) ? opts.getOption(Options::ENGINE) : "spacer", hypergraph);
+    auto result = solve(opts.hasOption(Options::ENGINE) ? opts.getOption(Options::ENGINE) : "spacer", *hypergraph);
     if (result.getAnswer() == VerificationAnswer::UNKNOWN) {
         std::cout << "unknown" << std::endl;
         return;

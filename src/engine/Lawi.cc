@@ -852,7 +852,7 @@ ErrorPath LawiContext::buildGraphPathFromTreePath(const ArtPath & path) const {
 // LAWI methods
 //
 
-VerificationResult Lawi::solve(ChcDirectedHyperGraph & graph) {
+VerificationResult Lawi::solve(ChcDirectedHyperGraph const & graph) {
     if (graph.isNormalGraph()) {
         auto normalGraph = graph.toNormalGraph();
         return solve(*normalGraph);

@@ -22,7 +22,7 @@ public:
         }
     }
 
-    virtual VerificationResult solve(ChcDirectedHyperGraph & graph) override {
+    virtual VerificationResult solve(ChcDirectedHyperGraph const & graph) override {
         if (graph.isNormalGraph()) {
             auto normalGraph = graph.toNormalGraph();
             return solve(*normalGraph);

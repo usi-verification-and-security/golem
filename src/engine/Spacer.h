@@ -16,7 +16,7 @@ class Spacer : public Engine {
 public:
     Spacer(Logic & logic, Options const & options) : logic(logic), options(options) {}
 
-    [[nodiscard]] VerificationResult solve(ChcDirectedHyperGraph & system) override;
+    [[nodiscard]] VerificationResult solve(ChcDirectedHyperGraph const & system) override;
 };
 
 

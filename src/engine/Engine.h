@@ -16,7 +16,7 @@
 
 class Engine {
 public:
-    virtual VerificationResult solve(ChcDirectedHyperGraph &) {
+    virtual VerificationResult solve(ChcDirectedHyperGraph const &) {
         return VerificationResult(VerificationAnswer::UNKNOWN);
     }
 

@@ -11,7 +11,7 @@
 #include "transformers/BasicTransformationPipelines.h"
 #include "TransformationUtils.h"
 
-VerificationResult Kind::solve(ChcDirectedHyperGraph & graph) {
+VerificationResult Kind::solve(ChcDirectedHyperGraph const & graph) {
     auto pipeline = Transformations::towardsTransitionSystems();
     auto transformationResult = pipeline.transform(std::make_unique<ChcDirectedHyperGraph>(graph));
     auto transformedGraph = std::move(transformationResult.first);

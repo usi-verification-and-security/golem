@@ -23,9 +23,9 @@ class Lawi : public Engine {
 public:
     Lawi(Logic & logic, Options const & options) : logic(logic), options(options) {}
 
-    VerificationResult solve(ChcDirectedHyperGraph & system) override;
+    VerificationResult solve(ChcDirectedHyperGraph const & system) override;
 
-    VerificationResult solve(const ChcDirectedGraph & system);
+    VerificationResult solve(ChcDirectedGraph const & system);
 
 private:
 

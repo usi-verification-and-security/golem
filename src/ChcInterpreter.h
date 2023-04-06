@@ -103,7 +103,7 @@ private:
 
     void reportError(std::string msg);
 
-    VerificationResult solve(std::string engine, const std::unique_ptr<ChcDirectedHyperGraph> & hyperGraph);
+    VerificationResult solve(std::string engine, ChcDirectedHyperGraph const & hyperGraph);
 
     void validate(VerificationResult result, ChcDirectedHyperGraph const & originalGraph, bool validateWitness,
                   bool printWitness, WitnessBackTranslator & translator);

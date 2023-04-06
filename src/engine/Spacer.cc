@@ -239,7 +239,7 @@ public:
     VerificationResult run();
 };
 
-VerificationResult Spacer::solve(ChcDirectedHyperGraph & system) {
+VerificationResult Spacer::solve(ChcDirectedHyperGraph const & system) {
     bool logProof = options.hasOption(Options::COMPUTE_WITNESS) and options.getOption(Options::COMPUTE_WITNESS) == "true";
     return SpacerContext(logic, system, logProof).run();
 }

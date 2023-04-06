@@ -41,7 +41,7 @@ std::unique_ptr<TPABase> TPAEngine::mkSolver() {
     throw std::logic_error("Unexpected situation");
 }
 
-VerificationResult TPAEngine::solve(ChcDirectedHyperGraph & graph) {
+VerificationResult TPAEngine::solve(ChcDirectedHyperGraph const & graph) {
     auto pipeline = Transformations::towardsTransitionSystems();
     auto transformationResult = pipeline.transform(std::make_unique<ChcDirectedHyperGraph>(graph));
     auto transformedGraph = std::move(transformationResult.first);

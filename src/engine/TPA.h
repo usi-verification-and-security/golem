@@ -35,7 +35,7 @@ class TPAEngine : public Engine {
 public:
     TPAEngine(Logic & logic, Options options) : logic(logic), options(std::move(options)) {}
 
-    VerificationResult solve(ChcDirectedHyperGraph & graph) override;
+    VerificationResult solve(ChcDirectedHyperGraph const & graph) override;
 
     static const std::string TPA;
     static const std::string SPLIT_TPA;

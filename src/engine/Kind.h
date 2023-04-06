@@ -28,7 +28,7 @@ public:
         }
     }
 
-    virtual VerificationResult solve(ChcDirectedHyperGraph & graph) override;
+    virtual VerificationResult solve(ChcDirectedHyperGraph const & graph) override;
 
     VerificationResult solve(ChcDirectedGraph const & system);
 
