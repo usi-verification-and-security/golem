@@ -4,48 +4,44 @@
  * SPDX-License-Identifier: MIT
  */
 
-#include <signal.h>
-#include <unistd.h>
-#include <sys/types.h>
-#include <sys/wait.h>
+#include "ChcInterpreter.h"
+#include "Normalizer.h"
+#include "Validator.h"
+#include "graph/ChcGraph.h"
+#include "graph/ChcGraphBuilder.h"
+#include "transformers/NodeEliminator.h"
+#include "transformers/RemoveUnreachableNodes.h"
+#include "transformers/SimpleChainSummarizer.h"
+#include "transformers/TransformationPipeline.h"
 #include <engine/Bmc.h>
+#include <engine/IMC.h>
 #include <engine/Kind.h>
 #include <engine/Lawi.h>
 #include <engine/Spacer.h>
 #include <engine/TPA.h>
-#include <engine/IMC.h>
-#include "ChcInterpreter.h"
-#include "graph/ChcGraph.h"
-#include "graph/ChcGraphBuilder.h"
-#include "Validator.h"
-#include "Normalizer.h"
-#include "transformers/RemoveUnreachableNodes.h"
-#include "transformers/SimpleChainSummarizer.h"
-#include "transformers/NodeEliminator.h"
-#include "transformers/TransformationPipeline.h"
+#include <signal.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
 using namespace osmttokens;
 
 namespace {
-bool addLetFrame(const vec<char *> & names, vec<PTRef> const& args, Logic & logic, LetRecords& letRecords) {
+bool addLetFrame(const vec<char *> & names, vec<PTRef> const & args, Logic & logic, LetRecords & letRecords) {
     assert(names.size() == args.size());
     if (names.size() > 1) {
         // check that they are pairwise distinct;
-        std::unordered_set<const char*, StringHash, Equal<const char*>> namesAsSet(names.begin(), names.end());
-        if (namesAsSet.size() != names.size_()) {
-            return false;
-        }
+        std::unordered_set<const char *, StringHash, Equal<const char *>> namesAsSet(names.begin(), names.end());
+        if (namesAsSet.size() != names.size_()) { return false; }
     }
     for (int i = 0; i < names.size(); ++i) {
-        const char* name = names[i];
-        if (logic.hasSym(name) && logic.getSym(logic.symNameToRef(name)[0]).noScoping()) {
-            return false;
-        }
+        const char * name = names[i];
+        if (logic.hasSym(name) && logic.getSym(logic.symNameToRef(name)[0]).noScoping()) { return false; }
         letRecords.addBinding(name, args[i]);
     }
     return true;
 }
-}
+} // namespace
 
 std::unique_ptr<ChcSystem> ChcInterpreter::interpretSystemAst(Logic & logic, const ASTNode * root) {
     ChcInterpreterContext ctx(logic, opts);
@@ -53,15 +49,13 @@ std::unique_ptr<ChcSystem> ChcInterpreter::interpretSystemAst(Logic & logic, con
 }
 
 std::unique_ptr<ChcSystem> ChcInterpreterContext::interpretSystemAst(const ASTNode * root) {
-    if (not root) {
-        return std::unique_ptr<ChcSystem>();
-    }
+    if (not root) { return std::unique_ptr<ChcSystem>(); }
     this->system.reset();
     auto it = root->children->begin();
     for (; it != root->children->end() && not this->doExit; ++it) {
         interpretCommand(**it);
-//        delete *it;
-//        *it = nullptr;
+        //        delete *it;
+        //        *it = nullptr;
     }
     return std::move(this->system);
 }
@@ -151,19 +145,18 @@ SRef ChcInterpreterContext::sortFromASTNode(ASTNode const & node) const {
 
 void ChcInterpreterContext::interpretDeclareFun(ASTNode & node) {
     auto it = node.children->begin();
-    ASTNode& name_node = **(it++);
-    ASTNode& args_node = **(it++);
-    ASTNode& ret_node  = **(it++);
+    ASTNode & name_node = **(it++);
+    ASTNode & args_node = **(it++);
+    ASTNode & ret_node = **(it++);
     assert(it == node.children->end());
 
     const char * fname = name_node.getValue();
     SRef codomainSort = sortFromASTNode(ret_node);
 
     if (codomainSort == SRef_Undef) {
-        reportError("Unknown return sort of " +  std::string(fname));
+        reportError("Unknown return sort of " + std::string(fname));
         return;
-    }
-    else if (codomainSort != logic.getSort_bool()) {
+    } else if (codomainSort != logic.getSort_bool()) {
         reportError("Return sort of uninterpeted predicate must be Bool");
         return;
     }
@@ -175,7 +168,7 @@ void ChcInterpreterContext::interpretDeclareFun(ASTNode & node) {
         if (argSort != SRef_Undef) {
             args.push(argSort);
         } else {
-            reportError("Undefined sort in function " +  std::string(fname));
+            reportError("Undefined sort in function " + std::string(fname));
             return;
         }
     }
@@ -189,10 +182,10 @@ void ChcInterpreterContext::interpretDeclareFun(ASTNode & node) {
 }
 
 void ChcInterpreterContext::interpretAssert(ASTNode & node) {
-    ASTNode& termNode = **(node.children->begin());
+    ASTNode & termNode = **(node.children->begin());
     PTRef term = parseTerm(termNode);
     assert(term != PTRef_Undef);
-//    std::cout << backgroundTheory->getLogic().printTerm(term) << std::endl;
+    //    std::cout << backgroundTheory->getLogic().printTerm(term) << std::endl;
     if (logic.getTerm_true() == term) { return; }
     auto chclause = chclauseFromPTRef(term);
     system->addClause(std::move(chclause));
@@ -201,26 +194,27 @@ void ChcInterpreterContext::interpretAssert(ASTNode & node) {
 PTRef ChcInterpreterContext::parseTerm(const ASTNode & termNode) {
     ASTType t = termNode.getType();
     if (t == TERM_T) {
-        const char* name = (**(termNode.children->begin())).getValue();
+        const char * name = (**(termNode.children->begin())).getValue();
         return logic.mkConst(name);
-    }
-    else if (t == FORALL_T) { // Forall has two children: sorted_var_list and term
+    } else if (t == FORALL_T) { // Forall has two children: sorted_var_list and term
         auto it = termNode.children->begin();
-        ASTNode& qvars = **it;
+        ASTNode & qvars = **it;
         assert(qvars.getType() == SVL_T);
-        // HACK! Using let frames to properly parse formula with universal quantifiers (same variable name might already be assoociated with multiple sorts
-        class QuantifierHack{
+        // HACK! Using let frames to properly parse formula with universal quantifiers (same variable name might already
+        // be assoociated with multiple sorts
+        class QuantifierHack {
             std::size_t counter = 0;
             LetRecords & rec;
+
         public:
-            QuantifierHack(LetRecords& rec): rec(rec) {}
+            QuantifierHack(LetRecords & rec) : rec(rec) {}
             ~QuantifierHack() {
                 for (std::size_t i = 0; i < counter; ++i) {
                     rec.popFrame();
                 }
             }
 
-            void addBinding(const char* name, PTRef term) {
+            void addBinding(const char * name, PTRef term) {
                 rec.pushFrame();
                 rec.addBinding(name, term);
                 ++counter;
@@ -229,30 +223,28 @@ PTRef ChcInterpreterContext::parseTerm(const ASTNode & termNode) {
         for (ASTNode * var : *qvars.children) {
             assert(var && var->getType() == SV_T);
             // make sure the term store know about these variables
-            const char* name = var->getValue();
+            const char * name = var->getValue();
             SRef sort = sortFromASTNode(**var->children->begin());
             PTRef varTerm = logic.mkVar(sort, name);
             quantifierHack.addBinding(name, varTerm);
-//            std::cout << var->getValue() << std::endl; // name of the variable
-//            std::cout << backgroundTheory->getLogic().getSortName(getSort(**var->children->begin())) << std::endl; // sort of th variable
+            //            std::cout << var->getValue() << std::endl; // name of the variable
+            //            std::cout << backgroundTheory->getLogic().getSortName(getSort(**var->children->begin())) <<
+            //            std::endl; // sort of th variable
         }
         ++it;
-        ASTNode& innerTerm = **it;
+        ASTNode & innerTerm = **it;
         return parseTerm(innerTerm);
-    }
-    else if (t == QID_T) {
-        const char* name = (**(termNode.children->begin())).getValue();
+    } else if (t == QID_T) {
+        const char * name = (**(termNode.children->begin())).getValue();
         PTRef tr = letRecords.getOrUndef(name);
-        if (tr != PTRef_Undef) {
-            return tr;
-        }
+        if (tr != PTRef_Undef) { return tr; }
         tr = logic.resolveTerm(name, {});
         assert(tr != PTRef_Undef);
         return tr;
-    }
-    else if (t == LQID_T) {
+    } else if (t == LQID_T) {
         auto node_iter = termNode.children->begin();
-        const char* name = (**node_iter).getValue(); node_iter++;
+        const char * name = (**node_iter).getValue();
+        node_iter++;
         // Parse the arguments
         vec<PTRef> args;
         for (; node_iter != termNode.children->end(); node_iter++) {
@@ -260,8 +252,7 @@ PTRef ChcInterpreterContext::parseTerm(const ASTNode & termNode) {
             if (arg_term == PTRef_Undef) {
                 assert(false);
                 return PTRef_Undef;
-            }
-            else
+            } else
                 args.push(arg_term);
         }
         assert(args.size() > 0);
@@ -269,52 +260,50 @@ PTRef ChcInterpreterContext::parseTerm(const ASTNode & termNode) {
         tr = logic.resolveTerm(name, std::move(args));
         assert(tr != PTRef_Undef);
         return tr;
-    }
-    else if (t == LET_T) {
+    } else if (t == LET_T) {
         auto ch = termNode.children->begin();
         auto vbl = (**ch).children->begin();
         vec<PTRef> tmp_args;
-        vec<char*> names;
+        vec<char *> names;
         // use RAII idiom to guard the scope of new LetFrame (and ensure the cleaup of names)
         class Guard {
-            LetRecords& rec;
-            vec<char*>& names;
+            LetRecords & rec;
+            vec<char *> & names;
+
         public:
-            Guard(LetRecords& rec, vec<char*>& names): rec(rec), names(names) { rec.pushFrame(); }
-            ~Guard() { rec.popFrame(); for (int i = 0; i < names.size(); i++) { free(names[i]); }}
+            Guard(LetRecords & rec, vec<char *> & names) : rec(rec), names(names) { rec.pushFrame(); }
+            ~Guard() {
+                rec.popFrame();
+                for (int i = 0; i < names.size(); i++) {
+                    free(names[i]);
+                }
+            }
         } scopeGuard(letRecords, names);
         // First read the term declarations in the let statement
         while (vbl != (**ch).children->end()) {
             PTRef let_tr = parseTerm(**((**vbl).children->begin()));
             if (let_tr == PTRef_Undef) return PTRef_Undef;
             tmp_args.push(let_tr);
-            char* name = strdup((**vbl).getValue());
+            char * name = strdup((**vbl).getValue());
             names.push(name);
             vbl++;
         }
         // Only then insert them to the table
         bool success = addLetFrame(names, tmp_args, logic, letRecords);
-        if (not success) {
-            return PTRef_Undef;
-        }
+        if (not success) { return PTRef_Undef; }
         ch++;
         // This is now constructed with the let declarations context in let_branch
         PTRef tr = parseTerm(**(ch));
-        if (tr == PTRef_Undef) {
-            return PTRef_Undef;
-        }
+        if (tr == PTRef_Undef) { return PTRef_Undef; }
         return tr;
-    }
-    else {
+    } else {
         std::cout << "Unknown type: " << termNode.typeToStr() << std::endl;
         throw std::logic_error("Type not handled in parsing!\n");
     }
 }
 
-VerificationResult ChcInterpreterContext::solve(
-        std::string engine_s,
-        const std::unique_ptr<ChcDirectedHyperGraph>& hypergraph
-    ) {
+VerificationResult ChcInterpreterContext::solve(std::string engine_s,
+                                                const std::unique_ptr<ChcDirectedHyperGraph> & hypergraph) {
     auto engine = getEngine(engine_s);
     auto result = engine->solve(*hypergraph);
     switch (result.getAnswer()) {
@@ -330,18 +319,12 @@ VerificationResult ChcInterpreterContext::solve(
             break;
     }
     return result;
-
 }
 
-void ChcInterpreterContext::validate(VerificationResult result,
-                                     ChcDirectedHyperGraph const & originalGraph,
-                                     bool validateWitness,
-                                     bool printWitness,
-                                     WitnessBackTranslator & translator){
+void ChcInterpreterContext::validate(VerificationResult result, ChcDirectedHyperGraph const & originalGraph,
+                                     bool validateWitness, bool printWitness, WitnessBackTranslator & translator) {
     result = translator.translate(std::move(result));
-    if (printWitness) {
-        result.printWitness(std::cout, logic);
-    }
+    if (printWitness) { result.printWitness(std::cout, logic); }
     if (validateWitness) {
         auto validationResult = Validator(logic).validate(originalGraph, result);
         switch (validationResult) {
@@ -367,7 +350,7 @@ void ChcInterpreterContext::interpretCheckSat() {
 
     auto normalizedSystem = Normalizer(logic).normalize(*system);
     auto hypergraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
-    std::unique_ptr<ChcDirectedHyperGraph> originalGraph {nullptr};
+    std::unique_ptr<ChcDirectedHyperGraph> originalGraph{nullptr};
     if (validateWitness) { // Store copy of the original graph for validating purposes
         originalGraph = std::make_unique<ChcDirectedHyperGraph>(*hypergraph);
     }
@@ -379,28 +362,25 @@ void ChcInterpreterContext::interpretCheckSat() {
     auto [newGraph, translator] = TransformationPipeline(std::move(transformations)).transform(std::move(hypergraph));
     hypergraph = std::move(newGraph);
     // This if is needed to run the portfolio of multiple engines
-    if(opts.getOption(Options::ENGINE).find(',')  != std::string::npos) {
+    if (opts.getOption(Options::ENGINE).find(',') != std::string::npos) {
         std::string tmp;
         std::vector<std::string> engines;
         std::stringstream ss(opts.getOption(Options::ENGINE));
-        while(getline(ss, tmp, ',')){
+        while (getline(ss, tmp, ',')) {
             engines.push_back(tmp);
         }
 
-
         pid_t parent = getpid();
         std::vector<pid_t> processes;
-        for(uint i = 0; i < engines.size(); i++){
-            if (getpid() == parent) {
-                processes.push_back(fork());
-            }
+        for (uint i = 0; i < engines.size(); i++) {
+            if (getpid() == parent) { processes.push_back(fork()); }
             if (processes[i] == 0) {
                 auto result = solve(engines[i], hypergraph);
                 if (result.getAnswer() == VerificationAnswer::UNKNOWN) { exit(1); }
                 if (validateWitness || printWitness) {
-                   validate(result, *originalGraph, validateWitness, printWitness, *translator);
+                    validate(result, *originalGraph, validateWitness, printWitness, *translator);
                 }
-                return ;
+                return;
             }
         }
 
@@ -414,23 +394,19 @@ void ChcInterpreterContext::interpretCheckSat() {
             } else {
                 // If some child process encountered error, we continue, otherwise if it returned
                 // SAT/UNSAT we stop all other children and exit the parent process
-                if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
-                    continue ;
-                }
-                for (auto k_p: processes) {
+                if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) { continue; }
+                for (auto k_p : processes) {
                     kill(k_p, SIGKILL);
                 }
-                return ;
+                return;
             }
         }
     }
 
-    auto result = solve(
-        opts.hasOption(Options::ENGINE) ? opts.getOption(Options::ENGINE) : "spacer",
-        hypergraph);
+    auto result = solve(opts.hasOption(Options::ENGINE) ? opts.getOption(Options::ENGINE) : "spacer", hypergraph);
     if (result.getAnswer() == VerificationAnswer::UNKNOWN) {
-            std::cout << "unknown" << std::endl;
-            return;
+        std::cout << "unknown" << std::endl;
+        return;
     }
     if (validateWitness || printWitness) {
         validate(result, *originalGraph, validateWitness, printWitness, *translator);
@@ -449,12 +425,14 @@ ChClause ChcInterpreterContext::chclauseFromPTRef(PTRef ref) {
         // special cases
         // 1. Head with empty body
         if (isUninterpretedPredicate(ref)) {
-            return ChClause{.head = PTRefToCHC::constructHead(ref), .body = PTRefToCHC::constructBody(logic.getTerm_true(), {})};
+            return ChClause{.head = PTRefToCHC::constructHead(ref),
+                            .body = PTRefToCHC::constructBody(logic.getTerm_true(), {})};
         } else if (logic.isNot(ref)) {
             PTRef argOfNot = logic.getPterm(ref)[0];
             // 2. Empty head, single predicate in body
             if (isUninterpretedPredicate(argOfNot)) {
-                return ChClause{.head = PTRefToCHC::constructHead(logic.getTerm_false()), .body = PTRefToCHC::constructBody(logic.getTerm_true(), {argOfNot})};
+                return ChClause{.head = PTRefToCHC::constructHead(logic.getTerm_false()),
+                                .body = PTRefToCHC::constructBody(logic.getTerm_true(), {argOfNot})};
             } else if (logic.isAnd(argOfNot)) {
                 // The clause is represented as negation of conjunction, turn it into disjunction
                 vec<PTRef> args;
@@ -473,17 +451,18 @@ ChClause ChcInterpreterContext::chclauseFromPTRef(PTRef ref) {
     vec<PTRef> disjuncts = TermUtils(logic).getTopLevelDisjuncts(disjunction);
     // find uninterpreted predicates (positive or negative)
     auto uninterpretedEnd = std::partition(disjuncts.begin(), disjuncts.end(), [this, &logic](PTRef arg) {
-        return this->isUninterpretedPredicate(arg) || (logic.isNot(arg) && this->isUninterpretedPredicate(logic.getPterm(arg)[0]));
+        return this->isUninterpretedPredicate(arg) ||
+               (logic.isNot(arg) && this->isUninterpretedPredicate(logic.getPterm(arg)[0]));
     });
 
     // find positive uninterpreted predicates
-    auto positiveEnd = std::partition(disjuncts.begin(), uninterpretedEnd, [&logic](PTRef arg) {
-        return not logic.isNot(arg);
-    });
+    auto positiveEnd =
+        std::partition(disjuncts.begin(), uninterpretedEnd, [&logic](PTRef arg) { return not logic.isNot(arg); });
     if (positiveEnd - disjuncts.begin() > 1) {
         throw std::logic_error(std::string("More than one positive uninterpreted predicate in clause"));
     }
-    ChcHead head = positiveEnd == disjuncts.begin() ? PTRefToCHC::constructHead(logic.getTerm_false()) : PTRefToCHC::constructHead(*disjuncts.begin());
+    ChcHead head = positiveEnd == disjuncts.begin() ? PTRefToCHC::constructHead(logic.getTerm_false())
+                                                    : PTRefToCHC::constructHead(*disjuncts.begin());
     // Negate the body so that it represents antecedent of the implication
     std::transform(positiveEnd, disjuncts.end(), positiveEnd, [&logic](PTRef bodyArg) { return logic.mkNot(bodyArg); });
     vec<PTRef> interpretedArgs;

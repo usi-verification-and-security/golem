@@ -17,38 +17,40 @@
 
 class LetBinder {
     PTRef currentValue;
-    std::vector<PTRef>* shadowedValues;
+    std::vector<PTRef> * shadowedValues;
+
 public:
     LetBinder(PTRef val) : currentValue(val), shadowedValues(nullptr) {}
     ~LetBinder() { delete shadowedValues; }
-    LetBinder(const LetBinder&) = delete;
-    LetBinder& operator=(const LetBinder&) = delete;
-    LetBinder(LetBinder&&) = default;
-    LetBinder& operator=(LetBinder&&) = default;
+    LetBinder(const LetBinder &) = delete;
+    LetBinder & operator=(const LetBinder &) = delete;
+    LetBinder(LetBinder &&) = default;
+    LetBinder & operator=(LetBinder &&) = default;
     PTRef getValue() const { return currentValue; }
     bool hasShadowValue() const { return shadowedValues && !shadowedValues->empty(); }
-    void restoreShadowedValue() { assert(hasShadowValue()); currentValue = shadowedValues->back(); shadowedValues->pop_back(); }
+    void restoreShadowedValue() {
+        assert(hasShadowValue());
+        currentValue = shadowedValues->back();
+        shadowedValues->pop_back();
+    }
     void addValue(PTRef val) {
-        if (not shadowedValues) {
-            shadowedValues = new std::vector<PTRef>();
-        }
+        if (not shadowedValues) { shadowedValues = new std::vector<PTRef>(); }
         shadowedValues->push_back(currentValue);
         currentValue = val;
     }
 };
 
 class LetRecords {
-    std::unordered_map<const char*, LetBinder, StringHash, Equal<const char*> > letBinders;
-    std::vector<const char*> knownBinders;
+    std::unordered_map<const char *, LetBinder, StringHash, Equal<const char *>> letBinders;
+    std::vector<const char *> knownBinders;
     std::vector<std::size_t> frameLimits;
 
-    bool has(const char* name) const { return letBinders.count(name) != 0; }
+    bool has(const char * name) const { return letBinders.count(name) != 0; }
+
 public:
-    PTRef getOrUndef(const char* letSymbol) const {
+    PTRef getOrUndef(const char * letSymbol) const {
         auto it = letBinders.find(letSymbol);
-        if (it != letBinders.end()) {
-            return it->second.getValue();
-        }
+        if (it != letBinders.end()) { return it->second.getValue(); }
         return PTRef_Undef;
     }
     void pushFrame() { frameLimits.push_back(knownBinders.size()); }
@@ -56,10 +58,10 @@ public:
         auto limit = frameLimits.back();
         frameLimits.pop_back();
         while (knownBinders.size() > limit) {
-            const char* binder = knownBinders.back();
+            const char * binder = knownBinders.back();
             knownBinders.pop_back();
             assert(this->has(binder));
-            auto& values = letBinders.at(binder);
+            auto & values = letBinders.at(binder);
             if (values.hasShadowValue()) {
                 values.restoreShadowedValue();
             } else {
@@ -68,7 +70,7 @@ public:
         }
     }
 
-    void addBinding(const char* name, PTRef arg) {
+    void addBinding(const char * name, PTRef arg) {
         knownBinders.push_back(name);
         if (not this->has(name)) {
             letBinders.insert(std::make_pair(name, LetBinder(arg)));
@@ -82,7 +84,7 @@ class ChcInterpreterContext {
 public:
     std::unique_ptr<ChcSystem> interpretSystemAst(const ASTNode * root);
 
-    ChcInterpreterContext(Logic & logic, Options const & opts): logic(logic), opts(opts) {}
+    ChcInterpreterContext(Logic & logic, Options const & opts) : logic(logic), opts(opts) {}
 
 private:
     Logic & logic;
@@ -91,27 +93,24 @@ private:
     bool doExit = false;
     LetRecords letRecords;
 
-    void interpretCommand(ASTNode& node);
+    void interpretCommand(ASTNode & node);
 
-    void interpretDeclareFun(ASTNode& node);
+    void interpretDeclareFun(ASTNode & node);
 
-    void interpretAssert(ASTNode& node);
+    void interpretAssert(ASTNode & node);
 
     void interpretCheckSat();
 
     void reportError(std::string msg);
 
-    VerificationResult solve(std::string engine, const std::unique_ptr<ChcDirectedHyperGraph>& hyperGraph);
+    VerificationResult solve(std::string engine, const std::unique_ptr<ChcDirectedHyperGraph> & hyperGraph);
 
-    void validate(VerificationResult result,
-                  ChcDirectedHyperGraph const & originalGraph,
-                  bool validateWitness,
-                  bool printWitness,
-                  WitnessBackTranslator & translator);
+    void validate(VerificationResult result, ChcDirectedHyperGraph const & originalGraph, bool validateWitness,
+                  bool printWitness, WitnessBackTranslator & translator);
 
     SRef sortFromASTNode(ASTNode const & node) const;
 
-    PTRef parseTerm(ASTNode const& node);
+    PTRef parseTerm(ASTNode const & node);
 
     // Building CHCs and helper methods
 
@@ -132,5 +131,4 @@ private:
     Options const & opts;
 };
 
-
-#endif //OPENSMT_CHCINTERPRETER_H
+#endif // OPENSMT_CHCINTERPRETER_H
