@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2022, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2020-2023, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
@@ -7,19 +7,12 @@
 #ifndef GOLEM_WITNESSES_H
 #define GOLEM_WITNESSES_H
 
+#include <variant>
+
 #include "graph/ChcGraph.h"
 #include "TransitionSystem.h"
 
 #include "osmt_solver.h"
-
-class WitnessModel {
-    std::unique_ptr<Model> model;
-public:
-    WitnessModel() = default;
-    explicit WitnessModel(std::unique_ptr<Model> model) : model(std::move(model)) {}
-
-    PTRef evaluate(PTRef fla) const { return model->evaluate(fla); }
-};
 
 class ErrorPath {
     std::vector<EId> path;
@@ -116,23 +109,24 @@ enum class VerificationAnswer : char {SAFE, UNSAFE, UNKNOWN};
 
 class VerificationResult {
     VerificationAnswer answer;
-    // TODO: use variant from c++17
-    ValidityWitness validityWitness;
-    InvalidityWitness invalidityWitness;
+    std::variant<ValidityWitness, InvalidityWitness> witness;
 
 public:
     VerificationResult(VerificationAnswer answer, ValidityWitness validityWitness)
-        : answer(answer), validityWitness(std::move(validityWitness)) {}
+        : answer(answer), witness(std::move(validityWitness)) {}
 
     VerificationResult(VerificationAnswer answer, InvalidityWitness invalidityWitness)
-        : answer(answer), invalidityWitness(std::move(invalidityWitness)) {}
+        : answer(answer), witness(std::move(invalidityWitness)) {}
 
     explicit VerificationResult(VerificationAnswer answer) : answer(answer) {}
 
-    VerificationAnswer getAnswer() const { return answer; }
+    [[nodiscard]] VerificationAnswer getAnswer() const { return answer; }
 
-    ValidityWitness const & getValidityWitness() const { assert(answer == VerificationAnswer::SAFE); return validityWitness; }
-    InvalidityWitness const & getInvalidityWitness() const { assert(answer == VerificationAnswer::UNSAFE); return invalidityWitness; }
+    ValidityWitness const & getValidityWitness() const & { assert(answer == VerificationAnswer::SAFE); return std::get<ValidityWitness>(witness); }
+    InvalidityWitness const & getInvalidityWitness() const & { assert(answer == VerificationAnswer::UNSAFE); return std::get<InvalidityWitness>(witness); }
+
+    ValidityWitness && getValidityWitness() && { assert(answer == VerificationAnswer::SAFE); return std::move(std::get<ValidityWitness>(witness)); }
+    InvalidityWitness && getInvalidityWitness() && { assert(answer == VerificationAnswer::UNSAFE); return std::move(std::get<InvalidityWitness>(witness)); }
 
     void printWitness(std::ostream & out, Logic & logic) const;
 };

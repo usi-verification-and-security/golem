@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2022-2023, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
@@ -18,12 +18,13 @@ public:
     virtual InvalidityWitness translate(InvalidityWitness witness) = 0;
     virtual ValidityWitness translate(ValidityWitness witness) = 0;
     virtual ~WitnessBackTranslator() = default;
-    VerificationResult translate(VerificationResult const & result) {
-        switch (result.getAnswer()) {
+    VerificationResult translate(VerificationResult && result) {
+        auto answer = result.getAnswer();
+        switch (answer) {
             case VerificationAnswer::SAFE:
-                return VerificationResult(result.getAnswer(), translate(result.getValidityWitness()));
+                return {answer, translate(std::move(result).getValidityWitness())};
             case VerificationAnswer::UNSAFE:
-                return VerificationResult(result.getAnswer(), translate(result.getInvalidityWitness()));
+                return {answer, translate(std::move(result).getInvalidityWitness())};
             case VerificationAnswer::UNKNOWN:
                 return result;
         }

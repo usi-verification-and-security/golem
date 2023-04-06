@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2022, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2020-2023, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
@@ -12,11 +12,11 @@ void VerificationResult::printWitness(std::ostream & out, Logic & logic) const {
     switch (answer) {
         case VerificationAnswer::SAFE: {
             TermUtils utils(logic);
-            validityWitness.print(out, logic);
+            std::get<ValidityWitness>(witness).print(out, logic);
             return;
         }
         case VerificationAnswer::UNSAFE: {
-            invalidityWitness.print(out, logic);
+            std::get<InvalidityWitness>(witness).print(out, logic);
             return;
         }
         default:

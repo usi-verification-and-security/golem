@@ -143,10 +143,9 @@ TEST_F(Transformer_test, test_OutputFromEngine) {
     hypergraph = std::move(newGraph);
     auto res = Spacer(logic, options).solve(*hypergraph);
     ASSERT_EQ(res.getAnswer(), VerificationAnswer::SAFE);
-    res = translator->translate(res);
+    res = translator->translate(std::move(res));
     Validator validator(logic);
-    VerificationResult result(std::move(res));
-    EXPECT_EQ(validator.validate(originalGraph, result), Validator::Result::VALIDATED);
+    EXPECT_EQ(validator.validate(originalGraph, res), Validator::Result::VALIDATED);
 }
 
 TEST_F(Transformer_test, test_ChainSummarizer_TwoStepChain_Unsafe) {
