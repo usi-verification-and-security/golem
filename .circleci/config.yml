@@ -125,7 +125,8 @@ jobs:
 
     build-macos:
         macos:
-            xcode: 13.4.1
+            xcode: 14.2.0
+        resource_class: macos.x86.medium.gen2
         steps:
             - run: echo "HOMEBREW_NO_AUTO_UPDATE=1" >> $BASH_ENV
             - run:
