@@ -9,8 +9,9 @@
 #include "CommonUtils.h"
 
 void NodeEliminator::BackTranslator::notifyRemovedVertex(SymRef sym, ContractionResult && contractionResult) {
-    assert(removedNodes.count(sym) == 0);
-    removedNodes.insert({sym, std::move(contractionResult)});
+    assert(nodeInfo.count(sym) == 0);
+    removedNodes.push_back(sym);
+    nodeInfo.insert({sym, std::move(contractionResult)});
 }
 
 Transformer::TransformationResult NodeEliminator::transform(std::unique_ptr<ChcDirectedHyperGraph> graph) {
@@ -54,7 +55,7 @@ InvalidityWitness NodeEliminator::BackTranslator::translate(InvalidityWitness wi
 
     using ContractionInfo = std::pair<DirectedHyperEdge, std::pair<DirectedHyperEdge, DirectedHyperEdge>>;
     auto findContractionInfo = [&](EId eid) -> std::optional<ContractionInfo> {
-        for (auto const & [node, contractionResult] : removedNodes) {
+        for (auto && [node, contractionResult] : nodeInfo) {
             for (auto const & [replacing, inout] : contractionResult.replacing) {
                 if (replacing.id == eid) {
                     return std::make_pair(replacing,
@@ -104,9 +105,12 @@ ValidityWitness NodeEliminator::BackTranslator::translate(ValidityWitness witnes
     };
     VersionManager manager(logic);
     TermUtils utils(logic);
-    for (auto && [vertex, entry] : this->removedNodes) {
+    // Removed vertices must be iterated in reversed order
+    for (auto rit = removedNodes.rbegin(); rit != removedNodes.rend(); ++rit) {
+        auto vertex = *rit;
+        auto const & info = nodeInfo.at(vertex);
         vec<PTRef> incomingFormulas;
-        for (auto const & edge : entry.incoming) {
+        for (auto const & edge : info.incoming) {
             if (edge.from.size() != 1) { throw std::logic_error("NonLoopEliminator should not have processed hyperEdges!"); }
             PTRef sourceDef = definitionFor(edge.from[0]);
             assert(sourceDef != PTRef_Undef);
@@ -117,7 +121,7 @@ ValidityWitness NodeEliminator::BackTranslator::translate(ValidityWitness witnes
             incomingFormulas.push(logic.mkAnd(sourceDef, edge.fla.fla));
         }
         vec<PTRef> outgoingFormulas;
-        for (auto const & edge : entry.outgoing) {
+        for (auto const & edge : info.outgoing) {
             if (edge.from.size() != 1) { throw std::logic_error("NonLoopEliminator should not have processed hyperEdges!"); }
             PTRef targetDef = definitionFor(edge.to);
             assert(targetDef != PTRef_Undef);

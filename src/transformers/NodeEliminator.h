@@ -34,7 +34,8 @@ public:
 
         void notifyRemovedVertex(SymRef sym, ContractionResult && edges);
     private:
-        std::unordered_map<SymRef, ContractionResult, SymRefHash> removedNodes;
+        std::unordered_map<SymRef, ContractionResult, SymRefHash> nodeInfo;
+        std::vector<SymRef> removedNodes;
         Logic & logic;
         NonlinearCanonicalPredicateRepresentation predicateRepresentation;
     };
