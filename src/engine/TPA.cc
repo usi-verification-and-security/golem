@@ -137,6 +137,7 @@ public:
     SolverWrapperSingleUse(Logic & logic, PTRef transition) : logic(logic) {
         this->transition = transition;
         const char * msg = "ok";
+        config.setOption(SMTConfig::o_sat_pure_lookahead, SMTOption(true), msg);
         config.setOption(SMTConfig::o_produce_models, SMTOption(true), msg);
         config.setOption(SMTConfig::o_produce_inter, SMTOption(true), msg);
         config.setSimplifyInterpolant(4);
@@ -196,6 +197,7 @@ public:
         //        std::cout << "Transition: " << logic.printTerm(transition) << std::endl;
         this->transition = transition;
         const char * msg = "ok";
+        config.setOption(SMTConfig::o_sat_pure_lookahead, SMTOption(true), msg);
         config.setOption(SMTConfig::o_produce_models, SMTOption(true), msg);
         config.setOption(SMTConfig::o_produce_inter, SMTOption(true), msg);
         config.setSimplifyInterpolant(4);
@@ -1334,6 +1336,7 @@ bool TPABasic::verifyPower(unsigned short level) const {
 PTRef TPABase::safeSupersetOfInitialStates(PTRef start, PTRef transitionInvariant, PTRef target) const {
     SMTConfig config;
     const char * msg = "ok";
+    config.setOption(SMTConfig::o_sat_pure_lookahead, SMTOption(true), msg);
     config.setOption(SMTConfig::o_produce_models, SMTOption(false), msg);
     config.setOption(SMTConfig::o_produce_inter, SMTOption(true), msg);
     config.setLRAInterpolationAlgorithm(itp_lra_alg_decomposing_strong);
@@ -1619,6 +1622,7 @@ TransitionSystemNetworkManager::QueryResult TransitionSystemNetworkManager::quer
                                                                                       PTRef targetCondition) {
     SMTConfig config;
     const char * msg = "ok";
+    config.setOption(SMTConfig::o_sat_pure_lookahead, SMTOption(true), msg);
     config.setOption(SMTConfig::o_produce_models, SMTOption(true), msg);
     config.setOption(SMTConfig::o_produce_inter, SMTOption(true), msg);
     config.setLRAInterpolationAlgorithm(itp_lra_alg_decomposing_strong);
