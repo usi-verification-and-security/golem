@@ -340,7 +340,8 @@ class LawiContext{
     std::unique_ptr<SMTConfig> createInterpolatingConfig() const {
         SMTConfig * config = new SMTConfig();
         const char* msg = "ok";
-        bool set = config->setOption(SMTConfig::o_produce_inter, SMTOption(true), msg);
+        bool set = config->setOption(SMTConfig::o_sat_pure_lookahead, SMTOption(true), msg);
+        set = config->setOption(SMTConfig::o_produce_inter, SMTOption(true), msg);
         assert(set); (void)set;
         config->setSimplifyInterpolant(4);
         if (options.hasOption(Options::LRA_ITP_ALG)) {
