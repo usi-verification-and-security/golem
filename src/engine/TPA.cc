@@ -1338,8 +1338,6 @@ bool TPABasic::verifyPower(unsigned short level) const {
 PTRef TPABase::safeSupersetOfInitialStates(PTRef start, PTRef transitionInvariant, PTRef target) const {
     SMTConfig config;
     const char * msg = "ok";
-    config.setOption(SMTConfig::o_sat_picky, SMTOption(true), msg);
-    config.setOption(SMTConfig::o_sat_picky_w, 10, msg);
     config.setOption(SMTConfig::o_produce_models, SMTOption(false), msg);
     config.setOption(SMTConfig::o_produce_inter, SMTOption(true), msg);
     config.setLRAInterpolationAlgorithm(itp_lra_alg_decomposing_strong);
@@ -1625,8 +1623,6 @@ TransitionSystemNetworkManager::QueryResult TransitionSystemNetworkManager::quer
                                                                                       PTRef targetCondition) {
     SMTConfig config;
     const char * msg = "ok";
-    config.setOption(SMTConfig::o_sat_picky, SMTOption(true), msg);
-    config.setOption(SMTConfig::o_sat_picky_w, 10, msg);
     config.setOption(SMTConfig::o_produce_models, SMTOption(true), msg);
     config.setOption(SMTConfig::o_produce_inter, SMTOption(true), msg);
     config.setLRAInterpolationAlgorithm(itp_lra_alg_decomposing_strong);

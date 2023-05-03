@@ -416,8 +416,6 @@ SpacerContext::QueryResult SpacerContext::implies(PTRef antecedent, PTRef conseq
 SpacerContext::ItpQueryResult SpacerContext::interpolatingImplies(PTRef antecedent, PTRef consequent) {
     SMTConfig config;
     const char* msg = "ok";
-    config.setOption(SMTConfig::o_sat_picky, SMTOption(true), msg);
-    config.setOption(SMTConfig::o_sat_picky_w, 10, msg);
     bool set = config.setOption(SMTConfig::o_produce_inter, SMTOption(true), msg);
     assert(set); (void)set;
     config.setSimplifyInterpolant(4);
