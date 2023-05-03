@@ -573,8 +573,9 @@ bool SpacerContext::tryPushComponents(SymRef vid, std::size_t level, PTRef body)
     bool allPushed = true;
     SMTConfig config;
     const char* msg = "ok";
-    config.setOption(SMTConfig::o_sat_picky, SMTOption(true), msg);
-    config.setOption(SMTConfig::o_sat_picky_w, 10, msg);
+    config.setOption(SMTConfig::o_sat_pure_lookahead, SMTOption(true), msg);
+//    config.setOption(SMTConfig::o_sat_picky, SMTOption(true), msg);
+//    config.setOption(SMTConfig::o_sat_picky_w, 10, msg);
     config.setOption(SMTConfig::o_produce_models, SMTOption(false), msg);
     config.setOption(SMTConfig::o_produce_inter, SMTOption(false), msg);
     MainSolver solver(logic, config, "inductive checker");

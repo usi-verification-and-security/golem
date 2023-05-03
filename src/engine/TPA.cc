@@ -137,8 +137,8 @@ public:
     SolverWrapperSingleUse(Logic & logic, PTRef transition) : logic(logic) {
         this->transition = transition;
         const char * msg = "ok";
-        config.setOption(SMTConfig::o_sat_picky, SMTOption(true), msg);
-        config.setOption(SMTConfig::o_sat_picky_w, 10, msg);
+        config.setOption(SMTConfig::o_sat_pure_lookahead, SMTOption(true), msg);
+//        config.setOption(SMTConfig::o_sat_picky_w, 10, msg);
         config.setOption(SMTConfig::o_produce_models, SMTOption(true), msg);
         config.setOption(SMTConfig::o_produce_inter, SMTOption(true), msg);
         config.setSimplifyInterpolant(4);
@@ -198,8 +198,9 @@ public:
         //        std::cout << "Transition: " << logic.printTerm(transition) << std::endl;
         this->transition = transition;
         const char * msg = "ok";
-        config.setOption(SMTConfig::o_sat_picky, SMTOption(true), msg);
-        config.setOption(SMTConfig::o_sat_picky_w, 10, msg);
+        config.setOption(SMTConfig::o_sat_pure_lookahead, SMTOption(true), msg);
+//        config.setOption(SMTConfig::o_sat_picky, SMTOption(true), msg);
+//        config.setOption(SMTConfig::o_sat_picky_w, 10, msg);
         config.setOption(SMTConfig::o_produce_models, SMTOption(true), msg);
         config.setOption(SMTConfig::o_produce_inter, SMTOption(true), msg);
         config.setSimplifyInterpolant(4);
