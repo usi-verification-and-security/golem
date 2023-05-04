@@ -344,7 +344,7 @@ class LawiContext{
 //        bool set = config->setOption(SMTConfig::o_sat_picky, SMTOption(true), msg);
 //        config->setOption(SMTConfig::o_sat_picky_w, 10, msg);
 
-        config->setOption(SMTConfig::o_random_seed, SMTOption(102457830), msg);
+        config->setOption(SMTConfig::o_random_seed, SMTOption(526899046), msg);
         bool set = config->setOption(SMTConfig::o_produce_inter, SMTOption(true), msg);
         assert(set); (void)set;
         config->setSimplifyInterpolant(4);
