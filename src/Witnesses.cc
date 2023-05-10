@@ -122,7 +122,7 @@ void InvalidityWitness::print(std::ostream & out, Logic & logic) const {
 void ValidityWitness::print(std::ostream & out, Logic & logic) const {
     for (auto && [predicate, definition] : interpretations) {
         if (predicate == logic.getTerm_true() or predicate == logic.getTerm_false()) { continue; }
-        out << "  (define-fun " << logic.getSymName(predicate) << " (";
+        out << "  (define-fun " << logic.protectName(logic.getSymRef(predicate)) << " (";
         const auto & args = TermUtils(logic).predicateArgsInOrder(predicate);
         for (std::size_t i = 0; i < args.size(); ++i) {
             auto sortString = logic.printSort(logic.getSortRef(args[i]));
