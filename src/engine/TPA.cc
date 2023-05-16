@@ -138,7 +138,7 @@ public:
         this->transition = transition;
         const char * msg = "ok";
         config.setOption(SMTConfig::o_sat_picky, SMTOption(true), msg);
-//        config.setOption(SMTConfig::o_sat_picky_w, 1, msg);
+        config.setOption(SMTConfig::o_sat_picky_w, 10, msg);
 //        config.setOption(SMTConfig::o_random_seed, SMTOption(526899046), msg);
         config.setOption(SMTConfig::o_produce_models, SMTOption(true), msg);
         config.setOption(SMTConfig::o_produce_inter, SMTOption(true), msg);
@@ -202,7 +202,7 @@ public:
 //        config.setOption(SMTConfig::o_random_seed, SMTOption(526899046), msg);
 //        config.setOption(SMTConfig::o_sat_pure_lookahead, SMTOption(true), msg);
         config.setOption(SMTConfig::o_sat_picky, SMTOption(true), msg);
-//        config.setOption(SMTConfig::o_sat_picky_w, 1, msg);
+        config.setOption(SMTConfig::o_sat_picky_w, 10, msg);
         config.setOption(SMTConfig::o_produce_models, SMTOption(true), msg);
         config.setOption(SMTConfig::o_produce_inter, SMTOption(true), msg);
         config.setSimplifyInterpolant(4);
@@ -257,6 +257,9 @@ public:
         itpContext->getSingleInterpolant(itps, mask);
         assert(itps.size() == 1);
         PTRef itp = itps[0];
+        PtermNodeCounter counter(logic, UINT32_MAX);
+        counter.visit(itp);
+        printf("Node count: %d\n", counter.getCount());
         solver->pop();
         pushed = false;
         //        std::cout << logic.printTerm(itp) << std::endl;
