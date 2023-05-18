@@ -11,7 +11,6 @@
 void VerificationResult::printWitness(std::ostream & out, Logic & logic) const {
     switch (answer) {
         case VerificationAnswer::SAFE: {
-            TermUtils utils(logic);
             std::get<ValidityWitness>(witness).print(out, logic);
             return;
         }
@@ -30,7 +29,7 @@ InvalidityWitness InvalidityWitness::fromErrorPath(ErrorPath const & errorPath, 
     Derivation derivation;
     using DerivationStep = Derivation::DerivationStep;
     auto const & path = errorPath;
-    if (path.isEmpty()) { return InvalidityWitness(); }
+    if (path.isEmpty()) { return {}; }
     auto edgeIds = path.getEdges();
     // Compute model for the error path
     auto model = [&]() {
@@ -46,7 +45,7 @@ InvalidityWitness InvalidityWitness::fromErrorPath(ErrorPath const & errorPath, 
         return solver.getModel();
     }();
 
-    struct UPHelper{
+    struct UPHelper {
         int counter = 0;
         ChcDirectedGraph const & graph;
         LinearPredicateVersioning predicateVersioning;
@@ -102,7 +101,6 @@ InvalidityWitness InvalidityWitness::fromTransitionSystem(const ChcDirectedGraph
 
 void InvalidityWitness::print(std::ostream & out, Logic & logic) const {
     auto derivationSize = derivation.size();
-    ChcPrinter printer(logic, out);
     for (std::size_t i = 0; i < derivationSize; ++i) {
         auto const & step = derivation[i];
         out << i << ":\t";

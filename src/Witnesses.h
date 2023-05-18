@@ -18,11 +18,11 @@ class ErrorPath {
     std::vector<EId> path;
 public:
     ErrorPath() = default;
-    ErrorPath(std::vector<EId> path) : path(std::move(path)) {}
+    explicit ErrorPath(std::vector<EId> path) : path(std::move(path)) {}
 
-    std::vector<EId> getEdges() const { return path; }
+    [[nodiscard]] std::vector<EId> getEdges() const { return path; }
+    [[nodiscard]] bool isEmpty() const { return path.empty(); }
     void setPath(std::vector<EId> npath) { this->path = std::move(npath); }
-    bool isEmpty() const { return path.empty(); }
 
     static ErrorPath fromTransitionSystem(ChcDirectedGraph const & graph, std::size_t unrollings);
 };
@@ -49,19 +49,19 @@ public:
         DerivationStep &        operator[](std::size_t index)       { assert(index < derivationSteps.size()); return derivationSteps[index]; }
         DerivationStep const &  operator[](std::size_t index) const { assert(index < derivationSteps.size()); return derivationSteps[index]; }
         DerivationStep &        last()       { assert(size() > 0); return derivationSteps[size() - 1]; }
-        DerivationStep const &  last() const { assert(size() > 0); return derivationSteps[size() - 1]; }
-        std::size_t size() const { return derivationSteps.size(); }
+        [[nodiscard]] DerivationStep const &  last() const { assert(size() > 0); return derivationSteps[size() - 1]; }
+        [[nodiscard]] std::size_t size() const { return derivationSteps.size(); }
     private:
         std::vector<DerivationStep> derivationSteps;
 
     public:
         Derivation() = default;
-        Derivation(std::vector<DerivationStep> derivationSteps) : derivationSteps(std::move(derivationSteps)) {}
+        explicit Derivation(std::vector<DerivationStep> derivationSteps) : derivationSteps(std::move(derivationSteps)) {}
 
         using const_iterator = decltype(derivationSteps)::const_iterator;
 
-        const_iterator begin() const { return derivationSteps.begin(); }
-        const_iterator end() const { return derivationSteps.end(); }
+        [[nodiscard]] const_iterator begin() const { return derivationSteps.begin(); }
+        [[nodiscard]] const_iterator end() const { return derivationSteps.end(); }
 
     };
 
@@ -71,7 +71,7 @@ private:
 public:
     void setDerivation(Derivation derivation_) { derivation = std::move(derivation_); }
 
-    Derivation const & getDerivation() const { return derivation; }
+    [[nodiscard]] Derivation const & getDerivation() const { return derivation; }
 
     static InvalidityWitness fromErrorPath(ErrorPath const & errorPath, ChcDirectedGraph const & graph);
     static InvalidityWitness fromTransitionSystem(ChcDirectedGraph const & graph, std::size_t unrollings);
@@ -83,9 +83,8 @@ class ValidityWitness {
     std::unordered_map<PTRef, PTRef, PTRefHash> interpretations;
 public:
     using definitions_t = decltype(interpretations);
-    using entry_type = decltype(interpretations)::value_type;
 
-    ValidityWitness() {}
+    ValidityWitness() = default;
 
     explicit ValidityWitness(definitions_t interpretations)
         : interpretations(std::move(interpretations)) {}
@@ -122,8 +121,8 @@ public:
 
     [[nodiscard]] VerificationAnswer getAnswer() const { return answer; }
 
-    ValidityWitness const & getValidityWitness() const & { assert(answer == VerificationAnswer::SAFE); return std::get<ValidityWitness>(witness); }
-    InvalidityWitness const & getInvalidityWitness() const & { assert(answer == VerificationAnswer::UNSAFE); return std::get<InvalidityWitness>(witness); }
+    [[nodiscard]] ValidityWitness const & getValidityWitness() const & { assert(answer == VerificationAnswer::SAFE); return std::get<ValidityWitness>(witness); }
+    [[nodiscard]] InvalidityWitness const & getInvalidityWitness() const & { assert(answer == VerificationAnswer::UNSAFE); return std::get<InvalidityWitness>(witness); }
 
     ValidityWitness && getValidityWitness() && { assert(answer == VerificationAnswer::SAFE); return std::move(std::get<ValidityWitness>(witness)); }
     InvalidityWitness && getInvalidityWitness() && { assert(answer == VerificationAnswer::UNSAFE); return std::move(std::get<InvalidityWitness>(witness)); }
