@@ -30,6 +30,7 @@ void printUsage() {
         "Usage: golem [options] [-i] file\n"
         "\n"
         "-h,--help                  Print this help message\n"
+        "--version                  Print version number of Golem\n"
         "-l,--logic <name>          SMT-LIB logic to use (required); possible values: QF_LRA, QF_LIA\n"
         "-e,--engine <name>         Select engine to use; supported engines:\n"
         "                               bmc - Bounded Model Checking (only transition systems)\n"
@@ -62,10 +63,12 @@ Options CommandLineParser::parse(int argc, char ** argv) {
     int forcedCovering = 0;
     int verbose = 0;
     int tpaUseQE = 0;
+    int printVersion = 0;
 
     struct option long_options[] =
         {
             {"help", no_argument, nullptr, 'h'},
+            {"version", no_argument, &printVersion, 1},
             {Options::ENGINE.c_str(), required_argument, nullptr, 'e'},
             {Options::LOGIC.c_str(), required_argument, nullptr, 'l'},
             {Options::INPUT_FILE.c_str(), required_argument, nullptr, 'i'},
@@ -87,6 +90,10 @@ Options CommandLineParser::parse(int argc, char ** argv) {
 
         switch (c) {
             case 0:
+                if (long_options[option_index].flag == &printVersion) {
+                    std::cout << "Golem " << GOLEM_VERSION << std::endl;
+                    exit(0);
+                }
                 if (long_options[option_index].flag == &computeWitness and optarg) {
                     if (isDisableKeyword(optarg)) {
                         computeWitness = 0;
@@ -110,15 +117,12 @@ Options CommandLineParser::parse(int argc, char ** argv) {
                 break;
             case 'e':
                 res.addOption(Options::ENGINE, optarg);
-//                printf ("option -e with value `%s'\n", optarg);
                 break;
             case 'l':
                 res.addOption(Options::LOGIC, optarg);
-//                printf ("option -l with value `%s'\n", optarg);
                 break;
             case 'i':
                 res.addOption(Options::INPUT_FILE, optarg);
-//                printf ("option -i with value `%s'\n", optarg);
                 break;
             case 'f':
                 res.addOption(Options::ANALYSIS_FLOW, optarg);
