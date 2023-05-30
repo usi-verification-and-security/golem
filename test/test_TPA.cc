@@ -475,6 +475,7 @@ TEST_F(TPATest, test_transformContractVertex_safe) {
     solveSystem(clauses, engine, VerificationAnswer::SAFE, true);
 }
 
+
 TEST_F(TPATest, test_transformContractVertex_unsafe) {
     Options options;
     options.addOption(Options::LOGIC, "QF_LIA");
@@ -530,6 +531,49 @@ TEST_F(TPATest, test_trivialSystem_safe) {
         { // x > 0  and x < -1 => false
             ChcHead{UninterpretedPredicate{logic->getTerm_false()}},
             ChcBody{{logic->mkAnd(logic->mkGt(xp, zero), logic->mkLt(xp, logic->mkNeg(one)))}, {}}
+        }};
+    TPAEngine engine(*logic, options);
+    solveSystem(clauses, engine, VerificationAnswer::SAFE, true);
+}
+
+
+
+TEST_F(TPATest, test_nextQueryVersion) {
+    Options options;
+    options.addOption(Options::LOGIC, "QF_LIA");
+    options.addOption(Options::COMPUTE_WITNESS, "true");
+    options.addOption(Options::ENGINE, TPAEngine::SPLIT_TPA);
+    SymRef itp = mkPredicateSymbol("itp", {intSort(), intSort(), intSort()});
+
+
+    PTRef ten = logic->mkIntConst(FastRational(10));
+    PTRef seven = logic->mkIntConst(FastRational(7));
+    PTRef five = logic->mkIntConst(FastRational(5));
+    PTRef three = logic->mkIntConst(FastRational(3));
+
+    PTRef y = logic->mkIntVar("y");
+    PTRef z = logic->mkIntVar("z");
+    PTRef k = logic->mkIntVar("k");
+    PTRef l = logic->mkIntVar("l");
+    PTRef predItpCurrent1 = instantiatePredicate(itp, {x, y, z});
+    PTRef predItpCurrent2 = instantiatePredicate(itp, {x, y, l});
+    PTRef predItpCurrent3 = instantiatePredicate(itp, {z, k, l});
+    PTRef predItpCurrent4 = instantiatePredicate(itp, {x, z, y});
+    std::vector<ChClause> clauses{
+        { // (x = 0) and (not (5 <= z)) and (not (z <= 0)) and (y = (z * 3))) => itp(x, y, z)
+         ChcHead{UninterpretedPredicate{predItpCurrent1}},
+         ChcBody{{logic->mkAnd({ logic->mkEq(x, zero), logic->mkNot(logic->mkLeq(five, z)),
+                                 logic->mkNot(logic->mkLeq(five, zero)), logic->mkEq(y, logic->mkTimes(z, three)) })}, {}}
+        },
+        { // itp(x,y,l) and (z = (1 + x)) and (not (x <= 10)) and (k = (y + 1))) => itp(z, k, l)
+         ChcHead{UninterpretedPredicate{predItpCurrent3}},
+         ChcBody{{logic->mkAnd({ logic->mkEq(z, logic->mkPlus(x, one)), logic->mkNot(logic->mkLeq(ten, x)),
+                                 logic->mkEq(k, logic->mkPlus(y, one)) })}, {UninterpretedPredicate{predItpCurrent2}}}
+        },
+        { // itp(x, z, y) and (not (z <= 7)) and (not (z >= 3)) => false
+         ChcHead{UninterpretedPredicate{logic->getTerm_false()}},
+         ChcBody{{logic->mkAnd(logic->mkNot(logic->mkLeq(z, seven)), logic->mkNot(logic->mkGeq(z, three)))},
+                 {UninterpretedPredicate{predItpCurrent4}}}
         }};
     TPAEngine engine(*logic, options);
     solveSystem(clauses, engine, VerificationAnswer::SAFE, true);

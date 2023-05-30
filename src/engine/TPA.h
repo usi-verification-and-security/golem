@@ -90,6 +90,7 @@ protected:
     PTRef query;
     vec<PTRef> stateVariables;
     vec<PTRef> auxiliaryVariables;
+    vec<PTRef> invariants;
 
     PTRef identity{PTRef_Undef};
 
@@ -177,6 +178,8 @@ protected:
     PTRef keepOnlyVars(PTRef fla, vec<PTRef> const & vars, Model & model);
 
     PTRef safeSupersetOfInitialStates(PTRef start, PTRef transitionInvariant, PTRef target) const;
+
+    vec<PTRef> houdiniCheck(PTRef invCandidates, PTRef transition);
 
     bool checkLessThanFixedPoint(unsigned short power);
 
