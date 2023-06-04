@@ -105,6 +105,13 @@ struct EdgeHasher {
     }
 };
 
+struct EdgeIdHasher {
+    std::size_t operator()(EId eid) const {
+        std::hash<std::size_t> hasher;
+        return hasher(eid.id);
+    }
+};
+
 struct VertexHasher {
     std::size_t operator()(VId vid) const {
         std::hash<std::size_t> hasher;

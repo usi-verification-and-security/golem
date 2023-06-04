@@ -85,6 +85,22 @@ bool operator>(ProofObligation const& pob1, ProofObligation const& pob2) {
            (pob1.bound == pob2.bound and pob1.vertex.x > pob2.vertex.x);
 }
 
+bool operator==(ProofObligation const & pob1, ProofObligation const & pob2) {
+    return pob1.constraint == pob2.constraint and pob1.vertex == pob2.vertex and pob1.bound == pob2.bound;
+}
+
+struct POBHasher {
+    std::size_t operator()(ProofObligation const & pob) const {
+        // From Boost hash_combine
+        std::hash<std::size_t> hasher;
+        std::size_t res = 0;
+        res ^= hasher(pob.bound) + 0x9e3779b9 + (res<<6) + (res>>2);
+        res ^= hasher(pob.vertex.x) + 0x9e3779b9 + (res<<6) + (res>>2);
+        res ^= hasher(pob.constraint.x) + 0x9e3779b9 + (res<<6) + (res>>2);
+        return res;
+    }
+};
+
 struct PriorityQueue {
 
     void push(ProofObligation pob) { pqueue.push(pob); }
@@ -168,6 +184,18 @@ class SpacerContext {
 
     // Helper data structures to get the versioning right
     ChcDirectedHyperGraph::VertexInstances vertexInstances;
+
+    class SafeEdgeCache {
+        std::unordered_map<ProofObligation, std::unordered_set<EId, EdgeIdHasher>, POBHasher> inner;
+    public:
+        [[nodiscard]] bool isEmpty() const;
+        bool has(ProofObligation const & pob) const;
+        bool isKnownToBeSafe(ProofObligation const & pob, EId eid) const;
+        void markSafe(ProofObligation const & pob, EId eid);
+        void remove(ProofObligation const & pob);
+    };
+
+    SafeEdgeCache safeEdgeCache;
 
     void addMaySummary(SymRef vid, std::size_t bound, PTRef summary) {
         over.insert(vid, bound, summary);
@@ -310,6 +338,7 @@ std::vector<EId> incomingEdges(SymRef v, ChcDirectedHyperGraph const & graph) {
 SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t currentBound) {
     TRACE(1, "\nRunning bounded safety check at level " << currentBound)
     auto query = graph.getExit();
+    assert(safeEdgeCache.isEmpty());
     PriorityQueue pqueue;
     pqueue.push(ProofObligation{query, currentBound, logic.getTerm_true()});
     lowestChangedLevel = currentBound;
@@ -326,6 +355,10 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
         for (EId edgeId : edges) {
             TRACE(2, "Considering edge " << edgeId.id)
             assert(graph.getTarget(edgeId) == pob.vertex);
+            if (safeEdgeCache.isKnownToBeSafe(pob, edgeId)) {
+//                std::cout << "Safe edge cache used!" << std::endl;
+                continue;
+            }
             // test if vertex can be reached using must summaries
             assert(pob.bound > 0);
             auto result = mustReachable(edgeId, pob.constraint, pob.bound - 1);
@@ -341,6 +374,7 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
                 if (pob.vertex == query) {
                     return BoundedSafetyResult::UNSAFE; // query is reachable
                 }
+                safeEdgeCache.remove(pob);
                 pqueue.pop();
                 mustReached = true;
                 break;
@@ -348,6 +382,8 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
             auto newProofObligation = computePredecessor(edgeId, pob);
             if (newProofObligation.has_value()) {
                 newProofObligations.push_back(newProofObligation.value());
+            } else {
+                safeEdgeCache.markSafe(pob, edgeId);
             }
         }
         if (mustReached) { continue; }
@@ -370,6 +406,7 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
                 if (pob.bound < lowestChangedLevel) {
                     lowestChangedLevel = pob.bound;
                 }
+                safeEdgeCache.remove(pob);
                 pqueue.pop(); // This POB has been successfully blocked
             } else {
                 for (auto const& npob : newProofObligations) {
@@ -379,6 +416,7 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
             }
         }
     } // end of main cycle
+    assert(safeEdgeCache.isEmpty());
     return BoundedSafetyResult::SAFE; // not reachable at this bound
 }
 
@@ -885,4 +923,25 @@ InvalidityWitness SpacerContext::reconstructInvalidityWitness() const {
     InvalidityWitness witness;
     witness.setDerivation(std::move(witnessingDerivation));
     return witness;
+}
+
+bool SpacerContext::SafeEdgeCache::isEmpty() const {
+    return inner.empty();
+}
+
+void SpacerContext::SafeEdgeCache::markSafe(const ProofObligation & pob, EId eid) {
+    inner[pob].insert(eid);
+}
+
+bool SpacerContext::SafeEdgeCache::isKnownToBeSafe(const ProofObligation & pob, EId eid) const {
+    auto it = inner.find(pob);
+    return it != inner.end() and it->second.find(eid) != it->second.end();
+}
+
+void SpacerContext::SafeEdgeCache::remove(const ProofObligation & pob) {
+    auto it = inner.find(pob);
+    //    assert(it != inner.end());
+    if (it != inner.end()) {
+        inner.erase(it);
+    }
 }
