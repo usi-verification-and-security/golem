@@ -440,7 +440,7 @@ SolverWrapper * TPASplit::getExactReachabilitySolver(unsigned short power) const
 VerificationAnswer TPABase::solveTransitionSystem(TransitionSystem & system) {
     resetTransitionSystem(system);
 //    printf("%s\n", logic.pp(transition).c_str());
-    houdiniCheck(transition, getNextVersion(transition));
+//    houdiniCheck(transition, getNextVersion(transition));
     return solve();
 }
 
@@ -995,6 +995,18 @@ vec<PTRef> TPABase::houdiniCheck(PTRef invCandidates, PTRef transition) {
     solver.push();
 
     auto candidates = topLevelConjuncts(logic, invCandidates);
+//    printf("Houdini start with %d candidates!\n", candidates.size());
+    while(candidates.size() > 128){
+        for(int i = candidates.size() - 1; i >= 1; i-=2 ){
+            PTRef n_f = logic.mkAnd(candidates[i], candidates[i-1]);
+            candidates.pop();
+            candidates.pop();
+            candidates.push(n_f);
+            if(candidates.size() <= 128){
+                break;
+            }
+        }
+    }
 //    invCandidates.append(conjuncts);
 //    tr(x, x') /\ tr(x', x'') => tr(x, x'')
 //    Atr(x, x') /\ tr(x', x'') => Atr(x, x'')
@@ -1022,12 +1034,13 @@ vec<PTRef> TPABase::houdiniCheck(PTRef invCandidates, PTRef transition) {
     for (auto cand: candidates) {
         invariants.push(cand);
     }
+//    printf("Houdini end with %d invs!\n", candidates.size());
     return candidates;
 }
 
 bool TPABase::checkLessThanFixedPoint(unsigned short power) {
     assert(verifyPower(power + 1, TPAType::LESS_THAN));
-    printf("iteration: %d\n", power);
+//    printf("iteration: %d\n", power);
     for (unsigned short i = 1; i <= power + 1; ++i) {
         PTRef currentLevelTransition = getPower(i, TPAType::LESS_THAN);
         // first check if it is fixed point with respect to initial state
@@ -1036,7 +1049,8 @@ bool TPABase::checkLessThanFixedPoint(unsigned short power) {
         {
             MainSolver solver(logic, config, "Fixed-point checker");
 //            invariants.push(currentLevelTransition);
-            solver.insertFormula(logic.mkAnd({ currentLevelTransition, getNextVersion(transition),
+//            We want the current version of the invs most likely getNextVersion(logic.mkAnd(invariants)), with
+            solver.insertFormula(logic.mkAnd({logic.mkAnd(invariants),  currentLevelTransition, getNextVersion(transition),
                                               logic.mkNot(shiftOnlyNextVars(currentLevelTransition))}));
 //            invariants.pop();
             auto satres = solver.check();
@@ -1069,7 +1083,7 @@ bool TPABase::checkLessThanFixedPoint(unsigned short power) {
         {
             MainSolver solver(logic, config, "Fixed-point checker");
 //            invariants.push(currentLevelTransition);
-            solver.insertFormula(logic.mkAnd({ transition, getNextVersion(currentLevelTransition),
+            solver.insertFormula(logic.mkAnd({logic.mkAnd(invariants), transition, getNextVersion(currentLevelTransition),
                                               logic.mkNot(shiftOnlyNextVars(currentLevelTransition))}));
 //            invariants.pop();
             auto satres = solver.check();
@@ -1099,30 +1113,30 @@ bool TPABase::checkLessThanFixedPoint(unsigned short power) {
             }
         }
         // now check the produced if transition invariants are actually safety invariants
-//        {
-//            MainSolver solver(logic, config, "Fixed-point checker");
-//            solver.insertFormula(logic.mkAnd({init, getNextVersion(logic.mkAnd(invariants)),
-//                                              getNextVersion(query)}));
-//            auto satres = solver.check();
-//            bool restrictedInvariant = false;
-//            if (satres == s_False) {
-//                if (verbose() > 0) {
-//                    std::cout << "; Left fixed point detected in less-than relation on level " << i << " from " << power
-//                              << std::endl;
-//                    std::cout << "; Fixed point detected for "
-//                              << (not restrictedInvariant ? "whole transition relation"
-//                                                          : "transition relation restricted to bad")
-//                              << std::endl;
-//                }
-//                explanation.invariantType = restrictedInvariant
-//                                                ? SafetyExplanation::TransitionInvariantType::RESTRICTED_TO_QUERY
-//                                                : SafetyExplanation::TransitionInvariantType::UNRESTRICTED;
-//                explanation.relationType = TPAType::LESS_THAN;
-//                explanation.power = i;
-//                explanation.fixedPointType = SafetyExplanation::FixedPointType::LEFT;
-//                return true;
-//            }
-//        }
+        {
+            MainSolver solver(logic, config, "Fixed-point checker");
+            solver.insertFormula(logic.mkAnd({init,logic.mkAnd(invariants),
+                                              getNextVersion(query)}));
+            auto satres = solver.check();
+            bool restrictedInvariant = false;
+            if (satres == s_False) {
+                if (verbose() > 0) {
+                    std::cout << "; Left fixed point detected in less-than relation on level " << i << " from " << power
+                              << std::endl;
+                    std::cout << "; Fixed point detected for "
+                              << (not restrictedInvariant ? "whole transition relation"
+                                                          : "transition relation restricted to bad")
+                              << std::endl;
+                }
+                explanation.invariantType = restrictedInvariant
+                                                ? SafetyExplanation::TransitionInvariantType::RESTRICTED_TO_QUERY
+                                                : SafetyExplanation::TransitionInvariantType::UNRESTRICTED;
+                explanation.relationType = TPAType::LESS_THAN;
+                explanation.power = i;
+                explanation.fixedPointType = SafetyExplanation::FixedPointType::LEFT;
+                return true;
+            }
+        }
     }
     return false;
 }
