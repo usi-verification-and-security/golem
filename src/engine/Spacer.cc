@@ -216,15 +216,7 @@ class SpacerContext {
     };
     ItpQueryResult interpolatingImplies(PTRef antecedent, PTRef consequent);
 
-    struct MustReachResult {
-        PTRef mustSummary = PTRef_Undef;
-        bool applied = false;
-        std::unique_ptr<Model> model {nullptr};
-    };
-
     bool checkMustReachability(std::vector<EId> const & edges, ProofObligation const & pob);
-
-    MustReachResult mustReachable(EId eid, PTRef targetConstraint, std::size_t bound);
 
     bool mayReachable(EId eid, PTRef targetConstraint, std::size_t bound) const;
 
@@ -434,46 +426,39 @@ SpacerContext::ItpQueryResult SpacerContext::interpolatingImplies(PTRef antecede
 }
 
 bool SpacerContext::checkMustReachability(std::vector<EId> const & edges, ProofObligation const & pob) {
+    assert(pob.bound > 0);
+    // test if vertex can be reached using must summaries
+    vec<PTRef> summaries;
+    summaries.capacity(edges.size());
     for (EId edgeId : edges) {
-        TRACE(2, "Considering edge " << edgeId.id)
         assert(graph.getTarget(edgeId) == pob.vertex);
-        // test if vertex can be reached using must summaries
-        assert(pob.bound > 0);
-        auto result = mustReachable(edgeId, pob.constraint, pob.bound - 1);
-        if (result.applied) {
-            TRACE(1, "Must summary successfully applied!")
-            assert(result.mustSummary != PTRef_Undef);
-            PTRef definitelyReachable = VersionManager(logic).targetFormulaToBase(result.mustSummary);
-            under.insert(pob.vertex, pob.bound, definitelyReachable);
-            if (logProof) {
-                assert(result.model);
-                logNewFactIntoDatabase(definitelyReachable, pob.vertex, pob.bound - 1, edgeId, *result.model);
+        summaries.push(getEdgeMustSummary(edgeId, pob.bound - 1));
+    }
+    PTRef anySummary = logic.mkOr(summaries);
+    auto implCheckRes = implies(anySummary, logic.mkNot(pob.constraint));
+    if (implCheckRes.answer == SpacerContext::QueryAnswer::INVALID) {
+        TRACE(1, "Must summary successfully applied!")
+        assert(implCheckRes.model);
+        // eliminate variables from body except variables present in predicate of pob's vertex
+        auto predicateVars = TermUtils(logic).getVars(graph.getNextStateVersion(pob.vertex));
+        int counter = 0;
+        for (PTRef summary : summaries) {
+            if (implCheckRes.model->evaluate(summary) == logic.getTerm_true()) {
+                PTRef newMustSummary = projectFormula(summary, predicateVars, *implCheckRes.model);
+                assert(newMustSummary != PTRef_Undef);
+                PTRef definitelyReachable = VersionManager(logic).targetFormulaToBase(newMustSummary);
+                under.insert(pob.vertex, pob.bound, definitelyReachable);
+                if (logProof) {
+                    logNewFactIntoDatabase(definitelyReachable, pob.vertex, pob.bound - 1, edges[counter], *implCheckRes.model);
+                }
+                return true;
             }
-            return true;
+            ++counter;
         }
+        assert(false); // Should be unreachable, we should encounter satisfied summary above
+        return true;
     }
     return false;
-}
-
-SpacerContext::MustReachResult SpacerContext::mustReachable(EId eid, PTRef targetConstraint, std::size_t bound) {
-    PTRef edgeMustSummary = getEdgeMustSummary(eid, bound);
-    auto implCheckRes = implies(edgeMustSummary, logic.mkNot(targetConstraint));
-    MustReachResult res;
-    if (implCheckRes.answer == SpacerContext::QueryAnswer::INVALID) {
-        assert(implCheckRes.model);
-        res.applied = true;
-        // eliminate variables from body except variables present in predicate of edge target
-        auto target = graph.getTarget(eid);
-        auto predicateVars = TermUtils(logic).getVars(graph.getNextStateVersion(target));
-        PTRef newMustSummary = projectFormula(edgeMustSummary, predicateVars, *implCheckRes.model); // TODO: is body OK, or do I need to project also the head?
-        res.mustSummary = newMustSummary;
-        res.model = std::move(implCheckRes.model);
-    } else {
-        res.applied = false;
-        res.mustSummary = PTRef_Undef;
-        res.model = nullptr;
-    }
-    return res;
 }
 
 bool SpacerContext::mayReachable(EId eid, PTRef targetConstraint, std::size_t bound) const {
