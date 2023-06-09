@@ -222,6 +222,8 @@ class SpacerContext {
         std::unique_ptr<Model> model {nullptr};
     };
 
+    bool checkMustReachability(std::vector<EId> const & edges, ProofObligation const & pob);
+
     MustReachResult mustReachable(EId eid, PTRef targetConstraint, std::size_t bound);
 
     bool mayReachable(EId eid, PTRef targetConstraint, std::size_t bound) const;
@@ -321,61 +323,44 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
             return BoundedSafetyResult::UNSAFE;
         }
         auto edges = incomingEdges(pob.vertex, graph);
-        bool mustReached = false;
+        bool mustReached = checkMustReachability(edges, pob);
+        if (mustReached) {
+            if (pob.vertex == query) {
+                return BoundedSafetyResult::UNSAFE; // query is reachable
+            }
+            pqueue.pop();
+            continue;
+        }
         std::vector<ProofObligation> newProofObligations;
         for (EId edgeId : edges) {
-            TRACE(2, "Considering edge " << edgeId.id)
-            assert(graph.getTarget(edgeId) == pob.vertex);
-            // test if vertex can be reached using must summaries
-            assert(pob.bound > 0);
-            auto result = mustReachable(edgeId, pob.constraint, pob.bound - 1);
-            if (result.applied) {
-                TRACE(1, "Must summary successfully applied!")
-                assert(result.mustSummary != PTRef_Undef);
-                PTRef definitelyReachable = VersionManager(logic).targetFormulaToBase(result.mustSummary);
-                under.insert(pob.vertex, pob.bound, definitelyReachable);
-                if (logProof) {
-                    assert(result.model);
-                    logNewFactIntoDatabase(definitelyReachable, pob.vertex, pob.bound - 1, edgeId, *result.model);
-                }
-                if (pob.vertex == query) {
-                    return BoundedSafetyResult::UNSAFE; // query is reachable
-                }
-                pqueue.pop();
-                mustReached = true;
-                break;
-            }
             auto newProofObligation = computePredecessor(edgeId, pob);
             if (newProofObligation.has_value()) {
                 newProofObligations.push_back(newProofObligation.value());
             }
         }
-        if (mustReached) { continue; }
-        else {
-            if (newProofObligations.empty()) {
-                // all edges are blocked; compute new lemma blocking the current proof obligation
-                // TODO:
-                vec<PTRef> edgeRepresentations; edgeRepresentations.capacity(edges.size());
-                for (EId eid : edges) {
-                    edgeRepresentations.push(getEdgeMaySummary(eid, pob.bound - 1));
-                }
-                auto res = interpolatingImplies(logic.mkOr(edgeRepresentations), logic.mkNot(pob.constraint));
-                assert(res.answer == QueryAnswer::VALID);
-                if (res.answer != QueryAnswer::VALID) {
-                    throw std::logic_error("All edges should have been blocked, but they are not!");
-                }
-                PTRef newLemma = VersionManager(logic).targetFormulaToBase(res.interpolant);
-                TRACE(2, "Learnt new lemma for " << pob.vertex.x << " at level " << pob.bound << " - " << logic.pp(newLemma))
-                addMaySummary(pob.vertex, pob.bound, newLemma);
-                if (pob.bound < lowestChangedLevel) {
-                    lowestChangedLevel = pob.bound;
-                }
-                pqueue.pop(); // This POB has been successfully blocked
-            } else {
-                for (auto const& npob : newProofObligations) {
-                    TRACE(2,"Pushing new proof obligation " << logic.pp(npob.constraint) << " for " << npob.vertex.x << " at level " << npob.bound)
-                    pqueue.push(npob);
-                }
+        if (newProofObligations.empty()) {
+            // all edges are blocked; compute new lemma blocking the current proof obligation
+            // TODO:
+            vec<PTRef> edgeRepresentations; edgeRepresentations.capacity(edges.size());
+            for (EId eid : edges) {
+                edgeRepresentations.push(getEdgeMaySummary(eid, pob.bound - 1));
+            }
+            auto res = interpolatingImplies(logic.mkOr(edgeRepresentations), logic.mkNot(pob.constraint));
+            assert(res.answer == QueryAnswer::VALID);
+            if (res.answer != QueryAnswer::VALID) {
+                throw std::logic_error("All edges should have been blocked, but they are not!");
+            }
+            PTRef newLemma = VersionManager(logic).targetFormulaToBase(res.interpolant);
+            TRACE(2, "Learnt new lemma for " << pob.vertex.x << " at level " << pob.bound << " - " << logic.pp(newLemma))
+            addMaySummary(pob.vertex, pob.bound, newLemma);
+            if (pob.bound < lowestChangedLevel) {
+                lowestChangedLevel = pob.bound;
+            }
+            pqueue.pop(); // This POB has been successfully blocked
+        } else {
+            for (auto const& npob : newProofObligations) {
+                TRACE(2,"Pushing new proof obligation " << logic.pp(npob.constraint) << " for " << npob.vertex.x << " at level " << npob.bound)
+                pqueue.push(npob);
             }
         }
     } // end of main cycle
@@ -446,6 +431,28 @@ SpacerContext::ItpQueryResult SpacerContext::interpolatingImplies(PTRef antecede
         throw std::logic_error("Unreachable code!");
     }
     return qres;
+}
+
+bool SpacerContext::checkMustReachability(std::vector<EId> const & edges, ProofObligation const & pob) {
+    for (EId edgeId : edges) {
+        TRACE(2, "Considering edge " << edgeId.id)
+        assert(graph.getTarget(edgeId) == pob.vertex);
+        // test if vertex can be reached using must summaries
+        assert(pob.bound > 0);
+        auto result = mustReachable(edgeId, pob.constraint, pob.bound - 1);
+        if (result.applied) {
+            TRACE(1, "Must summary successfully applied!")
+            assert(result.mustSummary != PTRef_Undef);
+            PTRef definitelyReachable = VersionManager(logic).targetFormulaToBase(result.mustSummary);
+            under.insert(pob.vertex, pob.bound, definitelyReachable);
+            if (logProof) {
+                assert(result.model);
+                logNewFactIntoDatabase(definitelyReachable, pob.vertex, pob.bound - 1, edgeId, *result.model);
+            }
+            return true;
+        }
+    }
+    return false;
 }
 
 SpacerContext::MustReachResult SpacerContext::mustReachable(EId eid, PTRef targetConstraint, std::size_t bound) {
