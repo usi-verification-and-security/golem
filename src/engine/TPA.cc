@@ -996,6 +996,16 @@ vec<PTRef> TPABase::houdiniCheck(PTRef invCandidates, PTRef transition) {
 
     auto candidates = topLevelConjuncts(logic, invCandidates);
 //    printf("Houdini start with %d candidates!\n", candidates.size());
+
+    for(int i = candidates.size() - 1; i >= 0; i--){
+        PTRef cand = candidates[i];
+        if(checkedCandidates_1.find(cand) != checkedCandidates_1.end() || std::find(invariants.begin(), invariants.end(), cand) != invariants.end()){
+            candidates[i] = candidates[candidates.size() - 1];
+            candidates.pop();
+        }
+    }
+
+//    printf("Houdini continues with %d candidates!\n", candidates.size());
     while(candidates.size() > 128){
         for(int i = candidates.size() - 1; i >= 1; i-=2 ){
             PTRef n_f = logic.mkAnd(candidates[i], candidates[i-1]);
@@ -1021,7 +1031,10 @@ vec<PTRef> TPABase::houdiniCheck(PTRef invCandidates, PTRef transition) {
             solver.push();
             solver.insertFormula(logic.mkAnd({logic.mkAnd(candidates), logic.mkNot(shiftOnlyNextVars(cand))}));
             if(solver.check() == s_True){
+                Model model = *solver.getModel();
                 candidates[i] = candidates[candidates.size() - 1];
+                checkedCandidates_1.insert(std::pair<PTRef, Model>(cand, model));
+//                checkedCandidates.insert(cand);
                 candidates.pop();
             }
         }
@@ -1033,6 +1046,19 @@ vec<PTRef> TPABase::houdiniCheck(PTRef invCandidates, PTRef transition) {
     }
     for (auto cand: candidates) {
         invariants.push(cand);
+    }
+    if(invariants.size() > lim){
+//        lim = invariants.size() * 2;
+        for(std::map<PTRef,Model>::iterator it = checkedCandidates_1.begin(); it != checkedCandidates_1.end();) {
+            auto cand = it -> first;
+            auto model = it -> second;
+            if(model.evaluate(logic.mkAnd(invariants)) != logic.getTerm_true()){
+                checkedCandidates_1.erase(it++);
+//                it--;
+            } else {
+                ++it;
+            }
+        }
     }
 //    printf("Houdini end with %d invs!\n", candidates.size());
     return candidates;
@@ -1046,6 +1072,7 @@ bool TPABase::checkLessThanFixedPoint(unsigned short power) {
         // first check if it is fixed point with respect to initial state
         SMTConfig config;
         houdiniCheck(currentLevelTransition, getNextVersion(transition));
+//        printf("Invariant: %s\n", logic.pp(logic.mkAnd(invariants)).c_str());
         {
             MainSolver solver(logic, config, "Fixed-point checker");
 //            invariants.push(currentLevelTransition);
@@ -1120,6 +1147,9 @@ bool TPABase::checkLessThanFixedPoint(unsigned short power) {
             auto satres = solver.check();
             bool restrictedInvariant = false;
             if (satres == s_False) {
+                // TODO: I'm not sure about invariant in this specific case, seems to work but need to ask Martin
+                // Possibly 2 steps: init /\ not invariants => LEFT
+                //                   invariants /\ not query => RIGHT
                 if (verbose() > 0) {
                     std::cout << "; Left fixed point detected in less-than relation on level " << i << " from " << power
                               << std::endl;
@@ -1133,7 +1163,7 @@ bool TPABase::checkLessThanFixedPoint(unsigned short power) {
                                                 : SafetyExplanation::TransitionInvariantType::UNRESTRICTED;
                 explanation.relationType = TPAType::LESS_THAN;
                 explanation.power = i;
-                explanation.fixedPointType = SafetyExplanation::FixedPointType::LEFT;
+                explanation.fixedPointType = SafetyExplanation::FixedPointType::RIGHT;
                 return true;
             }
         }
@@ -1813,11 +1843,14 @@ PTRef TPABase::getInductiveInvariant() const {
         switch (explanation.fixedPointType) {
             case SafetyExplanation::FixedPointType::LEFT:
                 return logic.mkNot(QuantifierElimination(logic).keepOnly(
-                    logic.mkAnd(logic.mkAnd(invariants), getNextVersion(query)), getStateVars(0)));
+                    logic.mkAnd({transitionAbstraction, logic.mkAnd(invariants), getNextVersion(query)}), getStateVars(0)));
             case SafetyExplanation::FixedPointType::RIGHT:
                 return getNextVersion(
-                    QuantifierElimination(logic).keepOnly(logic.mkAnd(init, logic.mkAnd(invariants)), getStateVars(1)),
+                    QuantifierElimination(logic).keepOnly(logic.mkAnd({init, transitionAbstraction, logic.mkAnd(invariants)}), getStateVars(1)),
                     -1);
+//            case SafetyExplanation::FixedPointType::CENTER:
+//                return
+//                    QuantifierElimination(logic).keepOnly(logic.mkAnd({init, logic.mkAnd(invariants), getNextVersion(query)}), getStateVars(0));
         }
     } else if (explanation.relationType == TPAType::EQUALS) {
         if (explanation.invariantType == SafetyExplanation::TransitionInvariantType::RESTRICTED_TO_QUERY) {

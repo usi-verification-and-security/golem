@@ -92,6 +92,10 @@ protected:
     vec<PTRef> auxiliaryVariables;
     vec<PTRef> invariants;
 
+    int lim = 10;
+    std::set <PTRef> checkedCandidates;
+    std::map <PTRef, Model> checkedCandidates_1;
+
     PTRef identity{PTRef_Undef};
 
 public:
