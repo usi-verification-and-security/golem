@@ -997,13 +997,13 @@ vec<PTRef> TPABase::houdiniCheck(PTRef invCandidates, PTRef transition) {
     auto candidates = topLevelConjuncts(logic, invCandidates);
 //    printf("Houdini start with %d candidates!\n", candidates.size());
 
-    for(int i = candidates.size() - 1; i >= 0; i--){
-        PTRef cand = candidates[i];
-        if(checkedCandidates_1.find(cand) != checkedCandidates_1.end() || std::find(invariants.begin(), invariants.end(), cand) != invariants.end()){
-            candidates[i] = candidates[candidates.size() - 1];
-            candidates.pop();
-        }
-    }
+//    for(int i = candidates.size() - 1; i >= 0; i--){
+//        PTRef cand = candidates[i];
+//        if(std::find(invariants.begin(), invariants.end(), cand) != invariants.end()){
+//            candidates[i] = candidates[candidates.size() - 1];
+//            candidates.pop();
+//        }
+//    }
 
 //    printf("Houdini continues with %d candidates!\n", candidates.size());
     while(candidates.size() > 128){
@@ -1033,7 +1033,7 @@ vec<PTRef> TPABase::houdiniCheck(PTRef invCandidates, PTRef transition) {
             if(solver.check() == s_True){
                 Model model = *solver.getModel();
                 candidates[i] = candidates[candidates.size() - 1];
-                checkedCandidates_1.insert(std::pair<PTRef, Model>(cand, model));
+//                checkedCandidates_1.insert(std::pair<PTRef, Model>(cand, model));
 //                checkedCandidates.insert(cand);
                 candidates.pop();
             }
@@ -1047,19 +1047,19 @@ vec<PTRef> TPABase::houdiniCheck(PTRef invCandidates, PTRef transition) {
     for (auto cand: candidates) {
         invariants.push(cand);
     }
-    if(invariants.size() > lim){
+//    if(invariants.size() > lim){
 //        lim = invariants.size() * 2;
-        for(std::map<PTRef,Model>::iterator it = checkedCandidates_1.begin(); it != checkedCandidates_1.end();) {
-            auto cand = it -> first;
-            auto model = it -> second;
-            if(model.evaluate(logic.mkAnd(invariants)) != logic.getTerm_true()){
-                checkedCandidates_1.erase(it++);
+//        for(std::map<PTRef,Model>::iterator it = checkedCandidates_1.begin(); it != checkedCandidates_1.end();) {
+//            auto cand = it -> first;
+//            auto model = it -> second;
+//            if(model.evaluate(logic.mkAnd(invariants)) != logic.getTerm_true()){
+//                checkedCandidates_1.erase(it++);
 //                it--;
-            } else {
-                ++it;
-            }
-        }
-    }
+//            } else {
+//                ++it;
+//            }
+//        }
+//    }
 //    printf("Houdini end with %d invs!\n", candidates.size());
     return candidates;
 }
@@ -1175,7 +1175,7 @@ bool TPASplit::checkExactFixedPoint(unsigned short power) {
     assert(verifyExactPower(power + 1));
     for (unsigned short i = 1; i <= power + 1; ++i) {
         PTRef currentLevelTransition = getExactPower(i);
-        PTRef currentTwoStep = logic.mkAnd(currentLevelTransition, getNextVersion(currentLevelTransition));
+        PTRef currentTwoStep = logic.mkAnd({currentLevelTransition, getNextVersion(currentLevelTransition), logic.mkAnd(invariants)});
         PTRef shifted = shiftOnlyNextVars(currentLevelTransition);
         SMTConfig config;
         MainSolver solver(logic, config, "Fixed-point checker");
