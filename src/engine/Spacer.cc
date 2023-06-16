@@ -220,7 +220,8 @@ class SpacerContext {
 
     bool mayReachable(EId eid, PTRef targetConstraint, std::size_t bound) const;
 
-    std::optional<ProofObligation> computePredecessor(EId eid, ProofObligation const & pob) const;
+    std::vector<ProofObligation> computePredecessors(std::vector<EId> const & edges, ProofObligation const & pob) const;
+    ProofObligation computePredecessor(EId eid, std::size_t sourceBound, PTRef maySummary, ProofObligation const & targetObligation, Model & model) const;
 
     PTRef projectFormula(PTRef fla, vec<PTRef> const & vars, Model & model) const;
 
@@ -323,13 +324,7 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
             pqueue.pop();
             continue;
         }
-        std::vector<ProofObligation> newProofObligations;
-        for (EId edgeId : edges) {
-            auto newProofObligation = computePredecessor(edgeId, pob);
-            if (newProofObligation.has_value()) {
-                newProofObligations.push_back(newProofObligation.value());
-            }
-        }
+        auto newProofObligations = computePredecessors(edges, pob);
         if (newProofObligations.empty()) {
             // all edges are blocked; compute new lemma blocking the current proof obligation
             // TODO:
@@ -471,51 +466,32 @@ bool SpacerContext::mayReachable(EId eid, PTRef targetConstraint, std::size_t bo
     return implCheckRes.answer == SpacerContext::QueryAnswer::INVALID;
 }
 
-std::optional<ProofObligation> SpacerContext::computePredecessor(EId eid, ProofObligation const & pob) const {
-    assert(pob.bound > 0);
-    auto sourceBound = pob.bound - 1;
+ProofObligation SpacerContext::computePredecessor(EId eid, std::size_t sourceBound, PTRef maySummary, ProofObligation const & targetObligation, Model & model) const {
     auto const & sources = graph.getSources(eid);
     assert(not sources.empty());
-    if (sources.size() == 1) { // Edge with single source, we only need to check if pob is reachable with over-approximation
-        PTRef maySummary = getEdgeMaySummary(eid, sourceBound);
-        auto res = implies(maySummary, logic.mkNot(pob.constraint));
-        if (res.answer == QueryAnswer::INVALID) {
-            assert(res.model);
-            // When this source is over-approximated and the edge becomes feasible -> extract next proof obligation
-            auto source = sources[0];
-            auto predicateVars = TermUtils(logic).getVars(graph.getStateVersion(source));
-            PTRef newConstraint = projectFormula(logic.mkAnd(maySummary, pob.constraint), predicateVars, *res.model);
-            PTRef newPob = VersionManager(logic).sourceFormulaToTarget(newConstraint); // ensure POB is target fla
-            TRACE(2, "New proof obligation generated")
-            return ProofObligation{source, sourceBound, newPob};
-        } else if (res.answer == QueryAnswer::VALID) {
-            TRACE(2, "Edge blocked by current may-summaries")
-            return std::nullopt;
-        }
-        assert(false);
-        throw std::logic_error("Unreachable!");
+    if (sources.size() == 1) { // Edge with single source, we can directly compute predecessor
+        auto source = sources[0];
+        auto predicateVars = TermUtils(logic).getVars(graph.getStateVersion(source));
+        PTRef newConstraint = projectFormula(logic.mkAnd(maySummary, targetObligation.constraint), predicateVars, model);
+        PTRef newPob = VersionManager(logic).sourceFormulaToTarget(newConstraint); // ensure POB is target fla
+        TRACE(2, "New proof obligation generated")
+        return ProofObligation{source, sourceBound, newPob};
     }
     // Hyperedge case
     // TODO: Think if this could be optimized further
-    bool maybeReachable = mayReachable(eid, pob.constraint, pob.bound - 1);
-    if (not maybeReachable) {
-        TRACE(2, "Edge blocked by current may-summaries")
-        return std::nullopt;
-    }
-    // if we got there then it was not possible to prove that the edge can be taken or prove that it cannot be taken
-    // examine the sources to generate a new proof obligation for this edge
-
+    // May summaries are not strong enough, they admit a predecessor
+    // Must summaries are too weak to guarantee the predecessor
     // Find the first source vertex such that over-approximating it (instead of under-approximating it) makes the edge feasible
     std::size_t vertexToRefine = 0; // vertex that is the last one to be over-approximated
     while(true) {
         PTRef mixedEdgeSummary = getEdgeMixedSummary(eid, sourceBound, vertexToRefine);
-        auto res = implies(mixedEdgeSummary, logic.mkNot(pob.constraint));
+        auto res = implies(mixedEdgeSummary, logic.mkNot(targetObligation.constraint));
         if (res.answer == QueryAnswer::INVALID) {
             assert(res.model);
             // When this source is over-approximated and the edge becomes feasible -> extract next proof obligation
             auto source = sources[vertexToRefine];
             auto predicateVars = TermUtils(logic).getVars(graph.getStateVersion(source, vertexInstances.getInstanceNumber(eid, vertexToRefine)));
-            PTRef newConstraint = projectFormula(logic.mkAnd(mixedEdgeSummary, pob.constraint), predicateVars, *res.model);
+            PTRef newConstraint = projectFormula(logic.mkAnd(mixedEdgeSummary, targetObligation.constraint), predicateVars, *res.model);
             PTRef newPob = VersionManager(logic).sourceFormulaToTarget(newConstraint); // ensure POB is target fla
             TRACE(2, "New proof obligation generated")
             return ProofObligation{sources[vertexToRefine], sourceBound, newPob};
@@ -528,6 +504,34 @@ std::optional<ProofObligation> SpacerContext::computePredecessor(EId eid, ProofO
         assert(false);
         throw std::logic_error("Unreachable!");
     }
+}
+
+std::vector<ProofObligation> SpacerContext::computePredecessors(std::vector<EId> const & edges, ProofObligation const & pob) const {
+    assert(pob.bound > 0);
+    auto sourceBound = pob.bound - 1;
+    std::vector<ProofObligation> newObligations;
+    vec<PTRef> maySummaries;
+    maySummaries.capacity(edges.size());
+    for (EId eid : edges) {
+        maySummaries.push(getEdgeMaySummary(eid, sourceBound));
+    }
+    // Check if all edges are blocked
+    auto res = implies(logic.mkOr(maySummaries), logic.mkNot(pob.constraint));
+    if (res.answer == QueryAnswer::VALID) {
+//        std::cout << "All edges (" << edges.size() << ") blocked with single query!" << std::endl;
+        return newObligations;
+    }
+    // Find out which edges admit predecessor
+    // TODO: Probably we need to get predecessors from all edges that admit one (similarly to how things are batched now in the inductive check)
+    auto & model = *res.model;
+    auto counter = 0u;
+    for (EId eid : edges) {
+        if (model.evaluate(maySummaries[counter]) == logic.getTerm_true()) {
+            newObligations.push_back(computePredecessor(eid, sourceBound, maySummaries[counter], pob, model));
+        }
+        ++counter;
+    }
+    return newObligations;
 }
 
 // *********** INDUCTIVE CHECK *****************************
