@@ -512,24 +512,48 @@ std::vector<ProofObligation> SpacerContext::computePredecessors(std::vector<EId>
     std::vector<ProofObligation> newObligations;
     vec<PTRef> maySummaries;
     maySummaries.capacity(edges.size());
+    vec<PTRef> activationLiterals;
+    activationLiterals.capacity(edges.size());
+    std::size_t counter = 0u;
     for (EId eid : edges) {
         maySummaries.push(getEdgeMaySummary(eid, sourceBound));
+        std::string name = ".act" + std::to_string(counter++);
+        PTRef activationVariable = logic.mkBoolVar(name.c_str());
+        activationLiterals.push(activationVariable);
     }
-    // Check if all edges are blocked
-    auto res = implies(logic.mkOr(maySummaries), logic.mkNot(pob.constraint));
-    if (res.answer == QueryAnswer::VALID) {
-//        std::cout << "All edges (" << edges.size() << ") blocked with single query!" << std::endl;
-        return newObligations;
+
+    SMTConfig config;
+    const char* msg = "ok";
+    config.setOption(SMTConfig::o_produce_models, SMTOption(true), msg);
+    config.setOption(SMTConfig::o_produce_inter, SMTOption(false), msg);
+    MainSolver solver(logic, config, "checker");
+    solver.insertFormula(pob.constraint);
+    vec<PTRef> edgeQueries;
+    edgeQueries.capacity(maySummaries.size());
+    for (auto i = 0; i < maySummaries.size(); ++i) {
+        edgeQueries.push(logic.mkAnd(activationLiterals[i], maySummaries[i]));
     }
-    // Find out which edges admit predecessor
-    // TODO: Probably we need to get predecessors from all edges that admit one (similarly to how things are batched now in the inductive check)
-    auto & model = *res.model;
-    auto counter = 0u;
-    for (EId eid : edges) {
-        if (model.evaluate(maySummaries[counter]) == logic.getTerm_true()) {
-            newObligations.push_back(computePredecessor(eid, sourceBound, maySummaries[counter], pob, model));
+    solver.insertFormula(logic.mkOr(edgeQueries));
+
+    auto disabled = 0u;
+    while (disabled < edgeQueries.size_()) {
+        solver.push();
+        solver.insertFormula(logic.mkAnd(activationLiterals));
+        auto res = solver.check();
+        if (res == s_False) { break; }
+        if (res != s_True) { throw std::logic_error("Solver could not solve a problem while trying to push components!"); }
+        assert(res == s_True);
+        auto model = solver.getModel();
+        for (auto i = 0; i < activationLiterals.size(); ++i) {
+            if (logic.isNot(activationLiterals[i])) { continue; } // already disabled
+            if (model->evaluate(maySummaries[i]) == logic.getTerm_true()) {
+                ++disabled;
+                assert(not logic.isNot(activationLiterals[i]));
+                activationLiterals[i] = logic.mkNot(activationLiterals[i]);
+                newObligations.push_back(computePredecessor(edges[i], sourceBound, maySummaries[i], pob, *model));
+            }
         }
-        ++counter;
+        solver.pop();
     }
     return newObligations;
 }
