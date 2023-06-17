@@ -1,16 +1,27 @@
 /*
- * Copyright (c) 2020-2022, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2020-2023, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
 
 #include "Bmc.h"
+
+#include "Common.h"
 #include "TermUtils.h"
 #include "TransformationUtils.h"
 
 VerificationResult BMC::solve(ChcDirectedGraph const & graph) {
+    if (isTrivial(graph)) {
+        return solveTrivial(graph, logic);
+    }
     if (isTransitionSystem(graph)) {
         return solveTransitionSystem(graph);
+    }
+    auto ts = fromGeneralLinearCHCSystem(graph);
+    if (ts) {
+        auto res = solveTransitionSystemInternal(*ts);
+        // TODO: This needs special translation
+        return translateTransitionSystemResult(res, graph, *ts);
     }
     return VerificationResult(VerificationAnswer::UNKNOWN);
 }
