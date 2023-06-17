@@ -157,6 +157,7 @@ ErrorPath ErrorPath::fromTransitionSystem(const ChcDirectedGraph & graph, std::s
 ValidityWitness
 ValidityWitness::fromTransitionSystem(Logic & logic, ChcDirectedGraph const & graph,
                                       TransitionSystem const & transitionSystem, PTRef inductiveInvariant) {
+    if (not isTransitionSystem(graph)) { return {}; }
     auto vertices = graph.getVertices();
     assert(vertices.size() == 3);
     auto vertex = vertices[2];
