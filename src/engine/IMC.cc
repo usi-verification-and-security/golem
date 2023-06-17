@@ -6,12 +6,22 @@
 
 #include "IMC.h"
 
+#include "Common.h"
 #include "TermUtils.h"
 #include "TransformationUtils.h"
 
 VerificationResult IMC::solve(ChcDirectedGraph const & graph) {
+    if (isTrivial(graph)) {
+        return solveTrivial(graph, logic);
+    }
     if (isTransitionSystem(graph)) {
         return solveTransitionSystem(graph);
+    }
+    auto ts = fromGeneralLinearCHCSystem(graph);
+    if (ts) {
+        auto res = solveTransitionSystemInternal(*ts);
+        // TODO: This needs special translation
+        return translateTransitionSystemResult(res, graph, *ts);
     }
     return VerificationResult(VerificationAnswer::UNKNOWN);
 }

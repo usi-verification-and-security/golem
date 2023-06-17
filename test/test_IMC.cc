@@ -116,3 +116,96 @@ TEST_F(IMCTest, test_IMC_moreInductionBackward_safe) {
     IMC engine(*logic, options);
     solveSystem(clauses, engine, VerificationAnswer::SAFE, true);
 }
+
+TEST_F(IMCTest, test_IMC_BeyondTransitionSystemWithAuxVar_unsafe)
+{
+    Options options;
+    options.addOption(Options::LOGIC, "QF_LIA");
+    options.addOption(Options::COMPUTE_WITNESS, "false"); // TODO: change to true when working
+    SymRef s1 = mkPredicateSymbol("s1", {intSort(), intSort()});
+    SymRef s2 = mkPredicateSymbol("s2", {intSort(), intSort()});
+    PTRef current1 = instantiatePredicate(s1, {x,y});
+    PTRef next1 = instantiatePredicate(s1, {xp,yp});
+    PTRef current2 = instantiatePredicate(s2, {x,y});
+    PTRef next2 = instantiatePredicate(s2, {xp,yp});
+    PTRef c = logic->mkIntVar("c");
+    // x = 0 and y = 0 => S1(x,y)
+    // S1(x,y) and x' = x + 1 => S1(x',y)
+    // S1(x,y) and x > 2 => S2(x,y)
+    // S2(x,y) and y' = y + 1 => S2(x,y')
+    // S2(x,y) and y > 2 => S1(x,y)
+    // S1(x,y) and y > c and c > x => false
+    std::vector<ChClause> clauses{
+        {
+            ChcHead{UninterpretedPredicate{next1}},
+            ChcBody{{logic->mkAnd(logic->mkEq(xp, zero), logic->mkEq(yp, zero))}, {}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{next1}},
+            ChcBody{{logic->mkAnd(logic->mkEq(xp, logic->mkPlus(x, one)), logic->mkEq(yp, y))}, {UninterpretedPredicate{current1}}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{current2}},
+            ChcBody{{logic->mkGt(x, logic->mkIntConst(2))}, {UninterpretedPredicate{current1}}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{next2}},
+            ChcBody{{logic->mkAnd(logic->mkEq(yp, logic->mkPlus(y, one)), logic->mkEq(xp, x))}, {UninterpretedPredicate{current2}}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{current1}},
+            ChcBody{{logic->mkGt(y, logic->mkIntConst(2))}, {UninterpretedPredicate{current2}}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{logic->getTerm_false()}},
+            ChcBody{{logic->mkAnd(logic->mkGt(y, c), logic->mkGt(c, x))}, {UninterpretedPredicate{current1}}}
+        }};
+    IMC engine(*logic, options);
+    solveSystem(clauses, engine, VerificationAnswer::UNSAFE, false); // TODO: Validate witness
+}
+
+TEST_F(IMCTest, test_KIND_BeyondTransitionSystem_safe)
+{
+    Options options;
+    options.addOption(Options::LOGIC, "QF_LIA");
+    options.addOption(Options::COMPUTE_WITNESS, "false"); // TODO: change to true when working
+    SymRef s1 = mkPredicateSymbol("s1", {intSort(), intSort()});
+    SymRef s2 = mkPredicateSymbol("s2", {intSort(), intSort()});
+    PTRef current1 = instantiatePredicate(s1, {x,y});
+    PTRef next1 = instantiatePredicate(s1, {xp,yp});
+    PTRef current2 = instantiatePredicate(s2, {x,y});
+    PTRef next2 = instantiatePredicate(s2, {xp,yp});
+    // x = 0 and y = 0 => S1(x,y)
+    // S1(x,y) and x' = x + 1 => S1(x',y)
+    // S1(x,y) and x > 5 => S2(x,y)
+    // S2(x,y) and y' = y + 1 => S2(x,y')
+    // S2(x,y) and y > 5 => S1(x,y)
+    // S1(x,y) and x < 0 => false
+    std::vector<ChClause> clauses{
+        {
+            ChcHead{UninterpretedPredicate{next1}},
+            ChcBody{{logic->mkAnd(logic->mkEq(xp, zero), logic->mkEq(yp, zero))}, {}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{next1}},
+            ChcBody{{logic->mkAnd(logic->mkEq(xp, logic->mkPlus(x, one)), logic->mkEq(yp, y))}, {UninterpretedPredicate{current1}}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{current2}},
+            ChcBody{{logic->mkGt(x, logic->mkIntConst(5))}, {UninterpretedPredicate{current1}}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{next2}},
+            ChcBody{{logic->mkAnd(logic->mkEq(yp, logic->mkPlus(y, one)), logic->mkEq(xp, x))}, {UninterpretedPredicate{current2}}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{current1}},
+            ChcBody{{logic->mkGt(y, logic->mkIntConst(5))}, {UninterpretedPredicate{current2}}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{logic->getTerm_false()}},
+            ChcBody{{logic->mkLt(x, zero)}, {UninterpretedPredicate{current1}}}
+        }};
+    IMC engine(*logic, options);
+    solveSystem(clauses, engine, VerificationAnswer::SAFE, false); // TODO: Validate witness
+}
