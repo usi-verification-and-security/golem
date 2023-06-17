@@ -242,43 +242,44 @@ struct EdgeTranslator {
     LocationVarMap const & locationVarMap;
     PositionVarMap const & positionVarMap;
 
+    mutable vec<PTRef> auxiliaryVariablesSeen;
+
     PTRef translateEdge(DirectedEdge const & edge) const;
 };
 
 }
 
 PTRef EdgeTranslator::translateEdge(DirectedEdge const & edge) const {
-    auto source = edge.from;
-    auto target = edge.to;
-    PTRef label = edge.fla.fla;
     TermUtils::substitutions_map substitutionsMap;
     Logic & logic = graph.getLogic();
+    auto source = edge.from;
+    auto target = edge.to;
     TimeMachine timeMachine(logic);
 
+    auto edgeVariables = getVariablesFromEdge(logic, graph, edge.id);
+    for (PTRef auxVar : edgeVariables.auxiliaryVars) {
+        this->auxiliaryVariablesSeen.push(auxVar);
+    }
+
     // TODO: prepare the substitution map in advance!
-    auto const & predicateRepresentation = graph.getPredicateRepresentation();
-    PTRef sourcePredicate = predicateRepresentation.getSourceTermFor(source);
-    auto size = logic.getPterm(sourcePredicate).nargs();
-    for (unsigned int i = 0; i < size; ++i) {
-        PTRef originalVar = logic.getPterm(sourcePredicate)[i];
+    auto const & stateVars = edgeVariables.stateVars;
+    for (unsigned int i = 0; i < stateVars.size(); ++i) {
         VarPosition varPosition {source, i};
         auto it = positionVarMap.find(varPosition);
         assert(it != positionVarMap.end());
-        substitutionsMap.insert({originalVar, it->second});
+        substitutionsMap.insert({stateVars[i], it->second});
     }
 
-    PTRef targetPredicate = predicateRepresentation.getTargetTermFor(target);
-    size = logic.getPterm(targetPredicate).nargs();
-    for (unsigned int i = 0; i < size; ++i) {
-        PTRef originalVar = logic.getPterm(targetPredicate)[i];
+    auto const & nextStateVars = edgeVariables.nextStateVars;
+    for (unsigned int i = 0; i < nextStateVars.size(); ++i) {
         VarPosition varPosition {target, i};
         auto it = positionVarMap.find(varPosition);
         assert(it != positionVarMap.end());
-        substitutionsMap.insert({originalVar, timeMachine.sendVarThroughTime(it->second, 1)});
+        substitutionsMap.insert({nextStateVars[i], timeMachine.sendVarThroughTime(it->second, 1)});
     }
 
     // Translate the constraint
-    PTRef translatedConstraint = TermUtils(logic).varSubstitute(label, substitutionsMap);
+    PTRef translatedConstraint = TermUtils(logic).varSubstitute(edge.fla.fla, substitutionsMap);
     PTRef sourceLocationVar = source == graph.getEntry() ? logic.getTerm_true() : locationVarMap.at(source);
     PTRef targetLocationVar = locationVarMap.at(target);
     PTRef updatedLocation = [&]() {
@@ -368,8 +369,6 @@ std::unique_ptr<TransitionSystem> fromGeneralLinearCHCSystem(ChcDirectedGraph co
         }
         return ret;
     }();
-    // TODO: Collect auxiliary variables
-    vec<PTRef> auxVars {};
-    auto systemType = std::make_unique<SystemType>(stateVars, auxVars, logic);
+    auto systemType = std::make_unique<SystemType>(stateVars, edgeTranslator.auxiliaryVariablesSeen, logic);
     return std::make_unique<TransitionSystem>(logic, std::move(systemType), initialStates, transitionRelation, badStates);
 }
