@@ -450,7 +450,7 @@ VerificationAnswer TPABase::solve() {
     if (res == VerificationAnswer::SAFE) { return res; }
     unsigned short power = 0;
 
-    printf("Transition: %s \n", logic.pp(transition).c_str());
+//    printf("Transition: %s \n", logic.pp(transition).c_str());
     while (true) {
         auto res = checkPower(power);
         switch (res) {
@@ -1064,7 +1064,7 @@ vec<PTRef> TPABase::houdiniCheck(PTRef invCandidates, PTRef transition, SafetyEx
         solver.push();
         goal = shiftOnlyNextVars(logic.mkAnd(candidates));
         if(allignment == SafetyExplanation::FixedPointType::RIGHT){
-            solver.insertFormula(logic.mkAnd({logic.mkAnd(candidates), logic.mkNot(goal)}));
+            solver.insertFormula(logic.mkAnd({logic.mkAnd(candidates), logic.mkNot(goal), getNextVersion(getNextVersion(transition))}));
         } else {
             solver.insertFormula(logic.mkAnd({getNextVersion(logic.mkAnd(candidates)), logic.mkNot(goal)}));
         }
@@ -1077,10 +1077,10 @@ vec<PTRef> TPABase::houdiniCheck(PTRef invCandidates, PTRef transition, SafetyEx
             }
             rightInvariants.push(cand);
         } else {
-            if(std::find(rightInvariants.begin(), rightInvariants.end(), getNextVersion(cand)) != rightInvariants.end()){
+            if(std::find(leftInvariants.begin(), leftInvariants.end(), cand) != leftInvariants.end()){
                 continue ;
             }
-            leftInvariants.push(getNextVersion(cand));
+            leftInvariants.push(cand);
         }
 
     }
@@ -1145,7 +1145,7 @@ bool TPABase::checkLessThanFixedPoint(unsigned short power) {
         {
             houdiniCheck(currentLevelTransition, transition, SafetyExplanation::FixedPointType::LEFT);
             MainSolver solver(logic, config, "Fixed-point checker");
-            solver.insertFormula(logic.mkAnd({ transition, logic.mkAnd(leftInvariants), getNextVersion(currentLevelTransition),
+            solver.insertFormula(logic.mkAnd({ transition, getNextVersion(logic.mkAnd(leftInvariants)), getNextVersion(currentLevelTransition),
                                               logic.mkNot(shiftOnlyNextVars(currentLevelTransition))}));
             auto satres = solver.check();
             bool restrictedInvariant = false;
@@ -1195,6 +1195,31 @@ bool TPABase::checkLessThanFixedPoint(unsigned short power) {
                 explanation.relationType = TPAType::LESS_THAN;
                 explanation.power = i;
                 explanation.fixedPointType = SafetyExplanation::FixedPointType::RIGHT;
+                return true;
+            }
+        }
+        // now check the produced if transition invariants are actually safety invariants
+        {
+            MainSolver solver(logic, config, "Fixed-point checker");
+            solver.insertFormula(logic.mkAnd({init,logic.mkAnd(leftInvariants),
+                                              getNextVersion(query)}));
+            auto satres = solver.check();
+            bool restrictedInvariant = false;
+            if (satres == s_False) {
+                if (verbose() > 0) {
+                    std::cout << "; Left fixed point detected in less-than relation on level " << i << " from " << power
+                              << std::endl;
+                    std::cout << "; Fixed point detected for "
+                              << (not restrictedInvariant ? "whole transition relation"
+                                                          : "transition relation restricted to bad")
+                              << std::endl;
+                }
+                explanation.invariantType = restrictedInvariant
+                                                ? SafetyExplanation::TransitionInvariantType::RESTRICTED_TO_QUERY
+                                                : SafetyExplanation::TransitionInvariantType::UNRESTRICTED;
+                explanation.relationType = TPAType::LESS_THAN;
+                explanation.power = i;
+                explanation.fixedPointType = SafetyExplanation::FixedPointType::LEFT;
                 return true;
             }
         }
