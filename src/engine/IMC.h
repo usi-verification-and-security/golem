@@ -35,11 +35,14 @@ public:
         return VerificationResult(VerificationAnswer::UNKNOWN);
     }
 
-    VerificationResult solve(ChcDirectedGraph const & system);
+    VerificationResult solve(ChcDirectedGraph const & graph);
 
 private:
+    VerificationResult solveTransitionSystem(ChcDirectedGraph const & graph);
+    TransitionSystemVerificationResult solveTransitionSystemInternal(TransitionSystem const & system);
+
     InterpolantResult finiteRun(PTRef init, PTRef transition, PTRef query, int k);
-    VerificationResult solveTransitionSystem(TransitionSystem const & system, ChcDirectedGraph const & graph);
+
     PTRef lastIterationInterpolant(MainSolver & solver, ipartitions_t const & mask);
     sstat checkItp(PTRef itp, PTRef itpsOld);
 };

@@ -130,4 +130,11 @@ public:
     void printWitness(std::ostream & out, Logic & logic) const;
 };
 
+struct TransitionSystemVerificationResult {
+    VerificationAnswer answer;
+    std::variant<std::size_t, PTRef> witness; // Unrolling number or state inductive invariant
+};
+
+VerificationResult translateTransitionSystemResult(TransitionSystemVerificationResult result, ChcDirectedGraph const & graph, TransitionSystem const & ts);
+
 #endif // GOLEM_WITNESSES_H

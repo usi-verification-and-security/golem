@@ -178,3 +178,17 @@ ValidityWitness::fromTransitionSystem(Logic & logic, ChcDirectedGraph const & gr
     ValidityWitness::definitions_t definitions{{unversionedPredicate, graphInvariant}};
     return ValidityWitness(std::move(definitions));
 }
+
+VerificationResult
+translateTransitionSystemResult(TransitionSystemVerificationResult result, ChcDirectedGraph const & graph, TransitionSystem const & transitionSystem) {
+    switch (result.answer) {
+        case VerificationAnswer::SAFE:
+            return {VerificationAnswer::SAFE, ValidityWitness::fromTransitionSystem(graph.getLogic(), graph, transitionSystem, std::get<PTRef>(result.witness))};
+        case VerificationAnswer::UNSAFE:
+            return {VerificationAnswer::UNSAFE, InvalidityWitness::fromTransitionSystem(graph, std::get<std::size_t>(result.witness))};
+        case VerificationAnswer::UNKNOWN:
+            return VerificationResult(VerificationAnswer::UNKNOWN);
+    }
+    assert(false);
+    return VerificationResult(VerificationAnswer::UNKNOWN);
+}

@@ -24,15 +24,20 @@ VerificationResult Kind::solve(ChcDirectedHyperGraph const & graph) {
     return VerificationResult(VerificationAnswer::UNKNOWN);
 }
 
-VerificationResult Kind::solve(ChcDirectedGraph const & system) {
-    if (isTransitionSystem(system)) {
-        auto ts = toTransitionSystem(system, logic);
-        return solveTransitionSystem(*ts, system);
+VerificationResult Kind::solve(ChcDirectedGraph const & graph) {
+    if (isTransitionSystem(graph)) {
+        return solveTransitionSystem(graph);
     }
     return VerificationResult(VerificationAnswer::UNKNOWN);
 }
 
-VerificationResult Kind::solveTransitionSystem(TransitionSystem const & system, ChcDirectedGraph const & graph) {
+VerificationResult Kind::solveTransitionSystem(ChcDirectedGraph const & graph) {
+    auto ts = toTransitionSystem(graph, logic);
+    auto res = solveTransitionSystemInternal(*ts);
+    return translateTransitionSystemResult(res, graph, *ts);
+}
+
+TransitionSystemVerificationResult Kind::solveTransitionSystemInternal(TransitionSystem const & system) {
     std::size_t maxK = std::numeric_limits<std::size_t>::max();
     PTRef init = system.getInit();
     PTRef query = system.getQuery();
@@ -61,7 +66,7 @@ VerificationResult Kind::solveTransitionSystem(TransitionSystem const & system, 
     { // Check for system with empty initial states
         auto res = solverBase.check();
         if (res == s_False) {
-            return VerificationResult{VerificationAnswer::SAFE};
+            return TransitionSystemVerificationResult{VerificationAnswer::SAFE, logic.getTerm_false()};
         }
     }
 
@@ -77,9 +82,9 @@ VerificationResult Kind::solveTransitionSystem(TransitionSystem const & system, 
                  std::cout << "; KIND: Bug found in depth: " << k << std::endl;
             }
             if (computeWitness) {
-                return VerificationResult(VerificationAnswer::UNSAFE, InvalidityWitness::fromTransitionSystem(graph, k));
+                return TransitionSystemVerificationResult{VerificationAnswer::UNSAFE, k};
             } else {
-                return VerificationResult(VerificationAnswer::UNSAFE);
+                return TransitionSystemVerificationResult{VerificationAnswer::UNSAFE, 0u};
             }
         }
         if (verbosity > 1) {
@@ -97,9 +102,9 @@ VerificationResult Kind::solveTransitionSystem(TransitionSystem const & system, 
                 std::cout << "; KIND: Found invariant with forward induction, which is " << k << "-inductive" << std::endl;
             }
             if (computeWitness) {
-                return VerificationResult(VerificationAnswer::SAFE, witnessFromForwardInduction(graph, system, k));
+                return TransitionSystemVerificationResult{VerificationAnswer::SAFE, invariantFromForwardInduction(system, k)};
             } else {
-                return VerificationResult(VerificationAnswer::SAFE);
+                return TransitionSystemVerificationResult{VerificationAnswer::SAFE, logic.getTerm_true()};
             }
         }
         PTRef versionedBackwardTransition = tm.sendFlaThroughTime(backwardTransition, k);
@@ -114,30 +119,28 @@ VerificationResult Kind::solveTransitionSystem(TransitionSystem const & system, 
                 std::cout << "; KIND: Found invariant with backward induction, which is " << k << "-inductive" << std::endl;
             }
             if (computeWitness) {
-                return VerificationResult(VerificationAnswer::SAFE, witnessFromBackwardInduction(graph, system, k));
+                return TransitionSystemVerificationResult{VerificationAnswer::SAFE, invariantFromBackwardInduction(system, k)};
             } else {
-                return VerificationResult(VerificationAnswer::SAFE);
+                return TransitionSystemVerificationResult{VerificationAnswer::SAFE, logic.getTerm_true()};
             }
         }
         solverStepBackward.push();
         solverStepBackward.insertFormula(versionedTransition);
         solverStepBackward.insertFormula(tm.sendFlaThroughTime(negInit, k+1));
     }
-    return VerificationResult(VerificationAnswer::UNKNOWN);
+    return TransitionSystemVerificationResult{VerificationAnswer::UNKNOWN, 0u};
 }
 
-ValidityWitness Kind::witnessFromForwardInduction(ChcDirectedGraph const & graph,
-                                                  TransitionSystem const & transitionSystem, unsigned long k) const {
+PTRef Kind::invariantFromForwardInduction(TransitionSystem const & transitionSystem, unsigned long k) const {
     PTRef kinductiveInvariant = logic.mkNot(transitionSystem.getQuery());
     PTRef inductiveInvariant = kinductiveToInductive(kinductiveInvariant, k, transitionSystem);
-    return ValidityWitness::fromTransitionSystem(logic, graph, transitionSystem, inductiveInvariant);
+    return inductiveInvariant;
 }
 
-ValidityWitness Kind::witnessFromBackwardInduction(ChcDirectedGraph const & graph,
-                                                   TransitionSystem const & transitionSystem, unsigned long k) const {
+PTRef Kind::invariantFromBackwardInduction(TransitionSystem const & transitionSystem, unsigned long k) const {
     auto reversedSystem = TransitionSystem::reverse(transitionSystem);
     PTRef kinductiveInvariant = logic.mkNot(reversedSystem.getQuery());
     PTRef inductiveInvariant = kinductiveToInductive(kinductiveInvariant, k, reversedSystem);
     PTRef originalInvariant = logic.mkNot(inductiveInvariant);
-    return ValidityWitness::fromTransitionSystem(logic, graph, transitionSystem, originalInvariant);
+    return originalInvariant;
 }

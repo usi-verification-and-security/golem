@@ -5,18 +5,24 @@
  */
 
 #include "IMC.h"
+
 #include "TermUtils.h"
 #include "TransformationUtils.h"
 
-VerificationResult IMC::solve(ChcDirectedGraph const & system) {
-    if (isTransitionSystem(system)) {
-        auto ts = toTransitionSystem(system, logic);
-        return solveTransitionSystem(*ts, system);
+VerificationResult IMC::solve(ChcDirectedGraph const & graph) {
+    if (isTransitionSystem(graph)) {
+        return solveTransitionSystem(graph);
     }
     return VerificationResult(VerificationAnswer::UNKNOWN);
 }
 
-VerificationResult IMC::solveTransitionSystem(TransitionSystem const & system, ChcDirectedGraph const & graph) {
+VerificationResult IMC::solveTransitionSystem(ChcDirectedGraph const & graph) {
+    auto ts = toTransitionSystem(graph, logic);
+    auto res = solveTransitionSystemInternal(*ts);
+    return translateTransitionSystemResult(res, graph, *ts);
+}
+
+TransitionSystemVerificationResult IMC::solveTransitionSystemInternal(TransitionSystem const & system) {
     std::size_t maxLoopUnrollings = std::numeric_limits<std::size_t>::max();
     PTRef init = system.getInit();
     PTRef query = system.getQuery();
@@ -33,18 +39,18 @@ VerificationResult IMC::solveTransitionSystem(TransitionSystem const & system, C
     initSolver.insertFormula(versionedQuery);
     //if I /\ F is Satisfiable, return true
     if (initSolver.check() == s_True) {
-        VerificationResult{VerificationAnswer::UNSAFE, InvalidityWitness::fromTransitionSystem(graph, 0)};
+        return TransitionSystemVerificationResult{VerificationAnswer::UNSAFE, 0u};
     }
     for (uint32_t k = 1; k < maxLoopUnrollings; ++k) {
         InterpolantResult res = finiteRun(init, transition, query, k);
         if (res.result == l_True) {
-            return VerificationResult{VerificationAnswer::UNSAFE, InvalidityWitness::fromTransitionSystem(graph, res.depth)};
+            return TransitionSystemVerificationResult{VerificationAnswer::UNSAFE, static_cast<std::size_t>(res.depth)};
         }
         if (res.result == l_False) {
-            return VerificationResult{VerificationAnswer::SAFE, ValidityWitness::fromTransitionSystem(logic, graph, system, res.interpolant)};
+            return TransitionSystemVerificationResult{VerificationAnswer::SAFE, res.interpolant};
         }
     }
-    return VerificationResult(VerificationAnswer::UNKNOWN);
+    return TransitionSystemVerificationResult{VerificationAnswer::UNKNOWN, 0u};
 }
 
 //procedure FiniteRun(M=(I,T,F), k>0)

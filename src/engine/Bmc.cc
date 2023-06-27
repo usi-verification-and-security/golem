@@ -8,15 +8,20 @@
 #include "TermUtils.h"
 #include "TransformationUtils.h"
 
-VerificationResult BMC::solve(ChcDirectedGraph const & system) {
-    if (isTransitionSystem(system)) {
-        auto ts = toTransitionSystem(system, logic);
-        return solveTransitionSystem(*ts, system);
+VerificationResult BMC::solve(ChcDirectedGraph const & graph) {
+    if (isTransitionSystem(graph)) {
+        return solveTransitionSystem(graph);
     }
     return VerificationResult(VerificationAnswer::UNKNOWN);
 }
 
-VerificationResult BMC::solveTransitionSystem(TransitionSystem const & system, ChcDirectedGraph const & graph) {
+VerificationResult BMC::solveTransitionSystem(ChcDirectedGraph const & graph) {
+    auto ts = toTransitionSystem(graph, logic);
+    auto res = solveTransitionSystemInternal(*ts);
+    return translateTransitionSystemResult(res, graph, *ts);
+}
+
+TransitionSystemVerificationResult BMC::solveTransitionSystemInternal(TransitionSystem const & system) {
     std::size_t maxLoopUnrollings = std::numeric_limits<std::size_t>::max();
     PTRef init = system.getInit();
     PTRef query = system.getQuery();
@@ -29,7 +34,7 @@ VerificationResult BMC::solveTransitionSystem(TransitionSystem const & system, C
     { // Check for system with empty initial states
         auto res = solver.check();
         if (res == s_False) {
-            return VerificationResult{VerificationAnswer::SAFE};
+            return TransitionSystemVerificationResult{VerificationAnswer::SAFE, logic.getTerm_false()};
         }
     }
 
@@ -44,7 +49,7 @@ VerificationResult BMC::solveTransitionSystem(TransitionSystem const & system, C
             if (verbosity > 0) {
                 std::cout << "; BMC: Bug found in depth: " << currentUnrolling << std::endl;
             }
-            return VerificationResult(VerificationAnswer::UNSAFE, InvalidityWitness::fromTransitionSystem(graph, currentUnrolling));
+            return TransitionSystemVerificationResult{.answer = VerificationAnswer::UNSAFE, .witness = static_cast<std::size_t>(currentUnrolling)};
         }
         if (verbosity > 1) {
             std::cout << "; BMC: No path of length " << currentUnrolling << " found!" << std::endl;
@@ -54,5 +59,5 @@ VerificationResult BMC::solveTransitionSystem(TransitionSystem const & system, C
 //        std::cout << "Adding transition: " << logic.pp(versionedTransition) << std::endl;
         solver.insertFormula(versionedTransition);
     }
-    return VerificationResult(VerificationAnswer::UNKNOWN);
+    return TransitionSystemVerificationResult{VerificationAnswer::UNKNOWN, 0u};
 }

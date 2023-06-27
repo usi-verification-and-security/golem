@@ -30,10 +30,11 @@ public:
         return VerificationResult(VerificationAnswer::UNKNOWN);
     }
 
-    VerificationResult solve(ChcDirectedGraph const & system);
+    VerificationResult solve(ChcDirectedGraph const & graph);
 
 private:
-    VerificationResult solveTransitionSystem(TransitionSystem const & system, ChcDirectedGraph const & graph);
+    VerificationResult solveTransitionSystem(ChcDirectedGraph const & graph);
+    TransitionSystemVerificationResult solveTransitionSystemInternal(TransitionSystem const & system);
 };
 
 

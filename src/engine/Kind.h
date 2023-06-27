@@ -30,16 +30,15 @@ public:
 
     virtual VerificationResult solve(ChcDirectedHyperGraph const & graph) override;
 
-    VerificationResult solve(ChcDirectedGraph const & system);
+    VerificationResult solve(ChcDirectedGraph const & graph);
 
 private:
-    VerificationResult solveTransitionSystem(TransitionSystem const & system, ChcDirectedGraph const & graph);
+    VerificationResult solveTransitionSystem(ChcDirectedGraph const & graph);
+    TransitionSystemVerificationResult solveTransitionSystemInternal(TransitionSystem const & system);
 
-    ValidityWitness witnessFromForwardInduction(ChcDirectedGraph const & graph,
-                                                TransitionSystem const & transitionSystem, unsigned long k) const;
+    PTRef invariantFromForwardInduction(TransitionSystem const & transitionSystem, unsigned long k) const;
+    PTRef invariantFromBackwardInduction(TransitionSystem const & transitionSystem, unsigned long k) const;
 
-    ValidityWitness witnessFromBackwardInduction(ChcDirectedGraph const & graph,
-                                                 TransitionSystem const & transitionSystem, unsigned long k) const;
 };
 
 
