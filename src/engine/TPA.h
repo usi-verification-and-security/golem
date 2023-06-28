@@ -93,11 +93,6 @@ protected:
     vec<PTRef> leftInvariants;
     vec<PTRef> rightInvariants;
 
-    int lim = 10;
-    std::set <PTRef> checkedCandidatesRight;
-    std::set <PTRef> checkedCandidatesLeft;
-    std::map <PTRef, Model> checkedCandidates_1;
-
     PTRef identity{PTRef_Undef};
 
 public:
