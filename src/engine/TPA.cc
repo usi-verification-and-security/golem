@@ -1893,14 +1893,12 @@ PTRef TPABase::getSafetyExplanation() const {
 }
 
 PTRef TPABase::getInductiveInvariant() const {
-//    logic.mkAnd(invariants);
     assert(explanation.invariantType != SafetyExplanation::TransitionInvariantType::NONE);
     if (explanation.relationType == TPAType::LESS_THAN) {
         PTRef transitionAbstraction = getPower(explanation.power, explanation.relationType);
         switch (explanation.fixedPointType) {
-//  TODO: Think about properties combination, can we use left and right invariants together?
-//  TODO: Use left and right together in the Center maybe?
-//  TODO:
+        //  TODO: Think about properties combination, can we use left and right invariants together?
+        //  TODO: Use left and right together in the Center maybe?
             case SafetyExplanation::FixedPointType::LEFT:
                 return logic.mkNot(QuantifierElimination(logic).keepOnly(
                     logic.mkAnd({transitionAbstraction, logic.mkAnd(leftInvariants), getNextVersion(query)}), getStateVars(0)));
@@ -1908,9 +1906,6 @@ PTRef TPABase::getInductiveInvariant() const {
                 return getNextVersion(
                     QuantifierElimination(logic).keepOnly(logic.mkAnd({init, transitionAbstraction, logic.mkAnd(rightInvariants)}), getStateVars(1)),
                     -1);
-//            case SafetyExplanation::FixedPointType::CENTER:
-//                return
-//                    QuantifierElimination(logic).keepOnly(logic.mkAnd({init, logic.mkAnd(invariants), getNextVersion(query)}), getStateVars(0));
         }
     } else if (explanation.relationType == TPAType::EQUALS) {
         if (explanation.invariantType == SafetyExplanation::TransitionInvariantType::RESTRICTED_TO_QUERY) {
