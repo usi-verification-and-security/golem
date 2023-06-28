@@ -62,7 +62,7 @@ enum class TPAType : char { LESS_THAN, EQUALS };
 struct SafetyExplanation {
     enum class TransitionInvariantType : char { NONE, UNRESTRICTED, RESTRICTED_TO_INIT, RESTRICTED_TO_QUERY };
 
-    enum class FixedPointType : char { LEFT, RIGHT, EQUALS };
+    enum class FixedPointType : char { LEFT, RIGHT };
 
     TransitionInvariantType invariantType{TransitionInvariantType::NONE};
     TPAType relationType{TPAType::LESS_THAN};
