@@ -8,11 +8,10 @@
 
 #include "ModelBasedProjection.h"
 #include "QuantifierElimination.h"
+#include "TermUtils.h"
 #include "TransformationUtils.h"
 #include "TransitionSystem.h"
 #include "transformers/BasicTransformationPipelines.h"
-#include "TermUtils.h"
-
 
 #define TRACE_LEVEL 0
 
@@ -988,65 +987,64 @@ vec<PTRef> TPABase::houdiniCheck(PTRef invCandidates, PTRef transition, SafetyEx
     SMTConfig config;
     MainSolver solver(logic, config, "Fixed-point checker");
     solver.push();
-   auto candidates = topLevelConjuncts(logic, invCandidates);
-    if(allignment == SafetyExplanation::FixedPointType::RIGHT){
+    auto candidates = topLevelConjuncts(logic, invCandidates);
+    if (allignment == SafetyExplanation::FixedPointType::RIGHT) {
         solver.insertFormula(getNextVersion(transition));
     } else {
-        if(allignment == SafetyExplanation::FixedPointType::LEFT) { solver.insertFormula(transition); }
+        if (allignment == SafetyExplanation::FixedPointType::LEFT) { solver.insertFormula(transition); }
     }
     solver.push();
 
-// RIGHT:
-//   rightInvariants /\ currentLevelTransition /\ getNextVersion(transition) =>
-//     shiftOnlyNextVars(currentLevelTransition);
-// LEFT:
-//   leftInvariants /\ transition /\ getNextVersion(currentLevelTransition) =>
-//     shiftOnlyNextVars(currentLevelTransition);
-    while(candidates.size() > 128){
-        for(int i = candidates.size() - 1; i >= 1; i-=2 ){
-            PTRef n_f = logic.mkAnd(candidates[i], candidates[i-1]);
+    // RIGHT:
+    //   rightInvariants /\ currentLevelTransition /\ getNextVersion(transition) =>
+    //     shiftOnlyNextVars(currentLevelTransition);
+    // LEFT:
+    //   leftInvariants /\ transition /\ getNextVersion(currentLevelTransition) =>
+    //     shiftOnlyNextVars(currentLevelTransition);
+    while (candidates.size() > 128) {
+        for (int i = candidates.size() - 1; i >= 1; i -= 2) {
+            PTRef n_f = logic.mkAnd(candidates[i], candidates[i - 1]);
             candidates.pop();
             candidates.pop();
             candidates.push(n_f);
-            if(candidates.size() <= 128){
-                break;
-            }
+            if (candidates.size() <= 128) { break; }
         }
     }
-//    invCandidates.append(conjuncts);
-//    Atr(x, x') /\ tr(x', x'') => Atr(x, x'')
-//    or
-//    Atr(x', x'') /\  tr(x, x') => Atr(x, x'')
-//    Push transition once and for all
-//    While loop externally, because we may drop smth important
+    //    invCandidates.append(conjuncts);
+    //    Atr(x, x') /\ tr(x', x'') => Atr(x, x'')
+    //    or
+    //    Atr(x', x'') /\  tr(x, x') => Atr(x, x'')
+    //    Push transition once and for all
+    //    While loop externally, because we may drop smth important
     PTRef goal = shiftOnlyNextVars(logic.mkAnd(candidates));
 
-    if(allignment == SafetyExplanation::FixedPointType::RIGHT){
+    if (allignment == SafetyExplanation::FixedPointType::RIGHT) {
         solver.insertFormula(logic.mkAnd({logic.mkAnd(candidates), logic.mkNot(goal)}));
     } else {
-        if(allignment == SafetyExplanation::FixedPointType::LEFT) {
+        if (allignment == SafetyExplanation::FixedPointType::LEFT) {
             solver.insertFormula(logic.mkAnd({getNextVersion(logic.mkAnd(candidates)), logic.mkNot(goal)}));
         }
     }
     while (solver.check() == s_True) {
-        for(int i = candidates.size() - 1; i >= 0; i--){
+        for (int i = candidates.size() - 1; i >= 0; i--) {
             PTRef cand = candidates[i];
             solver.pop();
             solver.push();
-            if(allignment == SafetyExplanation::FixedPointType::RIGHT){
+            if (allignment == SafetyExplanation::FixedPointType::RIGHT) {
                 solver.insertFormula(logic.mkAnd({logic.mkAnd(candidates), logic.mkNot(shiftOnlyNextVars(cand))}));
             } else {
-                if(allignment == SafetyExplanation::FixedPointType::LEFT) {
-                    solver.insertFormula(logic.mkAnd({getNextVersion(logic.mkAnd(candidates)), logic.mkNot(shiftOnlyNextVars(cand))}));
+                if (allignment == SafetyExplanation::FixedPointType::LEFT) {
+                    solver.insertFormula(
+                        logic.mkAnd({getNextVersion(logic.mkAnd(candidates)), logic.mkNot(shiftOnlyNextVars(cand))}));
                 }
             }
-            if(solver.check() == s_True){
+            if (solver.check() == s_True) {
                 Model model = *solver.getModel();
                 candidates[i] = candidates[candidates.size() - 1];
-                if(allignment == SafetyExplanation::FixedPointType::RIGHT){
+                if (allignment == SafetyExplanation::FixedPointType::RIGHT) {
                     checkedCandidatesRight.insert(cand);
                 } else {
-                    if(allignment == SafetyExplanation::FixedPointType::LEFT) { checkedCandidatesLeft.insert(cand); }
+                    if (allignment == SafetyExplanation::FixedPointType::LEFT) { checkedCandidatesLeft.insert(cand); }
                 }
                 candidates.pop();
             }
@@ -1054,25 +1052,21 @@ vec<PTRef> TPABase::houdiniCheck(PTRef invCandidates, PTRef transition, SafetyEx
         solver.pop();
         solver.push();
         goal = shiftOnlyNextVars(logic.mkAnd(candidates));
-        if(allignment == SafetyExplanation::FixedPointType::RIGHT){
-            solver.insertFormula(logic.mkAnd({logic.mkAnd(candidates), logic.mkNot(goal), getNextVersion(getNextVersion(transition))}));
+        if (allignment == SafetyExplanation::FixedPointType::RIGHT) {
+            solver.insertFormula(
+                logic.mkAnd({logic.mkAnd(candidates), logic.mkNot(goal), getNextVersion(getNextVersion(transition))}));
         } else {
             solver.insertFormula(logic.mkAnd({getNextVersion(logic.mkAnd(candidates)), logic.mkNot(goal)}));
         }
     }
-    for (auto cand: candidates) {
+    for (auto cand : candidates) {
         if (allignment == SafetyExplanation::FixedPointType::RIGHT) {
-            if(std::find(rightInvariants.begin(), rightInvariants.end(), cand) != rightInvariants.end()){
-                continue ;
-            }
+            if (std::find(rightInvariants.begin(), rightInvariants.end(), cand) != rightInvariants.end()) { continue; }
             rightInvariants.push(cand);
         } else {
-            if(std::find(leftInvariants.begin(), leftInvariants.end(), cand) != leftInvariants.end()){
-                continue ;
-            }
+            if (std::find(leftInvariants.begin(), leftInvariants.end(), cand) != leftInvariants.end()) { continue; }
             leftInvariants.push(cand);
         }
-
     }
     return candidates;
 }
@@ -1086,8 +1080,9 @@ bool TPABase::checkLessThanFixedPoint(unsigned short power) {
         {
             houdiniCheck(currentLevelTransition, transition, SafetyExplanation::FixedPointType::RIGHT);
             MainSolver solver(logic, config, "Fixed-point checker");
-            solver.insertFormula(logic.mkAnd({logic.mkAnd(rightInvariants),  currentLevelTransition, getNextVersion(transition),
-                                              logic.mkNot(shiftOnlyNextVars(currentLevelTransition))}));
+            solver.insertFormula(
+                logic.mkAnd({logic.mkAnd(rightInvariants), currentLevelTransition, getNextVersion(transition),
+                             logic.mkNot(shiftOnlyNextVars(currentLevelTransition))}));
             auto satres = solver.check();
             bool restrictedInvariant = false;
             if (satres != s_False) {
@@ -1118,7 +1113,8 @@ bool TPABase::checkLessThanFixedPoint(unsigned short power) {
         {
             houdiniCheck(currentLevelTransition, transition, SafetyExplanation::FixedPointType::LEFT);
             MainSolver solver(logic, config, "Fixed-point checker");
-            solver.insertFormula(logic.mkAnd({ transition, getNextVersion(logic.mkAnd(leftInvariants)), getNextVersion(currentLevelTransition),
+            solver.insertFormula(logic.mkAnd({transition, getNextVersion(logic.mkAnd(leftInvariants)),
+                                              getNextVersion(currentLevelTransition),
                                               logic.mkNot(shiftOnlyNextVars(currentLevelTransition))}));
             auto satres = solver.check();
             bool restrictedInvariant = false;
@@ -1149,8 +1145,7 @@ bool TPABase::checkLessThanFixedPoint(unsigned short power) {
         // now check the produced if transition invariants are actually safety invariants
         {
             MainSolver solver(logic, config, "Fixed-point checker");
-            solver.insertFormula(logic.mkAnd({init,logic.mkAnd(rightInvariants),
-                                              getNextVersion(query)}));
+            solver.insertFormula(logic.mkAnd({init, logic.mkAnd(rightInvariants), getNextVersion(query)}));
             auto satres = solver.check();
             bool restrictedInvariant = false;
             if (satres == s_False) {
@@ -1174,8 +1169,7 @@ bool TPABase::checkLessThanFixedPoint(unsigned short power) {
         // now check the produced if transition invariants are actually safety invariants
         {
             MainSolver solver(logic, config, "Fixed-point checker");
-            solver.insertFormula(logic.mkAnd({init,logic.mkAnd(leftInvariants),
-                                              getNextVersion(query)}));
+            solver.insertFormula(logic.mkAnd({init, logic.mkAnd(leftInvariants), getNextVersion(query)}));
             auto satres = solver.check();
             bool restrictedInvariant = false;
             if (satres == s_False) {
@@ -1868,14 +1862,16 @@ PTRef TPABase::getInductiveInvariant() const {
     if (explanation.relationType == TPAType::LESS_THAN) {
         PTRef transitionAbstraction = getPower(explanation.power, explanation.relationType);
         switch (explanation.fixedPointType) {
-        //  TODO: Think about properties combination, can we use left and right invariants together?
-        //  TODO: Use left and right together in the Center maybe?
+                //  TODO: Think about properties combination, can we use left and right invariants together?
+                //  TODO: Use left and right together in the Center maybe?
             case SafetyExplanation::FixedPointType::LEFT:
                 return logic.mkNot(QuantifierElimination(logic).keepOnly(
-                    logic.mkAnd({transitionAbstraction, logic.mkAnd(leftInvariants), getNextVersion(query)}), getStateVars(0)));
+                    logic.mkAnd({transitionAbstraction, logic.mkAnd(leftInvariants), getNextVersion(query)}),
+                    getStateVars(0)));
             case SafetyExplanation::FixedPointType::RIGHT:
                 return getNextVersion(
-                    QuantifierElimination(logic).keepOnly(logic.mkAnd({init, transitionAbstraction, logic.mkAnd(rightInvariants)}), getStateVars(1)),
+                    QuantifierElimination(logic).keepOnly(
+                        logic.mkAnd({init, transitionAbstraction, logic.mkAnd(rightInvariants)}), getStateVars(1)),
                     -1);
         }
     } else if (explanation.relationType == TPAType::EQUALS) {
