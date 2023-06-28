@@ -1041,11 +1041,6 @@ vec<PTRef> TPABase::houdiniCheck(PTRef invCandidates, PTRef transition, SafetyEx
             if (solver.check() == s_True) {
                 Model model = *solver.getModel();
                 candidates[i] = candidates[candidates.size() - 1];
-                if (allignment == SafetyExplanation::FixedPointType::RIGHT) {
-                    checkedCandidatesRight.insert(cand);
-                } else {
-                    if (allignment == SafetyExplanation::FixedPointType::LEFT) { checkedCandidatesLeft.insert(cand); }
-                }
                 candidates.pop();
             }
         }
