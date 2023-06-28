@@ -1049,7 +1049,7 @@ vec<PTRef> TPABase::houdiniCheck(PTRef invCandidates, PTRef transition, SafetyEx
         goal = shiftOnlyNextVars(logic.mkAnd(candidates));
         if (allignment == SafetyExplanation::FixedPointType::RIGHT) {
             solver.insertFormula(
-                logic.mkAnd({logic.mkAnd(candidates), logic.mkNot(goal), getNextVersion(getNextVersion(transition))}));
+                logic.mkAnd({logic.mkAnd(candidates), logic.mkNot(goal)}));
         } else {
             solver.insertFormula(logic.mkAnd({getNextVersion(logic.mkAnd(candidates)), logic.mkNot(goal)}));
         }
