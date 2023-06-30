@@ -1002,14 +1002,14 @@ vec<PTRef> TPABase::houdiniCheck(PTRef invCandidates, PTRef transition, SafetyEx
     //   leftInvariants /\ transition /\ getNextVersion(currentLevelTransition) =>
     //     shiftOnlyNextVars(currentLevelTransition);
     while (candidates.size() > 128) {
-        for (int i = candidates.size() - 1; i >= 1; i -= 2) {
-            PTRef n_f = logic.mkAnd(candidates[i], candidates[i - 1]);
+        int j = 0;
+        for (int i = candidates.size() - 1; i >= 1 && i > j; i-- && j++) {
+            PTRef n_f = logic.mkAnd(candidates[j], candidates[i]);
             candidates.pop();
-            candidates.pop();
-            candidates.push(n_f);
+            candidates[j] = n_f;
             if (candidates.size() <= 128) { break; }
         }
-    }
+
     //    invCandidates.append(conjuncts);
     //    Atr(x, x') /\ tr(x', x'') => Atr(x, x'')
     //    or
