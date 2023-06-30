@@ -1009,7 +1009,7 @@ vec<PTRef> TPABase::houdiniCheck(PTRef invCandidates, PTRef transition, SafetyEx
             candidates[j] = n_f;
             if (candidates.size() <= 128) { break; }
         }
-
+    }
     //    invCandidates.append(conjuncts);
     //    Atr(x, x') /\ tr(x', x'') => Atr(x, x'')
     //    or
