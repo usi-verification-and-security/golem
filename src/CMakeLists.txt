@@ -9,7 +9,7 @@ else(OpenSMT_FOUND)
     FetchContent_Declare(
         OpenSMT
         GIT_REPOSITORY https://github.com/usi-verification-and-security/opensmt.git
-        GIT_TAG e621c6a398d1352193e871623859747ebb1f0782 # v2.5.0
+        GIT_TAG 5eb3712aeeef690abd084c60c702aceaa5513d46 # v2.5.0
         GIT_SHALLOW true
         GIT_PROGRESS true
     )
