@@ -1141,7 +1141,6 @@ bool TPABase::checkLessThanFixedPoint(unsigned short power) {
             MainSolver solver(logic, config, "Fixed-point checker");
             solver.insertFormula(logic.mkAnd({init, logic.mkAnd(rightInvariants), getNextVersion(query)}));
             auto satres = solver.check();
-            bool restrictedInvariant = false;
             if (satres == s_False) {
                 explanation.invariantType = SafetyExplanation::TransitionInvariantType::UNRESTRICTED;
                 explanation.relationType = TPAType::LESS_THAN;
@@ -1154,7 +1153,6 @@ bool TPABase::checkLessThanFixedPoint(unsigned short power) {
             MainSolver solver(logic, config, "Fixed-point checker");
             solver.insertFormula(logic.mkAnd({init, logic.mkAnd(leftInvariants), getNextVersion(query)}));
             auto satres = solver.check();
-            bool restrictedInvariant = false;
             if (satres == s_False) {
                 explanation.invariantType = SafetyExplanation::TransitionInvariantType::UNRESTRICTED;
                 explanation.relationType = TPAType::LESS_THAN;
