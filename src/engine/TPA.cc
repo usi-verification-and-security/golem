@@ -995,7 +995,7 @@ void TPABase::squashInvariants(vec<PTRef> & candidates){
     }
 }
 
-vec<PTRef> TPABase::houdiniCheck(PTRef invCandidates, PTRef transition, SafetyExplanation::FixedPointType alignment) {
+void TPABase::houdiniCheck(PTRef invCandidates, PTRef transition, SafetyExplanation::FixedPointType alignment) {
     // RIGHT:
     //   rightInvariants /\ currentLevelTransition /\ getNextVersion(transition) =>
     //     shiftOnlyNextVars(currentLevelTransition);
@@ -1063,7 +1063,6 @@ vec<PTRef> TPABase::houdiniCheck(PTRef invCandidates, PTRef transition, SafetyEx
             leftInvariants.push(cand);
         }
     }
-    return candidates;
 }
 
 bool TPABase::checkLessThanFixedPoint(unsigned short power) {
