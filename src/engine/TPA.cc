@@ -983,7 +983,7 @@ bool TPASplit::verifyExactPower(unsigned short power) const {
     return res == s_False;
 }
 
-void TPABase::squashInvariants(vec<PTRef> & candidates){
+void TPABase::squashInvariants(vec<PTRef> & candidates) {
     while (candidates.size() > 128) {
         int j = 0;
         for (int i = candidates.size() - 1; i >= 1 && i > j; i-- && j++) {
@@ -1025,7 +1025,7 @@ void TPABase::houdiniCheck(PTRef invCandidates, PTRef transition, SafetyExplanat
     if (alignment == SafetyExplanation::FixedPointType::RIGHT) {
         solver.insertFormula(logic.mkAnd(logic.mkAnd(candidates), logic.mkNot(goal)));
     } else if (alignment == SafetyExplanation::FixedPointType::LEFT) {
-            solver.insertFormula(logic.mkAnd(getNextVersion(logic.mkAnd(candidates)), logic.mkNot(goal)));
+        solver.insertFormula(logic.mkAnd(getNextVersion(logic.mkAnd(candidates)), logic.mkNot(goal)));
     }
     while (solver.check() == s_True) {
         for (int i = candidates.size() - 1; i >= 0; i--) {
