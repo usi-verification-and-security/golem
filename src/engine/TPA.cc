@@ -1145,7 +1145,6 @@ bool TPABase::checkLessThanFixedPoint(unsigned short power) {
             if (satres == s_False) {
                 explanation.invariantType = SafetyExplanation::TransitionInvariantType::UNRESTRICTED;
                 explanation.relationType = TPAType::LESS_THAN;
-                explanation.power = i;
                 explanation.fixedPointType = SafetyExplanation::FixedPointType::RIGHT;
                 return true;
             }
@@ -1159,7 +1158,6 @@ bool TPABase::checkLessThanFixedPoint(unsigned short power) {
             if (satres == s_False) {
                 explanation.invariantType = SafetyExplanation::TransitionInvariantType::UNRESTRICTED;
                 explanation.relationType = TPAType::LESS_THAN;
-                explanation.power = i;
                 explanation.fixedPointType = SafetyExplanation::FixedPointType::LEFT;
                 return true;
             }
