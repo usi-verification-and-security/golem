@@ -321,7 +321,7 @@ std::unique_ptr<TransitionSystem> fromGeneralLinearCHCSystem(ChcDirectedGraph co
     // MB: It is useful to have exit location, so we do not remove exit from the vertices
     vertices.erase(std::remove_if(vertices.begin(), vertices.end(), [&](auto vertex) {
         return vertex == graph.getEntry();
-    }));
+    }), vertices.end());
     LocationVarMap locationVars;
     locationVars.reserve(vertices.size());
     for (auto vertex : vertices) {
