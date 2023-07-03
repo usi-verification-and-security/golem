@@ -983,24 +983,7 @@ bool TPASplit::verifyExactPower(unsigned short power) const {
     return res == s_False;
 }
 
-vec<PTRef> TPABase::houdiniCheck(PTRef invCandidates, PTRef transition, SafetyExplanation::FixedPointType alignment) {
-    SMTConfig config;
-    MainSolver solver(logic, config, "Fixed-point checker");
-    solver.push();
-    auto candidates = topLevelConjuncts(logic, invCandidates);
-    if (alignment == SafetyExplanation::FixedPointType::RIGHT) {
-        solver.insertFormula(getNextVersion(transition));
-    } else {
-        if (alignment == SafetyExplanation::FixedPointType::LEFT) { solver.insertFormula(transition); }
-    }
-    solver.push();
-
-    // RIGHT:
-    //   rightInvariants /\ currentLevelTransition /\ getNextVersion(transition) =>
-    //     shiftOnlyNextVars(currentLevelTransition);
-    // LEFT:
-    //   leftInvariants /\ transition /\ getNextVersion(currentLevelTransition) =>
-    //     shiftOnlyNextVars(currentLevelTransition);
+void TPABase::squashInvariants(vec<PTRef> & candidates){
     while (candidates.size() > 128) {
         int j = 0;
         for (int i = candidates.size() - 1; i >= 1 && i > j; i-- && j++) {
@@ -1010,6 +993,27 @@ vec<PTRef> TPABase::houdiniCheck(PTRef invCandidates, PTRef transition, SafetyEx
             if (candidates.size() <= 128) { break; }
         }
     }
+}
+
+vec<PTRef> TPABase::houdiniCheck(PTRef invCandidates, PTRef transition, SafetyExplanation::FixedPointType alignment) {
+    // RIGHT:
+    //   rightInvariants /\ currentLevelTransition /\ getNextVersion(transition) =>
+    //     shiftOnlyNextVars(currentLevelTransition);
+    // LEFT:
+    //   leftInvariants /\ transition /\ getNextVersion(currentLevelTransition) =>
+    //     shiftOnlyNextVars(currentLevelTransition);
+    SMTConfig config;
+    MainSolver solver(logic, config, "Fixed-point checker");
+    solver.push();
+    auto candidates = topLevelConjuncts(logic, invCandidates);
+    if (alignment == SafetyExplanation::FixedPointType::RIGHT) {
+        solver.insertFormula(getNextVersion(transition));
+    } else {
+        if (alignment == SafetyExplanation::FixedPointType::LEFT) { solver.insertFormula(transition); }
+    }
+
+    solver.push();
+    squashInvariants(candidates);
     //    invCandidates.append(conjuncts);
     //    Atr(x, x') /\ tr(x', x'') => Atr(x, x'')
     //    or
