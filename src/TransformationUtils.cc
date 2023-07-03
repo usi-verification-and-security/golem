@@ -372,3 +372,75 @@ std::unique_ptr<TransitionSystem> fromGeneralLinearCHCSystem(ChcDirectedGraph co
     auto systemType = std::make_unique<SystemType>(stateVars, edgeTranslator.auxiliaryVariablesSeen, logic);
     return std::make_unique<TransitionSystem>(logic, std::move(systemType), initialStates, transitionRelation, badStates);
 }
+
+VerificationResult backtranslateSingleLoopTransformation_Unsafe(
+    std::size_t unrolling,
+    ChcDirectedGraph const & graph,
+    TransitionSystem const & transitionSystem) {
+    // We need to get the CEX path, which will define the locations in the graph
+    Logic & logic = graph.getLogic();
+    TimeMachine tm(logic);
+    SMTConfig config;
+    MainSolver solver(logic, config, "CEX");
+    solver.insertFormula(transitionSystem.getInit());
+    PTRef transition = transitionSystem.getTransition();
+    for (auto i = 0u; i < unrolling; ++i) {
+        solver.insertFormula(tm.sendFlaThroughTime(transition, i));
+    }
+    solver.insertFormula(tm.sendFlaThroughTime(transitionSystem.getQuery(), unrolling));
+    auto res = solver.check();
+    assert(res == s_True);
+    if (res != s_True) {
+        throw std::logic_error("Unrolling should have been satisfiable");
+    }
+    auto model = solver.getModel();
+    std::vector<SymRef> pathVertices;
+    pathVertices.push_back(graph.getEntry());
+    auto allVertices = graph.getVertices();
+    for (auto i = 0u; i < unrolling; ++i) {
+        auto it = std::find_if(allVertices.begin(), allVertices.end(), [&](auto vertex) {
+            if (vertex == graph.getEntry()) { return false; }
+            auto varName = ".loc_" + std::to_string(vertex.x);
+            auto vertexVar = logic.mkBoolVar(varName.c_str());
+            vertexVar = tm.getVarVersionZero(vertexVar);
+            vertexVar = tm.sendVarThroughTime(vertexVar, i + 1);
+            return model->evaluate(vertexVar) == logic.getTerm_true();
+        });
+        assert(it != allVertices.end());
+        pathVertices.push_back(*it);
+    }
+
+    // Build error path from the vertices
+    std::vector<EId> errorEdges;
+    auto adj = AdjacencyListsGraphRepresentation::from(graph);
+    for (auto i = 1u; i < pathVertices.size(); ++i) {
+        auto source = pathVertices[i - 1];
+        auto target = pathVertices[i];
+        auto const & outgoing = adj.getOutgoingEdgesFor(source);
+        auto it = std::find_if(outgoing.begin(), outgoing.end(), [&](EId eid) {
+            return target == graph.getTarget(eid);
+        });
+        assert(it != outgoing.end());
+        errorEdges.push_back(*it);
+        // TODO: deal with multiedges properly
+        if (std::find_if(it + 1, outgoing.end(), [&](EId eid) {
+                return target == graph.getTarget(eid);
+            }) != outgoing.end()) {
+            // Bail out in this case
+            return VerificationResult(VerificationAnswer::UNSAFE);
+        }
+    }
+    ErrorPath errorPath;
+    errorPath.setPath(std::move(errorEdges));
+    return {VerificationAnswer::UNSAFE, InvalidityWitness::fromErrorPath(errorPath, graph)};
+}
+
+VerificationResult backtranslateSingleLoopTransformation(
+    TransitionSystemVerificationResult result,
+    ChcDirectedGraph const & graph,
+    TransitionSystem const & transitionSystem) {
+    if (result.answer == VerificationAnswer::UNSAFE) {
+        return backtranslateSingleLoopTransformation_Unsafe(std::get<std::size_t>(result.witness), graph, transitionSystem);
+    }
+    return VerificationResult(result.answer);
+}

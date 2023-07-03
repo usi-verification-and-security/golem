@@ -20,8 +20,7 @@ VerificationResult IMC::solve(ChcDirectedGraph const & graph) {
     auto ts = fromGeneralLinearCHCSystem(graph);
     if (ts) {
         auto res = solveTransitionSystemInternal(*ts);
-        // TODO: This needs special translation
-        return translateTransitionSystemResult(res, graph, *ts);
+        return backtranslateSingleLoopTransformation(res, graph, *ts);
     }
     return VerificationResult(VerificationAnswer::UNKNOWN);
 }

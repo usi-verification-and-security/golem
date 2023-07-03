@@ -121,7 +121,7 @@ TEST_F(IMCTest, test_IMC_BeyondTransitionSystemWithAuxVar_unsafe)
 {
     Options options;
     options.addOption(Options::LOGIC, "QF_LIA");
-    options.addOption(Options::COMPUTE_WITNESS, "false"); // TODO: change to true when working
+    options.addOption(Options::COMPUTE_WITNESS, "true");
     SymRef s1 = mkPredicateSymbol("s1", {intSort(), intSort()});
     SymRef s2 = mkPredicateSymbol("s2", {intSort(), intSort()});
     PTRef current1 = instantiatePredicate(s1, {x,y});
@@ -161,7 +161,7 @@ TEST_F(IMCTest, test_IMC_BeyondTransitionSystemWithAuxVar_unsafe)
             ChcBody{{logic->mkAnd(logic->mkGt(y, c), logic->mkGt(c, x))}, {UninterpretedPredicate{current1}}}
         }};
     IMC engine(*logic, options);
-    solveSystem(clauses, engine, VerificationAnswer::UNSAFE, false); // TODO: Validate witness
+    solveSystem(clauses, engine, VerificationAnswer::UNSAFE, true);
 }
 
 TEST_F(IMCTest, test_KIND_BeyondTransitionSystem_safe)

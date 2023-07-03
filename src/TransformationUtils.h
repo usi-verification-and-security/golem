@@ -8,6 +8,7 @@
 #define OPENSMT_TRANSFORMATIONUTILS_H
 
 #include "TransitionSystem.h"
+#include "Witnesses.h"
 #include "graph/ChcGraph.h"
 
 #include <memory>
@@ -22,7 +23,12 @@ std::unique_ptr<TransitionSystem> toTransitionSystem(ChcDirectedGraph const & gr
 
 std::unique_ptr<TransitionSystem> fromGeneralLinearCHCSystem(ChcDirectedGraph const & graph);
 
-struct EdgeVariables {
+VerificationResult backtranslateSingleLoopTransformation(
+    TransitionSystemVerificationResult result,
+    ChcDirectedGraph const & graph,
+    TransitionSystem const & transitionSystem);
+
+    struct EdgeVariables {
     std::vector<PTRef> stateVars;
     std::vector<PTRef> nextStateVars;
     std::vector<PTRef> auxiliaryVars;
