@@ -983,15 +983,15 @@ bool TPASplit::verifyExactPower(unsigned short power) const {
     return res == s_False;
 }
 
-vec<PTRef> TPABase::houdiniCheck(PTRef invCandidates, PTRef transition, SafetyExplanation::FixedPointType allignment) {
+vec<PTRef> TPABase::houdiniCheck(PTRef invCandidates, PTRef transition, SafetyExplanation::FixedPointType alignment) {
     SMTConfig config;
     MainSolver solver(logic, config, "Fixed-point checker");
     solver.push();
     auto candidates = topLevelConjuncts(logic, invCandidates);
-    if (allignment == SafetyExplanation::FixedPointType::RIGHT) {
+    if (alignment == SafetyExplanation::FixedPointType::RIGHT) {
         solver.insertFormula(getNextVersion(transition));
     } else {
-        if (allignment == SafetyExplanation::FixedPointType::LEFT) { solver.insertFormula(transition); }
+        if (alignment == SafetyExplanation::FixedPointType::LEFT) { solver.insertFormula(transition); }
     }
     solver.push();
 
@@ -1018,28 +1018,25 @@ vec<PTRef> TPABase::houdiniCheck(PTRef invCandidates, PTRef transition, SafetyEx
     //    While loop externally, because we may drop smth important
     PTRef goal = shiftOnlyNextVars(logic.mkAnd(candidates));
 
-    if (allignment == SafetyExplanation::FixedPointType::RIGHT) {
-        solver.insertFormula(logic.mkAnd({logic.mkAnd(candidates), logic.mkNot(goal)}));
-    } else {
-        if (allignment == SafetyExplanation::FixedPointType::LEFT) {
-            solver.insertFormula(logic.mkAnd({getNextVersion(logic.mkAnd(candidates)), logic.mkNot(goal)}));
-        }
+    if (alignment == SafetyExplanation::FixedPointType::RIGHT) {
+        solver.insertFormula(logic.mkAnd(logic.mkAnd(candidates), logic.mkNot(goal)));
+    } else if (alignment == SafetyExplanation::FixedPointType::LEFT) {
+            solver.insertFormula(logic.mkAnd(getNextVersion(logic.mkAnd(candidates)), logic.mkNot(goal)));
     }
     while (solver.check() == s_True) {
         for (int i = candidates.size() - 1; i >= 0; i--) {
             PTRef cand = candidates[i];
             solver.pop();
             solver.push();
-            if (allignment == SafetyExplanation::FixedPointType::RIGHT) {
-                solver.insertFormula(logic.mkAnd({logic.mkAnd(candidates), logic.mkNot(shiftOnlyNextVars(cand))}));
+            if (alignment == SafetyExplanation::FixedPointType::RIGHT) {
+                solver.insertFormula(logic.mkAnd(logic.mkAnd(candidates), logic.mkNot(shiftOnlyNextVars(cand))));
             } else {
-                if (allignment == SafetyExplanation::FixedPointType::LEFT) {
+                if (alignment == SafetyExplanation::FixedPointType::LEFT) {
                     solver.insertFormula(
-                        logic.mkAnd({getNextVersion(logic.mkAnd(candidates)), logic.mkNot(shiftOnlyNextVars(cand))}));
+                        logic.mkAnd(getNextVersion(logic.mkAnd(candidates)), logic.mkNot(shiftOnlyNextVars(cand))));
                 }
             }
             if (solver.check() == s_True) {
-                Model model = *solver.getModel();
                 candidates[i] = candidates[candidates.size() - 1];
                 candidates.pop();
             }
@@ -1047,15 +1044,14 @@ vec<PTRef> TPABase::houdiniCheck(PTRef invCandidates, PTRef transition, SafetyEx
         solver.pop();
         solver.push();
         goal = shiftOnlyNextVars(logic.mkAnd(candidates));
-        if (allignment == SafetyExplanation::FixedPointType::RIGHT) {
-            solver.insertFormula(
-                logic.mkAnd({logic.mkAnd(candidates), logic.mkNot(goal)}));
+        if (alignment == SafetyExplanation::FixedPointType::RIGHT) {
+            solver.insertFormula(logic.mkAnd(logic.mkAnd(candidates), logic.mkNot(goal)));
         } else {
-            solver.insertFormula(logic.mkAnd({getNextVersion(logic.mkAnd(candidates)), logic.mkNot(goal)}));
+            solver.insertFormula(logic.mkAnd(getNextVersion(logic.mkAnd(candidates)), logic.mkNot(goal)));
         }
     }
     for (auto cand : candidates) {
-        if (allignment == SafetyExplanation::FixedPointType::RIGHT) {
+        if (alignment == SafetyExplanation::FixedPointType::RIGHT) {
             if (std::find(rightInvariants.begin(), rightInvariants.end(), cand) != rightInvariants.end()) { continue; }
             rightInvariants.push(cand);
         } else {
@@ -1144,17 +1140,7 @@ bool TPABase::checkLessThanFixedPoint(unsigned short power) {
             auto satres = solver.check();
             bool restrictedInvariant = false;
             if (satres == s_False) {
-                if (verbose() > 0) {
-                    std::cout << "; Left fixed point detected in less-than relation on level " << i << " from " << power
-                              << std::endl;
-                    std::cout << "; Fixed point detected for "
-                              << (not restrictedInvariant ? "whole transition relation"
-                                                          : "transition relation restricted to bad")
-                              << std::endl;
-                }
-                explanation.invariantType = restrictedInvariant
-                                                ? SafetyExplanation::TransitionInvariantType::RESTRICTED_TO_QUERY
-                                                : SafetyExplanation::TransitionInvariantType::UNRESTRICTED;
+                explanation.invariantType = SafetyExplanation::TransitionInvariantType::UNRESTRICTED;
                 explanation.relationType = TPAType::LESS_THAN;
                 explanation.power = i;
                 explanation.fixedPointType = SafetyExplanation::FixedPointType::RIGHT;
@@ -1168,17 +1154,7 @@ bool TPABase::checkLessThanFixedPoint(unsigned short power) {
             auto satres = solver.check();
             bool restrictedInvariant = false;
             if (satres == s_False) {
-                if (verbose() > 0) {
-                    std::cout << "; Left fixed point detected in less-than relation on level " << i << " from " << power
-                              << std::endl;
-                    std::cout << "; Fixed point detected for "
-                              << (not restrictedInvariant ? "whole transition relation"
-                                                          : "transition relation restricted to bad")
-                              << std::endl;
-                }
-                explanation.invariantType = restrictedInvariant
-                                                ? SafetyExplanation::TransitionInvariantType::RESTRICTED_TO_QUERY
-                                                : SafetyExplanation::TransitionInvariantType::UNRESTRICTED;
+                explanation.invariantType = SafetyExplanation::TransitionInvariantType::UNRESTRICTED;
                 explanation.relationType = TPAType::LESS_THAN;
                 explanation.power = i;
                 explanation.fixedPointType = SafetyExplanation::FixedPointType::LEFT;
@@ -1193,7 +1169,7 @@ bool TPASplit::checkExactFixedPoint(unsigned short power) {
     assert(verifyExactPower(power + 1));
     for (unsigned short i = 1; i <= power + 1; ++i) {
         PTRef currentLevelTransition = getExactPower(i);
-        PTRef currentTwoStep = logic.mkAnd({currentLevelTransition, getNextVersion(currentLevelTransition)});
+        PTRef currentTwoStep = logic.mkAnd(currentLevelTransition, getNextVersion(currentLevelTransition));
         PTRef shifted = shiftOnlyNextVars(currentLevelTransition);
         SMTConfig config;
         MainSolver solver(logic, config, "Fixed-point checker");
