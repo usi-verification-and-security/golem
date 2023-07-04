@@ -59,6 +59,7 @@ Validator::Result Validator::validateValidityWitness(ChcDirectedHyperGraph const
         }
         PTRef interpretedBody = logic.mkAnd(std::move(bodyComponents));
         PTRef interpretedHead = getInterpretation(graph.getNextStateVersion(edge.to));
+        if (interpretedHead == PTRef_Undef) { return Result::NOT_VALIDATED; }
         PTRef query = logic.mkAnd(interpretedBody, logic.mkNot(interpretedHead));
         {
             SMTConfig config;
