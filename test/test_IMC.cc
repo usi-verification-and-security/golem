@@ -164,7 +164,7 @@ TEST_F(IMCTest, test_IMC_BeyondTransitionSystemWithAuxVar_unsafe)
     solveSystem(clauses, engine, VerificationAnswer::UNSAFE, true);
 }
 
-TEST_F(IMCTest, test_KIND_BeyondTransitionSystem_safe)
+TEST_F(IMCTest, test_IMC_BeyondTransitionSystem_safe)
 {
     Options options;
     options.addOption(Options::LOGIC, "QF_LIA");
