@@ -1020,12 +1020,12 @@ void TPABase::houdiniCheck(PTRef invCandidates, PTRef transition, SafetyExplanat
     //    Atr(x', x'') /\  tr(x, x') => Atr(x, x'')
     //    Push transition once and for all
     //    While loop externally, because we may drop smth important
-    PTRef goal = shiftOnlyNextVars(logic.mkAnd(candidates));
+    PTRef goal = shiftOnlyNextVars(invCandidates);
 
     if (alignment == SafetyExplanation::FixedPointType::RIGHT) {
-        solver.insertFormula(logic.mkAnd(logic.mkAnd(candidates), logic.mkNot(goal)));
+        solver.insertFormula(logic.mkAnd(invCandidates, logic.mkNot(goal)));
     } else if (alignment == SafetyExplanation::FixedPointType::LEFT) {
-        solver.insertFormula(logic.mkAnd(getNextVersion(logic.mkAnd(candidates)), logic.mkNot(goal)));
+        solver.insertFormula(logic.mkAnd(getNextVersion(invCandidates), logic.mkNot(goal)));
     }
     while (solver.check() == s_True) {
         for (int i = candidates.size() - 1; i >= 0; i--) {
