@@ -31,6 +31,8 @@ class TPAEngine : public Engine {
     Logic & logic;
     Options options;
     friend class TransitionSystemNetworkManager;
+    unsigned int duration;
+    unsigned int startingTime;
 
 public:
     TPAEngine(Logic & logic, Options options) : logic(logic), options(std::move(options)) {}
@@ -94,10 +96,14 @@ protected:
 
     PTRef identity{PTRef_Undef};
 
+    unsigned int startingTime;
+    unsigned int duration;
 public:
     TPABase(Logic & logic, Options const & options) : logic(logic), options(options) {
         if (options.hasOption(Options::VERBOSE)) { verbosity = std::stoi(options.getOption(Options::VERBOSE)); }
         if (options.hasOption(Options::TPA_USE_QE)) { useQE = true; }
+        if (options.hasOption("startingTime")) { startingTime =  std::stoi(options.getOption("startingTime")); }
+        if (options.hasOption("duration")) { startingTime =  std::stoi(options.getOption("duration")); }
     }
 
     virtual ~TPABase() = default;

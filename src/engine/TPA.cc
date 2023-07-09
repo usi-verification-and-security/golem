@@ -6,7 +6,9 @@
 
 #include "TPA.h"
 
+
 #include "Common.h"
+#include <time.h>
 #include "ModelBasedProjection.h"
 #include "QuantifierElimination.h"
 #include "TermUtils.h"
@@ -27,6 +29,8 @@ const std::string TPAEngine::SPLIT_TPA = "split-tpa";
 std::unique_ptr<TPABase> TPAEngine::mkSolver() {
     assert(options.hasOption(Options::ENGINE));
     auto val = options.getOption(Options::ENGINE);
+    options.addOption("startingTime", std::to_string(startingTime));
+    options.addOption("duration", std::to_string(duration));
     if (val == SPLIT_TPA) {
         return std::unique_ptr<TPABase>(new TPASplit(logic, options));
     } else if (val == TPA) {
@@ -60,28 +64,39 @@ VerificationResult TPAEngine::solve(ChcDirectedHyperGraph const & graph) {
 
 VerificationResult TPAEngine::solve(const ChcDirectedGraph & graph) {
     if (isTrivial(graph)) { return solveTrivial(graph); }
-    if (isTransitionSystem(graph)) {
-        auto ts = toTransitionSystem(graph);
-        auto solver = mkSolver();
-        auto res = solver->solveTransitionSystem(*ts);
-        if (not options.hasOption(Options::COMPUTE_WITNESS)) { return VerificationResult(res); }
-        switch (res) {
-            case VerificationAnswer::UNSAFE:
-                return VerificationResult(res, computeInvalidityWitness(graph, solver->getTransitionStepCount()));
-            case VerificationAnswer::SAFE: {
-                PTRef inductiveInvariant = solver->getInductiveInvariant();
-                if (inductiveInvariant == PTRef_Undef) { return VerificationResult(res); }
-                // std::cout << "TS invariant: " << logic.printTerm(inductiveInvariant) << std::endl;
-                return VerificationResult(res, computeValidityWitness(graph, *ts, inductiveInvariant));
+    duration = 1;
+    while(duration <= 256){
+        startingTime = time (NULL);
+        if (isTransitionSystem(graph)) {
+            auto ts = toTransitionSystem(graph);
+            auto solver = mkSolver();
+            auto res = solver->solveTransitionSystem(*ts);
+            if (not options.hasOption(Options::COMPUTE_WITNESS)) { return VerificationResult(res); }
+            switch (res) {
+                case VerificationAnswer::UNSAFE:
+                    return VerificationResult(res, computeInvalidityWitness(graph, solver->getTransitionStepCount()));
+                case VerificationAnswer::SAFE: {
+                    PTRef inductiveInvariant = solver->getInductiveInvariant();
+                    if (inductiveInvariant == PTRef_Undef) { return VerificationResult(res); }
+                    //                std::cout << "TS invariant: " << logic.printTerm(inductiveInvariant) << std::endl;
+                    return VerificationResult(res, computeValidityWitness(graph, *ts, inductiveInvariant));
+                }
+                case VerificationAnswer::TIMEOUT:
+                    duration *= 2;
+                    continue;
+                case VerificationAnswer::UNKNOWN:
+                default:
+                    assert(false);
+                    throw std::logic_error("Unreachable!");
             }
-            case VerificationAnswer::UNKNOWN:
-            default:
-                assert(false);
-                throw std::logic_error("Unreachable!");
+        } else if (isTransitionSystemDAG(graph)) {
+            auto res = solveTransitionSystemGraph(graph);
+            if (res.getAnswer() == VerificationAnswer::TIMEOUT) {
+                duration *= 2;
+                continue;
+            }
+            return res;
         }
-    } else if (isTransitionSystemDAG(graph)) {
-        return solveTransitionSystemGraph(graph);
-    }
     // Translate CHCGraph into transition system
     SingleLoopTransformation transformation;
     auto [ts, backtranslator] = transformation.transform(graph);
@@ -167,6 +182,7 @@ public:
     SolverWrapperIncremental(Logic & logic, PTRef transition)
         : logic(logic), solverWrapper(logic, SMTSolver::WitnessProduction::MODEL_AND_INTERPOLANTS) {
         //        std::cout << "Transition: " << logic.printTerm(transition) << std::endl;
+        printf("Creates solver\n");
         this->transition = transition;
         solverWrapper.getConfig().setSimplifyInterpolant(4);
         solverWrapper.getConfig().setLRAInterpolationAlgorithm(itp_lra_alg_decomposing_strong);
@@ -423,6 +439,10 @@ VerificationAnswer TPABase::solve() {
                 return res;
             case VerificationAnswer::UNKNOWN:
                 ++power;
+        }
+        unsigned int currentTime = time (NULL);
+        if (currentTime >= startingTime + duration && duration < 128) {
+            return VerificationAnswer::TIMEOUT;
         }
     }
 }
@@ -1443,10 +1463,16 @@ class TransitionSystemNetworkManager {
     ChcDirectedGraph const & graph;
     AdjacencyListsGraphRepresentation adjacencyRepresentation;
 
+    unsigned int startingTime;
+    unsigned int duration;
+
 public:
     TransitionSystemNetworkManager(TPAEngine & owner, ChcDirectedGraph const & graph)
         : owner(owner), logic(owner.logic), graph(graph),
-          adjacencyRepresentation(AdjacencyListsGraphRepresentation::from(graph)) {}
+          adjacencyRepresentation(AdjacencyListsGraphRepresentation::from(graph)) {
+        startingTime = owner.startingTime;
+        duration = owner.duration;
+    }
 
     VerificationResult solve() &&;
 
@@ -1583,6 +1609,7 @@ void TransitionSystemNetworkManager::initNetwork() {
 }
 
 VerificationResult TransitionSystemNetworkManager::solve() && {
+    printf("Solve TPA\n");
     initNetwork();
     auto current = graph.getEntry();
     activePath.clear();
@@ -1624,6 +1651,9 @@ VerificationResult TransitionSystemNetworkManager::solve() && {
             continue;
         }
         auto [res, explanation] = queryTransitionSystem(networkMap.at(current));
+        if(explanation == PTRef_Undef) {
+            return {VerificationAnswer::TIMEOUT, ValidityWitness{}};
+        }
         if (reachable(res)) {
             getNode(current).trulyReached = explanation;
             while (getNode(current).blocked_children < getNode(current).children.size()) {
@@ -1667,6 +1697,10 @@ VerificationResult TransitionSystemNetworkManager::solve() && {
                 current = graph.getSource(previousEdge);
                 continue; // Blocked states have been propagated to the previous node, repeat the query there.
             }
+        }
+        unsigned int currentTime = time (NULL);
+        if (currentTime >= startingTime + duration && duration <= 128) {
+            return {VerificationAnswer::TIMEOUT, ValidityWitness{}};
         }
     }
     throw std::logic_error("Unreachable!");
@@ -1751,6 +1785,12 @@ TransitionSystemNetworkManager::QueryResult TransitionSystemNetworkManager::quer
             PTRef explanation = node.solver->getSafetyExplanation();
             assert(explanation != PTRef_Undef);
             TRACE(1, "TS blocks " << logic.pp(explanation))
+            return {ReachabilityResult::UNREACHABLE, explanation};
+        }
+        case VerificationAnswer::TIMEOUT: {
+            printf("Time: %d\n", duration);
+            PTRef explanation = PTRef_Undef;
+            TRACE(1, "solving restarts " << logic.pp(explanation))
             return {ReachabilityResult::UNREACHABLE, explanation};
         }
         default:
