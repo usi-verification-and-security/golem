@@ -29,6 +29,7 @@ const std::string TPAEngine::SPLIT_TPA = "split-tpa";
 std::unique_ptr<TPABase> TPAEngine::mkSolver() {
     assert(options.hasOption(Options::ENGINE));
     auto val = options.getOption(Options::ENGINE);
+    // TODO: options should be updated(they are static now)
     options.addOption("startingTime", std::to_string(startingTime));
     options.addOption("duration", std::to_string(duration));
     if (val == SPLIT_TPA) {
@@ -441,7 +442,10 @@ VerificationAnswer TPABase::solve() {
                 ++power;
         }
         unsigned int currentTime = time (NULL);
-        if (currentTime >= startingTime + duration && duration < 128) {
+        if ( (currentTime >= startingTime + duration) && (duration < 128)) {
+            printf("Duration: %d \n", duration);
+            printf("Starting time: %d \n", startingTime);
+            printf("Current time: %d \n", currentTime);
             return VerificationAnswer::TIMEOUT;
         }
     }

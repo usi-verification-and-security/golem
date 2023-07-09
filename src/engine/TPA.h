@@ -103,7 +103,9 @@ public:
         if (options.hasOption(Options::VERBOSE)) { verbosity = std::stoi(options.getOption(Options::VERBOSE)); }
         if (options.hasOption(Options::TPA_USE_QE)) { useQE = true; }
         if (options.hasOption("startingTime")) { startingTime =  std::stoi(options.getOption("startingTime")); }
-        if (options.hasOption("duration")) { startingTime =  std::stoi(options.getOption("duration")); }
+        if (options.hasOption("duration")) {
+            duration =  std::stoi(options.getOption("duration"));
+        }
     }
 
     virtual ~TPABase() = default;

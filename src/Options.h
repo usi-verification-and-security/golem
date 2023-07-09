@@ -14,7 +14,8 @@ class Options {
     std::map<std::string, std::string> options;
 public:
     void addOption(std::string key, std::string value) {
-        options.emplace(std::move(key), std::move(value));
+        if(options.find(key) == options.end()) { options.emplace(std::move(key), std::move(value)); }
+        else { options[key] = value; }
     }
 
     std::string getOption(std::string const & key) const {
