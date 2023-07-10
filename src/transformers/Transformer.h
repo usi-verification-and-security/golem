@@ -26,6 +26,8 @@ public:
                 return {answer, translate(std::move(result).getValidityWitness())};
             case VerificationAnswer::UNSAFE:
                 return {answer, translate(std::move(result).getInvalidityWitness())};
+            case VerificationAnswer::TIMEOUT:
+                return result;
             case VerificationAnswer::UNKNOWN:
                 return std::move(result);
         }

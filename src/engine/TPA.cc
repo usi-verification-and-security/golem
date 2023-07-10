@@ -32,6 +32,7 @@ std::unique_ptr<TPABase> TPAEngine::mkSolver() {
     // TODO: options should be updated(they are static now)
     options.addOption("startingTime", std::to_string(startingTime));
     options.addOption("duration", std::to_string(duration));
+    options.addOption("seed", std::to_string(seed));
     if (val == SPLIT_TPA) {
         return std::unique_ptr<TPABase>(new TPASplit(logic, options));
     } else if (val == TPA) {
@@ -66,13 +67,14 @@ VerificationResult TPAEngine::solve(ChcDirectedHyperGraph const & graph) {
 VerificationResult TPAEngine::solve(const ChcDirectedGraph & graph) {
     if (isTrivial(graph)) { return solveTrivial(graph); }
     duration = 1;
+    seed = random();
     while(duration <= 256){
         startingTime = time (NULL);
         if (isTransitionSystem(graph)) {
             auto ts = toTransitionSystem(graph);
             auto solver = mkSolver();
             auto res = solver->solveTransitionSystem(*ts);
-            if (not options.hasOption(Options::COMPUTE_WITNESS)) { return VerificationResult(res); }
+            if (not options.hasOption(Options::COMPUTE_WITNESS) && res != VerificationAnswer::TIMEOUT) { return VerificationResult(res); }
             switch (res) {
                 case VerificationAnswer::UNSAFE:
                     return VerificationResult(res, computeInvalidityWitness(graph, solver->getTransitionStepCount()));
@@ -82,9 +84,11 @@ VerificationResult TPAEngine::solve(const ChcDirectedGraph & graph) {
                     //                std::cout << "TS invariant: " << logic.printTerm(inductiveInvariant) << std::endl;
                     return VerificationResult(res, computeValidityWitness(graph, *ts, inductiveInvariant));
                 }
-                case VerificationAnswer::TIMEOUT:
+                case VerificationAnswer::TIMEOUT: {
                     duration *= 2;
+                    seed = random();
                     continue;
+                }
                 case VerificationAnswer::UNKNOWN:
                 default:
                     assert(false);
@@ -94,6 +98,7 @@ VerificationResult TPAEngine::solve(const ChcDirectedGraph & graph) {
             auto res = solveTransitionSystemGraph(graph);
             if (res.getAnswer() == VerificationAnswer::TIMEOUT) {
                 duration *= 2;
+                seed = random();
                 continue;
             }
             return res;
@@ -180,13 +185,15 @@ protected:
     auto & solver() { return solverWrapper.getCoreSolver(); }
 
 public:
-    SolverWrapperIncremental(Logic & logic, PTRef transition)
+    SolverWrapperIncremental(Logic & logic, PTRef transition, unsigned int seed)
         : logic(logic), solverWrapper(logic, SMTSolver::WitnessProduction::MODEL_AND_INTERPOLANTS) {
         //        std::cout << "Transition: " << logic.printTerm(transition) << std::endl;
         printf("Creates solver\n");
         this->transition = transition;
         solverWrapper.getConfig().setSimplifyInterpolant(4);
         solverWrapper.getConfig().setLRAInterpolationAlgorithm(itp_lra_alg_decomposing_strong);
+        printf("Seed: %d\n", int(seed));
+        solverWrapper.getConfig().setRandomSeed(seed);
         solverWrapper.getCoreSolver().insertFormula(transition);
         opensmt::setbit(mask, allformulasInserted++);
     }
@@ -261,8 +268,8 @@ class SolverWrapperIncrementalWithRestarts : public SolverWrapperIncremental {
     }
 
 public:
-    SolverWrapperIncrementalWithRestarts(Logic & logic, PTRef transition)
-        : SolverWrapperIncremental(logic, transition) {
+    SolverWrapperIncrementalWithRestarts(Logic & logic, PTRef transition, unsigned int seed)
+        : SolverWrapperIncremental(logic, transition, seed) {
         transitionComponents.push(transition);
     }
 
@@ -391,7 +398,7 @@ void TPASplit::storeExactPower(unsigned short power, PTRef tr) {
     PTRef nextLevelTransitionStrengthening = logic.mkAnd(tr, getNextVersion(tr));
     if (not reachabilitySolvers[power + 1]) {
         reachabilitySolvers[power + 1] =
-            new SolverWrapperIncrementalWithRestarts(logic, nextLevelTransitionStrengthening);
+            new SolverWrapperIncrementalWithRestarts(logic, nextLevelTransitionStrengthening, seed);
         //        reachabilitySolvers[power + 1] = new SolverWrapperIncremental(logic,
         //        nextLevelTransitionStrengthening); reachabilitySolvers[power + 1] = new SolverWrapperSingleUse(logic,
         //        nextLevelTransitionStrengthening);
@@ -1285,7 +1292,7 @@ void TPABasic::storeLevelTransition(unsigned short power, PTRef tr) {
     PTRef nextLevelTransitionStrengthening = logic.mkAnd(tr, getNextVersion(tr));
     if (not reachabilitySolvers[power + 1]) {
         reachabilitySolvers[power + 1] =
-            new SolverWrapperIncrementalWithRestarts(logic, nextLevelTransitionStrengthening);
+            new SolverWrapperIncrementalWithRestarts(logic, nextLevelTransitionStrengthening, seed);
         //        reachabilitySolvers[power + 1] = new SolverWrapperIncremental(logic,
         //        nextLevelTransitionStrengthening); reachabilitySolvers[power + 1] = new SolverWrapperSingleUse(logic,
         //        nextLevelTransitionStrengthening);

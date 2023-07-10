@@ -33,6 +33,7 @@ class TPAEngine : public Engine {
     friend class TransitionSystemNetworkManager;
     unsigned int duration;
     unsigned int startingTime;
+    unsigned int seed;
 
 public:
     TPAEngine(Logic & logic, Options options) : logic(logic), options(std::move(options)) {}
@@ -98,6 +99,7 @@ protected:
 
     unsigned int startingTime;
     unsigned int duration;
+    unsigned int seed;
 public:
     TPABase(Logic & logic, Options const & options) : logic(logic), options(options) {
         if (options.hasOption(Options::VERBOSE)) { verbosity = std::stoi(options.getOption(Options::VERBOSE)); }
@@ -105,6 +107,9 @@ public:
         if (options.hasOption("startingTime")) { startingTime =  std::stoi(options.getOption("startingTime")); }
         if (options.hasOption("duration")) {
             duration =  std::stoi(options.getOption("duration"));
+        }
+        if (options.hasOption("seed")) {
+            seed = std::stoi(options.getOption("seed"));
         }
     }
 
