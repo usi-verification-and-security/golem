@@ -21,14 +21,7 @@ bool isTrivial(ChcDirectedGraph const & graph);
 
 std::unique_ptr<TransitionSystem> toTransitionSystem(ChcDirectedGraph const & graph, Logic & logic);
 
-std::unique_ptr<TransitionSystem> fromGeneralLinearCHCSystem(ChcDirectedGraph const & graph);
-
-VerificationResult backtranslateSingleLoopTransformation(
-    TransitionSystemVerificationResult result,
-    ChcDirectedGraph const & graph,
-    TransitionSystem const & transitionSystem);
-
-    struct EdgeVariables {
+struct EdgeVariables {
     std::vector<PTRef> stateVars;
     std::vector<PTRef> nextStateVars;
     std::vector<PTRef> auxiliaryVars;

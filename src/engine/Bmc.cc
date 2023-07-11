@@ -9,6 +9,7 @@
 #include "Common.h"
 #include "TermUtils.h"
 #include "TransformationUtils.h"
+#include "transformers/SingleLoopTransformation.h"
 
 VerificationResult BMC::solve(ChcDirectedGraph const & graph) {
     if (isTrivial(graph)) {
@@ -17,12 +18,12 @@ VerificationResult BMC::solve(ChcDirectedGraph const & graph) {
     if (isTransitionSystem(graph)) {
         return solveTransitionSystem(graph);
     }
-    auto ts = fromGeneralLinearCHCSystem(graph);
-    if (ts) {
-        auto res = solveTransitionSystemInternal(*ts);
-        return backtranslateSingleLoopTransformation(res, graph, *ts);
-    }
-    return VerificationResult(VerificationAnswer::UNKNOWN);
+
+    SingleLoopTransformation transformation;
+    auto[ts, backtranslator] = transformation.transform(graph);
+    assert(ts);
+    auto res = solveTransitionSystemInternal(*ts);
+    return backtranslator->translate(res);
 }
 
 VerificationResult BMC::solveTransitionSystem(ChcDirectedGraph const & graph) {
