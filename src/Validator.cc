@@ -7,6 +7,7 @@
 #include "Validator.h"
 
 Validator::Result Validator::validate(ChcDirectedHyperGraph const & graph, VerificationResult const & result) {
+    if (not result.hasWitness()) { return Validator::Result::NOT_VALIDATED; }
     switch (result.getAnswer()) {
         case VerificationAnswer::SAFE:
             return validateValidityWitness(graph, result.getValidityWitness());

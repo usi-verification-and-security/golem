@@ -9,13 +9,14 @@
 #include "TransformationUtils.h"
 
 void VerificationResult::printWitness(std::ostream & out, Logic & logic) const {
+    if (not hasWitness()) { return; }
     switch (answer) {
         case VerificationAnswer::SAFE: {
-            std::get<ValidityWitness>(witness).print(out, logic);
+            getValidityWitness().print(out, logic);
             return;
         }
         case VerificationAnswer::UNSAFE: {
-            std::get<InvalidityWitness>(witness).print(out, logic);
+            getInvalidityWitness().print(out, logic);
             return;
         }
         default:

@@ -19,6 +19,7 @@ public:
     virtual ValidityWitness translate(ValidityWitness witness) = 0;
     virtual ~WitnessBackTranslator() = default;
     VerificationResult translate(VerificationResult && result) {
+        if (not result.hasWitness()) { return result; }
         auto answer = result.getAnswer();
         switch (answer) {
             case VerificationAnswer::SAFE:

@@ -104,11 +104,13 @@ public:
                                                 TransitionSystem const & transitionSystem, PTRef invariant);
 };
 
+struct NoWitness {};
+
 enum class VerificationAnswer : char {SAFE, UNSAFE, UNKNOWN};
 
 class VerificationResult {
     VerificationAnswer answer;
-    std::variant<ValidityWitness, InvalidityWitness> witness;
+    std::variant<NoWitness, ValidityWitness, InvalidityWitness> witness;
 
 public:
     VerificationResult(VerificationAnswer answer, ValidityWitness validityWitness)
@@ -117,9 +119,11 @@ public:
     VerificationResult(VerificationAnswer answer, InvalidityWitness invalidityWitness)
         : answer(answer), witness(std::move(invalidityWitness)) {}
 
-    explicit VerificationResult(VerificationAnswer answer) : answer(answer) {}
+    explicit VerificationResult(VerificationAnswer answer) : answer(answer), witness(NoWitness()) {}
 
     [[nodiscard]] VerificationAnswer getAnswer() const { return answer; }
+
+    [[nodiscard]] bool hasWitness() const { return not std::holds_alternative<NoWitness>(witness); }
 
     [[nodiscard]] ValidityWitness const & getValidityWitness() const & { assert(answer == VerificationAnswer::SAFE); return std::get<ValidityWitness>(witness); }
     [[nodiscard]] InvalidityWitness const & getInvalidityWitness() const & { assert(answer == VerificationAnswer::UNSAFE); return std::get<InvalidityWitness>(witness); }

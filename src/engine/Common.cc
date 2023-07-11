@@ -30,5 +30,5 @@ VerificationResult solveTrivial(ChcDirectedGraph const & graph, Logic & logic) {
         }
     }
     // Here we know that no edge is satisfiable
-    return VerificationResult(VerificationAnswer::SAFE);
+    return VerificationResult(VerificationAnswer::SAFE, ValidityWitness{});
 }
