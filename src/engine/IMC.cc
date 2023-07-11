@@ -13,7 +13,7 @@
 
 VerificationResult IMC::solve(ChcDirectedGraph const & graph) {
     if (isTrivial(graph)) {
-        return solveTrivial(graph, logic);
+        return solveTrivial(graph);
     }
     if (isTransitionSystem(graph)) {
         return solveTransitionSystem(graph);
@@ -26,7 +26,7 @@ VerificationResult IMC::solve(ChcDirectedGraph const & graph) {
 }
 
 VerificationResult IMC::solveTransitionSystem(ChcDirectedGraph const & graph) {
-    auto ts = toTransitionSystem(graph, logic);
+    auto ts = toTransitionSystem(graph);
     auto res = solveTransitionSystemInternal(*ts);
     return translateTransitionSystemResult(res, graph, *ts);
 }

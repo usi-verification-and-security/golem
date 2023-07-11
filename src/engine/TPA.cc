@@ -57,9 +57,9 @@ VerificationResult TPAEngine::solve(ChcDirectedHyperGraph const & graph) {
 }
 
 VerificationResult TPAEngine::solve(const ChcDirectedGraph & graph) {
-    if (isTrivial(graph)) { return solveTrivial(graph, logic); }
+    if (isTrivial(graph)) { return solveTrivial(graph); }
     if (isTransitionSystem(graph)) {
-        auto ts = toTransitionSystem(graph, logic);
+        auto ts = toTransitionSystem(graph);
         auto solver = mkSolver();
         auto res = solver->solveTransitionSystem(*ts);
         if (not options.hasOption(Options::COMPUTE_WITNESS)) { return VerificationResult(res); }

@@ -1,8 +1,7 @@
 #include "Common.h"
 
-#include "transformers/SingleLoopTransformation.h"
-
-VerificationResult solveTrivial(ChcDirectedGraph const & graph, Logic & logic) {
+VerificationResult solveTrivial(ChcDirectedGraph const & graph) {
+    Logic & logic = graph.getLogic();
     // All edges should be between entry and exit, check if any of them has a satisfiable label
     auto edgeIds = graph.getEdges();
     assert(edgeIds.size() <= 1); // Current preprocessing in TPA ensures that multiedges are replaced by single edge

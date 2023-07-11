@@ -32,7 +32,8 @@ bool isTransitionSystem(ChcDirectedGraph const & graph) {
     return true;
 }
 
-std::unique_ptr<TransitionSystem> toTransitionSystem(ChcDirectedGraph const & graph, Logic & logic) {
+std::unique_ptr<TransitionSystem> toTransitionSystem(ChcDirectedGraph const & graph) {
+    Logic & logic = graph.getLogic();
     auto adjacencyRepresentation = AdjacencyListsGraphRepresentation::from(graph);
     auto vertices = reversePostOrder(graph, adjacencyRepresentation);
     assert(vertices.size() == 3);

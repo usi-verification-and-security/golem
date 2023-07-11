@@ -4,6 +4,6 @@
 #include "graph/ChcGraph.h"
 #include "Witnesses.h"
 
-VerificationResult solveTrivial(ChcDirectedGraph const & graph, Logic & logic);
+VerificationResult solveTrivial(ChcDirectedGraph const & graph);
 
 #endif //GOLEM_COMMON_H
