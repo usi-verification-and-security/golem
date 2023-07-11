@@ -36,15 +36,29 @@ public:
     class WitnessBackTranslator {
         ChcDirectedGraph const & graph;
         TransitionSystem const & transitionSystem;
+        LocationVarMap locationVarMap;
+        PositionVarMap positionVarMap;
     public:
-        WitnessBackTranslator(ChcDirectedGraph const & graph, TransitionSystem const & transitionSystem)
-            : graph(graph), transitionSystem(transitionSystem) {}
+        WitnessBackTranslator(
+            ChcDirectedGraph const & graph,
+            TransitionSystem const & transitionSystem,
+            LocationVarMap && locationVarMap,
+            PositionVarMap && positionVarMap
+            )
+            : graph(graph),
+              transitionSystem(transitionSystem),
+              locationVarMap(std::move(locationVarMap)),
+              positionVarMap(std::move(positionVarMap))
+        {}
 
         VerificationResult translate(TransitionSystemVerificationResult result);
 
         InvalidityWitness translateErrorPath(std::size_t unrolling);
 
         ValidityWitness translateInvariant(PTRef inductiveInvariant);
+
+    private:
+        std::set<PTRef> getVarsForVertex(SymRef vertex) const;
     };
 
 

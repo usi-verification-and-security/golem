@@ -168,7 +168,7 @@ TEST_F(IMCTest, test_IMC_BeyondTransitionSystem_safe)
 {
     Options options;
     options.addOption(Options::LOGIC, "QF_LIA");
-    options.addOption(Options::COMPUTE_WITNESS, "false"); // TODO: change to true when working
+    options.addOption(Options::COMPUTE_WITNESS, "true");
     SymRef s1 = mkPredicateSymbol("s1", {intSort(), intSort()});
     SymRef s2 = mkPredicateSymbol("s2", {intSort(), intSort()});
     PTRef current1 = instantiatePredicate(s1, {x,y});
@@ -207,5 +207,5 @@ TEST_F(IMCTest, test_IMC_BeyondTransitionSystem_safe)
             ChcBody{{logic->mkLt(x, zero)}, {UninterpretedPredicate{current1}}}
         }};
     IMC engine(*logic, options);
-    solveSystem(clauses, engine, VerificationAnswer::SAFE, false); // TODO: Validate witness
+    solveSystem(clauses, engine, VerificationAnswer::SAFE, true);
 }

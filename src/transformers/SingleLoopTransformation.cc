@@ -147,7 +147,7 @@ SingleLoopTransformation::TransformationResult SingleLoopTransformation::transfo
     }();
     auto systemType = std::make_unique<SystemType>(stateVars, edgeTranslator.auxiliaryVariablesSeen, logic);
     auto ts = std::make_unique<TransitionSystem>(logic, std::move(systemType), initialStates, transitionRelation, badStates);
-    auto backTraslator = std::make_unique<WitnessBackTranslator>(graph, *ts);
+    auto backTraslator = std::make_unique<WitnessBackTranslator>(graph, *ts, std::move(locationVars), std::move(argVars));
     return {std::move(ts), std::move(backTraslator)};
 }
 
@@ -226,8 +226,61 @@ ValidityWitness SingleLoopTransformation::WitnessBackTranslator::translateInvari
     Logic & logic = graph.getLogic();
     //    std::cout << "Invariant is " << logic.pp(invariant) << std::endl;
     auto vertices = graph.getVertices();
-    for (auto vertex : vertices){
-
+    TermUtils utils(logic);
+    TermUtils::substitutions_map substitutions;
+    for (auto vertex : vertices) {
+        if (vertex == graph.getEntry()) { continue; }
+        PTRef locationVar = this->locationVarMap.at(vertex);
+        substitutions.insert({locationVar, logic.getTerm_false()});
     }
-    return {};
+
+    ValidityWitness::definitions_t vertexInvariants;
+    for (auto vertex : vertices) {
+        if (vertex == graph.getEntry() or vertex == graph.getExit()) { continue; }
+        PTRef locationVar = this->locationVarMap.at(vertex);
+        substitutions.at(locationVar) = logic.getTerm_true();
+        auto vertexInvariant = utils.varSubstitute(inductiveInvariant, substitutions);
+        substitutions.at(locationVar) = logic.getTerm_false();
+
+        // TODO: Better API from OpenSMT
+        if (logic.isBooleanOperator(vertexInvariant)) {
+            vertexInvariant = ::rewriteMaxArityAggresive(logic, vertexInvariant);
+            // Repeat until fixpoint.
+            // TODO: Improve the rewriting in OpenSMT. If child simplifies to atom, it can be used to simplify the remaining children
+            while(logic.isBooleanOperator(vertexInvariant)) {
+                PTRef before = vertexInvariant;
+                vertexInvariant = ::simplifyUnderAssignment_Aggressive(vertexInvariant, logic);
+                if (before == vertexInvariant) { break; }
+            }
+        }
+        // Check if all variables are from the current vertex
+        auto allVars = variables(logic, vertexInvariant);
+        auto vertexVars = getVarsForVertex(vertex);
+        bool hasAlienVariable = std::any_of(allVars.begin(), allVars.end(), [&](PTRef var) {
+            return vertexVars.find(var) == vertexVars.end();
+        });
+        if (hasAlienVariable) { return ValidityWitness{}; } // TODO: Figure out a way to deal with this situation properly
+        // No alien variable, we can translate the invariant using predicate's variables
+        TermUtils::substitutions_map varSubstitutions;
+        PTRef statePredicate = graph.getStateVersion(vertex);
+        auto argsNum = logic.getPterm(statePredicate).nargs();
+        for (auto i = 0u; i < argsNum; ++i) {
+            PTRef positionVar = positionVarMap.at(VarPosition{vertex, i});
+            varSubstitutions.insert({positionVar, logic.getPterm(statePredicate)[i]});
+        }
+        vertexInvariant = utils.varSubstitute(vertexInvariant, varSubstitutions);
+        vertexInvariants.insert({statePredicate, vertexInvariant});
+        //std::cout << logic.printSym(vertex) << " -> " << logic.pp(vertexInvariant) << std::endl;
+    }
+    return ValidityWitness(std::move(vertexInvariants));
+}
+
+std::set<PTRef> SingleLoopTransformation::WitnessBackTranslator::getVarsForVertex(SymRef vertex) const {
+    std::set<PTRef> vars;
+    for (auto const & entry : positionVarMap) {
+        if (entry.first.vertex == vertex) {
+            vars.insert(entry.second);
+        }
+    }
+    return vars;
 }
