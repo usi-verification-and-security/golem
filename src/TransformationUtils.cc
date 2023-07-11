@@ -435,12 +435,24 @@ VerificationResult backtranslateSingleLoopTransformation_Unsafe(
     return {VerificationAnswer::UNSAFE, InvalidityWitness::fromErrorPath(errorPath, graph)};
 }
 
+VerificationResult backtranslateSingleLoopTransformation_Safe(
+    PTRef invariant,
+    ChcDirectedGraph const & graph,
+    TransitionSystem const & transitionSystem) {
+    Logic & logic = graph.getLogic();
+//    std::cout << "Invariant is " << logic.pp(invariant) << std::endl;
+    return VerificationResult(VerificationAnswer::SAFE, ValidityWitness{});
+}
+
 VerificationResult backtranslateSingleLoopTransformation(
     TransitionSystemVerificationResult result,
     ChcDirectedGraph const & graph,
     TransitionSystem const & transitionSystem) {
     if (result.answer == VerificationAnswer::UNSAFE) {
         return backtranslateSingleLoopTransformation_Unsafe(std::get<std::size_t>(result.witness), graph, transitionSystem);
+    }
+    if (result.answer == VerificationAnswer::SAFE) {
+        return backtranslateSingleLoopTransformation_Safe(std::get<PTRef>(result.witness), graph, transitionSystem);
     }
     return VerificationResult(result.answer);
 }
