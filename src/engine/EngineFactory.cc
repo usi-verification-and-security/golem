@@ -10,6 +10,7 @@
 #include "IMC.h"
 #include "Kind.h"
 #include "Lawi.h"
+#include "PDKind.h"
 #include "Spacer.h"
 #include "TPA.h"
 
@@ -28,6 +29,8 @@ std::unique_ptr<Engine> EngineFactory::getEngine(std::string_view engine) && {
         return std::make_unique<Kind>(logic, options);
     } else if (engine == "imc") {
         return std::make_unique<IMC>(logic, options);
+    } else if (engine == "pdkind") {
+        return std::make_unique<PDKind>(logic, options);
     } else {
         throw std::invalid_argument("Unknown engine specified");
     }
