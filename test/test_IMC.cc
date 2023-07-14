@@ -209,3 +209,36 @@ TEST_F(IMCTest, test_IMC_BeyondTransitionSystem_safe)
     IMC engine(*logic, options);
     solveSystem(clauses, engine, VerificationAnswer::SAFE, true);
 }
+
+TEST_F(IMCTest, test_IMC_modelRegression_safe) {
+    Options options;
+    options.addOption(Options::COMPUTE_WITNESS, "true");
+    SymRef s1 = mkPredicateSymbol("s1", {intSort(), intSort()});
+    PTRef current = instantiatePredicate(s1, {x,y});
+    PTRef next = instantiatePredicate(s1, {xp,yp});
+    // x = 0 and y = 0 => S1(x,y)
+    // S1(x,y) and x < 3 and x' = x + y and y' = y + 1 => S1(x',y')
+    // S1(x,y) and x < 0 => false
+    std::vector<ChClause> clauses{
+        {
+            ChcHead{UninterpretedPredicate{next}},
+            ChcBody{{logic->mkAnd(logic->mkEq(xp, zero), logic->mkEq(yp, zero))}, {}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{next}},
+            ChcBody{{logic->mkAnd({
+                        logic->mkEq(xp, logic->mkPlus(x, y)),
+                        logic->mkEq(yp, logic->mkPlus(y, one)),
+                        logic->mkLt(x, logic->mkIntConst(3))
+                    })},
+                    {UninterpretedPredicate{current}}
+            }
+        },
+        {
+            ChcHead{UninterpretedPredicate{logic->getTerm_false()}},
+            ChcBody{{logic->mkLt(x, zero)}, {UninterpretedPredicate{current}}}
+        }
+    };
+    IMC engine(*logic, options);
+    solveSystem(clauses, engine, VerificationAnswer::SAFE, true);
+}

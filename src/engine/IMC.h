@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2022, Konstantin Britikov <britikovki@gmail.com>
+ * Copyright (c) 2023, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
@@ -17,7 +18,7 @@ class IMC : public Engine {
 public:
     struct InterpolantResult{
         lbool result;
-        int depth;
+        unsigned depth;
         PTRef interpolant;
     };
 
@@ -41,7 +42,9 @@ private:
     VerificationResult solveTransitionSystem(ChcDirectedGraph const & graph);
     TransitionSystemVerificationResult solveTransitionSystemInternal(TransitionSystem const & system);
 
-    InterpolantResult finiteRun(PTRef init, PTRef transition, PTRef query, int k);
+    InterpolantResult finiteRun(TransitionSystem const & ts, unsigned k);
+
+    PTRef computeFinalInductiveInvariant(PTRef inductiveInvariant, unsigned k, TransitionSystem const & ts);
 
     PTRef lastIterationInterpolant(MainSolver & solver, ipartitions_t const & mask);
     sstat checkItp(PTRef itp, PTRef itpsOld);
