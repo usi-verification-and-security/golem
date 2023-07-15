@@ -90,6 +90,8 @@ protected:
     PTRef query;
     vec<PTRef> stateVariables;
     vec<PTRef> auxiliaryVariables;
+    vec<PTRef> leftInvariants;
+    vec<PTRef> rightInvariants;
 
     PTRef identity{PTRef_Undef};
 
@@ -178,6 +180,8 @@ protected:
 
     PTRef safeSupersetOfInitialStates(PTRef start, PTRef transitionInvariant, PTRef target) const;
 
+    void houdiniCheck(PTRef invCandidates, PTRef transition, SafetyExplanation::FixedPointType alignment);
+
     bool checkLessThanFixedPoint(unsigned short power);
 
     QueryResult reachabilityExactOneStep(PTRef from, PTRef to);
@@ -186,6 +190,8 @@ protected:
     PTRef computeIdentity() const;
 
     void resetExplanation();
+
+    void squashInvariants(vec<PTRef> & candidates);
 
     VerificationAnswer checkTrivialUnreachability();
 };
