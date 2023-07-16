@@ -180,7 +180,7 @@ protected:
 
     PTRef safeSupersetOfInitialStates(PTRef start, PTRef transitionInvariant, PTRef target) const;
 
-    void houdiniCheck(PTRef invCandidates, PTRef transition, SafetyExplanation::FixedPointType alignment);
+    void houdiniCheck(PTRef invCandidates, SafetyExplanation::FixedPointType alignment);
 
     bool checkLessThanFixedPoint(unsigned short power);
 
@@ -190,8 +190,6 @@ protected:
     PTRef computeIdentity() const;
 
     void resetExplanation();
-
-    void squashInvariants(vec<PTRef> & candidates);
 
     VerificationAnswer checkTrivialUnreachability();
 };

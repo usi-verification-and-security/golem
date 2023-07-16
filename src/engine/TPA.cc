@@ -983,7 +983,8 @@ bool TPASplit::verifyExactPower(unsigned short power) const {
     return res == s_False;
 }
 
-void TPABase::squashInvariants(vec<PTRef> & candidates) {
+namespace {
+void squashCandidates(vec<PTRef> & candidates, Logic & logic) {
     while (candidates.size() > 128) {
         int j = 0;
         for (int i = candidates.size() - 1; i >= 1 && i > j; i-- && j++) {
@@ -994,68 +995,51 @@ void TPABase::squashInvariants(vec<PTRef> & candidates) {
         }
     }
 }
+}// namespace
 
-void TPABase::houdiniCheck(PTRef invCandidates, PTRef transition, SafetyExplanation::FixedPointType alignment) {
+void TPABase::houdiniCheck(PTRef invCandidates, SafetyExplanation::FixedPointType alignment) {
+    using align_t = decltype(alignment);
+    assert(alignment == align_t::RIGHT or alignment == align_t::LEFT);
     // RIGHT:
-    //   rightInvariants /\ currentLevelTransition /\ getNextVersion(transition) =>
-    //     shiftOnlyNextVars(currentLevelTransition);
+    //   rightInvariants /\ candidateTransitionRelation /\ getNextVersion(transition) =>
+    //     shiftOnlyNextVars(candidateTransitionRelation);
     // LEFT:
-    //   leftInvariants /\ transition /\ getNextVersion(currentLevelTransition) =>
-    //     shiftOnlyNextVars(currentLevelTransition);
+    //   leftInvariants /\ transition /\ getNextVersion(candidateTransitionRelation) =>
+    //     shiftOnlyNextVars(candidateTransitionRelation);
+    auto candidates = topLevelConjuncts(logic, invCandidates);
+    squashCandidates(candidates, logic);
+
     SMTConfig config;
     MainSolver solver(logic, config, "Fixed-point checker");
-    solver.push();
-    auto candidates = topLevelConjuncts(logic, invCandidates);
-    if (alignment == SafetyExplanation::FixedPointType::RIGHT) {
-        solver.insertFormula(getNextVersion(transition));
-    } else {
-        if (alignment == SafetyExplanation::FixedPointType::LEFT) { solver.insertFormula(transition); }
-    }
+    solver.insertFormula(alignment == align_t::RIGHT ? getNextVersion(transition) : transition);
 
-    solver.push();
-    squashInvariants(candidates);
     //    invCandidates.append(conjuncts);
     //    Atr(x, x') /\ tr(x', x'') => Atr(x, x'')
     //    or
     //    Atr(x', x'') /\  tr(x, x') => Atr(x, x'')
     //    Push transition once and for all
     //    While loop externally, because we may drop smth important
+    solver.push();
     PTRef goal = shiftOnlyNextVars(invCandidates);
-
-    if (alignment == SafetyExplanation::FixedPointType::RIGHT) {
-        solver.insertFormula(logic.mkAnd(invCandidates, logic.mkNot(goal)));
-    } else if (alignment == SafetyExplanation::FixedPointType::LEFT) {
-        solver.insertFormula(logic.mkAnd(getNextVersion(invCandidates), logic.mkNot(goal)));
-    }
+    solver.insertFormula(logic.mkNot(goal));
+    solver.insertFormula(alignment == align_t::RIGHT ? invCandidates : getNextVersion(invCandidates));
     while (solver.check() == s_True) {
+        auto model = solver.getModel();
         for (int i = candidates.size() - 1; i >= 0; i--) {
-            PTRef cand = candidates[i];
-            solver.pop();
-            solver.push();
-            if (alignment == SafetyExplanation::FixedPointType::RIGHT) {
-                solver.insertFormula(logic.mkAnd(logic.mkAnd(candidates), logic.mkNot(shiftOnlyNextVars(cand))));
-            } else {
-                if (alignment == SafetyExplanation::FixedPointType::LEFT) {
-                    solver.insertFormula(
-                        logic.mkAnd(getNextVersion(logic.mkAnd(candidates)), logic.mkNot(shiftOnlyNextVars(cand))));
-                }
-            }
-            if (solver.check() == s_True) {
+            if (model->evaluate(shiftOnlyNextVars(candidates[i])) == logic.getTerm_false()) {
                 candidates[i] = candidates[candidates.size() - 1];
                 candidates.pop();
             }
         }
         solver.pop();
         solver.push();
-        goal = shiftOnlyNextVars(logic.mkAnd(candidates));
-        if (alignment == SafetyExplanation::FixedPointType::RIGHT) {
-            solver.insertFormula(logic.mkAnd(logic.mkAnd(candidates), logic.mkNot(goal)));
-        } else {
-            solver.insertFormula(logic.mkAnd(getNextVersion(logic.mkAnd(candidates)), logic.mkNot(goal)));
-        }
+        PTRef allCandidates = logic.mkAnd(candidates);
+        goal = shiftOnlyNextVars(allCandidates);
+        solver.insertFormula(logic.mkNot(goal));
+        solver.insertFormula(alignment == align_t::RIGHT ? allCandidates : getNextVersion(allCandidates));
     }
     for (auto cand : candidates) {
-        if (alignment == SafetyExplanation::FixedPointType::RIGHT) {
+        if (alignment == align_t::RIGHT) {
             if (std::find(rightInvariants.begin(), rightInvariants.end(), cand) != rightInvariants.end()) { continue; }
             rightInvariants.push(cand);
         } else {
@@ -1072,7 +1056,7 @@ bool TPABase::checkLessThanFixedPoint(unsigned short power) {
         // first check if it is fixed point with respect to initial state
         SMTConfig config;
         {
-            houdiniCheck(currentLevelTransition, transition, SafetyExplanation::FixedPointType::RIGHT);
+            houdiniCheck(currentLevelTransition, SafetyExplanation::FixedPointType::RIGHT);
             MainSolver solver(logic, config, "Fixed-point checker");
             solver.insertFormula(
                 logic.mkAnd({logic.mkAnd(rightInvariants), currentLevelTransition, getNextVersion(transition),
@@ -1105,7 +1089,7 @@ bool TPABase::checkLessThanFixedPoint(unsigned short power) {
         }
         // now check if it is fixed point with respect to bad states
         {
-            houdiniCheck(currentLevelTransition, transition, SafetyExplanation::FixedPointType::LEFT);
+            houdiniCheck(currentLevelTransition, SafetyExplanation::FixedPointType::LEFT);
             MainSolver solver(logic, config, "Fixed-point checker");
             solver.insertFormula(logic.mkAnd({transition, getNextVersion(logic.mkAnd(leftInvariants)),
                                               getNextVersion(currentLevelTransition),
