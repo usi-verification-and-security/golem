@@ -5,3 +5,8 @@ src/ChcInterpreter.h
 
 src/engine/TPA.cc
 src/engine/TPA.h
+src/engine/Common.cc
+src/engine/Common.h
+
+src/transformers/SingleLoopTransformation.cc
+src/transformers/SingleLoopTransformation.h
