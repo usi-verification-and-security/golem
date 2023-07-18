@@ -139,13 +139,12 @@ SingleLoopTransformation::TransformationResult SingleLoopTransformation::transfo
     auto systemType = std::make_unique<SystemType>(stateVars, edgeTranslator.auxiliaryVariablesSeen, logic);
     auto ts =
         std::make_unique<TransitionSystem>(logic, std::move(systemType), initialStates, transitionRelation, badStates);
-    auto backTraslator =
+    auto backTranslator =
         std::make_unique<WitnessBackTranslator>(graph, *ts, std::move(locationVars), std::move(argVars));
-    return {std::move(ts), std::move(backTraslator)};
+    return {std::move(ts), std::move(backTranslator)};
 }
 
 // Witness backtranslation
-
 VerificationResult
 SingleLoopTransformation::WitnessBackTranslator::translate(TransitionSystemVerificationResult result) {
     if (result.answer == VerificationAnswer::UNSAFE) {
