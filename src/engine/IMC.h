@@ -15,16 +15,15 @@ class IMC : public Engine {
     Logic & logic;
 //    Options const & options;
     int verbosity = 0;
-public:
-    struct InterpolantResult{
-        lbool result;
-        unsigned depth;
-        PTRef interpolant;
-    };
+    bool computeWitness = false;
 
+public:
     IMC(Logic & logic, Options const & options) : logic(logic) {
         if (options.hasOption(Options::VERBOSE)) {
             verbosity = std::stoi(options.getOption(Options::VERBOSE));
+        }
+        if (options.hasOption(Options::COMPUTE_WITNESS)) {
+            computeWitness = options.getOption(Options::COMPUTE_WITNESS) == "true";
         }
     }
 
@@ -42,11 +41,10 @@ private:
     VerificationResult solveTransitionSystem(ChcDirectedGraph const & graph);
     TransitionSystemVerificationResult solveTransitionSystemInternal(TransitionSystem const & system);
 
-    InterpolantResult finiteRun(TransitionSystem const & ts, unsigned k);
+    TransitionSystemVerificationResult finiteRun(TransitionSystem const & ts, unsigned k);
 
     PTRef computeFinalInductiveInvariant(PTRef inductiveInvariant, unsigned k, TransitionSystem const & ts);
 
-    PTRef lastIterationInterpolant(MainSolver & solver, ipartitions_t const & mask);
     sstat checkItp(PTRef itp, PTRef itpsOld);
 };
 

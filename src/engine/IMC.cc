@@ -23,13 +23,13 @@ VerificationResult IMC::solve(ChcDirectedGraph const & graph) {
     auto[ts, backtranslator] = transformation.transform(graph);
     assert(ts);
     auto res = solveTransitionSystemInternal(*ts);
-    return backtranslator->translate(res);
+    return computeWitness ? backtranslator->translate(res) : VerificationResult(res.answer);
 }
 
 VerificationResult IMC::solveTransitionSystem(ChcDirectedGraph const & graph) {
     auto ts = toTransitionSystem(graph);
     auto res = solveTransitionSystemInternal(*ts);
-    return translateTransitionSystemResult(res, graph, *ts);
+    return computeWitness ? translateTransitionSystemResult(res, graph, *ts) : VerificationResult(res.answer);
 }
 
 TransitionSystemVerificationResult IMC::solveTransitionSystemInternal(TransitionSystem const & system) {
@@ -48,19 +48,24 @@ TransitionSystemVerificationResult IMC::solveTransitionSystemInternal(Transition
         return TransitionSystemVerificationResult{VerificationAnswer::UNSAFE, 0u};
     }
     for (uint32_t k = 1; k < maxLoopUnrollings; ++k) {
-        InterpolantResult res = finiteRun(system, k);
-        if (res.result == l_True) {
-            return TransitionSystemVerificationResult{VerificationAnswer::UNSAFE, static_cast<std::size_t>(res.depth)};
-        }
-        if (res.result == l_False) {
-            return TransitionSystemVerificationResult{VerificationAnswer::SAFE, res.interpolant};
-        }
+        auto res = finiteRun(system, k);
+        if (res.answer != VerificationAnswer::UNKNOWN) { return res; }
     }
     return TransitionSystemVerificationResult{VerificationAnswer::UNKNOWN, 0u};
 }
 
+namespace { // Helper method for IMC::finiteRun
+PTRef lastIterationInterpolant(MainSolver & solver, ipartitions_t const & mask) {
+    auto itpContext = solver.getInterpolationContext();
+    vec<PTRef> itps;
+    itpContext->getSingleInterpolant(itps, mask);
+    assert(itps.size() == 1);
+    return itps[0];
+}
+} // namespace
+
 //procedure FiniteRun(M=(I,T,F), k>0)
-IMC::InterpolantResult IMC::finiteRun(TransitionSystem const & ts, unsigned k) {
+TransitionSystemVerificationResult IMC::finiteRun(TransitionSystem const & ts, unsigned k) {
     assert(k > 0);
     SMTConfig config;
     const char * msg = "ok";
@@ -87,10 +92,10 @@ IMC::InterpolantResult IMC::finiteRun(TransitionSystem const & ts, unsigned k) {
         if (res == s_True) {
             if (movingInit == ts.getInit()) {
                 // if R=I return True
-                return InterpolantResult{l_True, iter + k, PTRef_Undef};
+                return {VerificationAnswer::UNSAFE, iter + k};
             } else {
                 // else Abort
-                return InterpolantResult{l_Undef, iter + k, PTRef_Undef};
+                return {VerificationAnswer::UNKNOWN, PTRef_Undef};
             }
             // else if A U B is unsat
         } else {
@@ -103,23 +108,16 @@ IMC::InterpolantResult IMC::finiteRun(TransitionSystem const & ts, unsigned k) {
             movingInit = tm.sendFlaThroughTime(movingInit, 1);
             //if R' => R return False(if R' /\ not R returns True)
             if (checkItp(itp, movingInit) == s_False) {
+                if (not computeWitness) { return {VerificationAnswer::SAFE, PTRef_Undef}; }
                 PTRef inductiveInvariant = tm.sendFlaThroughTime(movingInit, -iter - 1);
                 PTRef finalInductiveInvariant = computeFinalInductiveInvariant(inductiveInvariant, k, ts);
-                return InterpolantResult{l_False, iter + k, finalInductiveInvariant};
+                return {VerificationAnswer::SAFE, finalInductiveInvariant};
             }
             // let R = R\/R'
             movingInit = logic.mkOr(movingInit, itp);
         }
         iter++;
     }
-}
-
-PTRef IMC::lastIterationInterpolant(MainSolver & solver, ipartitions_t const & mask) {
-    auto itpContext = solver.getInterpolationContext();
-    vec<PTRef> itps;
-    itpContext->getSingleInterpolant(itps, mask);
-    assert(itps.size() == 1);
-    return itps[0];
 }
 
 sstat IMC::checkItp(PTRef itp, PTRef itpsOld) {
