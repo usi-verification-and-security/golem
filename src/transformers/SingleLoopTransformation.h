@@ -72,11 +72,11 @@ public:
 
         VerificationResult translate(TransitionSystemVerificationResult result);
 
+    private:
         InvalidityWitness translateErrorPath(std::size_t unrolling);
 
         ValidityWitness translateInvariant(PTRef inductiveInvariant);
 
-    private:
         std::set<PTRef> getVarsForVertex(SymRef vertex) const;
     };
 
