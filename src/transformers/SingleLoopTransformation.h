@@ -47,11 +47,8 @@ public:
     };
     struct VarPositionHasher {
         std::size_t operator()(VarPosition pos) const {
-            std::hash<std::size_t> hasher;
-            std::size_t res = 0;
-            res ^= hasher(pos.vertex.x) + 0x9e3779b9 + (res << 6) + (res >> 2);
-            res ^= hasher(pos.pos) + 0x9e3779b9 + (res << 6) + (res >> 2);
-            return res;
+            std::hash<std::uint32_t> hasher;
+            return hasher(pos.vertex.x) ^ hasher(pos.pos);
         }
     };
 
