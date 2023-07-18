@@ -88,9 +88,7 @@ SingleLoopTransformation::TransformationResult SingleLoopTransformation::transfo
     TimeMachine timeMachine(logic);
     auto vertices = graph.getVertices();
     // MB: It is useful to have exit location, so we do not remove exit from the vertices
-    vertices.erase(
-        std::remove_if(vertices.begin(), vertices.end(), [&](auto vertex) { return vertex == graph.getEntry(); }),
-        vertices.end());
+    vertices.erase(std::remove(vertices.begin(), vertices.end(), graph.getEntry()), vertices.end());
     LocationVarMap locationVars;
     locationVars.reserve(vertices.size());
     for (auto vertex : vertices) {
