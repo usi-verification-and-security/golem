@@ -20,7 +20,7 @@ VerificationResult Kind::solve(ChcDirectedHyperGraph const & graph) {
     if (transformedGraph->isNormalGraph()) {
         auto normalGraph = transformedGraph->toNormalGraph();
         auto res = solve(*normalGraph);
-        return computeWitness ? translator->translate(std::move(res)) : res;
+        return computeWitness ? translator->translate(std::move(res)) : std::move(res);
     }
     return VerificationResult(VerificationAnswer::UNKNOWN);
 }

@@ -323,6 +323,11 @@ VerificationResult ChcInterpreterContext::solve(std::string engine_s, ChcDirecte
 void ChcInterpreterContext::validate(VerificationResult result, ChcDirectedHyperGraph const & originalGraph,
                                      bool validateWitness, bool printWitness, WitnessBackTranslator & translator) {
     result = translator.translate(std::move(result));
+    if (not result.hasWitness()) {
+        if (validateWitness) { std::cout << "Internal witness validation failed!" << std::endl; }
+        std::cerr << ";No witness has been computed.\n;Reason: " << result.getNoWitnessReason() << std::endl;
+        return;
+    }
     if (printWitness) { result.printWitness(std::cout, logic); }
     if (validateWitness) {
         auto validationResult = Validator(logic).validate(originalGraph, result);
@@ -377,7 +382,7 @@ void ChcInterpreterContext::interpretCheckSat() {
                 auto result = solve(engines[i], *hypergraph);
                 if (result.getAnswer() == VerificationAnswer::UNKNOWN) { exit(1); }
                 if (validateWitness || printWitness) {
-                    validate(result, *originalGraph, validateWitness, printWitness, *translator);
+                    validate(std::move(result), *originalGraph, validateWitness, printWitness, *translator);
                 }
                 return;
             }
@@ -408,7 +413,7 @@ void ChcInterpreterContext::interpretCheckSat() {
         return;
     }
     if (validateWitness || printWitness) {
-        validate(result, *originalGraph, validateWitness, printWitness, *translator);
+        validate(std::move(result), *originalGraph, validateWitness, printWitness, *translator);
     }
 }
 

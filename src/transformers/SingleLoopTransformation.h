@@ -70,9 +70,11 @@ public:
         VerificationResult translate(TransitionSystemVerificationResult result);
 
     private:
-        InvalidityWitness translateErrorPath(std::size_t unrolling);
+        template<typename T> using ErrorOr = std::variant<NoWitness, T>;
 
-        ValidityWitness translateInvariant(PTRef inductiveInvariant);
+        ErrorOr<InvalidityWitness> translateErrorPath(std::size_t unrolling);
+
+        ErrorOr<ValidityWitness> translateInvariant(PTRef inductiveInvariant);
 
         std::set<PTRef> getVarsForVertex(SymRef vertex) const;
     };

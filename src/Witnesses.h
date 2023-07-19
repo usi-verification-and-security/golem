@@ -104,7 +104,17 @@ public:
                                                 TransitionSystem const & transitionSystem, PTRef invariant);
 };
 
-struct NoWitness {};
+class NoWitness {
+    std::string reason;
+public:
+    explicit NoWitness(std::string_view reason) : reason(reason) {}
+
+    NoWitness() = default;
+    NoWitness(NoWitness &&) = default;
+    NoWitness & operator=(NoWitness &&) = default;
+
+    [[nodiscard]] std::string_view getReason() const { return reason; }
+};
 
 enum class VerificationAnswer : char {SAFE, UNSAFE, UNKNOWN};
 
@@ -119,6 +129,9 @@ public:
     VerificationResult(VerificationAnswer answer, InvalidityWitness invalidityWitness)
         : answer(answer), witness(std::move(invalidityWitness)) {}
 
+    VerificationResult(VerificationAnswer answer, NoWitness noWitness)
+        : answer(answer), witness(std::move(noWitness)) {}
+
     explicit VerificationResult(VerificationAnswer answer) : answer(answer), witness(NoWitness()) {}
 
     [[nodiscard]] VerificationAnswer getAnswer() const { return answer; }
@@ -127,6 +140,7 @@ public:
 
     [[nodiscard]] ValidityWitness const & getValidityWitness() const & { assert(answer == VerificationAnswer::SAFE); return std::get<ValidityWitness>(witness); }
     [[nodiscard]] InvalidityWitness const & getInvalidityWitness() const & { assert(answer == VerificationAnswer::UNSAFE); return std::get<InvalidityWitness>(witness); }
+    [[nodiscard]] std::string_view getNoWitnessReason() const & { assert(not hasWitness()); return std::get<NoWitness>(witness).getReason(); }
 
     ValidityWitness && getValidityWitness() && { assert(answer == VerificationAnswer::SAFE); return std::move(std::get<ValidityWitness>(witness)); }
     InvalidityWitness && getInvalidityWitness() && { assert(answer == VerificationAnswer::UNSAFE); return std::move(std::get<InvalidityWitness>(witness)); }

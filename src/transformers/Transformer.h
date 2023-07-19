@@ -19,7 +19,7 @@ public:
     virtual ValidityWitness translate(ValidityWitness witness) = 0;
     virtual ~WitnessBackTranslator() = default;
     VerificationResult translate(VerificationResult && result) {
-        if (not result.hasWitness()) { return result; }
+        if (not result.hasWitness()) { return std::move(result); }
         auto answer = result.getAnswer();
         switch (answer) {
             case VerificationAnswer::SAFE:
@@ -27,7 +27,7 @@ public:
             case VerificationAnswer::UNSAFE:
                 return {answer, translate(std::move(result).getInvalidityWitness())};
             case VerificationAnswer::UNKNOWN:
-                return result;
+                return std::move(result);
         }
         throw std::logic_error("Unreachable");
     }

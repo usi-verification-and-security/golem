@@ -146,15 +146,24 @@ SingleLoopTransformation::TransformationResult SingleLoopTransformation::transfo
 VerificationResult
 SingleLoopTransformation::WitnessBackTranslator::translate(TransitionSystemVerificationResult result) {
     if (result.answer == VerificationAnswer::UNSAFE) {
-        return {VerificationAnswer::UNSAFE, translateErrorPath(std::get<std::size_t>(result.witness))};
+        auto witness = translateErrorPath(std::get<std::size_t>(result.witness));
+        if (std::holds_alternative<NoWitness>(witness)) {
+            return {result.answer, std::get<NoWitness>(std::move(witness))};
+        }
+        return {VerificationAnswer::UNSAFE, std::get<InvalidityWitness>(std::move(witness))};
     }
     if (result.answer == VerificationAnswer::SAFE) {
-        return {VerificationAnswer::SAFE, translateInvariant(std::get<PTRef>(result.witness))};
+        auto witness = translateInvariant(std::get<PTRef>(result.witness));
+        if (std::holds_alternative<NoWitness>(witness)) {
+            return {result.answer, std::get<NoWitness>(std::move(witness))};
+        }
+        return {VerificationAnswer::SAFE, std::get<ValidityWitness>(std::move(witness))};
     }
     return VerificationResult(result.answer);
 }
 
-InvalidityWitness SingleLoopTransformation::WitnessBackTranslator::translateErrorPath(std::size_t unrolling) {
+SingleLoopTransformation::WitnessBackTranslator::ErrorOr<InvalidityWitness>
+SingleLoopTransformation::WitnessBackTranslator::translateErrorPath(std::size_t unrolling) {
     // We need to get the CEX path, which will define the locations in the graph
     Logic & logic = graph.getLogic();
     TimeMachine tm(logic);
@@ -201,7 +210,7 @@ InvalidityWitness SingleLoopTransformation::WitnessBackTranslator::translateErro
         if (std::find_if(it + 1, outgoing.end(), [&](EId eid) { return target == graph.getTarget(eid); }) !=
             outgoing.end()) {
             // Bail out in this case
-            return {};
+            return NoWitness{"Could not backtranslate invalidity witness in single-loop transformation"};
         }
     }
     ErrorPath errorPath;
@@ -209,7 +218,8 @@ InvalidityWitness SingleLoopTransformation::WitnessBackTranslator::translateErro
     return InvalidityWitness::fromErrorPath(errorPath, graph);
 }
 
-ValidityWitness SingleLoopTransformation::WitnessBackTranslator::translateInvariant(PTRef inductiveInvariant) {
+SingleLoopTransformation::WitnessBackTranslator::ErrorOr<ValidityWitness>
+SingleLoopTransformation::WitnessBackTranslator::translateInvariant(PTRef inductiveInvariant) {
     Logic & logic = graph.getLogic();
     //    std::cout << "Invariant is " << logic.pp(invariant) << std::endl;
     auto vertices = graph.getVertices();
@@ -247,7 +257,7 @@ ValidityWitness SingleLoopTransformation::WitnessBackTranslator::translateInvari
         bool hasAlienVariable = std::any_of(allVars.begin(), allVars.end(),
                                             [&](PTRef var) { return vertexVars.find(var) == vertexVars.end(); });
         if (hasAlienVariable) {
-            return ValidityWitness{};
+            return NoWitness{"Could not backtranslate validity witness in single-loop transformation: Predicate interpretation contains alien variable"};
         } // TODO: Figure out a way to deal with this situation properly
         // No alien variable, we can translate the invariant using predicate's variables
         TermUtils::substitutions_map varSubstitutions;
