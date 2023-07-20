@@ -4,7 +4,6 @@ VerificationResult solveTrivial(ChcDirectedGraph const & graph) {
     Logic & logic = graph.getLogic();
     // All edges should be between entry and exit, check if any of them has a satisfiable label
     auto edgeIds = graph.getEdges();
-    assert(edgeIds.size() <= 1); // Current preprocessing in TPA ensures that multiedges are replaced by single edge
     for (EId eid : edgeIds) {
         assert(graph.getSource(eid) == graph.getEntry());
         assert(graph.getTarget(eid) == graph.getExit());
