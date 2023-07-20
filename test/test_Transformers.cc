@@ -13,6 +13,7 @@
 #include "transformers/MultiEdgeMerger.h"
 #include "Validator.h"
 #include "engine/Spacer.h"
+#include "engine/IMC.h"
 
 class Transformer_New_Test : public LIAEngineTest {
 };
@@ -380,6 +381,44 @@ TEST_F(Transformer_test, test_NodeEliminator_PredicateWithoutVariables) {
     Validator validator(logic);
     auto res = validator.validate(originalGraph, VerificationResult(VerificationAnswer::SAFE, witness));
     ASSERT_EQ(res, Validator::Result::VALIDATED);
+}
+
+TEST_F(Transformer_New_Test, test_NodeEliminator_SecondEdgeUsed) {
+    SymRef p = mkPredicateSymbol("P", {intSort()});
+    PTRef current = instantiatePredicate(p, {x});
+    PTRef next = instantiatePredicate(p, {xp});
+
+    // x = 0 => P(x)
+    // x = 1 => P(x)
+    // P(x) and x = 1 => false
+    std::vector<ChClause> clauses{
+        {
+            ChcHead{UninterpretedPredicate{next}},
+            ChcBody{{logic->mkEq(xp, zero)}, {}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{next}},
+            ChcBody{{logic->mkEq(xp, one)}, {}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{logic->getTerm_false()}},
+            ChcBody{{logic->mkEq(x, one)}, {UninterpretedPredicate{current}}}
+        }};
+
+    for (auto const & clause : clauses) { system.addClause(clause); }
+    Logic & logic = *this->logic;
+    auto normalizedSystem = Normalizer(logic).normalize(system);
+    auto hyperGraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
+    auto originalGraph = *hyperGraph;
+    SimpleNodeEliminator transformation;
+    auto [transformedGraph, translator] = transformation.transform(std::move(hyperGraph));
+    ASSERT_EQ(transformedGraph->getEdges().size(), 2);
+    auto res = IMC(logic, options).solve(*transformedGraph);
+    auto answer = res.getAnswer();
+    ASSERT_EQ(answer, VerificationAnswer::UNSAFE);
+    auto translatedWitness = translator->translate(res.getInvalidityWitness());
+    VerificationResult translatedResult(VerificationAnswer::UNSAFE, translatedWitness);
+    EXPECT_EQ(Validator(logic).validate(originalGraph, translatedResult), Validator::Result::VALIDATED);
 }
 
 TEST_F(Transformer_New_Test, test_MultiEdgeMerger_SimpleUnsafe) {

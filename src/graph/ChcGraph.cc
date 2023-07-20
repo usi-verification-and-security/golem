@@ -410,11 +410,12 @@ ChcDirectedHyperGraph::VertexContractionResult ChcDirectedHyperGraph::contractVe
     std::transform(outgoingEdges.begin(), outgoingEdges.end(), std::back_inserter(result.outgoing), [this](EId eid) {
         return this->getEdge(eid);
     });
-    std::size_t incomingIndex = 0;
-    for (EId incomingId : incomingEdges) {
+    for (std::size_t incomingIndex = 0; incomingIndex < incomingEdges.size(); ++incomingIndex) {
+        EId incomingId = incomingEdges[incomingIndex];
         if (getSources(incomingId).size() > 1) { throw std::logic_error("Unable to contract vertex with hyperedge!"); }
-        std::size_t outgoingIndex = 0;
-        for (EId outgoingId : outgoingEdges) {
+
+        for (std::size_t outgoingIndex = 0; outgoingIndex < outgoingEdges.size(); ++outgoingIndex) {
+            EId outgoingId = outgoingEdges[outgoingIndex];
             if (getSources(outgoingId).size() > 1) { throw std::logic_error("Unable to contract vertex with hyperedge!"); }
             auto replacingEdge = mergeEdges({incomingId, outgoingId});
             result.replacing.emplace_back(std::move(replacingEdge), std::make_pair(incomingIndex, outgoingIndex));
