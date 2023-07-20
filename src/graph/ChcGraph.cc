@@ -424,8 +424,8 @@ ChcDirectedHyperGraph::VertexContractionResult ChcDirectedHyperGraph::contractVe
     return result;
 }
 
-bool ChcDirectedHyperGraph::mergeMultiEdges() {
-    bool changed = false;
+ChcDirectedHyperGraph::MergedEdges ChcDirectedHyperGraph::mergeMultiEdges() {
+    ChcDirectedHyperGraph::MergedEdges mergedEdges;
     std::unordered_map<std::pair<SymRef, SymRef>, std::vector<EId>, EdgeHasher> buckets;
     forEachEdge([&](auto const & edge) {
         auto const & sources = edge.from;
@@ -436,16 +436,18 @@ bool ChcDirectedHyperGraph::mergeMultiEdges() {
     for (auto const & bucketEntry : buckets) {
         auto const & bucket = bucketEntry.second;
         if (bucket.size() < 2) { continue; }
+        auto & currentRecord = mergedEdges.emplace_back();
         vec<PTRef> labels;
         labels.capacity(bucket.size());
         for (auto index : bucket) {
-            labels.push(edges[index].fla.fla);
+            labels.push(edges.at(index).fla.fla);
+            currentRecord.first.push_back(getEdge(index));
         }
-        edges[bucket[0]].fla = InterpretedFla{logic.mkOr(std::move(labels))};
+        edges.at(bucket[0]).fla = InterpretedFla{logic.mkOr(std::move(labels))};
         std::for_each(bucket.begin() + 1, bucket.end(), [this](EId eid) { edges.erase(eid); });
-        changed = true;
+        currentRecord.second = getEdge(bucket[0]);
     }
-    return changed;
+    return mergedEdges;
 }
 
 void ChcDirectedHyperGraph::deleteFalseEdges() {

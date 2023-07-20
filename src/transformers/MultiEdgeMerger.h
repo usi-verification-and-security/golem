@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2022-2023, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
@@ -15,11 +15,18 @@ public:
 
     class BackTranslator : public WitnessBackTranslator {
     public:
+        BackTranslator(Logic & logic, NonlinearCanonicalPredicateRepresentation predicateRepresentation)
+            : logic(logic), predicateRepresentation(std::move(predicateRepresentation)) {}
+
         InvalidityWitness translate(InvalidityWitness witness) override;
 
         ValidityWitness translate(ValidityWitness witness) override;
 
-        bool somethingChanged {false};
+        using MergedEdges = ChcDirectedHyperGraph::MergedEdges;
+
+        MergedEdges mergedEdges {};
+        Logic & logic;
+        NonlinearCanonicalPredicateRepresentation predicateRepresentation;
     };
 };
 
