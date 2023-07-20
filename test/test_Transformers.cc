@@ -431,3 +431,53 @@ TEST_F(Transformer_New_Test, test_MultiEdgeMerger_SimpleUnsafe) {
     EXPECT_EQ(validator.validate(originalGraph, res), Validator::Result::NOT_VALIDATED);
     EXPECT_EQ(validator.validate(originalGraph, translatedResult), Validator::Result::VALIDATED);
 }
+
+TEST_F(Transformer_New_Test, test_MultiEdgeMerger_UnsafeWithAuxVars) {
+    Options options;
+    options.addOption(Options::LOGIC, "QF_LIA");
+    options.addOption(Options::COMPUTE_WITNESS, "true");
+    SymRef s1 = mkPredicateSymbol("s1", {intSort(), intSort()});
+    PTRef current = instantiatePredicate(s1, {x,y});
+    PTRef next = instantiatePredicate(s1, {xp,yp});
+    PTRef c = mkIntVar("c");
+    PTRef val = logic->mkIntConst(2);
+    // x = 0 and y = 0 => S1(x,y)
+    // S1(x,y) and x' = x + c and c > 0 => S1(x',y)
+    // S1(x,y) and y' = y + 1 => S1(x,y')
+    // S1(x,y) and y > 2 and x > 2 => false
+
+    std::vector<ChClause> clauses{
+        {
+            ChcHead{UninterpretedPredicate{next}},
+            ChcBody{{logic->mkAnd(logic->mkEq(xp, zero), logic->mkEq(yp, zero))}, {}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{next}},
+            ChcBody{{logic->mkAnd({logic->mkEq(xp, logic->mkPlus(x, c)), logic->mkEq(yp, y), logic->mkGt(c, zero)})}, {UninterpretedPredicate{current}}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{next}},
+            ChcBody{{logic->mkAnd(logic->mkEq(yp, logic->mkPlus(y, one)), logic->mkEq(xp, x))}, {UninterpretedPredicate{current}}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{logic->getTerm_false()}},
+            ChcBody{{logic->mkAnd(logic->mkGt(y, val), logic->mkGt(x, val))}, {UninterpretedPredicate{current}}}
+        }};
+
+    for (auto const & clause : clauses) { system.addClause(clause); }
+
+    Logic & logic = *this->logic;
+    auto normalizedSystem = Normalizer(logic).normalize(system);
+    auto hyperGraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
+    auto originalGraph = *hyperGraph;
+    MultiEdgeMerger transformation;
+    auto [transformedGraph, translator] = transformation.transform(std::move(hyperGraph));
+    ASSERT_EQ(transformedGraph->getEdges().size(), 3);
+    auto res = Spacer(logic, options).solve(*transformedGraph);
+    auto answer = res.getAnswer();
+    ASSERT_EQ(answer, VerificationAnswer::UNSAFE);
+    auto translatedWitness = translator->translate(res.getInvalidityWitness());
+    VerificationResult translatedResult(VerificationAnswer::UNSAFE, translatedWitness);
+    Validator validator(logic);
+    EXPECT_EQ(validator.validate(originalGraph, translatedResult), Validator::Result::VALIDATED);
+}

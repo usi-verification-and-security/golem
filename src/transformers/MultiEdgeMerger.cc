@@ -26,8 +26,15 @@ InvalidityWitness MultiEdgeMerger::BackTranslator::translate(InvalidityWitness w
         auto const& replacedEdges = it->first;
         auto const& replacingEdge = it->second;
         // Figure out which of the replaced edges can be used to derive the same fact
-        auto model = [&]() -> std::unique_ptr<Model> {
-            ModelBuilder builder(logic);
+        TermUtils utils(logic);
+        TermUtils::substitutions_map subst;
+        { // build the substitution map
+            auto fillVariables = [&](PTRef derivedFact, PTRef normalizedPredicate) {
+                assert(logic.getSymRef(derivedFact) == logic.getSymRef(normalizedPredicate));
+                auto const & term = logic.getPterm(derivedFact); (void) term;
+                assert(std::all_of(term.begin(), term.end(), [&](PTRef arg) { return logic.isConstant(arg); }));
+                utils.mapFromPredicate(normalizedPredicate, derivedFact, subst);
+            };
             // collect values from the derived fact
             auto targetVertex = replacingEdge.to;
             assert(predicateRepresentation.hasRepresentationFor(targetVertex));
@@ -35,10 +42,7 @@ InvalidityWitness MultiEdgeMerger::BackTranslator::translate(InvalidityWitness w
             PTRef derivedFact = step.derivedFact;
             assert(logic.getPterm(targetTerm).size() == logic.getPterm(derivedFact).size());
             assert(logic.getSymRef(targetTerm) == targetVertex and logic.getSymRef(derivedFact) == targetVertex);
-            auto argsCount = logic.getPterm(targetTerm).size();
-            for (auto i = 0u; i < argsCount; ++i) {
-                builder.addVarValue(logic.getPterm(targetTerm)[i], logic.getPterm(derivedFact)[i]);
-            }
+            fillVariables(derivedFact, targetTerm);
             // and collect values from the premise as well
             auto const& premises = step.premises;
             assert(premises.size() == 1); // TODO: Generalize this when we generalize MultiEdgeMerge to HyperEdges
@@ -48,24 +52,22 @@ InvalidityWitness MultiEdgeMerger::BackTranslator::translate(InvalidityWitness w
             PTRef sourceTerm = predicateRepresentation.getSourceTermFor(sourceVertex);
             assert(logic.getPterm(sourceTerm).size() == logic.getPterm(premise).size());
             assert(logic.getSymRef(sourceTerm) == sourceVertex and logic.getSymRef(premise) == sourceVertex);
-            argsCount = logic.getPterm(sourceTerm).size();
-            for (auto i = 0u; i < argsCount; ++i) {
-                builder.addVarValue(logic.getPterm(sourceTerm)[i], logic.getPterm(premise)[i]);
-            }
-            return builder.build();
-        }();
+            fillVariables(premise, sourceTerm);
+        } // substitution map is built
 
         auto chosenEdgeIndex = [&]() -> std::optional<std::size_t> {
+            std::vector<PTRef> evaluatedLabels;
             for (std::size_t i = 0u; i < replacedEdges.size(); ++i) {
-                if (model->evaluate(replacedEdges[i].fla.fla) == logic.getTerm_true()) { return i; }
+                PTRef evaluatedLabel = utils.varSubstitute(replacedEdges[i].fla.fla, subst);
+                if (evaluatedLabel == logic.getTerm_true()) { return i; }
+                evaluatedLabels.push_back(evaluatedLabel);
             }
             // No edge evaluate to true, try to find one with satisfiable label
-            for (std::size_t i = 0u; i < replacedEdges.size(); ++i) {
-                PTRef simplifiedLabel = model->evaluate(replacedEdges[i].fla.fla);
-                if (simplifiedLabel == logic.getTerm_false()) { continue; }
+            for (std::size_t i = 0u; i < evaluatedLabels.size(); ++i) {
+                if (evaluatedLabels[i] == logic.getTerm_false()) { continue; }
                 SMTConfig config;
                 MainSolver solver(logic, config, "");
-                solver.insertFormula(simplifiedLabel);
+                solver.insertFormula(evaluatedLabels[i]);
                 if (solver.check() == s_True) { return i; }
             }
             return {};
@@ -74,7 +76,7 @@ InvalidityWitness MultiEdgeMerger::BackTranslator::translate(InvalidityWitness w
         auto const & chosenEdge = replacedEdges[chosenEdgeIndex.value()];
         step.clauseId = chosenEdge.id;
     }
-    return std::move(witness);
+    return witness;
 }
 
 ValidityWitness MultiEdgeMerger::BackTranslator::translate(ValidityWitness witness) {
