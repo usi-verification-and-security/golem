@@ -12,9 +12,9 @@ class Spacer_LRA_Test : public LRAEngineTest {
 
 TEST_F(Spacer_LRA_Test, test_TransitionSystem)
 {
-	SymRef inv_sym = mkPredicateSymbol("Inv", {realSort()});
-	PTRef inv = instantiatePredicate(inv_sym, {x});
-	PTRef invp = instantiatePredicate(inv_sym, {xp});
+    SymRef inv_sym = mkPredicateSymbol("Inv", {realSort()});
+    PTRef inv = instantiatePredicate(inv_sym, {x});
+    PTRef invp = instantiatePredicate(inv_sym, {xp});
     std::vector<ChClause> clauses{
         { // x' = 0 => Inv(x')
             ChcHead{UninterpretedPredicate{invp}},
@@ -30,7 +30,7 @@ TEST_F(Spacer_LRA_Test, test_TransitionSystem)
         }
     };
 	
-	Spacer engine(*logic, options);
+    Spacer engine(*logic, options);
     solveSystem(clauses, engine, VerificationAnswer::SAFE);
 }
 
