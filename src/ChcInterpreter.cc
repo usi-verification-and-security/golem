@@ -9,6 +9,7 @@
 #include "Validator.h"
 #include "graph/ChcGraph.h"
 #include "graph/ChcGraphBuilder.h"
+#include "transformers/MultiEdgeMerger.h"
 #include "transformers/NodeEliminator.h"
 #include "transformers/RemoveUnreachableNodes.h"
 #include "transformers/SimpleChainSummarizer.h"
@@ -363,6 +364,8 @@ void ChcInterpreterContext::interpretCheckSat() {
     transformations.push_back(std::make_unique<SimpleChainSummarizer>());
     transformations.push_back(std::make_unique<RemoveUnreachableNodes>());
     transformations.push_back(std::make_unique<SimpleNodeEliminator>());
+    transformations.push_back(std::make_unique<MultiEdgeMerger>());
+    // TODO: Try following MultiEdgeMerger by another round of SimpleChainSummarizer and/or SimpleNodeEliminator?
     auto [newGraph, translator] = TransformationPipeline(std::move(transformations)).transform(std::move(hypergraph));
     hypergraph = std::move(newGraph);
     // This if is needed to run the portfolio of multiple engines
