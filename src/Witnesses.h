@@ -59,9 +59,12 @@ public:
         explicit Derivation(std::vector<DerivationStep> derivationSteps) : derivationSteps(std::move(derivationSteps)) {}
 
         using const_iterator = decltype(derivationSteps)::const_iterator;
+        using iterator = decltype(derivationSteps)::iterator;
 
         [[nodiscard]] const_iterator begin() const { return derivationSteps.begin(); }
         [[nodiscard]] const_iterator end() const { return derivationSteps.end(); }
+        [[nodiscard]] iterator begin() { return derivationSteps.begin(); }
+        [[nodiscard]] iterator end() { return derivationSteps.end(); }
 
     };
 
@@ -72,6 +75,7 @@ public:
     void setDerivation(Derivation derivation_) { derivation = std::move(derivation_); }
 
     [[nodiscard]] Derivation const & getDerivation() const { return derivation; }
+    [[nodiscard]] Derivation & getDerivation() { return derivation; }
 
     static InvalidityWitness fromErrorPath(ErrorPath const & errorPath, ChcDirectedGraph const & graph);
     static InvalidityWitness fromTransitionSystem(ChcDirectedGraph const & graph, std::size_t unrollings);
