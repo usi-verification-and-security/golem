@@ -13,25 +13,23 @@ Transformer::TransformationResult MultiEdgeMerger::transform(std::unique_ptr<Chc
 }
 
 InvalidityWitness MultiEdgeMerger::BackTranslator::translate(InvalidityWitness witness) {
-    if (mergedEdges.empty()) {
-        return witness;
-    }
+    if (mergedEdges.empty()) { return witness; }
     auto & derivation = witness.getDerivation();
     for (auto & step : derivation) {
         auto eid = step.clauseId;
-        auto it = std::find_if(mergedEdges.begin(), mergedEdges.end(), [eid](auto const & mergedEntry) {
-           return mergedEntry.second.id == eid;
-        });
+        auto it = std::find_if(mergedEdges.begin(), mergedEdges.end(),
+                               [eid](auto const & mergedEntry) { return mergedEntry.second.id == eid; });
         if (it == mergedEdges.end()) { continue; }
-        auto const& replacedEdges = it->first;
-        auto const& replacingEdge = it->second;
+        auto const & replacedEdges = it->first;
+        auto const & replacingEdge = it->second;
         // Figure out which of the replaced edges can be used to derive the same fact
         TermUtils utils(logic);
         TermUtils::substitutions_map subst;
         { // build the substitution map
             auto fillVariables = [&](PTRef derivedFact, PTRef normalizedPredicate) {
                 assert(logic.getSymRef(derivedFact) == logic.getSymRef(normalizedPredicate));
-                auto const & term = logic.getPterm(derivedFact); (void) term;
+                auto const & term = logic.getPterm(derivedFact);
+                (void)term;
                 assert(std::all_of(term.begin(), term.end(), [&](PTRef arg) { return logic.isConstant(arg); }));
                 utils.mapFromPredicate(normalizedPredicate, derivedFact, subst);
             };
@@ -44,9 +42,9 @@ InvalidityWitness MultiEdgeMerger::BackTranslator::translate(InvalidityWitness w
             assert(logic.getSymRef(targetTerm) == targetVertex and logic.getSymRef(derivedFact) == targetVertex);
             fillVariables(derivedFact, targetTerm);
             // and collect values from the premise as well
-            auto const& premises = step.premises;
+            auto const & premises = step.premises;
             assert(premises.size() == 1); // TODO: Generalize this when we generalize MultiEdgeMerge to HyperEdges
-            auto const& premiseStep = derivation[premises[0]];
+            auto const & premiseStep = derivation[premises[0]];
             auto sourceVertex = replacingEdge.from[0];
             PTRef premise = premiseStep.derivedFact;
             PTRef sourceTerm = predicateRepresentation.getSourceTermFor(sourceVertex);
@@ -72,7 +70,9 @@ InvalidityWitness MultiEdgeMerger::BackTranslator::translate(InvalidityWitness w
             }
             return {};
         }();
-        if (not chosenEdgeIndex.has_value()) { return InvalidityWitness{}; } // TODO: Change API to allow return NoWitness with reason
+        if (not chosenEdgeIndex.has_value()) {
+            return InvalidityWitness{}; // TODO: Change API to allow return NoWitness with reason
+        }
         auto const & chosenEdge = replacedEdges[chosenEdgeIndex.value()];
         step.clauseId = chosenEdge.id;
     }

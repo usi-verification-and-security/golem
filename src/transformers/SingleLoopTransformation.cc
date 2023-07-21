@@ -257,7 +257,8 @@ SingleLoopTransformation::WitnessBackTranslator::translateInvariant(PTRef induct
         bool hasAlienVariable = std::any_of(allVars.begin(), allVars.end(),
                                             [&](PTRef var) { return vertexVars.find(var) == vertexVars.end(); });
         if (hasAlienVariable) {
-            return NoWitness{"Could not backtranslate validity witness in single-loop transformation: Predicate interpretation contains alien variable"};
+            return NoWitness{"Could not backtranslate validity witness in single-loop transformation: Predicate "
+                             "interpretation contains alien variable"};
         } // TODO: Figure out a way to deal with this situation properly
         // No alien variable, we can translate the invariant using predicate's variables
         TermUtils::substitutions_map varSubstitutions;
