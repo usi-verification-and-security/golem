@@ -24,11 +24,10 @@ public:
 
         using MergedEdges = ChcDirectedHyperGraph::MergedEdges;
 
-        MergedEdges mergedEdges {};
+        MergedEdges mergedEdges{};
         Logic & logic;
         NonlinearCanonicalPredicateRepresentation predicateRepresentation;
     };
 };
 
-
-#endif //GOLEM_MULTIEDGEMERGER_H
+#endif // GOLEM_MULTIEDGEMERGER_H
