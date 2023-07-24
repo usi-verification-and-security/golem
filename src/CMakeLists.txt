@@ -2,14 +2,14 @@ include(FetchContent)
 
 # Find OpenSMT2
 SET(OPENSMT_HOME CACHE STRING "OpenSMT installation directory")
-find_package(OpenSMT 2.5.0 EXACT CONFIG PATHS ${OPENSMT_HOME} NO_DEFAULT_PATH)
+find_package(OpenSMT 2.5.2 EXACT CONFIG PATHS ${OPENSMT_HOME} NO_DEFAULT_PATH)
 
 if (OpenSMT_FOUND)
 else(OpenSMT_FOUND)
     FetchContent_Declare(
         OpenSMT
         GIT_REPOSITORY https://github.com/usi-verification-and-security/opensmt.git
-        GIT_TAG 4af8fa21c0c5960f40c4111573c4ec604f00ec89 # v2.5.0
+        GIT_TAG 596501bab9008a69ea20f499911e7c751fe0f29e # v2.5.2
         GIT_SHALLOW true
         GIT_PROGRESS true
     )
