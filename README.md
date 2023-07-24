@@ -13,7 +13,7 @@ Golem can be compiled on Linux and MacOS.
 It uses `CMake` for build configuration.
 Golem depends on [OpenSMT](https://github.com/usi-verification-and-security/opensmt/) for SMT solving and interpolation.
 If you already have OpenSMT installed, you can pass the path using `-DOPENSMT_HOME` option to `cmake` command.
-Note that Golem requires a specific version of OpenSMT, currently v2.5.0.
+Note that Golem requires a specific version of OpenSMT, currently v2.5.2.
 Otherwise, `cmake` will download the latest compatible version of OpenSMT and build it as a subproject.
 
 ## Usage
@@ -52,7 +52,7 @@ It is also known as `Impact`, which was the first tool where the algorithm was i
 LAWI engine supports only linear systems of Horn clauses.
 
 TPA stands for Transition Power Abstraction. It is an algorithm we have developed recently with the goal to detect long counterexample quickly. The description of the algorithm can be found in [this paper](https://link.springer.com/chapter/10.1007/978-3-030-99524-9_29).
-TPA supports only a limited subset of linear CHC systems that represent chains of transition systems.
+TPA supports a subset of linear CHC systems that represent DAGs of transition systems.
 
 split-TPA is a different instantiation of the TPA paradigm and is typically more powerful than TPA on satisfiable (safe) CHC systems.
 
@@ -68,4 +68,4 @@ Witness for `sat` is a model, an interpretation of the predicates.
 Witness for `unsat` is a proof.
 This option is still experimental. For example, `tpa/split-tpa` does not always produce the witness yet.
  
-To obtain the produced model or proof of unsatisfiability, use `--print-witness` option.
+To obtain the produced model or proof of unsatisfiability, use `--print-witness`.
