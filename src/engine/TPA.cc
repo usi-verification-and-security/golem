@@ -988,6 +988,18 @@ void TPABase::houdiniCheck(PTRef invCandidates, PTRef transition, SafetyExplanat
         solver.insertFormula(logic.mkAnd(getNextVersion(invCandidates), logic.mkNot(goal)));
     }
     while (solver.check() == s_True) {
+        Model model = *solver.getModel();
+        for(auto conjunct: topLevelConjuncts(logic, goal)){
+            if(model.evaluate(conjunct) == logic.getTerm_true()){
+                for (int i = 0; i < candidates.size(); i++) {
+                    if(shiftOnlyNextVars(candidates[i]) == conjunct){
+                        candidates[i] = candidates[candidates.size() - 1];
+                        candidates.pop();
+                        break ;
+                    }
+                }
+            }
+        }
         for (int i = candidates.size() - 1; i >= 0; i--) {
             PTRef cand = candidates[i];
             solver.pop();
