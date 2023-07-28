@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2022, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2020-2023, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
@@ -453,6 +453,14 @@ ChcDirectedHyperGraph::MergedEdges ChcDirectedHyperGraph::mergeMultiEdges() {
 
 void ChcDirectedHyperGraph::deleteFalseEdges() {
     deleteMatchingEdges([this](auto const & edge) { return edge.fla.fla == logic.getTerm_false(); });
+}
+
+void ChcDirectedHyperGraph::deleteEdges(std::vector<EId> const & edgesToDelete) {
+    for (EId eid : edgesToDelete) {
+        auto it = edges.find(eid);
+        assert(it != edges.end());
+        edges.erase(it);
+    }
 }
 
 ChcDirectedHyperGraph::VertexInstances::VertexInstances(ChcDirectedHyperGraph const & graph) {

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2022, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2020-2023, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
@@ -284,6 +284,7 @@ public:
     }
 
     void deleteFalseEdges();
+    void deleteEdges(std::vector<EId> const & edgesToDelete);
     void deleteNode(SymRef sym);
 
 private:
