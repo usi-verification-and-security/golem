@@ -12,6 +12,7 @@
 #include "NodeEliminator.h"
 #include "RemoveUnreachableNodes.h"
 #include "TransformationPipeline.h"
+#include "TrivialEdgePruner.h"
 
 namespace Transformations {
 
@@ -22,6 +23,7 @@ inline TransformationPipeline towardsTransitionSystems() {
     stages.push_back(std::make_unique<FalseClauseRemoval>());
     stages.push_back(std::make_unique<RemoveUnreachableNodes>());
     stages.push_back(std::make_unique<MultiEdgeMerger>());
+    stages.push_back(std::make_unique<TrivialEdgePruner>());
     TransformationPipeline pipeline(std::move(stages));
     return pipeline;
 }
