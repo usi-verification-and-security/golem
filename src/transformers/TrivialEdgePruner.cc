@@ -26,9 +26,8 @@ Transformer::TransformationResult TrivialEdgePruner::transform(std::unique_ptr<C
             NonlinearCanonicalPredicateRepresentation predicateRepresentation(logic);
             predicateRepresentation.addRepresentation(graph->getEntry(), {});
             predicateRepresentation.addRepresentation(graph->getExit(), {});
-            auto singleEdgeGraph =
-                std::make_unique<ChcDirectedHyperGraph>(std::vector<DirectedHyperEdge>{graph->getEdge(eid)},
-                                                        std::move(predicateRepresentation), logic);
+            auto singleEdgeGraph = std::make_unique<ChcDirectedHyperGraph>(
+                std::vector<DirectedHyperEdge>{graph->getEdge(eid)}, std::move(predicateRepresentation), logic);
             return {std::move(singleEdgeGraph), std::make_unique<TrivialEdgePruner::BackTranslator>(eid)};
         }
         if (res != s_False) {
@@ -42,15 +41,13 @@ Transformer::TransformationResult TrivialEdgePruner::transform(std::unique_ptr<C
     return {std::move(graph), std::make_unique<TrivialEdgePruner::BackTranslator>()};
 }
 
-TrivialEdgePruner::BackTranslator::BackTranslator(EId satisfiableEdge)
-    : satisfiableEdge(satisfiableEdge) {}
+TrivialEdgePruner::BackTranslator::BackTranslator(EId satisfiableEdge) : satisfiableEdge(satisfiableEdge) {}
 
 InvalidityWitness TrivialEdgePruner::BackTranslator::translate(InvalidityWitness witness) {
     if (not satisfiableEdge) return witness;
     assert(witness.getDerivation().size() == 2);
     witness.getDerivation()[1].clauseId = satisfiableEdge.value();
     return witness;
-
 }
 ValidityWitness TrivialEdgePruner::BackTranslator::translate(ValidityWitness witness) {
     assert(not satisfiableEdge);

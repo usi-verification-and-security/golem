@@ -8,7 +8,9 @@ src/engine/TPA.h
 src/engine/Common.cc
 src/engine/Common.h
 
-src/transformers/SingleLoopTransformation.cc
-src/transformers/SingleLoopTransformation.h
 src/transformers/MultiEdgeMerger.cc
 src/transformers/MultiEdgeMerger.h
+src/transformers/SingleLoopTransformation.cc
+src/transformers/SingleLoopTransformation.h
+src/transformers/TrivialEdgePruner.cc
+src/transformers/TrivialEdgePruner.h

@@ -10,8 +10,8 @@
 #include "Transformer.h"
 
 /**
- * This transformation removes all direct edges from entry to exit nodes, unless one of such edges has satisfiable label.
- * In such a case, the transformation returns the trivial graph with only this edge.
+ * This transformation removes all direct edges from entry to exit nodes, unless one of such edges has a satisfiable
+ * label. In such a case, the transformation returns the trivial graph with only this edge.
  */
 class TrivialEdgePruner : public Transformer {
     class BackTranslator : public WitnessBackTranslator {
