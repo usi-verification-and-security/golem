@@ -151,7 +151,11 @@ bool isTransitionSystemDAG(ChcDirectedGraph const & graph) {
         }
         if (not(hasSelfLoop and hasEdgeToNext)) { return false; }
     }
-    return true;
+    // There should be no edge from entry to exit
+    auto const & entryEdges = graphRepresentation.getOutgoingEdgesFor(graph.getEntry());
+    bool canReachExit = std::any_of(entryEdges.begin(), entryEdges.end(),
+                                    [&](EId eid) { return graph.getTarget(eid) == graph.getExit(); });
+    return not canReachExit;
 }
 
 EdgeVariables getVariablesFromEdge(Logic & logic, ChcDirectedGraph const & graph, EId eid) {
