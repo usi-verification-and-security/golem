@@ -56,8 +56,9 @@ target_sources(golem_lib
     PRIVATE transformers/MultiEdgeMerger.cc
     PRIVATE transformers/FalseClauseRemoval.cc
     PRIVATE transformers/RemoveUnreachableNodes.cc
-    PRIVATE transformers/TransformationPipeline.cc
     PRIVATE transformers/SingleLoopTransformation.cc
+    PRIVATE transformers/TransformationPipeline.cc
+    PRIVATE transformers/TrivialEdgePruner.cc
     )
 
 target_include_directories(golem_lib PUBLIC ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/src/include)
