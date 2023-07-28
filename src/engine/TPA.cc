@@ -1572,7 +1572,10 @@ VerificationResult TransitionSystemNetworkManager::solve() && {
     activePath.clear();
     while (true) {
         if (getNode(current).blocked_children == getNode(current).children.size()) {
-            if (current == graph.getEntry()) { return {VerificationAnswer::SAFE, ValidityWitness{}}; }
+            if (current == graph.getEntry()) {
+                // TODO: Compute witness
+                return {VerificationAnswer::SAFE, NoWitness{"Unable to compute witness from TPA for DAG of TSs yet"}};
+            }
             getNode(current).trulyReached = PTRef_Undef;
             getNode(current).blocked_children = 0;
             updateRestrictions(current);
