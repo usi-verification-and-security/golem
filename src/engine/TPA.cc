@@ -113,7 +113,7 @@ public:
         }
     }
 
-    void strenghtenTransition(PTRef nTransition) override { transition = logic.mkAnd(transition, nTransition); }
+    void strengthenTransition(PTRef nTransition) override { transition = logic.mkAnd(transition, nTransition); }
 
     std::unique_ptr<Model> lastQueryModel() override {
         if (not solver or lastResult != s_True) {
@@ -178,7 +178,7 @@ public:
         }
     }
 
-    void strenghtenTransition(PTRef nTransition) override {
+    void strengthenTransition(PTRef nTransition) override {
         assert(not pushed);
         solver->push();
         solver->insertFormula(nTransition);
@@ -245,8 +245,8 @@ public:
         return SolverWrapperIncremental::checkConsistent(query);
     }
 
-    void strenghtenTransition(PTRef nTransition) override {
-        SolverWrapperIncremental::strenghtenTransition(nTransition);
+    void strengthenTransition(PTRef nTransition) override {
+        SolverWrapperIncremental::strengthenTransition(nTransition);
         transitionComponents.push(nTransition);
         ++levels;
     }
@@ -365,7 +365,7 @@ void TPASplit::storeExactPower(unsigned short power, PTRef tr) {
         //        nextLevelTransitionStrengthening); reachabilitySolvers[power + 1] = new SolverWrapperSingleUse(logic,
         //        nextLevelTransitionStrengthening);
     } else {
-        reachabilitySolvers[power + 1]->strenghtenTransition(nextLevelTransitionStrengthening);
+        reachabilitySolvers[power + 1]->strengthenTransition(nextLevelTransitionStrengthening);
     }
 }
 
@@ -1247,7 +1247,7 @@ void TPABasic::storeLevelTransition(unsigned short power, PTRef tr) {
         //        nextLevelTransitionStrengthening); reachabilitySolvers[power + 1] = new SolverWrapperSingleUse(logic,
         //        nextLevelTransitionStrengthening);
     } else {
-        reachabilitySolvers[power + 1]->strenghtenTransition(nextLevelTransitionStrengthening);
+        reachabilitySolvers[power + 1]->strengthenTransition(nextLevelTransitionStrengthening);
     }
 }
 

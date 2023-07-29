@@ -20,7 +20,7 @@ protected:
 public:
     virtual ~SolverWrapper() = default;
     virtual ReachabilityResult checkConsistent(PTRef query) = 0;
-    virtual void strenghtenTransition(PTRef nTransition) = 0;
+    virtual void strengthenTransition(PTRef nTransition) = 0;
     virtual std::unique_ptr<Model> lastQueryModel() = 0;
     virtual PTRef lastQueryTransitionInterpolant() = 0;
 };
