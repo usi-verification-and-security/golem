@@ -67,17 +67,12 @@ PTRef EdgeTranslator::translateEdge(DirectedEdge const & edge) const {
         }
         return logic.mkAnd(std::move(args));
     }();
-    PTRef frameEqualities = [&]() {
-        vec<PTRef> equalities;
-        for (auto && entry : positionVarMap) {
-            if (entry.first.vertex == target) { continue; }
-            PTRef var = timeMachine.sendVarThroughTime(entry.second, 1);
-            equalities.push(logic.mkEq(var, logic.getDefaultValuePTRef(var)));
-        }
-        return logic.mkAnd(std::move(equalities));
-    }();
+    // We used to add equalities that restricted the values of all variables other than target ones to their default
+    // values. The paper uses frame equalities that keep the values from previous step. Now, we do not restrict
+    // the values of these variables in any way.
+    // This is sound because we still force the right variables to be considered using the location variables.
     vec<PTRef> components{sourceLocationVar, translatedConstraint, timeMachine.sendVarThroughTime(targetLocationVar, 1),
-                          updatedLocation, frameEqualities};
+                          updatedLocation};
     return logic.mkAnd(std::move(components));
 }
 
