@@ -441,15 +441,10 @@ VerificationAnswer TPASplit::checkPower(unsigned short power) {
         reachedStates = ReachedStates{res.refinedTarget, res.steps};
         return VerificationAnswer::UNSAFE;
     } else if (isUnreachable(res)) {
-        if (explanation.invariantType != SafetyExplanation::TransitionInvariantType::NONE) {
-            // MB: Transition invariant found in the previous iteration from Equals relation
-            // However, at that point we were not sure yet if it is also safe, now we are.
-            assert(explanation.relationType == TPAType::EQUALS);
-            assert(explanation.power == power);
-            return VerificationAnswer::SAFE;
-        }
         if (verbose() > 0) { std::cout << "; System is safe up to <2^" << power + 1 << " steps" << std::endl; }
-        bool fixedPointReached = checkLessThanFixedPoint(power);
+        bool fixedPointReached = checkLessThanFixedPoint(power + 1);
+        if (fixedPointReached) { return VerificationAnswer::SAFE; }
+        fixedPointReached = checkExactFixedPoint(power);
         if (fixedPointReached) { return VerificationAnswer::SAFE; }
     }
     res = reachabilityQueryExact(init, query, power);
@@ -459,7 +454,7 @@ VerificationAnswer TPASplit::checkPower(unsigned short power) {
     } else if (isUnreachable(res)) {
         if (verbose() > 0) { std::cout << "; System is safe up to 2^" << power + 1 << " steps" << std::endl; }
         bool fixedPointReached = checkExactFixedPoint(power);
-        if (fixedPointReached and explanation.power <= power) {
+        if (fixedPointReached) {
             assert(explanation.invariantType != SafetyExplanation::TransitionInvariantType::NONE);
             return VerificationAnswer::SAFE;
         }
@@ -1021,8 +1016,8 @@ void TPABase::houdiniCheck(PTRef invCandidates, PTRef transition, SafetyExplanat
 }
 
 bool TPABase::checkLessThanFixedPoint(unsigned short power) {
-    assert(verifyPower(power + 1, TPAType::LESS_THAN));
-    for (unsigned short i = 1; i <= power + 1; ++i) {
+    assert(verifyPower(power, TPAType::LESS_THAN));
+    for (unsigned short i = 1; i <= power; ++i) {
         PTRef currentLevelTransition = getPower(i, TPAType::LESS_THAN);
         // first check if it is fixed point with respect to initial state
         SMTConfig config;
@@ -1120,8 +1115,8 @@ bool TPABase::checkLessThanFixedPoint(unsigned short power) {
 }
 
 bool TPASplit::checkExactFixedPoint(unsigned short power) {
-    assert(verifyExactPower(power + 1));
-    for (unsigned short i = 1; i <= power + 1; ++i) {
+    assert(power == 0 or verifyExactPower(power));
+    for (unsigned short i = 1; i <= power; ++i) {
         PTRef currentLevelTransition = getExactPower(i);
         PTRef currentTwoStep = logic.mkAnd(currentLevelTransition, getNextVersion(currentLevelTransition));
         PTRef shifted = shiftOnlyNextVars(currentLevelTransition);
@@ -1266,7 +1261,7 @@ VerificationAnswer TPABasic::checkPower(unsigned short power) {
     } else if (isUnreachable(res)) {
         if (verbose() > 0) { std::cout << "; System is safe up to <=2^" << power + 1 << " steps" << std::endl; }
         // Check if we have not reached fixed point.
-        bool fixedPointReached = checkLessThanFixedPoint(power);
+        bool fixedPointReached = checkLessThanFixedPoint(power + 1);
         if (fixedPointReached) { return VerificationAnswer::SAFE; }
     }
     return VerificationAnswer::UNKNOWN;
