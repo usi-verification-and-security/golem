@@ -342,7 +342,7 @@ class LawiContext{
         const char* msg = "ok";
 //        config->setOption(SMTConfig::o_sat_pure_lookahead, SMTOption(true), msg);
         bool set = config->setOption(SMTConfig::o_sat_picky, SMTOption(true), msg);
-//        config->setOption(SMTConfig::o_sat_picky_w, 1, msg);
+        config->setOption(SMTConfig::o_sat_picky_w, 10, msg);
 
 //        config->setOption(SMTConfig::o_random_seed, SMTOption(526899046), msg);
         set = config->setOption(SMTConfig::o_produce_inter, SMTOption(true), msg);
