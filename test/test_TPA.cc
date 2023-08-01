@@ -578,3 +578,97 @@ TEST_F(TPATest, test_nextQueryVersion) {
     TPAEngine engine(*logic, options);
     solveSystem(clauses, engine, VerificationAnswer::SAFE, true);
 }
+
+TEST_F(TPATest, test_TPA_BeyondTransitionSystemDAG_Unsafe)
+{
+    Options options;
+    options.addOption(Options::LOGIC, "QF_LIA");
+    options.addOption(Options::COMPUTE_WITNESS, "true");
+    options.addOption(Options::ENGINE, TPAEngine::SPLIT_TPA);
+    SymRef s1 = mkPredicateSymbol("s1", {intSort(), intSort()});
+    SymRef s2 = mkPredicateSymbol("s2", {intSort(), intSort()});
+    PTRef current1 = instantiatePredicate(s1, {x,y});
+    PTRef next1 = instantiatePredicate(s1, {xp,yp});
+    PTRef current2 = instantiatePredicate(s2, {x,y});
+    PTRef next2 = instantiatePredicate(s2, {xp,yp});
+    // x = 0 and y = 0 => S1(x,y)
+    // S1(x,y) and x' = x + 1 => S1(x',y)
+    // S1(x,y) and x > 2 => S2(x,y)
+    // S2(x,y) and y' = y + 1 => S2(x,y')
+    // S2(x,y) and y > 2 => S1(x,y)
+    // S1(x,y) and y > 0 and x = 5 => false
+    std::vector<ChClause> clauses{
+        {
+            ChcHead{UninterpretedPredicate{next1}},
+            ChcBody{{logic->mkAnd(logic->mkEq(xp, zero), logic->mkEq(yp, zero))}, {}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{next1}},
+            ChcBody{{logic->mkAnd(logic->mkEq(xp, logic->mkPlus(x, one)), logic->mkEq(yp, y))}, {UninterpretedPredicate{current1}}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{current2}},
+            ChcBody{{logic->mkGt(x, logic->mkIntConst(2))}, {UninterpretedPredicate{current1}}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{next2}},
+            ChcBody{{logic->mkAnd(logic->mkEq(yp, logic->mkPlus(y, one)), logic->mkEq(xp, x))}, {UninterpretedPredicate{current2}}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{current1}},
+            ChcBody{{logic->mkGt(y, logic->mkIntConst(2))}, {UninterpretedPredicate{current2}}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{logic->getTerm_false()}},
+            ChcBody{{logic->mkAnd(logic->mkGt(y, zero), logic->mkEq(x, logic->mkIntConst(5)))}, {UninterpretedPredicate{current1}}}
+        }};
+    TPAEngine engine(*logic, options);
+    solveSystem(clauses, engine, VerificationAnswer::UNSAFE, true);
+}
+
+TEST_F(TPATest, test_TPA_BeyondTransitionSystemDAG_Safe)
+{
+    Options options;
+    options.addOption(Options::LOGIC, "QF_LIA");
+    options.addOption(Options::COMPUTE_WITNESS, "true");
+    options.addOption(Options::ENGINE, TPAEngine::SPLIT_TPA);
+    SymRef s1 = mkPredicateSymbol("s1", {intSort(), intSort()});
+    SymRef s2 = mkPredicateSymbol("s2", {intSort(), intSort()});
+    PTRef current1 = instantiatePredicate(s1, {x,y});
+    PTRef next1 = instantiatePredicate(s1, {xp,yp});
+    PTRef current2 = instantiatePredicate(s2, {x,y});
+    PTRef next2 = instantiatePredicate(s2, {xp,yp});
+    // x = 0 and y = 0 => S1(x,y)
+    // S1(x,y) and x' = x + 1 => S1(x',y)
+    // S1(x,y) and x >= 2 => S2(x,y)
+    // S2(x,y) and y' = y + 1 => S2(x,y')
+    // S2(x,y) and y >= 2 => S1(x,y)
+    // S1(x,y) and y < 0 or x < 0 => false
+    std::vector<ChClause> clauses{
+        {
+            ChcHead{UninterpretedPredicate{next1}},
+            ChcBody{{logic->mkAnd(logic->mkEq(xp, zero), logic->mkEq(yp, zero))}, {}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{next1}},
+            ChcBody{{logic->mkAnd(logic->mkEq(xp, logic->mkPlus(x, one)), logic->mkEq(yp, y))}, {UninterpretedPredicate{current1}}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{current2}},
+            ChcBody{{logic->mkGeq(x, logic->mkIntConst(2))}, {UninterpretedPredicate{current1}}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{next2}},
+            ChcBody{{logic->mkAnd(logic->mkEq(yp, logic->mkPlus(y, one)), logic->mkEq(xp, x))}, {UninterpretedPredicate{current2}}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{current1}},
+            ChcBody{{logic->mkGeq(y, logic->mkIntConst(2))}, {UninterpretedPredicate{current2}}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{logic->getTerm_false()}},
+            ChcBody{{logic->mkOr(logic->mkLt(y, zero), logic->mkLt(x, zero))}, {UninterpretedPredicate{current1}}}
+        }};
+    TPAEngine engine(*logic, options);
+    solveSystem(clauses, engine, VerificationAnswer::SAFE, true);
+}

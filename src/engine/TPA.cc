@@ -13,6 +13,7 @@
 #include "TransformationUtils.h"
 #include "TransitionSystem.h"
 #include "transformers/BasicTransformationPipelines.h"
+#include "transformers/SingleLoopTransformation.h"
 
 #define TRACE_LEVEL 0
 
@@ -80,7 +81,26 @@ VerificationResult TPAEngine::solve(const ChcDirectedGraph & graph) {
     } else if (isTransitionSystemDAG(graph)) {
         return solveTransitionSystemGraph(graph);
     }
-    return VerificationResult(VerificationAnswer::UNKNOWN);
+    // Translate CHCGraph into transition system
+    SingleLoopTransformation transformation;
+    auto [ts, backtranslator] = transformation.transform(graph);
+    assert(ts);
+    auto solver = mkSolver();
+    auto res = solver->solveTransitionSystem(*ts);
+    if (not options.hasOption(Options::COMPUTE_WITNESS)) { return VerificationResult(res); }
+    switch (res) {
+        case VerificationAnswer::UNSAFE:
+            return backtranslator->translate({res, solver->getTransitionStepCount()});
+        case VerificationAnswer::SAFE: {
+            PTRef inductiveInvariant = solver->getInductiveInvariant();
+            if (inductiveInvariant == PTRef_Undef) { return VerificationResult(res); }
+            return backtranslator->translate({res, inductiveInvariant});
+        }
+        case VerificationAnswer::UNKNOWN:
+        default:
+            assert(false);
+            throw std::logic_error("Unreachable!");
+    }
 }
 
 class SolverWrapperSingleUse : public SolverWrapper {
