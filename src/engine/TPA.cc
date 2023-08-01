@@ -69,7 +69,7 @@ VerificationResult TPAEngine::solve(const ChcDirectedGraph & graph) {
             case VerificationAnswer::SAFE: {
                 PTRef inductiveInvariant = solver->getInductiveInvariant();
                 if (inductiveInvariant == PTRef_Undef) { return VerificationResult(res); }
-                //                std::cout << "TS invariant: " << logic.printTerm(inductiveInvariant) << std::endl;
+                // std::cout << "TS invariant: " << logic.printTerm(inductiveInvariant) << std::endl;
                 return VerificationResult(res, computeValidityWitness(graph, *ts, inductiveInvariant));
             }
             case VerificationAnswer::UNKNOWN:
@@ -323,7 +323,8 @@ PTRef TPABase::keepOnlyVars(PTRef fla, const vec<PTRef> & vars, Model & model) {
 
 void TPABase::resetExplanation() {
     explanation.invariantType = SafetyExplanation::TransitionInvariantType::NONE;
-    explanation.power = 0;
+    explanation.inductivnessPowerExponent = 0;
+    explanation.safeTransitionInvariant = PTRef_Undef;
 }
 
 void TPABase::resetInitialStates(PTRef fla) {
@@ -416,7 +417,8 @@ VerificationAnswer TPABase::solve() {
 VerificationAnswer TPABase::checkTrivialUnreachability() {
     if (query == logic.getTerm_false()) {
         // TODO: Check UNSAT with solver?
-        explanation.power = 0;
+        explanation.inductivnessPowerExponent = 0;
+        explanation.safeTransitionInvariant = logic.getTerm_true();
         explanation.relationType = TPAType::LESS_THAN;
         explanation.invariantType = SafetyExplanation::TransitionInvariantType::RESTRICTED_TO_QUERY;
         explanation.fixedPointType = SafetyExplanation::FixedPointType::LEFT;
@@ -424,7 +426,8 @@ VerificationAnswer TPABase::checkTrivialUnreachability() {
     }
     if (init == logic.getTerm_false()) {
         // TODO: Check UNSAT with solver?
-        explanation.power = 0;
+        explanation.inductivnessPowerExponent = 0;
+        explanation.safeTransitionInvariant = logic.getTerm_true();
         explanation.relationType = TPAType::LESS_THAN;
         explanation.invariantType = SafetyExplanation::TransitionInvariantType::RESTRICTED_TO_INIT;
         explanation.fixedPointType = SafetyExplanation::FixedPointType::RIGHT;
@@ -1019,7 +1022,7 @@ bool TPABase::checkLessThanFixedPoint(unsigned short power) {
     assert(verifyPower(power, TPAType::LESS_THAN));
     for (unsigned short i = 1; i <= power; ++i) {
         PTRef currentLevelTransition = getPower(i, TPAType::LESS_THAN);
-        // first check if it is fixed point with respect to initial state
+        // first check if it is a fixed point with respect to the initial states
         SMTConfig config;
         {
             houdiniCheck(currentLevelTransition, transition, SafetyExplanation::FixedPointType::RIGHT);
@@ -1048,8 +1051,9 @@ bool TPABase::checkLessThanFixedPoint(unsigned short power) {
                                                 ? SafetyExplanation::TransitionInvariantType::RESTRICTED_TO_INIT
                                                 : SafetyExplanation::TransitionInvariantType::UNRESTRICTED;
                 explanation.relationType = TPAType::LESS_THAN;
-                explanation.power = i;
                 explanation.fixedPointType = SafetyExplanation::FixedPointType::RIGHT;
+                explanation.inductivnessPowerExponent = 0;
+                explanation.safeTransitionInvariant = logic.mkAnd(logic.mkAnd(rightInvariants), currentLevelTransition);
                 return true;
             }
         }
@@ -1081,11 +1085,13 @@ bool TPABase::checkLessThanFixedPoint(unsigned short power) {
                                                 ? SafetyExplanation::TransitionInvariantType::RESTRICTED_TO_QUERY
                                                 : SafetyExplanation::TransitionInvariantType::UNRESTRICTED;
                 explanation.relationType = TPAType::LESS_THAN;
-                explanation.power = i;
                 explanation.fixedPointType = SafetyExplanation::FixedPointType::LEFT;
+                explanation.inductivnessPowerExponent = 0;
+                explanation.safeTransitionInvariant = logic.mkAnd(logic.mkAnd(leftInvariants), currentLevelTransition);
                 return true;
             }
         }
+        // TODO: Move this to a separate method?
         // now check the produced if transition invariants are actually safety invariants
         {
             MainSolver solver(logic, config, "Fixed-point checker");
@@ -1095,6 +1101,8 @@ bool TPABase::checkLessThanFixedPoint(unsigned short power) {
                 explanation.invariantType = SafetyExplanation::TransitionInvariantType::UNRESTRICTED;
                 explanation.relationType = TPAType::LESS_THAN;
                 explanation.fixedPointType = SafetyExplanation::FixedPointType::RIGHT;
+                explanation.inductivnessPowerExponent = 0;
+                explanation.safeTransitionInvariant = logic.mkAnd(rightInvariants);
                 return true;
             }
         }
@@ -1107,6 +1115,8 @@ bool TPABase::checkLessThanFixedPoint(unsigned short power) {
                 explanation.invariantType = SafetyExplanation::TransitionInvariantType::UNRESTRICTED;
                 explanation.relationType = TPAType::LESS_THAN;
                 explanation.fixedPointType = SafetyExplanation::FixedPointType::LEFT;
+                explanation.inductivnessPowerExponent = 0;
+                explanation.safeTransitionInvariant = logic.mkAnd(leftInvariants);
                 return true;
             }
         }
@@ -1163,7 +1173,10 @@ bool TPASplit::checkExactFixedPoint(unsigned short power) {
                 : restrictedInvariant == 1 ? SafetyExplanation::TransitionInvariantType::RESTRICTED_TO_INIT
                                            : SafetyExplanation::TransitionInvariantType::RESTRICTED_TO_QUERY;
             explanation.relationType = TPAType::EQUALS;
-            explanation.power = i;
+            explanation.inductivnessPowerExponent = i;
+            explanation.safeTransitionInvariant =
+                logic.mkOr(shiftOnlyNextVars(getPower(i, TPAType::LESS_THAN)),
+                           logic.mkAnd(getPower(i, TPAType::LESS_THAN), getNextVersion(getPower(i, TPAType::EQUALS))));
             return true;
         }
     }
@@ -1769,12 +1782,10 @@ PTRef TPABase::getSafetyExplanation() const {
         // TODO: compute the safe inductive invariant and return negation of that?
         return init;
     }
-    auto power = explanation.power;
-    PTRef transitionInvariant = explanation.relationType == TPAType::LESS_THAN
-                                    ? getPower(power, explanation.relationType)
-                                    : logic.mkOr(shiftOnlyNextVars(getPower(power, TPAType::LESS_THAN)),
-                                                 logic.mkAnd(getPower(power, TPAType::LESS_THAN),
-                                                             getNextVersion(getPower(power, TPAType::EQUALS))));
+    PTRef transitionInvariant = explanation.safeTransitionInvariant;
+    // TODO: Currently transition invariants from TPA:Type::EQUALS are over three copies of the variables.
+    //       Maybe we should use auxiliary (existentially quantified) variables for the intermediate state?
+    //       And rename the variables so the final state is version 1, same as for TPAType::LESS_THAN?
     return safeSupersetOfInitialStates(
         getInit(), transitionInvariant,
         getNextVersion(getQuery(), explanation.relationType == TPAType::LESS_THAN ? 1 : 2));
@@ -1783,25 +1794,21 @@ PTRef TPABase::getSafetyExplanation() const {
 PTRef TPABase::getInductiveInvariant() const {
     assert(explanation.invariantType != SafetyExplanation::TransitionInvariantType::NONE);
     if (explanation.relationType == TPAType::LESS_THAN) {
-        PTRef transitionAbstraction = getPower(explanation.power, explanation.relationType);
+        PTRef transitionInvariant = explanation.safeTransitionInvariant;
         switch (explanation.fixedPointType) {
                 //  TODO: Think about properties combination, can we use left and right invariants together?
-                //  TODO: Use left and right together in the Center maybe?
             case SafetyExplanation::FixedPointType::LEFT:
                 return logic.mkNot(QuantifierElimination(logic).keepOnly(
-                    logic.mkAnd({transitionAbstraction, logic.mkAnd(leftInvariants), getNextVersion(query)}),
-                    getStateVars(0)));
+                    logic.mkAnd({transitionInvariant, getNextVersion(query)}), getStateVars(0)));
             case SafetyExplanation::FixedPointType::RIGHT:
                 return getNextVersion(
-                    QuantifierElimination(logic).keepOnly(
-                        logic.mkAnd({init, transitionAbstraction, logic.mkAnd(rightInvariants)}), getStateVars(1)),
-                    -1);
+                    QuantifierElimination(logic).keepOnly(logic.mkAnd(init, transitionInvariant), getStateVars(1)), -1);
         }
     } else if (explanation.relationType == TPAType::EQUALS) {
         if (explanation.invariantType == SafetyExplanation::TransitionInvariantType::RESTRICTED_TO_QUERY) {
             return PTRef_Undef;
         }
-        if (explanation.power > 10) {
+        if (explanation.inductivnessPowerExponent > 10) {
             std::cerr << "; k-inductive invariant computed, but k is too large to compute 1-inductive invariant"
                       << std::endl;
             return PTRef_Undef;
@@ -1812,7 +1819,7 @@ PTRef TPABase::getInductiveInvariant() const {
 }
 
 PTRef TPASplit::inductiveInvariantFromEqualsTransitionInvariant() const {
-    unsigned short power = explanation.power;
+    unsigned short power = explanation.inductivnessPowerExponent;
     assert(verifyLessThanPower(power));
     assert(verifyExactPower(power));
     //    std::cout << "Less-than transition: " << logic.printTerm(getLessThanPower(power)) << '\n';

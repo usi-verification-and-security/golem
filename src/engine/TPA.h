@@ -63,7 +63,10 @@ struct SafetyExplanation {
     TransitionInvariantType invariantType{TransitionInvariantType::NONE};
     TPAType relationType{TPAType::LESS_THAN};
     FixedPointType fixedPointType{FixedPointType::LEFT};
-    unsigned power{0};
+    PTRef safeTransitionInvariant{PTRef_Undef};
+
+    /** the transition invariant is k-inductive for k = 2^{inductivnessPowerExponent}*/
+    uint32_t inductivnessPowerExponent{0};
 };
 
 struct ReachedStates {
@@ -113,6 +116,11 @@ public:
     PTRef getTransitionRelation() const;
     PTRef getQuery() const;
 
+    /**
+     * After the current system has been proven safe, this method can be used to extract superset of initial states that
+     * are also safe, given the explanation found by the algorithm.
+     * @return superset of initial states that are still safe
+     */
     PTRef getSafetyExplanation() const;
     PTRef getReachedStates() const;
     unsigned getTransitionStepCount() const;
