@@ -298,7 +298,7 @@ PTRef NNFTransformer::negate(PTRef fla) {
             nargs.push(negate(child));
         }
         PTRef nfla = logic.mkOr(nargs);
-        transformed.insert({fla, nfla});
+        negated.insert({fla, nfla});
         return nfla;
     }
     if (logic.isOr(fla)) {
@@ -310,7 +310,7 @@ PTRef NNFTransformer::negate(PTRef fla) {
             nargs.push(negate(child));
         }
         PTRef nfla = logic.mkAnd(nargs);
-        transformed.insert({fla, nfla});
+        negated.insert({fla, nfla});
         return nfla;
     }
     assert(false);
