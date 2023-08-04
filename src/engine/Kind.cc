@@ -11,6 +11,7 @@
 #include "TermUtils.h"
 #include "transformers/BasicTransformationPipelines.h"
 #include "TransformationUtils.h"
+#include "utils/SmtSolver.h"
 
 VerificationResult Kind::solve(ChcDirectedHyperGraph const & graph) {
     auto pipeline = Transformations::towardsTransitionSystems();
@@ -54,21 +55,18 @@ TransitionSystemVerificationResult Kind::solveTransitionSystemInternal(Transitio
     // Inductive step backward:
     // ~Init(x0) <= Tr(x0,x1) and ~Init(x1) and ... and Tr(x_{k-1},x_k) and ~Init(xk), is valid -> return SAFE
 
-    SMTConfig configBase;
-    SMTConfig configStepForward;
-    SMTConfig configStepBackward;
-    MainSolver solverBase(logic, configBase, "KIND-base");
-    MainSolver solverStepForward(logic, configStepForward, "KIND-stepForward");
-    MainSolver solverStepBackward(logic, configStepBackward, "KIND-stepBackward");
+    SMTSolver solverBase(logic, SMTSolver::WitnessProduction::NONE);
+    SMTSolver solverStepForward(logic, SMTSolver::WitnessProduction::NONE);
+    SMTSolver solverStepBackward(logic, SMTSolver::WitnessProduction::NONE);
 
     PTRef negQuery = logic.mkNot(query);
     PTRef negInit = logic.mkNot(init);
     // starting point
-    solverBase.insertFormula(init);
-    solverStepBackward.insertFormula(init);
-    solverStepForward.insertFormula(query);
+    solverBase.getCoreSolver().insertFormula(init);
+    solverStepBackward.getCoreSolver().insertFormula(init);
+    solverStepForward.getCoreSolver().insertFormula(query);
     { // Check for system with empty initial states
-        auto res = solverBase.check();
+        auto res = solverBase.getCoreSolver().check();
         if (res == s_False) {
             return TransitionSystemVerificationResult{VerificationAnswer::SAFE, logic.getTerm_false()};
         }
@@ -78,9 +76,9 @@ TransitionSystemVerificationResult Kind::solveTransitionSystemInternal(Transitio
     for (std::size_t k = 0; k < maxK; ++k) {
         PTRef versionedQuery = tm.sendFlaThroughTime(query, k);
         // Base case
-        solverBase.push();
-        solverBase.insertFormula(versionedQuery);
-        auto res = solverBase.check();
+        solverBase.getCoreSolver().push();
+        solverBase.getCoreSolver().insertFormula(versionedQuery);
+        auto res = solverBase.getCoreSolver().check();
         if (res == s_True) {
             if (verbosity > 0) {
                  std::cout << "; KIND: Bug found in depth: " << k << std::endl;
@@ -94,13 +92,13 @@ TransitionSystemVerificationResult Kind::solveTransitionSystemInternal(Transitio
         if (verbosity > 1) {
             std::cout << "; KIND: No path of length " << k << " found!" << std::endl;
         }
-        solverBase.pop();
+        solverBase.getCoreSolver().pop();
         PTRef versionedTransition = tm.sendFlaThroughTime(transition, k);
 //        std::cout << "Adding transition: " << logic.pp(versionedTransition) << std::endl;
-        solverBase.insertFormula(versionedTransition);
+        solverBase.getCoreSolver().insertFormula(versionedTransition);
 
         // step forward
-        res = solverStepForward.check();
+        res = solverStepForward.getCoreSolver().check();
         if (res == s_False) {
             if (verbosity > 0) {
                 std::cout << "; KIND: Found invariant with forward induction, which is " << k << "-inductive" << std::endl;
@@ -112,12 +110,12 @@ TransitionSystemVerificationResult Kind::solveTransitionSystemInternal(Transitio
             }
         }
         PTRef versionedBackwardTransition = tm.sendFlaThroughTime(backwardTransition, k);
-        solverStepForward.push();
-        solverStepForward.insertFormula(versionedBackwardTransition);
-        solverStepForward.insertFormula(tm.sendFlaThroughTime(negQuery,k+1));
+        solverStepForward.getCoreSolver().push();
+        solverStepForward.getCoreSolver().insertFormula(versionedBackwardTransition);
+        solverStepForward.getCoreSolver().insertFormula(tm.sendFlaThroughTime(negQuery,k+1));
 
         // step backward
-        res = solverStepBackward.check();
+        res = solverStepBackward.getCoreSolver().check();
         if (res == s_False) {
             if (verbosity > 0) {
                 std::cout << "; KIND: Found invariant with backward induction, which is " << k << "-inductive" << std::endl;
@@ -128,9 +126,9 @@ TransitionSystemVerificationResult Kind::solveTransitionSystemInternal(Transitio
                 return TransitionSystemVerificationResult{VerificationAnswer::SAFE, logic.getTerm_true()};
             }
         }
-        solverStepBackward.push();
-        solverStepBackward.insertFormula(versionedTransition);
-        solverStepBackward.insertFormula(tm.sendFlaThroughTime(negInit, k+1));
+        solverStepBackward.getCoreSolver().push();
+        solverStepBackward.getCoreSolver().insertFormula(versionedTransition);
+        solverStepBackward.getCoreSolver().insertFormula(tm.sendFlaThroughTime(negInit, k+1));
     }
     return TransitionSystemVerificationResult{VerificationAnswer::UNKNOWN, 0u};
 }

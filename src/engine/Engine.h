@@ -1,6 +1,8 @@
-//
-// Created by Martin Blicha on 17.07.20.
-//
+/*
+* Copyright (c) 2020-2023, Martin Blicha <martin.blicha@gmail.com>
+*
+* SPDX-License-Identifier: MIT
+*/
 
 #ifndef OPENSMT_ENGINE_H
 #define OPENSMT_ENGINE_H
@@ -9,7 +11,6 @@
 #include "Options.h"
 #include "graph/ChcGraph.h"
 
-#include "osmt_solver.h"
 #include "osmt_terms.h"
 
 #include <memory>

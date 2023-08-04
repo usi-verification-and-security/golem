@@ -14,3 +14,6 @@ src/transformers/SingleLoopTransformation.cc
 src/transformers/SingleLoopTransformation.h
 src/transformers/TrivialEdgePruner.cc
 src/transformers/TrivialEdgePruner.h
+
+src/utils/SmtSolver.h
+src/utils/SmtSolver.cc

@@ -1,5 +1,7 @@
 #include "Common.h"
 
+#include "utils/SmtSolver.h"
+
 VerificationResult solveTrivial(ChcDirectedGraph const & graph) {
     Logic & logic = graph.getLogic();
     // All edges should be between entry and exit, check if any of them has a satisfiable label
@@ -9,8 +11,8 @@ VerificationResult solveTrivial(ChcDirectedGraph const & graph) {
         assert(graph.getTarget(eid) == graph.getExit());
         PTRef label = graph.getEdgeLabel(eid);
         if (label == logic.getTerm_false()) { continue; }
-        SMTConfig config;
-        MainSolver solver(logic, config, "solver");
+        SMTSolver solverWrapper(logic, SMTSolver::WitnessProduction::NONE);
+        auto & solver = solverWrapper.getCoreSolver();
         solver.insertFormula(label);
         auto res = solver.check();
         if (res == s_False) {

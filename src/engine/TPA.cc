@@ -14,6 +14,7 @@
 #include "TransitionSystem.h"
 #include "transformers/BasicTransformationPipelines.h"
 #include "transformers/SingleLoopTransformation.h"
+#include "utils/SmtSolver.h"
 
 #define TRACE_LEVEL 0
 
@@ -105,25 +106,23 @@ VerificationResult TPAEngine::solve(const ChcDirectedGraph & graph) {
 
 class SolverWrapperSingleUse : public SolverWrapper {
     Logic & logic;
-    SMTConfig config;
+    SMTSolver solverWrapper;
     sstat lastResult = s_Undef;
-    std::unique_ptr<MainSolver> solver;
 
 public:
-    SolverWrapperSingleUse(Logic & logic, PTRef transition) : logic(logic) {
+    SolverWrapperSingleUse(Logic & logic, PTRef transition)
+        : logic(logic), solverWrapper(logic, SMTSolver::WitnessProduction::MODEL_AND_INTERPOLANTS) {
         this->transition = transition;
-        const char * msg = "ok";
-        config.setOption(SMTConfig::o_produce_models, SMTOption(true), msg);
-        config.setOption(SMTConfig::o_produce_inter, SMTOption(true), msg);
-        config.setSimplifyInterpolant(4);
-        config.setLRAInterpolationAlgorithm(itp_lra_alg_decomposing_strong);
+        solverWrapper.getConfig().setSimplifyInterpolant(4);
+        solverWrapper.getConfig().setLRAInterpolationAlgorithm(itp_lra_alg_decomposing_strong);
     }
 
     ReachabilityResult checkConsistent(PTRef query) override {
-        solver.reset(new MainSolver(logic, config, "Reachability checker"));
-        solver->insertFormula(transition);
-        solver->insertFormula(query);
-        lastResult = solver->check();
+        solverWrapper.resetSolver();
+        auto & solver = solverWrapper.getCoreSolver();
+        solver.insertFormula(transition);
+        solver.insertFormula(query);
+        lastResult = solver.check();
         if (lastResult == s_False) {
             return ReachabilityResult::UNREACHABLE;
         } else if (lastResult == s_True) {
@@ -136,17 +135,13 @@ public:
     void strengthenTransition(PTRef nTransition) override { transition = logic.mkAnd(transition, nTransition); }
 
     std::unique_ptr<Model> lastQueryModel() override {
-        if (not solver or lastResult != s_True) {
-            throw std::logic_error("Invalid call for obtaining a model from solver");
-        }
-        return solver->getModel();
+        if (lastResult != s_True) { throw std::logic_error("Invalid call for obtaining a model from solver"); }
+        return solverWrapper.getCoreSolver().getModel();
     }
 
     PTRef lastQueryTransitionInterpolant() override {
-        if (not solver or lastResult != s_False) {
-            throw std::logic_error("Invalid call for obtaining an interpolant from solver");
-        }
-        auto itpContext = solver->getInterpolationContext();
+        if (lastResult != s_False) { throw std::logic_error("Invalid call for obtaining an interpolant from solver"); }
+        auto itpContext = solverWrapper.getCoreSolver().getInterpolationContext();
         vec<PTRef> itps;
         ipartitions_t mask = 1; // The transition was the first formula inserted
         itpContext->getSingleInterpolant(itps, mask);
@@ -159,36 +154,34 @@ public:
 class SolverWrapperIncremental : public SolverWrapper {
 protected:
     Logic & logic;
-    SMTConfig config;
+    SMTSolver solverWrapper;
     sstat lastResult = s_Undef;
-    std::unique_ptr<MainSolver> solver;
 
     unsigned allformulasInserted = 0;
     ipartitions_t mask = 0;
     bool pushed = false;
 
+    auto & solver() { return solverWrapper.getCoreSolver(); }
+
 public:
-    SolverWrapperIncremental(Logic & logic, PTRef transition) : logic(logic) {
+    SolverWrapperIncremental(Logic & logic, PTRef transition)
+        : logic(logic), solverWrapper(logic, SMTSolver::WitnessProduction::MODEL_AND_INTERPOLANTS) {
         //        std::cout << "Transition: " << logic.printTerm(transition) << std::endl;
         this->transition = transition;
-        const char * msg = "ok";
-        config.setOption(SMTConfig::o_produce_models, SMTOption(true), msg);
-        config.setOption(SMTConfig::o_produce_inter, SMTOption(true), msg);
-        config.setSimplifyInterpolant(4);
-        config.setLRAInterpolationAlgorithm(itp_lra_alg_decomposing_strong);
-        solver.reset(new MainSolver(logic, config, "incremental reachability checker"));
-        solver->insertFormula(transition);
+        solverWrapper.getConfig().setSimplifyInterpolant(4);
+        solverWrapper.getConfig().setLRAInterpolationAlgorithm(itp_lra_alg_decomposing_strong);
+        solverWrapper.getCoreSolver().insertFormula(transition);
         opensmt::setbit(mask, allformulasInserted++);
     }
 
     ReachabilityResult checkConsistent(PTRef query) override {
         //        std::cout << "Query: " << logic.printTerm(query) << std::endl;
         assert(not pushed);
-        solver->push();
+        solver().push();
         pushed = true;
-        solver->insertFormula(query);
+        solver().insertFormula(query);
         ++allformulasInserted;
-        lastResult = solver->check();
+        lastResult = solver().check();
         if (lastResult == s_False) {
             return ReachabilityResult::UNREACHABLE;
         } else if (lastResult == s_True) {
@@ -200,8 +193,8 @@ public:
 
     void strengthenTransition(PTRef nTransition) override {
         assert(not pushed);
-        solver->push();
-        solver->insertFormula(nTransition);
+        solver().push();
+        solver().insertFormula(nTransition);
         opensmt::setbit(mask, allformulasInserted++);
         //        std::cout << "Current number of formulas inserted: " << allformulasInserted << std::endl;
     }
@@ -210,8 +203,8 @@ public:
         if (lastResult != s_True or not pushed) {
             throw std::logic_error("Invalid call for obtaining a model from solver");
         }
-        auto model = solver->getModel();
-        solver->pop();
+        auto model = solver().getModel();
+        solver().pop();
         pushed = false;
         return model;
     }
@@ -220,13 +213,13 @@ public:
         if (lastResult != s_False or not pushed) {
             throw std::logic_error("Invalid call for obtaining an interpolant from solver");
         }
-        auto itpContext = solver->getInterpolationContext();
+        auto itpContext = solver().getInterpolationContext();
         vec<PTRef> itps;
         //        std::cout << "Current mask: "  << mask << std::endl;
         itpContext->getSingleInterpolant(itps, mask);
         assert(itps.size() == 1);
         PTRef itp = itps[0];
-        solver->pop();
+        solver().pop();
         pushed = false;
         //        std::cout << logic.printTerm(itp) << std::endl;
         return itp;
@@ -239,9 +232,9 @@ class SolverWrapperIncrementalWithRestarts : public SolverWrapperIncremental {
     unsigned levels = 0;
 
     void rebuildSolver() {
-        solver.reset(new MainSolver(logic, config, "incremental reachability checker"));
+        solverWrapper.resetSolver();
         PTRef consolidatedTransition = logic.mkAnd(transitionComponents);
-        solver->insertFormula(consolidatedTransition);
+        solver().insertFormula(consolidatedTransition);
         levels = 0;
         allformulasInserted = 0;
         mask = 0;
@@ -491,10 +484,8 @@ VerificationAnswer TPASplit::checkPower(unsigned short power) {
 TPABase::QueryResult TPABase::reachabilityExactOneStep(PTRef from, PTRef to) {
     // TODO: this solver can be persistent and used incrementally
     QueryResult result;
-    SMTConfig config;
-    const char * msg = "ok";
-    config.setOption(SMTConfig::o_produce_models, SMTOption(true), msg);
-    MainSolver solver(logic, config, "1-step checker");
+    SMTSolver solverWrapper(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
+    auto & solver = solverWrapper.getCoreSolver();
     PTRef goal = getNextVersion(to);
     PTRef smtQuery = logic.mkAnd({from, transition, goal});
     solver.insertFormula(smtQuery);
@@ -517,10 +508,8 @@ TPABase::QueryResult TPABase::reachabilityExactOneStep(PTRef from, PTRef to) {
 
 TPABase::QueryResult TPABase::reachabilityExactZeroStep(PTRef from, PTRef to) {
     QueryResult result;
-    SMTConfig config;
-    const char * msg = "ok";
-    config.setOption(SMTConfig::o_produce_models, SMTOption(true), msg);
-    MainSolver solver(logic, config, "0-step checker");
+    SMTSolver solverWrapper(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
+    auto & solver = solverWrapper.getCoreSolver();
     PTRef intersection = logic.mkAnd(from, to);
     solver.insertFormula(intersection);
     auto res = solver.check();
@@ -656,15 +645,13 @@ TPASplit::QueryResult TPASplit::reachabilityQueryLessThan(PTRef from, PTRef to, 
     PTRef goal = getNextVersion(to, 2);
     unsigned counter = 0;
     while (true) {
+        SMTSolver solverWrapper(logic, SMTSolver::WitnessProduction::MODEL_AND_INTERPOLANTS);
+        auto & solver = solverWrapper.getCoreSolver();
+        auto & config = solverWrapper.getConfig();
         TRACE(3, "Less-than: Iteration " << ++counter << " on level " << power)
-        SMTConfig config;
-        const char * msg = "ok";
-        //        config.setOption(SMTConfig::o_verbosity, SMTOption(1), msg);
         config.setReduction(1);
-        config.setOption(SMTConfig::o_produce_inter, SMTOption(true), msg);
         config.setSimplifyInterpolant(4);
         config.setLRAInterpolationAlgorithm(itp_lra_alg_decomposing_strong);
-        MainSolver solver(logic, config, "Less-than reachability checker");
         // Tr^{<n} or (Tr^{<n} concat Tr^{=n})
         PTRef previousLessThanTransition = getLessThanPower(power);
         PTRef translatedExactTransition = getNextVersion(getExactPower(power));
@@ -772,7 +759,7 @@ TPASplit::QueryResult TPASplit::reachabilityQueryLessThan(PTRef from, PTRef to, 
                 return subQueryRes;
             }
         } else {
-            throw std::logic_error("Accelerated BMC: Unexpected situation checking reachability");
+            throw std::logic_error("TPA: Unexpected situation checking reachability");
         }
     }
 }
@@ -924,8 +911,8 @@ bool TPASplit::verifyPower(unsigned short power, TPAType relationType) const {
 
 bool TPASplit::verifyLessThanPower(unsigned short power) const {
     assert(power > 0);
-    SMTConfig config;
-    MainSolver solver(logic, config, "");
+    SMTSolver solverWrapper(logic, SMTSolver::WitnessProduction::NONE);
+    auto & solver = solverWrapper.getCoreSolver();
     PTRef current = getLessThanPower(power);
     PTRef previous = getLessThanPower(power - 1);
     PTRef previousExact = getExactPower(power - 1);
@@ -943,8 +930,8 @@ bool TPASplit::verifyExactPower(unsigned short power) const {
         bool previousRes = verifyExactPower(power - 1);
         if (not previousRes) { return false; }
     }
-    SMTConfig config;
-    MainSolver solver(logic, config, "");
+    SMTSolver solverWrapper(logic, SMTSolver::WitnessProduction::NONE);
+    auto & solver = solverWrapper.getCoreSolver();
     PTRef current = getExactPower(power);
     PTRef previous = getExactPower(power - 1);
     //    std::cout << "Exact on level " << power << " : " << logic.printTerm(current) << std::endl;
@@ -975,8 +962,8 @@ void TPABase::houdiniCheck(PTRef invCandidates, PTRef transition, SafetyExplanat
     // LEFT:
     //   leftInvariants /\ transition /\ getNextVersion(currentLevelTransition) =>
     //     shiftOnlyNextVars(currentLevelTransition);
-    SMTConfig config;
-    MainSolver solver(logic, config, "Fixed-point checker");
+    SMTSolver solverWrapper(logic, SMTSolver::WitnessProduction::NONE);
+    auto & solver = solverWrapper.getCoreSolver();
     solver.push();
     auto candidates = topLevelConjuncts(logic, invCandidates);
     if (alignment == SafetyExplanation::FixedPointType::RIGHT) {
@@ -1043,10 +1030,10 @@ bool TPABase::checkLessThanFixedPoint(unsigned short power) {
     for (unsigned short i = 1; i <= power; ++i) {
         PTRef currentLevelTransition = getPower(i, TPAType::LESS_THAN);
         // first check if it is a fixed point with respect to the initial states
-        SMTConfig config;
+        SMTSolver solverWrapper(logic, SMTSolver::WitnessProduction::NONE);
         {
+            auto & solver = solverWrapper.getCoreSolver();
             houdiniCheck(currentLevelTransition, transition, SafetyExplanation::FixedPointType::RIGHT);
-            MainSolver solver(logic, config, "Fixed-point checker");
             solver.insertFormula(
                 logic.mkAnd({logic.mkAnd(rightInvariants), currentLevelTransition, getNextVersion(transition),
                              logic.mkNot(shiftOnlyNextVars(currentLevelTransition))}));
@@ -1079,8 +1066,9 @@ bool TPABase::checkLessThanFixedPoint(unsigned short power) {
         }
         // now check if it is fixed point with respect to bad states
         {
+            solverWrapper.resetSolver();
+            auto & solver = solverWrapper.getCoreSolver();
             houdiniCheck(currentLevelTransition, transition, SafetyExplanation::FixedPointType::LEFT);
-            MainSolver solver(logic, config, "Fixed-point checker");
             solver.insertFormula(logic.mkAnd({transition, getNextVersion(logic.mkAnd(leftInvariants)),
                                               getNextVersion(currentLevelTransition),
                                               logic.mkNot(shiftOnlyNextVars(currentLevelTransition))}));
@@ -1114,7 +1102,8 @@ bool TPABase::checkLessThanFixedPoint(unsigned short power) {
         // TODO: Move this to a separate method?
         // now check the produced if transition invariants are actually safety invariants
         {
-            MainSolver solver(logic, config, "Fixed-point checker");
+            solverWrapper.resetSolver();
+            auto & solver = solverWrapper.getCoreSolver();
             solver.insertFormula(logic.mkAnd({init, logic.mkAnd(rightInvariants), getNextVersion(query)}));
             auto satres = solver.check();
             if (satres == s_False) {
@@ -1128,7 +1117,8 @@ bool TPABase::checkLessThanFixedPoint(unsigned short power) {
         }
         // now check the produced if transition invariants are actually safety invariants
         {
-            MainSolver solver(logic, config, "Fixed-point checker");
+            solverWrapper.resetSolver();
+            auto & solver = solverWrapper.getCoreSolver();
             solver.insertFormula(logic.mkAnd({init, logic.mkAnd(leftInvariants), getNextVersion(query)}));
             auto satres = solver.check();
             if (satres == s_False) {
@@ -1150,8 +1140,8 @@ bool TPASplit::checkExactFixedPoint(unsigned short power) {
         PTRef currentLevelTransition = getExactPower(i);
         PTRef currentTwoStep = logic.mkAnd(currentLevelTransition, getNextVersion(currentLevelTransition));
         PTRef shifted = shiftOnlyNextVars(currentLevelTransition);
-        SMTConfig config;
-        MainSolver solver(logic, config, "Fixed-point checker");
+        SMTSolver solverWrapper(logic, SMTSolver::WitnessProduction::NONE);
+        auto & solver = solverWrapper.getCoreSolver();
         solver.insertFormula(logic.mkAnd({currentTwoStep, logic.mkNot(shifted)}));
         sstat satres = solver.check();
         char restrictedInvariant = 0;
@@ -1208,8 +1198,9 @@ bool TPABase::verifyKinductiveInvariant(PTRef fla, unsigned long k) const {
     TRACE(trace_level, "Verifying k-inductive invariant for k = " << k)
 
     { // Inductive case:
-        SMTConfig config;
-        MainSolver solver(logic, config, "k-induction inductive step checker");
+
+        SMTSolver solverWrapper(logic, SMTSolver::WitnessProduction::NONE);
+        auto & solver = solverWrapper.getCoreSolver();
         for (unsigned long i = 0; i < k; ++i) {
             solver.insertFormula(getNextVersion(fla, i));
             solver.insertFormula(getNextVersion(transition, i));
@@ -1223,8 +1214,8 @@ bool TPABase::verifyKinductiveInvariant(PTRef fla, unsigned long k) const {
         TRACE(trace_level, "Inductive case succesfully verified")
     }
     { // Base cases:
-        SMTConfig config;
-        MainSolver solver(logic, config, "k-induction base checker");
+        SMTSolver solverWrapper(logic, SMTSolver::WitnessProduction::NONE);
+        auto & solver = solverWrapper.getCoreSolver();
         solver.insertFormula(init);
         for (unsigned long i = 0; i < k; ++i) {
             solver.push();
@@ -1414,8 +1405,8 @@ bool TPABasic::verifyPower(unsigned short power, TPAType relationType) const {
 
 bool TPABasic::verifyPower(unsigned short level) const {
     assert(level > 0);
-    SMTConfig config;
-    MainSolver solver(logic, config, "");
+    SMTSolver solverWrapper(logic, SMTSolver::WitnessProduction::NONE);
+    auto & solver = solverWrapper.getCoreSolver();
     PTRef current = getLevelTransition(level);
     PTRef previous = getLevelTransition(level - 1);
     solver.insertFormula(logic.mkAnd(previous, getNextVersion(previous)));
@@ -1426,13 +1417,10 @@ bool TPABasic::verifyPower(unsigned short level) const {
 }
 
 PTRef TPABase::safeSupersetOfInitialStates(PTRef start, PTRef transitionInvariant, PTRef target) const {
-    SMTConfig config;
-    const char * msg = "ok";
-    config.setOption(SMTConfig::o_produce_models, SMTOption(false), msg);
-    config.setOption(SMTConfig::o_produce_inter, SMTOption(true), msg);
-    config.setLRAInterpolationAlgorithm(itp_lra_alg_decomposing_strong);
-    config.setSimplifyInterpolant(4);
-    MainSolver solver(logic, config, "Unsafe initial states computation");
+    SMTSolver solverWrapper(logic, SMTSolver::WitnessProduction::ONLY_INTERPOLANTS);
+    auto & solver = solverWrapper.getCoreSolver();
+    solverWrapper.getConfig().setLRAInterpolationAlgorithm(itp_lra_alg_decomposing_strong);
+    solverWrapper.getConfig().setSimplifyInterpolant(4);
     solver.insertFormula(start);
     solver.insertFormula(transitionInvariant);
     solver.insertFormula(target);
@@ -1714,13 +1702,10 @@ TransitionSystem TransitionSystemNetworkManager::constructTransitionSystemFor(Sy
 
 TransitionSystemNetworkManager::QueryResult TransitionSystemNetworkManager::queryEdge(EId eid, PTRef sourceCondition,
                                                                                       PTRef targetCondition) {
-    SMTConfig config;
-    const char * msg = "ok";
-    config.setOption(SMTConfig::o_produce_models, SMTOption(true), msg);
-    config.setOption(SMTConfig::o_produce_inter, SMTOption(true), msg);
-    config.setLRAInterpolationAlgorithm(itp_lra_alg_decomposing_strong);
-    config.setSimplifyInterpolant(4);
-    MainSolver solver(logic, config, "Edge query solver");
+    SMTSolver solverWrapper(logic, SMTSolver::WitnessProduction::MODEL_AND_INTERPOLANTS);
+    auto & solver = solverWrapper.getCoreSolver();
+    solverWrapper.getConfig().setLRAInterpolationAlgorithm(itp_lra_alg_decomposing_strong);
+    solverWrapper.getConfig().setSimplifyInterpolant(4);
     PTRef label = graph.getEdgeLabel(eid);
     TRACE(1, "Querying edge " << eid.id << " with label " << logic.pp(label) << "\n\tsource is "
                               << logic.pp(sourceCondition) << "\n\ttarget is " << logic.pp(targetCondition))

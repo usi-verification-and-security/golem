@@ -7,6 +7,7 @@
 #include "Witnesses.h"
 
 #include "TransformationUtils.h"
+#include "utils/SmtSolver.h"
 
 void VerificationResult::printWitness(std::ostream & out, Logic & logic) const {
     if (not hasWitness()) { return; }
@@ -34,8 +35,8 @@ InvalidityWitness InvalidityWitness::fromErrorPath(ErrorPath const & errorPath, 
     auto edgeIds = path.getEdges();
     // Compute model for the error path
     auto model = [&]() {
-        SMTConfig config;
-        MainSolver solver(logic, config, "path_solver");
+        SMTSolver solverWrapper(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
+        auto & solver = solverWrapper.getCoreSolver();
         for (std::size_t i = 0; i < edgeIds.size(); ++i) {
             PTRef fla = graph.getEdgeLabel(edgeIds[i]);
             fla = TimeMachine(logic).sendFlaThroughTime(fla, i);

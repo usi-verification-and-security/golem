@@ -11,6 +11,7 @@
 #include "TermUtils.h"
 #include "TransformationUtils.h"
 #include "transformers/SingleLoopTransformation.h"
+#include "utils/SmtSolver.h"
 
 VerificationResult IMC::solve(ChcDirectedGraph const & graph) {
     if (isTrivial(graph)) {
@@ -35,16 +36,14 @@ VerificationResult IMC::solveTransitionSystem(ChcDirectedGraph const & graph) {
 TransitionSystemVerificationResult IMC::solveTransitionSystemInternal(TransitionSystem const & system) {
     std::size_t maxLoopUnrollings = std::numeric_limits<std::size_t>::max();
 
-    SMTConfig config;
-    const char * msg = "ok";
-    config.setOption(SMTConfig::o_produce_inter, SMTOption(true), msg);
-    config.setSimplifyInterpolant(4);
+    SMTSolver solverWrapper(logic, SMTSolver::WitnessProduction::NONE);
+    solverWrapper.getConfig().setSimplifyInterpolant(4);
+    auto & solver = solverWrapper.getCoreSolver();
     TimeMachine tm{logic};
-    MainSolver initSolver(logic, config, "IMC");
-    initSolver.insertFormula(system.getInit());
-    initSolver.insertFormula(system.getQuery());
+    solver.insertFormula(system.getInit());
+    solver.insertFormula(system.getQuery());
     //if I /\ F is Satisfiable, return true
-    if (initSolver.check() == s_True) {
+    if (solver.check() == s_True) {
         return TransitionSystemVerificationResult{VerificationAnswer::UNSAFE, 0u};
     }
     for (uint32_t k = 1; k < maxLoopUnrollings; ++k) {
@@ -67,16 +66,14 @@ PTRef lastIterationInterpolant(MainSolver & solver, ipartitions_t const & mask) 
 //procedure FiniteRun(M=(I,T,F), k>0)
 TransitionSystemVerificationResult IMC::finiteRun(TransitionSystem const & ts, unsigned k) {
     assert(k > 0);
-    SMTConfig config;
-    const char * msg = "ok";
-    config.setOption(SMTConfig::o_produce_inter, SMTOption(true), msg);
-    config.setSimplifyInterpolant(4);
+    SMTSolver solverWrapper(logic, SMTSolver::WitnessProduction::ONLY_INTERPOLANTS);
+    solverWrapper.getConfig().setSimplifyInterpolant(4);
     TimeMachine tm{logic};
     PTRef movingInit = ts.getInit();
     unsigned iter = 0;
     // while true
     while (true) {
-        MainSolver solver(logic, config, "IMC");
+        auto & solver = solverWrapper.getCoreSolver();
         //A = CNF(PREF1(M'), U1)
         PTRef A = logic.mkAnd(movingInit, tm.sendFlaThroughTime(ts.getTransition(), iter));
         solver.insertFormula(A);
@@ -117,15 +114,15 @@ TransitionSystemVerificationResult IMC::finiteRun(TransitionSystem const & ts, u
             movingInit = logic.mkOr(movingInit, itp);
         }
         iter++;
+        solverWrapper.resetSolver();
     }
 }
 
 sstat IMC::checkItp(PTRef itp, PTRef itpsOld) {
-    SMTConfig itp_config;
+    SMTSolver solverWrapper(logic, SMTSolver::WitnessProduction::NONE);
     PTRef cmp = logic.mkAnd(itp, logic.mkNot(itpsOld));
-    MainSolver itpSolver(logic, itp_config, "Interpolant");
-    itpSolver.insertFormula(cmp);
-    return itpSolver.check();
+    solverWrapper.getCoreSolver().insertFormula(cmp);
+    return solverWrapper.getCoreSolver().check();
 }
 
 /**
@@ -141,8 +138,8 @@ sstat IMC::checkItp(PTRef itp, PTRef itpsOld) {
  * @return safe inductive invariant of the system
  */
 PTRef IMC::computeFinalInductiveInvariant(PTRef inductiveInvariant, unsigned k, TransitionSystem const & ts) {
-    SMTConfig config;
-    MainSolver solver(logic, config, "");
+    SMTSolver solverWrapper(logic, SMTSolver::WitnessProduction::NONE);
+    auto & solver = solverWrapper.getCoreSolver();
     solver.insertFormula(inductiveInvariant);
     solver.insertFormula(ts.getQuery());
     auto res = solver.check();

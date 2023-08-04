@@ -6,6 +6,8 @@
 
 #include "MultiEdgeMerger.h"
 
+#include "utils/SmtSolver.h"
+
 Transformer::TransformationResult MultiEdgeMerger::transform(std::unique_ptr<ChcDirectedHyperGraph> graph) {
     auto backtranslator = std::make_unique<BackTranslator>(graph->getLogic(), graph->predicateRepresentation());
     backtranslator->mergedEdges = graph->mergeMultiEdges();
@@ -63,8 +65,8 @@ InvalidityWitness MultiEdgeMerger::BackTranslator::translate(InvalidityWitness w
             // No edge evaluate to true, try to find one with satisfiable label
             for (std::size_t i = 0u; i < evaluatedLabels.size(); ++i) {
                 if (evaluatedLabels[i] == logic.getTerm_false()) { continue; }
-                SMTConfig config;
-                MainSolver solver(logic, config, "");
+                SMTSolver solverWrapper(logic, SMTSolver::WitnessProduction::NONE);
+                auto & solver = solverWrapper.getCoreSolver();
                 solver.insertFormula(evaluatedLabels[i]);
                 if (solver.check() == s_True) { return i; }
             }

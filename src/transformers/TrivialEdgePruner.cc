@@ -6,6 +6,8 @@
 
 #include "TrivialEdgePruner.h"
 
+#include "utils/SmtSolver.h"
+
 Transformer::TransformationResult TrivialEdgePruner::transform(std::unique_ptr<ChcDirectedHyperGraph> graph) {
     std::vector<EId> directEdges;
     graph->forEachEdge([&](auto const & edge) {
@@ -17,8 +19,8 @@ Transformer::TransformationResult TrivialEdgePruner::transform(std::unique_ptr<C
     Logic & logic = graph->getLogic();
     // Test if any edge is satisfiable
     for (EId eid : directEdges) {
-        SMTConfig config;
-        MainSolver solver(graph->getLogic(), config, "");
+        SMTSolver solverWrapper(logic, SMTSolver::WitnessProduction::NONE);
+        auto & solver = solverWrapper.getCoreSolver();
         solver.insertFormula(graph->getEdgeLabel(eid));
         auto res = solver.check();
         if (res == s_True) {

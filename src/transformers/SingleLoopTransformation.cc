@@ -7,6 +7,7 @@
 #include "SingleLoopTransformation.h"
 
 #include "TransformationUtils.h"
+#include "utils/SmtSolver.h"
 
 namespace {
 using LocationVarMap = SingleLoopTransformation::LocationVarMap;
@@ -162,8 +163,8 @@ SingleLoopTransformation::WitnessBackTranslator::translateErrorPath(std::size_t 
     // We need to get the CEX path, which will define the locations in the graph
     Logic & logic = graph.getLogic();
     TimeMachine tm(logic);
-    SMTConfig config;
-    MainSolver solver(logic, config, "CEX");
+    SMTSolver solverWrapper(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
+    auto & solver = solverWrapper.getCoreSolver();
     solver.insertFormula(transitionSystem.getInit());
     PTRef transition = transitionSystem.getTransition();
     for (auto i = 0u; i < unrolling; ++i) {

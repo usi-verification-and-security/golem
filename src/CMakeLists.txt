@@ -59,6 +59,7 @@ target_sources(golem_lib
     PRIVATE transformers/SingleLoopTransformation.cc
     PRIVATE transformers/TransformationPipeline.cc
     PRIVATE transformers/TrivialEdgePruner.cc
+    PRIVATE utils/SmtSolver.cc
     )
 
 target_include_directories(golem_lib PUBLIC ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/src/include)

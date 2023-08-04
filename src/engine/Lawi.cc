@@ -6,6 +6,8 @@
 
 #include "Lawi.h"
 
+#include "utils/SmtSolver.h"
+
 #include <functional>
 #include <optional>
 
@@ -204,8 +206,8 @@ public:
         if (it != cache.end()) {
             return it->second;
         }
-        SMTConfig config;
-        MainSolver solver(logic, config, "implication_checker");
+        SMTSolver solverWrapper(logic, SMTSolver::WitnessProduction::NONE);
+        auto & solver = solverWrapper.getCoreSolver();
         PTRef negImpl = logic.mkAnd(antecedent, logic.mkNot(consequent)); // not(A->B) iff A and (not B)
 //        std::cout << logic.printTerm(negImpl) << std::endl;
         solver.insertFormula(negImpl);
@@ -247,8 +249,8 @@ public:
                 return QueryResult::INVALID;
             }
         }
-        SMTConfig config;
-        MainSolver solver(logic, config, "implication_checker");
+        SMTSolver solverWrapper(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
+        auto & solver = solverWrapper.getCoreSolver();
         PTRef negImpl = logic.mkAnd(antecedent, logic.mkNot(consequent)); // not(A->B) iff A and (not B)
 //        std::cout << logic.printTerm(negImpl) << std::endl;
         solver.insertFormula(negImpl);
@@ -337,17 +339,14 @@ class LawiContext{
 
     std::optional<VId> getUncoveredLeaf();
 
-    std::unique_ptr<SMTConfig> createInterpolatingConfig() const {
-        SMTConfig * config = new SMTConfig();
-        const char* msg = "ok";
-        bool set = config->setOption(SMTConfig::o_produce_inter, SMTOption(true), msg);
-        assert(set); (void)set;
-        config->setSimplifyInterpolant(4);
+    std::unique_ptr<SMTSolver> createInterpolatingSolver() const {
+        auto solverWrapper = std::make_unique<SMTSolver>(logic, SMTSolver::WitnessProduction::ONLY_INTERPOLANTS);
+        solverWrapper->getConfig().setSimplifyInterpolant(4);
         if (options.hasOption(Options::LRA_ITP_ALG)) {
             int algNumber = std::atoi(options.getOption(Options::LRA_ITP_ALG).c_str());
-            config->setLRAInterpolationAlgorithm(ItpAlgorithm{algNumber});
+            solverWrapper->getConfig().setLRAInterpolationAlgorithm(ItpAlgorithm{algNumber});
         }
-        return std::unique_ptr<SMTConfig>(config);
+        return solverWrapper;
     }
 
     vec<PTRef> normalizeInterpolants(vec<PTRef> const & itps) const;
@@ -485,8 +484,8 @@ void LawiContext::applyForcedCovering(VId vertex) {
         // check label of nca and path to child implies label of candidate
         auto path = art.getPath(nca, vertex, logic);
         auto edgeFormulas = path.getEdgeFormulas();
-        auto config = createInterpolatingConfig();
-        MainSolver solver(logic, *config, "forcedCoveringChecker");
+        auto solverWrapper = createInterpolatingSolver();
+        auto & solver = solverWrapper->getCoreSolver();
         solver.insertFormula(labels.getLabel(nca));
 //        std::cout << logic.printTerm(labels.getLabel(nca)) << std::endl;
         for (PTRef edge : edgeFormulas) {
@@ -539,8 +538,8 @@ LawiContext::RefinementResult LawiContext::refine(VId errVertex) {
      */
 //    std::cout << "\nChecking path: " << logic.printTerm(logic.mkAnd(edgeFormulas)) << std::endl;
 //    std::cout << "\nChecking path of length " << edgeFormulas.size() << std::endl;
-    auto config = createInterpolatingConfig();
-    MainSolver solver(logic, *config, "checker");
+    auto solverWrapper = createInterpolatingSolver();
+    auto & solver = solverWrapper->getCoreSolver();
     for (PTRef segment : edgeFormulas) {
 //    	std::cout << logic.printTerm(segment) << std::endl;
         solver.insertFormula(segment);

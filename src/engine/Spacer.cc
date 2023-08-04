@@ -6,6 +6,7 @@
 
 #include "Spacer.h"
 
+#include "utils/SmtSolver.h"
 #include "ModelBasedProjection.h"
 
 #include <queue>
@@ -365,8 +366,8 @@ SpacerContext::QueryResult SpacerContext::implies(PTRef antecedent, PTRef conseq
         qres.answer = QueryAnswer::VALID;
         return qres;
     }
-    SMTConfig config;
-    MainSolver solver(logic, config, "checker");
+    SMTSolver solverWrapper(logic);
+    auto & solver = solverWrapper.getCoreSolver();
     solver.insertFormula(antecedent);
     solver.insertFormula(logic.mkNot(consequent));
     auto res = solver.check();
@@ -391,12 +392,9 @@ SpacerContext::QueryResult SpacerContext::implies(PTRef antecedent, PTRef conseq
 }
 
 SpacerContext::ItpQueryResult SpacerContext::interpolatingImplies(PTRef antecedent, PTRef consequent) {
-    SMTConfig config;
-    const char* msg = "ok";
-    bool set = config.setOption(SMTConfig::o_produce_inter, SMTOption(true), msg);
-    assert(set); (void)set;
-    config.setSimplifyInterpolant(4);
-    MainSolver solver(logic, config, "checker");
+    SMTSolver solverWrapper(logic, SMTSolver::WitnessProduction::ONLY_INTERPOLANTS);
+    solverWrapper.getConfig().setSimplifyInterpolant(4);
+    auto & solver = solverWrapper.getCoreSolver();
     solver.insertFormula(antecedent);
     solver.insertFormula(logic.mkNot(consequent));
     auto res = solver.check();
@@ -610,11 +608,8 @@ bool SpacerContext::tryPushComponents(SymRef vid, std::size_t level, PTRef body)
     if (targetCandidates.size() == 0) { return true; }
 
     bool allPushed = true;
-    SMTConfig config;
-    const char* msg = "ok";
-    config.setOption(SMTConfig::o_produce_models, SMTOption(true), msg);
-    config.setOption(SMTConfig::o_produce_inter, SMTOption(false), msg);
-    MainSolver solver(logic, config, "inductive checker");
+    SMTSolver solverWrapper(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
+    auto & solver = solverWrapper.getCoreSolver();
     solver.insertFormula(body);
     vec<PTRef> queries;
     queries.capacity(targetCandidates.size());
@@ -778,8 +773,8 @@ void computePremiseInstances(DerivationDatabase::Entry const & databaseEntry, En
     assert(entry.premiseInstances.empty());
     Logic & logic = graph.getLogic();
     EId edge = databaseEntry.incomingEdge;
-    SMTConfig config;
-    MainSolver solver(logic, config, "");
+    SMTSolver solverWrapper(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
+    auto & solver = solverWrapper.getCoreSolver();
     PTRef edgeConstraint = graph.getEdgeLabel(edge);
     solver.insertFormula(edgeConstraint);
 //    std::cout << logic.pp(edgeConstraint) << '\n';

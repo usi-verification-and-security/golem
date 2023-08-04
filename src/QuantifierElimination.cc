@@ -1,12 +1,14 @@
-//
-// Created by Martin Blicha on 12.06.21.
-//
+/*
+* Copyright (c) 2021-2023, Martin Blicha <martin.blicha@gmail.com>
+*
+* SPDX-License-Identifier: MIT
+*/
 
 #include "QuantifierElimination.h"
 
 #include "ModelBasedProjection.h"
 #include "TermUtils.h"
-
+#include "utils/SmtSolver.h"
 
 PTRef QuantifierElimination::keepOnly(PTRef fla, const vec<PTRef> & varsToKeep) {
     auto allVars = TermUtils(logic).getVars(fla);
@@ -31,10 +33,8 @@ PTRef QuantifierElimination::eliminate(PTRef fla, vec<PTRef> const & vars) {
     fla = TermUtils(logic).toNNF(fla);
     vec<PTRef> projections;
 
-    SMTConfig config;
-    const char* msg = "ok";
-    config.setOption(SMTConfig::o_produce_models, SMTOption(true), msg);
-    MainSolver solver(logic, config, "QE solver");
+    SMTSolver solverWrapper(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
+    auto & solver = solverWrapper.getCoreSolver();
     solver.insertFormula(fla);
     while(true) {
         auto res = solver.check();

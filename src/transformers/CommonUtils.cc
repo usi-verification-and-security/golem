@@ -6,6 +6,8 @@
 
 #include "CommonUtils.h"
 
+#include "utils/SmtSolver.h"
+
 using DerivationStep = InvalidityWitness::Derivation::DerivationStep;
 
 InvalidityWitness::Derivation replaceSummarizingStep(
@@ -47,8 +49,9 @@ InvalidityWitness::Derivation replaceSummarizingStep(
     const PTRef targetPredicate = LinearPredicateVersioning(logic).sendPredicateThroughTime(versionPredicate(replacingEdge.to),simpleChain.size());
     utils.mapFromPredicate(targetPredicate, summarizedStep.derivedFact, subst);
     utils.mapFromPredicate(sourcePredicate, derivation[summarizedStep.premises.front()].derivedFact, subst);
-    SMTConfig config;
-    MainSolver solver(logic, config, "");
+
+    SMTSolver solverWrapper(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
+    auto & solver = solverWrapper.getCoreSolver();
     solver.insertFormula(logic.mkAnd(std::move(edgeConstraints)));
     for (auto const & [var,value] : subst) {
         assert(logic.isVar(var) and logic.isConstant(value));

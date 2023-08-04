@@ -8,6 +8,8 @@
 
 #include "CommonUtils.h"
 
+#include "utils/SmtSolver.h"
+
 Transformer::TransformationResult SimpleChainSummarizer::transform(std::unique_ptr<ChcDirectedHyperGraph> graph) {
     auto translator = std::make_unique<BackTranslator>(graph->getLogic(), graph->predicateRepresentation());
     while(true) {
@@ -80,15 +82,12 @@ ValidityWitness SimpleChainSummarizer::BackTranslator::translate(ValidityWitness
     definitions.insert({logic.getTerm_true(), logic.getTerm_true()});
     definitions.insert({logic.getTerm_false(), logic.getTerm_false()});
     std::reverse(summarizedChains.begin(), summarizedChains.end());
-    SMTConfig config;
-    const char * msg;
-    config.setOption(SMTConfig::o_produce_models, SMTOption(false), msg);
-    config.setOption(SMTConfig::o_produce_inter, SMTOption(true), msg);
     TermUtils utils(logic);
     VersionManager manager(logic);
     for (auto && [chain, summary] : summarizedChains) {
         // Compute definitions for vertices on the chain using path interpolants
-        MainSolver solver(logic, config, "labeler");
+        SMTSolver solverWrapper(logic, SMTSolver::WitnessProduction::ONLY_INTERPOLANTS);
+        auto & solver = solverWrapper.getCoreSolver();
         assert(summary.from.size() == 1);
         PTRef sourceInterpretation = manager.baseFormulaToSource(
             definitions.at(manager.sourceFormulaToBase(predicateRepresentation.getSourceTermFor(summary.from.front())))

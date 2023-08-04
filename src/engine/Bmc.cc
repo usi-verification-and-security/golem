@@ -7,9 +7,11 @@
 #include "Bmc.h"
 
 #include "Common.h"
+
 #include "TermUtils.h"
 #include "TransformationUtils.h"
 #include "transformers/SingleLoopTransformation.h"
+#include "utils/SmtSolver.h"
 
 VerificationResult BMC::solve(ChcDirectedGraph const & graph) {
     if (isTrivial(graph)) {
@@ -38,8 +40,8 @@ TransitionSystemVerificationResult BMC::solveTransitionSystemInternal(Transition
     PTRef query = system.getQuery();
     PTRef transition = system.getTransition();
 
-    SMTConfig config;
-    MainSolver solver(logic, config, "BMC");
+    SMTSolver solverWrapper(logic, SMTSolver::WitnessProduction::NONE);
+    auto & solver = solverWrapper.getCoreSolver();
 //    std::cout << "Adding initial states: " << logic.pp(init) << std::endl;
     solver.insertFormula(init);
     { // Check for system with empty initial states

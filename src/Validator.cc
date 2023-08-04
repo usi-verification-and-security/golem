@@ -6,6 +6,8 @@
 
 #include "Validator.h"
 
+#include "utils/SmtSolver.h"
+
 Validator::Result Validator::validate(ChcDirectedHyperGraph const & graph, VerificationResult const & result) {
     if (not result.hasWitness()) { return Validator::Result::NOT_VALIDATED; }
     switch (result.getAnswer()) {
@@ -63,8 +65,8 @@ Validator::Result Validator::validateValidityWitness(ChcDirectedHyperGraph const
         if (interpretedHead == PTRef_Undef) { return Result::NOT_VALIDATED; }
         PTRef query = logic.mkAnd(interpretedBody, logic.mkNot(interpretedHead));
         {
-            SMTConfig config;
-            MainSolver solver(logic, config, "validator");
+            SMTSolver solverWrapper(logic, SMTSolver::WitnessProduction::NONE);
+            auto & solver = solverWrapper.getCoreSolver();
             solver.insertFormula(query);
             auto res = solver.check();
             if (res != s_False) {
@@ -108,8 +110,8 @@ Validator::Result validateStep(
     PTRef constraintAfterSubstitution = utils.varSubstitute(graph.getEdgeLabel(edge), subst);
     if (constraintAfterSubstitution == logic.getTerm_true()) { return Validator::Result::VALIDATED; }
     if (constraintAfterSubstitution == logic.getTerm_false()) { return Validator::Result::NOT_VALIDATED; }
-    SMTConfig config;
-    MainSolver solver(logic, config, "validator");
+    SMTSolver solverWrapper(logic, SMTSolver::WitnessProduction::NONE);
+    auto & solver = solverWrapper.getCoreSolver();
     solver.insertFormula(constraintAfterSubstitution);
     auto res = solver.check();
     if (res == s_True) { return Validator::Result::VALIDATED; }
