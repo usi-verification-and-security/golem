@@ -1150,7 +1150,8 @@ bool TPASplit::checkExactFixedPoint(unsigned short power) {
     assert(power == 0 or verifyExactPower(power));
     for (unsigned short i = 1; i <= power; ++i) {
         PTRef currentLevelTransition = getExactPower(i);
-        PTRef currentTwoStep = logic.mkAnd(currentLevelTransition, getNextVersion(currentLevelTransition));
+        PTRef currentTwoStep = logic.mkAnd({currentLevelTransition, logic.mkAnd(rightInvariants),
+         getNextVersion(logic.mkAnd(leftInvariants)), getNextVersion(currentLevelTransition)});
         PTRef shifted = shiftOnlyNextVars(currentLevelTransition);
         SMTSolver solverWrapper(logic, SMTSolver::WitnessProduction::NONE);
         auto & solver = solverWrapper.getCoreSolver();
