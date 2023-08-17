@@ -58,7 +58,7 @@ enum class TPAType : char { LESS_THAN, EQUALS };
 struct SafetyExplanation {
     enum class TransitionInvariantType : char { NONE, UNRESTRICTED, RESTRICTED_TO_INIT, RESTRICTED_TO_QUERY };
 
-    enum class FixedPointType : char { LEFT, RIGHT };
+    enum class FixedPointType : char { LEFT, RIGHT, NONE };
 
     TransitionInvariantType invariantType{TransitionInvariantType::NONE};
     TPAType relationType{TPAType::LESS_THAN};
@@ -91,6 +91,7 @@ protected:
     vec<PTRef> auxiliaryVariables;
     vec<PTRef> leftInvariants;
     vec<PTRef> rightInvariants;
+    vec<PTRef> exactInvariants;
 
     PTRef identity{PTRef_Undef};
 
@@ -184,7 +185,7 @@ protected:
 
     PTRef safeSupersetOfInitialStates(PTRef start, PTRef transitionInvariant, PTRef target) const;
 
-    void houdiniCheck(PTRef invCandidates, PTRef transition, SafetyExplanation::FixedPointType alignment);
+    void houdiniCheck(PTRef invCandidates, PTRef transition, SafetyExplanation::FixedPointType alignment, TPAType type);
 
     bool checkLessThanFixedPoint(unsigned short power);
 
