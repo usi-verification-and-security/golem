@@ -955,7 +955,7 @@ void TPABase::squashInvariants(vec<PTRef> & candidates) {
     }
 }
 
-void TPABase::houdiniCheck(PTRef invCandidates, PTRef transition, SafetyExplanation::FixedPointType alignment) {
+void TPABase::houdiniCheck(PTRef invCandidates, PTRef transition, SafetyExplanation::FixedPointType alignment, TPAType type) {
     // RIGHT:
     //   rightInvariants /\ currentLevelTransition /\ getNextVersion(transition) =>
     //     shiftOnlyNextVars(currentLevelTransition);
@@ -966,10 +966,12 @@ void TPABase::houdiniCheck(PTRef invCandidates, PTRef transition, SafetyExplanat
     auto & solver = solverWrapper.getCoreSolver();
     solver.push();
     auto candidates = topLevelConjuncts(logic, invCandidates);
-    if (alignment == SafetyExplanation::FixedPointType::RIGHT) {
-        solver.insertFormula(getNextVersion(transition));
-    } else {
-        if (alignment == SafetyExplanation::FixedPointType::LEFT) { solver.insertFormula(transition); }
+    if (type == TPAType::LESS_THAN) {
+        if (alignment == SafetyExplanation::FixedPointType::RIGHT) {
+            solver.insertFormula(getNextVersion(transition));
+        } else {
+            if (alignment == SafetyExplanation::FixedPointType::LEFT) { solver.insertFormula(transition); }
+        }
     }
 
     solver.push();
@@ -981,36 +983,25 @@ void TPABase::houdiniCheck(PTRef invCandidates, PTRef transition, SafetyExplanat
     //    Push transition once and for all
     //    While loop externally, because we may drop smth important
     PTRef goal = shiftOnlyNextVars(invCandidates);
-
-    if (alignment == SafetyExplanation::FixedPointType::RIGHT) {
+    if ( type == TPAType::EQUALS) {
+        solver.insertFormula(logic.mkAnd({invCandidates, transition, logic.mkNot(goal)}));
+    } else if (alignment == SafetyExplanation::FixedPointType::RIGHT || type == TPAType::EQUALS) {
         solver.insertFormula(logic.mkAnd(invCandidates, logic.mkNot(goal)));
     } else if (alignment == SafetyExplanation::FixedPointType::LEFT) {
         solver.insertFormula(logic.mkAnd(getNextVersion(invCandidates), logic.mkNot(goal)));
     }
     while (solver.check() == s_True) {
-//        Model model = *solver.getModel();
-//        for(auto conjunct: topLevelConjuncts(logic, goal)){
-//            if(model.evaluate(conjunct) == logic.getTerm_true()){
-//                for (int i = 0; i < candidates.size(); i++) {
-//                    if(shiftOnlyNextVars(candidates[i]) == conjunct){
-//                        candidates[i] = candidates[candidates.size() - 1];
-//                        candidates.pop();
-//                        break ;
-//                    }
-//                }
-//            }
-//        }
         for (int i = candidates.size() - 1; i >= 0; i--) {
             PTRef cand = candidates[i];
             solver.pop();
             solver.push();
-            if (alignment == SafetyExplanation::FixedPointType::RIGHT) {
+            if ( type == TPAType::EQUALS) {
+                solver.insertFormula(logic.mkAnd({logic.mkAnd(candidates), getNextVersion(logic.mkAnd(candidates)), logic.mkNot(shiftOnlyNextVars(cand))}));
+            } else if (alignment == SafetyExplanation::FixedPointType::RIGHT || type == TPAType::EQUALS) {
                 solver.insertFormula(logic.mkAnd(logic.mkAnd(candidates), logic.mkNot(shiftOnlyNextVars(cand))));
-            } else {
-                if (alignment == SafetyExplanation::FixedPointType::LEFT) {
+            } else if (alignment == SafetyExplanation::FixedPointType::LEFT) {
                     solver.insertFormula(
                         logic.mkAnd(getNextVersion(logic.mkAnd(candidates)), logic.mkNot(shiftOnlyNextVars(cand))));
-                }
             }
             if (solver.check() == s_True) {
                 candidates[i] = candidates[candidates.size() - 1];
@@ -1020,14 +1011,19 @@ void TPABase::houdiniCheck(PTRef invCandidates, PTRef transition, SafetyExplanat
         solver.pop();
         solver.push();
         goal = shiftOnlyNextVars(logic.mkAnd(candidates));
-        if (alignment == SafetyExplanation::FixedPointType::RIGHT) {
+        if(type == TPAType::EQUALS){
+            solver.insertFormula(logic.mkAnd({logic.mkAnd(candidates), getNextVersion(logic.mkAnd(candidates)), logic.mkNot(goal)}));
+        } else if (alignment == SafetyExplanation::FixedPointType::RIGHT) {
             solver.insertFormula(logic.mkAnd(logic.mkAnd(candidates), logic.mkNot(goal)));
         } else {
             solver.insertFormula(logic.mkAnd(getNextVersion(logic.mkAnd(candidates)), logic.mkNot(goal)));
         }
     }
     for (auto cand : candidates) {
-        if (alignment == SafetyExplanation::FixedPointType::RIGHT) {
+        if(type == TPAType::EQUALS){
+            if (std::find(exactInvariants.begin(), exactInvariants.end(), cand) != exactInvariants.end()) { continue; }
+            exactInvariants.push(cand);
+        } else if (alignment == SafetyExplanation::FixedPointType::RIGHT) {
             if (std::find(rightInvariants.begin(), rightInvariants.end(), cand) != rightInvariants.end()) { continue; }
             rightInvariants.push(cand);
         } else {
@@ -1045,7 +1041,7 @@ bool TPABase::checkLessThanFixedPoint(unsigned short power) {
         SMTSolver solverWrapper(logic, SMTSolver::WitnessProduction::NONE);
         {
             auto & solver = solverWrapper.getCoreSolver();
-            houdiniCheck(currentLevelTransition, transition, SafetyExplanation::FixedPointType::RIGHT);
+            houdiniCheck(currentLevelTransition, transition, SafetyExplanation::FixedPointType::RIGHT, TPAType::LESS_THAN);
             solver.insertFormula(
                 logic.mkAnd({logic.mkAnd(rightInvariants), currentLevelTransition, getNextVersion(transition),
                              logic.mkNot(shiftOnlyNextVars(currentLevelTransition))}));
@@ -1080,7 +1076,7 @@ bool TPABase::checkLessThanFixedPoint(unsigned short power) {
         {
             solverWrapper.resetSolver();
             auto & solver = solverWrapper.getCoreSolver();
-            houdiniCheck(currentLevelTransition, transition, SafetyExplanation::FixedPointType::LEFT);
+            houdiniCheck(currentLevelTransition, transition, SafetyExplanation::FixedPointType::LEFT, TPAType::LESS_THAN);
             solver.insertFormula(logic.mkAnd({transition, getNextVersion(logic.mkAnd(leftInvariants)),
                                               getNextVersion(currentLevelTransition),
                                               logic.mkNot(shiftOnlyNextVars(currentLevelTransition))}));
@@ -1151,7 +1147,9 @@ bool TPASplit::checkExactFixedPoint(unsigned short power) {
     for (unsigned short i = 1; i <= power; ++i) {
         PTRef currentLevelTransition = getExactPower(i);
         PTRef currentTwoStep = logic.mkAnd({currentLevelTransition, logic.mkAnd(rightInvariants),
-         getNextVersion(logic.mkAnd(leftInvariants)), getNextVersion(currentLevelTransition)});
+         getNextVersion(logic.mkAnd(leftInvariants)), logic.mkAnd(exactInvariants), getNextVersion(currentLevelTransition)});
+        houdiniCheck(currentLevelTransition, currentLevelTransition,
+                     SafetyExplanation::FixedPointType::NONE, TPAType::EQUALS);
         PTRef shifted = shiftOnlyNextVars(currentLevelTransition);
         SMTSolver solverWrapper(logic, SMTSolver::WitnessProduction::NONE);
         auto & solver = solverWrapper.getCoreSolver();
