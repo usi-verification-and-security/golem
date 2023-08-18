@@ -28,6 +28,7 @@ class Normalizer{
         PTRef originalArg;
     };
     vec<Equality> topLevelEqualities;
+    std::vector<vec<Equality>> normalizingEqualities;
 
     ChClause normalize(ChClause const & clause);
 
@@ -60,7 +61,10 @@ class Normalizer{
 public:
     Normalizer(Logic& logic) : logic(logic), timeMachine(logic), canonicalPredicateRepresentation(logic) {}
 
-    NormalizedChcSystem normalize(ChcSystem const & system) &&;
+    NormalizedChcSystem normalize(ChcSystem const & system);
+
+    const vec<Equality> & getNormalizingEqualities(std::size_t index) const { return std::move(normalizingEqualities.at(index)); }
+    std::vector<std::vector<PTRef>> getPTRefNormalizingEqualities();
 
 };
 

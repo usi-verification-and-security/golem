@@ -7,12 +7,12 @@
 #ifndef GOLEM_WITNESSES_H
 #define GOLEM_WITNESSES_H
 
-#include <variant>
-
-#include "graph/ChcGraph.h"
 #include "TransitionSystem.h"
-
+#include "graph/ChcGraph.h"
 #include "osmt_solver.h"
+#include "proofs/Term.h"
+#include <memory>
+#include <variant>
 
 class ErrorPath {
     std::vector<EId> path;
@@ -81,6 +81,9 @@ public:
     static InvalidityWitness fromTransitionSystem(ChcDirectedGraph const & graph, std::size_t unrollings);
 
     void print(std::ostream & out, Logic & logic) const;
+    void alethePrint(std::ostream & out, Logic & logic, const ChcDirectedHyperGraph& originalGraph,
+                     std::vector<std::shared_ptr<Term>> originalAssertions, std::vector<std::vector<PTRef>> normalizingEqualities) const;
+    std::vector<std::pair<std::string, std::string>> getInstPairs(int it, Logic & logic, const ChcDirectedHyperGraph& originalGraph, std::vector<PTRef> stepNormEq) const;
 };
 
 class ValidityWitness {
@@ -143,13 +146,15 @@ public:
     [[nodiscard]] bool hasWitness() const { return not std::holds_alternative<NoWitness>(witness); }
 
     [[nodiscard]] ValidityWitness const & getValidityWitness() const & { assert(answer == VerificationAnswer::SAFE); return std::get<ValidityWitness>(witness); }
-    [[nodiscard]] InvalidityWitness const & getInvalidityWitness() const & { assert(answer == VerificationAnswer::UNSAFE); return std::get<InvalidityWitness>(witness); }
+    [[nodiscard]] const InvalidityWitness getInvalidityWitness() const & { assert(answer == VerificationAnswer::UNSAFE); return std::get<InvalidityWitness>(witness); }
     [[nodiscard]] std::string_view getNoWitnessReason() const & { assert(not hasWitness()); return std::get<NoWitness>(witness).getReason(); }
 
     ValidityWitness && getValidityWitness() && { assert(answer == VerificationAnswer::SAFE); return std::move(std::get<ValidityWitness>(witness)); }
     InvalidityWitness && getInvalidityWitness() && { assert(answer == VerificationAnswer::UNSAFE); return std::move(std::get<InvalidityWitness>(witness)); }
 
     void printWitness(std::ostream & out, Logic & logic) const;
+    void printWitness_(std::ostream & out, Logic & logic, ChcDirectedHyperGraph const & originalGraph, std::vector<std::shared_ptr<Term>> originalAssertions,
+                       std::vector<std::vector<PTRef>> normalizingEqualities) const;
 };
 
 struct TransitionSystemVerificationResult {

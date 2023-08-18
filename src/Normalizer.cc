@@ -6,7 +6,7 @@
 
 #include "Normalizer.h"
 
-NormalizedChcSystem Normalizer::normalize(const ChcSystem & system) && {
+NormalizedChcSystem Normalizer::normalize(const ChcSystem & system) {
     this->canonicalPredicateRepresentation.addRepresentation(logic.getSym_true(), {});
     std::vector<ChClause> normalized;
     auto const& clauses = system.getClauses();
@@ -29,6 +29,7 @@ ChClause Normalizer::normalize(ChClause const & clause) {
     ChcHead newHead = normalize(head);
     ChcBody newBody = normalize(body);
     ChClause res = eliminateRedundantVariables(ChClause{.head = std::move(newHead), .body = std::move(newBody)});
+    normalizingEqualities.push_back(std::move(topLevelEqualities));
     topLevelEqualities.clear();
     return res;
 }
@@ -148,6 +149,20 @@ ChcBody Normalizer::normalize(const ChcBody & body) {
     newInterpretedPart = eliminateDivMod(newInterpretedPart);
     newInterpretedPart = eliminateDistincts(newInterpretedPart);
     return ChcBody{InterpretedFla{newInterpretedPart}, std::move(newUninterpretedPart)};
+}
+
+std::vector<std::vector<PTRef>> Normalizer::getPTRefNormalizingEqualities() {
+    std::vector<std::vector<PTRef>> normalizingPTRefEqualities;
+    for (int i = 0; i < normalizingEqualities.size(); i++){
+        const vec<Equality> & equalities = getNormalizingEqualities(i);
+        std::vector<PTRef> PTRefs;
+        for (Equality eq : equalities){
+            PTRefs.push_back(eq.originalArg);
+            PTRefs.push_back(eq.normalizedVar);
+        }
+        normalizingPTRefEqualities.push_back(std::move(PTRefs));
+    }
+    return  normalizingPTRefEqualities;
 }
 
 PTRef Normalizer::eliminateDivMod(PTRef fla) {

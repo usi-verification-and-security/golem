@@ -9,6 +9,7 @@
 #include "Validator.h"
 #include "graph/ChcGraph.h"
 #include "graph/ChcGraphBuilder.h"
+#include "proofs/Term.h"
 #include "transformers/MultiEdgeMerger.h"
 #include "transformers/NodeEliminator.h"
 #include "transformers/RemoveUnreachableNodes.h"
@@ -20,6 +21,7 @@
 #include <engine/Lawi.h>
 #include <engine/Spacer.h>
 #include <engine/TPA.h>
+#include <memory>
 #include <signal.h>
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -190,6 +192,58 @@ void ChcInterpreterContext::interpretAssert(ASTNode & node) {
     if (logic.getTerm_true() == term) { return; }
     auto chclause = chclauseFromPTRef(term);
     system->addClause(std::move(chclause));
+    originalAssertions.push_back(ASTtoTerm(termNode));
+}
+
+std::shared_ptr<Term> ChcInterpreterContext::ASTtoTerm(const ASTNode & node){
+    ASTType t = node.getType();
+    if (t == TERM_T) {
+        std::string name = (**(node.children->begin())).getValue();
+        auto term = std::make_shared<Terminal>(name, Term::INT);
+        return term;
+    } else if (t == FORALL_T) { // Forall has two children: sorted_var_list and term
+        auto it = node.children->begin();
+        ASTNode & qvars = **it;
+        assert(qvars.getType() == SVL_T);
+        std::vector<std::shared_ptr<Term>> vars;
+        std::vector<std::shared_ptr<Term>> sorts;
+        for (ASTNode * var : *qvars.children) {
+            assert(var && var->getType() == SV_T);
+            // make sure the term store know about these variables
+            std::string name = var->getValue();
+            auto var_term = std::make_shared<Terminal>(name, Term::VAR);
+            std::string sort = (*var->children->begin())->getValue();
+            auto sort_term = std::make_shared<Terminal>(sort, Term::SORT);
+            vars.push_back(var_term);
+            sorts.push_back(sort_term);
+        }
+        assert(vars.size() == sorts.size());
+        ASTNode & innerTerm = **(++it);
+        auto term = std::make_shared<Quant>("forall", vars, sorts, ASTtoTerm(innerTerm));
+        return term;
+    } else if (t == QID_T) {
+        std::string name = (**(node.children->begin())).getValue();
+        auto term = std::make_shared<Terminal>(name, Term::VAR);
+        return term;
+    } else if (t == LQID_T) {
+        auto it = node.children->begin();
+        std::string op = (**it).getValue();
+        it++;
+        std::vector<std::shared_ptr<Term>> args;
+        for (; it != node.children->end(); it++) {
+            std::shared_ptr arg_term = ASTtoTerm(**it);
+            args.push_back(arg_term);
+        }
+        assert(args.size() > 0);
+
+        if (isOperator(op)){
+            auto term = std::make_shared<Op>(op, args);
+            return  term;
+        }else {
+            auto term = std::make_shared<App>(op, args);
+            return  term;
+        }
+    }
 }
 
 PTRef ChcInterpreterContext::parseTerm(const ASTNode & termNode) {
@@ -206,7 +260,6 @@ PTRef ChcInterpreterContext::parseTerm(const ASTNode & termNode) {
         class QuantifierHack {
             std::size_t counter = 0;
             LetRecords & rec;
-
         public:
             QuantifierHack(LetRecords & rec) : rec(rec) {}
             ~QuantifierHack() {
@@ -322,14 +375,16 @@ VerificationResult ChcInterpreterContext::solve(std::string engine_s, ChcDirecte
 }
 
 void ChcInterpreterContext::validate(VerificationResult result, ChcDirectedHyperGraph const & originalGraph,
-                                     bool validateWitness, bool printWitness, WitnessBackTranslator & translator) {
+                                     bool validateWitness, bool printWitness, WitnessBackTranslator & translator, std::vector<std::vector<PTRef>> normalizingEqualities) {
+
     result = translator.translate(std::move(result));
     if (not result.hasWitness()) {
         if (validateWitness) { std::cout << "Internal witness validation failed!" << std::endl; }
         std::cerr << ";No witness has been computed.\n;Reason: " << result.getNoWitnessReason() << std::endl;
         return;
     }
-    if (printWitness) { result.printWitness(std::cout, logic); }
+
+    if (printWitness) { result.printWitness_(std::cout, logic, originalGraph, originalAssertions, normalizingEqualities); }
     if (validateWitness) {
         auto validationResult = Validator(logic).validate(originalGraph, result);
         switch (validationResult) {
@@ -348,15 +403,19 @@ void ChcInterpreterContext::validate(VerificationResult result, ChcDirectedHyper
 }
 
 void ChcInterpreterContext::interpretCheckSat() {
+
     bool validateWitness = opts.hasOption(Options::VALIDATE_RESULT);
     assert(not validateWitness || opts.getOption(Options::VALIDATE_RESULT) == std::string("true"));
     bool printWitness = opts.hasOption(Options::PRINT_WITNESS);
     assert(not printWitness || opts.getOption(Options::PRINT_WITNESS) == std::string("true"));
 
-    auto normalizedSystem = Normalizer(logic).normalize(*system);
+    Normalizer normalizer(logic);
+    auto normalizedSystem = normalizer.normalize(*system);
+    std::vector<std::vector<PTRef>> normalizingEqualities = normalizer.getPTRefNormalizingEqualities();
+
     auto hypergraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
     std::unique_ptr<ChcDirectedHyperGraph> originalGraph{nullptr};
-    if (validateWitness) { // Store copy of the original graph for validating purposes
+    if (validateWitness or printWitness) { // Store copy of the original graph for validating purposes
         originalGraph = std::make_unique<ChcDirectedHyperGraph>(*hypergraph);
     }
 
@@ -385,7 +444,7 @@ void ChcInterpreterContext::interpretCheckSat() {
                 auto result = solve(engines[i], *hypergraph);
                 if (result.getAnswer() == VerificationAnswer::UNKNOWN) { exit(1); }
                 if (validateWitness || printWitness) {
-                    validate(std::move(result), *originalGraph, validateWitness, printWitness, *translator);
+                    validate(std::move(result), *originalGraph, validateWitness, printWitness, *translator, normalizingEqualities);
                 }
                 return;
             }
@@ -416,7 +475,8 @@ void ChcInterpreterContext::interpretCheckSat() {
         return;
     }
     if (validateWitness || printWitness) {
-        validate(std::move(result), *originalGraph, validateWitness, printWitness, *translator);
+
+        validate(std::move(result), *originalGraph, validateWitness, printWitness, *translator, normalizingEqualities);
     }
 }
 

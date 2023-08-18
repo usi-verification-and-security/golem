@@ -8,11 +8,11 @@
 #define OPENSMT_CHCINTERPRETER_H
 
 #include "ChcSystem.h"
+#include "Normalizer.h"
 #include "Options.h"
+#include "proofs/Term.h"
 #include "transformers/Transformer.h"
-
 #include <engine/Engine.h> // TODO: remove this and create an engine factory
-
 #include <memory>
 
 class LetBinder {
@@ -83,13 +83,24 @@ public:
 class ChcInterpreterContext {
 public:
     std::unique_ptr<ChcSystem> interpretSystemAst(const ASTNode * root);
-
     ChcInterpreterContext(Logic & logic, Options const & opts) : logic(logic), opts(opts) {}
+
+    std::vector<std::string> operators = {"+", "-", "/", "*", "and", "or", "=>", "not", "=", ">=", "<=", ">", "<"};
+
+    bool isOperator (const std::string& val){
+        for (const std::string& op : operators){
+            if (op == val){
+                return true;
+            }
+        }
+        return false;
+    }
 
 private:
     Logic & logic;
     Options const & opts;
     std::unique_ptr<ChcSystem> system;
+    std::vector<std::shared_ptr<Term>> originalAssertions;
     bool doExit = false;
     LetRecords letRecords;
 
@@ -106,11 +117,15 @@ private:
     VerificationResult solve(std::string engine, ChcDirectedHyperGraph const & hyperGraph);
 
     void validate(VerificationResult result, ChcDirectedHyperGraph const & originalGraph, bool validateWitness,
-                  bool printWitness, WitnessBackTranslator & translator);
+                  bool printWitness, WitnessBackTranslator & translator, std::vector<std::vector<PTRef>> normalizingEqualities);
 
     SRef sortFromASTNode(ASTNode const & node) const;
 
     PTRef parseTerm(ASTNode const & node);
+
+    std::string ASTtoString(ASTNode const & node);
+
+    std::shared_ptr<Term> ASTtoTerm(ASTNode const & node);
 
     // Building CHCs and helper methods
 

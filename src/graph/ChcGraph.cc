@@ -392,11 +392,11 @@ std::vector<SymRef> ChcDirectedHyperGraph::getVertices() const {
 }
 
 std::vector<DirectedHyperEdge> ChcDirectedHyperGraph::getEdges() const {
-    std::vector<DirectedHyperEdge> edges;
+    std::vector<DirectedHyperEdge> retEdges;
     forEachEdge([&](DirectedHyperEdge const & edge){
-        edges.push_back(edge);
+        retEdges.push_back(edge);
     });
-    return edges;
+    return retEdges;
 }
 
 ChcDirectedHyperGraph::VertexContractionResult ChcDirectedHyperGraph::contractVertex(SymRef sym) {
