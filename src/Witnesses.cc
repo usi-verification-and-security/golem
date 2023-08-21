@@ -52,10 +52,12 @@ void InvalidityWitness::alethePrint(std::ostream & out, Logic & logic, ChcDirect
     OperateVisitor opVisitor;
     SimplifyRuleVisitor simplifyRuleVisitor;
     TerminalOrAppVisitor terminalOrAppVisitor;
+    ImpFirstTermVisitor impFirstTermVisitor;
+    RequiresCongVisitor requiresCongVisitor;
 
     for (std::size_t i = 1; i <= assertionSize; ++i) {
         // Printing assumptions
-        out << "(assume h" << i << ' ' << originalAssertions[i-1]->accept(&printVisitor) << '\n';
+        out << "(assume h" << i << ' ' << originalAssertions[i-1]->accept(&printVisitor) << ")\n";
     }
 
     int currAletheStep = assertionSize;
@@ -73,7 +75,7 @@ void InvalidityWitness::alethePrint(std::ostream & out, Logic & logic, ChcDirect
                 std::shared_ptr<Term> instTerm = term->accept(&instVisitor);
 
                 //Instantiation
-                out << "(step t" << ++currAletheStep << " " << "(cl (or (not (" << term->accept(&printVisitor) << ") " << instTerm->accept(&printVisitor) << "))"
+                out << "(step t" << ++currAletheStep << " " << "(cl (or (not " << term->accept(&printVisitor) << ") " << instTerm->accept(&printVisitor) << "))"
                     << " :rule forall_inst" << " :args (";
 
                 for (std::pair<std::string, std::string> pair : instPairs){
@@ -81,12 +83,149 @@ void InvalidityWitness::alethePrint(std::ostream & out, Logic & logic, ChcDirect
                 }
                 out << "))\n";
 
-                out << "(step t" << ++currAletheStep << " " << "(cl (not (" << term->accept(&printVisitor) << ") " << instTerm->accept(&printVisitor) << ")"
+                out << "(step t" << ++currAletheStep << " " << "(cl (not " << term->accept(&printVisitor) << ") " << instTerm->accept(&printVisitor) << ")"
                     << " :rule or :premises (t" << currAletheStep-1 << "))\n";
 
                 out << "(step t" << ++currAletheStep << " " << "(cl " << instTerm->accept(&printVisitor) << ") :rule resolution :premises (h"
                     << step.clauseId.id+1 << " t" << currAletheStep-1 << "))\n";
 
+                //Simplification
+
+                std::shared_ptr<Term> impFirstArg = instTerm->accept(&impFirstTermVisitor);
+
+                out << "(step t" << ++currAletheStep << " " << "(cl (not " << impFirstArg->accept(&printVisitor) << ") " << logic.printTerm(step.derivedFact) << ") :rule implies :premises (t"
+                    << currAletheStep-1 << "))\n";
+
+                int impliesStep = currAletheStep;
+                int modusPonensStep;
+
+                if (not impFirstArg->accept(&requiresCongVisitor)) {
+
+                    while (not instTerm->accept(&simpVisitor)->accept(&terminalOrAppVisitor)){
+                        std::shared_ptr<Term> simplifiedTerm = instTerm->accept(&simpVisitor);
+                        std::string simplification = simplifiedTerm->accept(&opVisitor);
+
+                        out << "(step t" << ++currAletheStep << " " << "(cl (= " << simplifiedTerm->accept(&printVisitor) << " " << simplification
+                            << ")) :rule " << simplifiedTerm->accept(&simplifyRuleVisitor) << ")\n";
+
+                        out << "(step t" << ++currAletheStep << " " << "(cl " << simplifiedTerm->accept(&printVisitor) << " (not " << simplification
+                            << ")) :rule equiv2 :premises (t" << currAletheStep-1 << "))\n";
+
+                        if (simplification == "true"){
+                            out << "(step t" << ++currAletheStep << " " << "(cl true) :rule true)\n";
+
+                            out << "(step t" << ++currAletheStep << " " << "(cl " << simplifiedTerm->accept(&printVisitor) << ") :rule resolution :premises (t"
+                                << currAletheStep-1 << " t" << currAletheStep-2 << "))\n";
+
+                            out << "(step t" << ++currAletheStep << " " << "(cl " << logic.printTerm(step.derivedFact) << ") :rule resolution :premises (t"
+                                << impliesStep << " t" << currAletheStep-1 << "))\n";
+
+                            modusPonensStep = currAletheStep;
+                        }
+
+                        SimplifyVisitor simplifyVisitor(simplification, simplifiedTerm);
+
+                        instTerm =  instTerm->accept(&simplifyVisitor);
+
+                    }
+
+                } else {
+
+                    std::shared_ptr<Term> finalSimplifiedTerm;
+                    std::string finalSimplification;
+                    std::string finalRule;
+
+                    std::vector<int> simpSteps;
+
+                    while (not instTerm->accept(&simpVisitor)->accept(&terminalOrAppVisitor)) {
+
+                        std::shared_ptr<Term> simplifiedTerm = instTerm->accept(&simpVisitor);
+                        std::string simplification = simplifiedTerm->accept(&opVisitor);
+                        std::string rule = simplifiedTerm->accept(&simplifyRuleVisitor);
+
+                        if (rule != "and_simplify"){
+
+                            out << "(step t" << ++currAletheStep << " "
+                                << "(cl (= " << simplification << " " << simplifiedTerm->accept(&printVisitor)
+                                << ")) :rule " << rule << ")\n";
+
+                            SimplifyVisitor simplifyVisitor(simplification, simplifiedTerm);
+                            instTerm = instTerm->accept(&simplifyVisitor);
+
+                            if (rule != "and_simplify" and rule != "equiv_simplify" and rule != "or_simplify" and rule != "comp_simplify"){
+
+                                std::shared_ptr<Term> nextSimplifiedTerm = instTerm->accept(&simpVisitor);
+                                std::string nextSimplification = nextSimplifiedTerm->accept(&opVisitor);
+
+                                out << "(step t" << ++currAletheStep << " "
+                                    << "(cl " << nextSimplifiedTerm->accept(&printVisitor) << ") :rule refl)\n";
+
+                                out << "(step t" << ++currAletheStep << " "
+                                    << "(cl (= (= " << simplification << " " << simplifiedTerm->accept(&printVisitor) << ") " << nextSimplifiedTerm->accept(&printVisitor)
+                                    << ")) :rule cong :premises (t" << currAletheStep-2 << " t" << currAletheStep -1<< "))\n";
+
+                                out << "(step t" << ++currAletheStep << " "
+                                    << "(cl (= " << nextSimplifiedTerm->accept(&printVisitor) << " " << nextSimplification
+                                    << ")) :rule " << nextSimplifiedTerm->accept(&simplifyRuleVisitor) << ")\n";
+
+                                out << "(step t" << ++currAletheStep << " "
+                                    << "(cl (= (= " << simplification << " " << simplifiedTerm->accept(&printVisitor)
+                                    << ") " << nextSimplification << ")) :rule trans :premises (t" << currAletheStep-2 << " t" << currAletheStep-1 << "))\n";
+
+                                simpSteps.push_back(currAletheStep);
+
+                                SimplifyVisitor newSimplifyVisitor(nextSimplification, nextSimplifiedTerm);
+                                instTerm = instTerm->accept(&newSimplifyVisitor);
+                            } else {
+                                simpSteps.push_back(currAletheStep);
+                            }
+                        } else {
+                            finalRule = rule;
+                            finalSimplification = simplification;
+                            finalSimplifiedTerm = simplifiedTerm;
+
+                            SimplifyVisitor simplifyVisitor(simplification, simplifiedTerm);
+                            instTerm = instTerm->accept(&simplifyVisitor);
+                        }
+                    }
+
+                    out << "(step t" << ++currAletheStep << " "
+                        << "(cl (= " << impFirstArg->accept(&printVisitor) << " "
+                        << finalSimplifiedTerm->accept(&printVisitor) << ")) :rule cong :premises (";
+
+                    for (int i = 0; i < simpSteps.size(); i++) {
+                        out << "t" << simpSteps[i];
+                        if (i != simpSteps.size()-1) {
+                            out << " ";
+                        }
+                    }
+
+                    out << "))\n";
+
+                    out << "(step t" << ++currAletheStep << " "
+                        << "(cl (= " << finalSimplifiedTerm->accept(&printVisitor) << " " << finalSimplification
+                        << ")) :rule " << finalRule << ")\n";
+
+                    out << "(step t" << ++currAletheStep << " "
+                        << "(cl (= " << impFirstArg->accept(&printVisitor) << " "
+                        << finalSimplification << ")) :rule trans :premises (t" << currAletheStep-2 << " t" << currAletheStep-1 << "))\n";
+
+                    out << "(step t" << ++currAletheStep << " "
+                        << "(cl " << impFirstArg->accept(&printVisitor) << " (not "
+                        << finalSimplification << ")) :rule equiv2 :premises (t" << currAletheStep-1 << "))\n";
+
+                    out << "(step t" << ++currAletheStep << " "
+                        << "(cl " << impFirstArg->accept(&printVisitor)
+                        << ") :rule resolution :premises (t" << currAletheStep-1 << " t" << modusPonensStep << "))\n";
+
+                    out << "(step t" << ++currAletheStep << " " << "(cl " << logic.printTerm(step.derivedFact) << ") :rule resolution :premises (t"
+                        << impliesStep << " t" << currAletheStep-1 << "))\n";
+
+                    modusPonensStep = currAletheStep;
+
+                }
+
+                /*
                 //Simplification
 
                 int instantionStep = currAletheStep;
@@ -128,6 +267,7 @@ void InvalidityWitness::alethePrint(std::ostream & out, Logic & logic, ChcDirect
                         << finalImplication << " t" << modusPonensStep << "))\n";
                     modusPonensStep = currAletheStep;
                 }
+                 */
 
             }
     }
@@ -135,6 +275,7 @@ void InvalidityWitness::alethePrint(std::ostream & out, Logic & logic, ChcDirect
     out << "(step t" << ++currAletheStep << " (cl (not false)) :rule false)\n";
     out << "(step t" << ++currAletheStep << " (cl) :rule resolution :premises (t"
         << currAletheStep-2 << " t" << currAletheStep-1 << "))\n";
+
 }
 
 std::vector<std::pair<std::string, std::string>> InvalidityWitness::getInstPairs(int it, Logic & logic, const ChcDirectedHyperGraph& originalGraph,

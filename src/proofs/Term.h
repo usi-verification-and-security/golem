@@ -109,6 +109,14 @@ public:
     std::shared_ptr<Term> visit(App*) override;
 };
 
+class ImpFirstTermVisitor : public LogicVisitor {
+public:
+    std::shared_ptr<Term> visit(Terminal*) override;
+    std::shared_ptr<Term> visit(Quant*) override;
+    std::shared_ptr<Term> visit(Op*) override;
+    std::shared_ptr<Term> visit(App*) override;
+};
+
 class StringVisitor {
 public:
     virtual std::string visit(Terminal*) = 0;
@@ -150,6 +158,14 @@ public:
 };
 
 class TerminalOrAppVisitor : public BooleanVisitor {
+public:
+    bool visit(Terminal*) override;
+    bool visit(Quant*) override;
+    bool visit(Op*) override;
+    bool visit(App*) override;
+};
+
+class RequiresCongVisitor : public BooleanVisitor {
 public:
     bool visit(Terminal*) override;
     bool visit(Quant*) override;

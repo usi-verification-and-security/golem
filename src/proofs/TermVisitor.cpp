@@ -203,6 +203,36 @@ std::shared_ptr<Term> InstantiateVisitor::visit(Quant* term){
     return coreTerm;
 }
 
+std::shared_ptr<Term> ImpFirstTermVisitor::visit(Terminal* term){
+    return std::make_shared<Terminal>(term->getVal(), term->getType());
+}
+
+std::shared_ptr<Term> ImpFirstTermVisitor::visit(Op* term){
+    std::string opcode = term->getOp();
+    if (opcode == "=>"){
+        return term->getArgs()[0]->accept(this);
+    }
+    std::vector<std::shared_ptr<Term>> args;
+    for (std::shared_ptr<Term> arg : term->getArgs()) {
+        args.push_back(arg->accept(this));
+    }
+    return std::make_shared<Op>(opcode, args);
+}
+
+std::shared_ptr<Term> ImpFirstTermVisitor::visit(App* term){
+    std::vector<std::shared_ptr<Term>> args;
+    std::string fun = term->getFun();
+    for (std::shared_ptr<Term> arg : term->getArgs()) {
+        args.push_back(arg->accept(this));
+    }
+    return std::make_shared<App>(fun, args);
+}
+
+std::shared_ptr<Term> ImpFirstTermVisitor::visit(Quant* term){
+    std::shared_ptr<Term> coreTerm = term->getCoreTerm()->accept(this);
+    return coreTerm;
+}
+
 std::shared_ptr<Term> SimplifyLocatorVisitor::visit(Terminal* term){
     return std::make_shared<Terminal>(term->getVal(), term->getType());
 }
@@ -292,6 +322,25 @@ bool TerminalOrAppVisitor::visit(App* term){
 }
 
 bool TerminalOrAppVisitor::visit(Quant* term){
+    return false;
+}
+
+bool RequiresCongVisitor::visit(Terminal* term){
+    return false;
+}
+
+bool RequiresCongVisitor::visit(App* term){
+    return false;
+}
+
+bool RequiresCongVisitor::visit(Op* term){
+    if (term->getOp() != "and" and term->getOp() != "or" and term->getOp() != "=>"){
+        return false;
+    }
+    return true;
+}
+
+bool RequiresCongVisitor::visit(Quant* term){
     return false;
 }
 
