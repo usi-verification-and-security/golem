@@ -5,9 +5,9 @@
  */
 
 #include "Witnesses.h"
-
 #include "TransformationUtils.h"
 #include "utils/SmtSolver.h"
+#include <memory>
 
 void VerificationResult::printWitness(std::ostream & out, Logic & logic) const {
     if (not hasWitness()) { return; }
@@ -23,6 +23,179 @@ void VerificationResult::printWitness(std::ostream & out, Logic & logic) const {
         default:
             return;
     }
+}
+
+void VerificationResult::printWitness_(std::ostream & out, Logic & logic, const ChcDirectedHyperGraph & originalGraph,
+                                       std::vector<std::shared_ptr<Term>> originalAssertions, std::vector<std::vector<PTRef>> normalizingEqualities) const {
+
+    if (not hasWitness()) { return; }
+    switch (answer) {
+        case VerificationAnswer::SAFE: {
+            return;
+        }
+        case VerificationAnswer::UNSAFE: {
+
+            getInvalidityWitness().alethePrint(out, logic, originalGraph, originalAssertions, normalizingEqualities);
+            return;
+        }
+        default:
+            return;
+    }
+}
+
+void InvalidityWitness::alethePrint(std::ostream & out, Logic & logic, ChcDirectedHyperGraph const & originalGraph,
+                                    std::vector<std::shared_ptr<Term>> originalAssertions, std::vector<std::vector<PTRef>> normalizingEqualities) const {
+
+    auto assertionSize = originalAssertions.size();
+    PrintVisitor printVisitor;
+    SimplifyLocatorVisitor simpVisitor;
+    OperateVisitor opVisitor;
+    SimplifyRuleVisitor simplifyRuleVisitor;
+    TerminalOrAppVisitor terminalOrAppVisitor;
+
+    for (std::size_t i = 1; i <= assertionSize; ++i) {
+        // Printing assumptions
+        out << "(assume h" << i << ' ' << originalAssertions[i-1]->accept(&printVisitor) << '\n';
+    }
+
+    int currAletheStep = assertionSize;
+    auto derivationSize = derivation.size();
+
+    int modusPonensStep;
+
+        for (std::size_t i = 0; i < derivationSize; ++i) {
+            auto const & step = derivation[i];
+            if (not step.premises.empty()) {
+
+                std::vector<std::pair<std::string, std::string>> instPairs = getInstPairs(i, logic, originalGraph, normalizingEqualities[step.clauseId.id]);
+                InstantiateVisitor instVisitor(instPairs);
+                std::shared_ptr<Term> term = originalAssertions[step.clauseId.id];
+                std::shared_ptr<Term> instTerm = term->accept(&instVisitor);
+
+                //Instantiation
+                out << "(step t" << ++currAletheStep << " " << "(cl (or (not (" << term->accept(&printVisitor) << ") " << instTerm->accept(&printVisitor) << "))"
+                    << " :rule forall_inst" << " :args (";
+
+                for (std::pair<std::string, std::string> pair : instPairs){
+                    out << "(:= " << pair.first << " " << pair.second << ")";
+                }
+                out << "))\n";
+
+                out << "(step t" << ++currAletheStep << " " << "(cl (not (" << term->accept(&printVisitor) << ") " << instTerm->accept(&printVisitor) << ")"
+                    << " :rule or :premises (t" << currAletheStep-1 << "))\n";
+
+                out << "(step t" << ++currAletheStep << " " << "(cl " << instTerm->accept(&printVisitor) << ") :rule resolution :premises (h"
+                    << step.clauseId.id+1 << " t" << currAletheStep-1 << "))\n";
+
+                //Simplification
+
+                int instantionStep = currAletheStep;
+
+                while (not instTerm->accept(&simpVisitor)->accept(&terminalOrAppVisitor)){
+                    std::shared_ptr<Term> simplifiedTerm = instTerm->accept(&simpVisitor);
+                    std::string simplification = simplifiedTerm->accept(&opVisitor);
+
+                    out << "(step t" << ++currAletheStep << " " << "(cl (= " << simplifiedTerm->accept(&printVisitor) << " " << simplification
+                        << ")) :rule " << simplifiedTerm->accept(&simplifyRuleVisitor) << "))\n";
+
+                    SimplifyVisitor simplifyVisitor(simplification, simplifiedTerm);
+
+                    instTerm =  instTerm->accept(&simplifyVisitor);
+                    out << "(step t" << ++currAletheStep << " " << "(cl " << instTerm->accept(&printVisitor)
+                        << ") :rule substitution :premises (t" << currAletheStep-1 << " t" << instantionStep << "))\n";
+
+                    instantionStep = currAletheStep;
+                }
+
+                //Modus Ponens
+
+                out << "(step t" << ++currAletheStep << " (cl (not ";
+                for(std::size_t premise : step.premises){
+                    out << logic.printTerm(derivation[premise].derivedFact) << ") ";
+                }
+                out << logic.printTerm(step.derivedFact) << ")) :rule implies :premises (t" << currAletheStep-1 << "))\n";
+
+                int finalImplication = currAletheStep;
+
+                if (i == 1){
+                    out << "(step t" << ++currAletheStep << " (cl true) :rule true)\n";
+                    modusPonensStep = currAletheStep;
+                    out << "(step t" << ++currAletheStep << " (cl " << logic.printTerm(step.derivedFact) << ") :rule resolution :premises (t"
+                        << finalImplication << " t" << modusPonensStep << "))\n";
+                    modusPonensStep = currAletheStep;
+                } else{
+                    out << "(step t" << ++currAletheStep << " (cl " << logic.printTerm(step.derivedFact) << ") :rule resolution :premises (t"
+                        << finalImplication << " t" << modusPonensStep << "))\n";
+                    modusPonensStep = currAletheStep;
+                }
+
+            }
+    }
+
+    out << "(step t" << ++currAletheStep << " (cl (not false)) :rule false)\n";
+    out << "(step t" << ++currAletheStep << " (cl) :rule resolution :premises (t"
+        << currAletheStep-2 << " t" << currAletheStep-1 << "))\n";
+}
+
+std::vector<std::pair<std::string, std::string>> InvalidityWitness::getInstPairs(int it, Logic & logic, const ChcDirectedHyperGraph& originalGraph,
+                                                        std::vector<PTRef> stepNormEq) const {
+    std::vector<PTRef> sourceVariables;
+    std::vector<std::pair<std::string, std::string>> instPairs;
+
+    auto const & step = derivation[it];
+    TermUtils utils(logic);
+
+    if(it != 1) {
+        for (std::size_t premise : step.premises) {
+            auto concreteArgs = utils.predicateArgsInOrder(derivation[premise].derivedFact);
+            auto targetVertex = originalGraph.getEdge(derivation[premise].clauseId).to;
+            PTRef clauseHead = originalGraph.getStateVersion(targetVertex);
+            auto formalArgs = utils.predicateArgsInOrder(clauseHead);
+            assert(step.premises.size() == originalGraph.getEdge(derivation[premise].clauseId).from.size());
+            assert(concreteArgs.size() == formalArgs.size());
+            //Building the pairs
+            for (int m = 0; m < formalArgs.size(); m++) {
+                for (int n = 0; n < stepNormEq.size(); n++) {
+                    if (stepNormEq[n] == formalArgs[m]) {
+                        sourceVariables.push_back(stepNormEq[n-1]);
+                        std::pair<std::string, std::string> pair;
+                        pair.first = logic.printTerm(stepNormEq[n-1]);
+                        pair.second = logic.printTerm(concreteArgs[m]);
+                        instPairs.push_back(pair);
+                    }
+                }
+            }
+        }
+    }
+    //printing target variables instantiation
+    bool redundance = false;
+    auto concreteArgs = utils.predicateArgsInOrder(step.derivedFact);
+    auto targetVertex = originalGraph.getEdge(step.clauseId).to;
+    PTRef clauseHead = originalGraph.getNextStateVersion(targetVertex);
+    auto formalArgs = utils.predicateArgsInOrder(clauseHead);
+    assert(concreteArgs.size() == formalArgs.size());
+
+    //Building the pairs
+    for (int m = 0; m < formalArgs.size(); m++){
+        for (int n = 0; n < stepNormEq.size(); n++) {
+            if (stepNormEq[n] == formalArgs[m]) {
+                for (PTRef variable : sourceVariables){
+                    if (variable == stepNormEq[n-1]){
+                        redundance = true;
+                    }
+                }
+                if (!redundance) {
+                    std::pair<std::string, std::string> pair;
+                    pair.first = logic.printTerm(stepNormEq[n-1]);
+                    pair.second = logic.printTerm(concreteArgs[m]);
+                    instPairs.push_back(pair);
+                } else {
+                    redundance = false;
+                }
+            }
+        }
+    }
+    return instPairs;
 }
 
 InvalidityWitness InvalidityWitness::fromErrorPath(ErrorPath const & errorPath, ChcDirectedGraph const & graph) {
@@ -80,7 +253,7 @@ InvalidityWitness InvalidityWitness::fromErrorPath(ErrorPath const & errorPath, 
     assert(vertexPredicates.size() == edgeIds.size() + 1);
     std::size_t stepCounter = 0;
     // Make the `true` the first step of the derivation
-    derivation.addDerivationStep({.index = stepCounter++, .premises = {}, .derivedFact = logic.getTerm_true(), .clauseId = {static_cast<id_t>(-1)}});
+    derivation.addDerivationStep({.index = stepCounter++, .premises = {},.derivedFact = logic.getTerm_true(), .clauseId = {static_cast<id_t>(-1)}});
     for (std::size_t i = 0; i < edgeIds.size(); ++i) {
         auto id = edgeIds[i];
         DerivationStep step;
@@ -111,6 +284,7 @@ void InvalidityWitness::print(std::ostream & out, Logic & logic) const {
             out << " -> ";
             for (auto index : step.premises) {
                 out << ' ' << index;
+
             }
             out << '\n';
         }

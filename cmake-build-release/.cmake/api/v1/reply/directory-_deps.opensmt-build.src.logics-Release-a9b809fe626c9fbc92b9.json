@@ -1,0 +1,49 @@
+{
+	"backtraceGraph" : 
+	{
+		"commands" : 
+		[
+			"install"
+		],
+		"files" : 
+		[
+			"cmake-build-release/_deps/opensmt-src/src/logics/CMakeLists.txt"
+		],
+		"nodes" : 
+		[
+			{
+				"file" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 26,
+				"parent" : 0
+			}
+		]
+	},
+	"installers" : 
+	[
+		{
+			"backtrace" : 1,
+			"component" : "Unspecified",
+			"destination" : "include/opensmt",
+			"paths" : 
+			[
+				"cmake-build-release/_deps/opensmt-src/src/logics/LogicFactory.h",
+				"cmake-build-release/_deps/opensmt-src/src/logics/Theory.h",
+				"cmake-build-release/_deps/opensmt-src/src/logics/Logic.h",
+				"cmake-build-release/_deps/opensmt-src/src/logics/ArithLogic.h",
+				"cmake-build-release/_deps/opensmt-src/src/logics/CUFLogic.h",
+				"cmake-build-release/_deps/opensmt-src/src/logics/BVLogic.h",
+				"cmake-build-release/_deps/opensmt-src/src/logics/FunctionTools.h"
+			],
+			"type" : "file"
+		}
+	],
+	"paths" : 
+	{
+		"build" : "_deps/opensmt-build/src/logics",
+		"source" : "cmake-build-release/_deps/opensmt-src/src/logics"
+	}
+}

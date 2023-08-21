@@ -8,7 +8,6 @@
 
 std::unique_ptr<ChcDirectedHyperGraph> ChcGraphBuilder::buildGraph(NormalizedChcSystem const & system) {
     std::vector<DirectedHyperEdge> edges;
-
     ChcSystem const & chcSystem = *system.normalizedSystem;
     // Special case to cover initial clauses, we are adding artificial "TRUE" starting predicate
     SymRef init = logic.getSym_true();

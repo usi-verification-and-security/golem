@@ -9,9 +9,10 @@
 
 class Term {
 public:
-    enum terminalType{ VAR, REAL, INT, SORT };
-    virtual std::string string() = 0;
-    virtual std::string stringInst(std::vector<std::vector<std::string>> instPairs) = 0;
+    enum terminalType{ VAR, REAL, INT, SORT, UNDECLARED};
+    virtual std::shared_ptr<Term> accept(class LogicVisitor*) = 0;
+    virtual std::string accept(class StringVisitor*) = 0;
+    virtual bool accept(class BooleanVisitor*) = 0;
 };
 
 class Terminal : public Term {
@@ -19,10 +20,12 @@ class Terminal : public Term {
     terminalType type;
 public:
     Terminal(std::string  val, terminalType t) : val(std::move(val)), type(t) {}
-    std::string string() override { return val;}
-    std::string stringInst(std::vector<std::vector<std::string>> instPairs) override {
-        for (std::vector<std::string> pair : inst)
-    }
+    std::string getVal() { return val;}
+    terminalType getType() {return type;}
+
+    std::shared_ptr<Term> accept(LogicVisitor*) override;
+    std::string accept(StringVisitor*) override;
+    bool accept(BooleanVisitor*) override;
 };
 
 class Op : public Term {
@@ -30,24 +33,12 @@ class Op : public Term {
     std::vector<std::shared_ptr<Term>> args;
 public:
     Op(std::string  opcode, std::vector<std::shared_ptr<Term>> args) : operation(std::move(opcode)), args(std::move(args)) {}
-    std::string string() override {
-        std::stringstream ss;
-        ss << "(" << operation;
-        for (const std::shared_ptr<Term>& arg : args){
-            ss << " " << arg->string();
-        }
-        ss << ")";
-        return ss.str();
-    }
-    std::string stringInst(std::vector<std::vector<std::string>> instPairs) override {
-        std::stringstream ss;
-        ss << "(" << operation;
-        for (const std::shared_ptr<Term>& arg : args){
-            ss << " " << arg->stringInst(instPairs);
-        }
-        ss << ")";
-        return ss.str();
-    }
+    std::string getOp() { return operation;}
+    std::vector<std::shared_ptr<Term>> getArgs() {return args;}
+
+    std::shared_ptr<Term> accept(LogicVisitor*) override;
+    std::string accept(StringVisitor*) override;
+    bool accept(BooleanVisitor*) override;
 };
 
 class App : public Term {
@@ -55,24 +46,12 @@ class App : public Term {
     std::vector<std::shared_ptr<Term>> args;
 public:
     App(std::string  fun, std::vector<std::shared_ptr<Term>> args) : fun(std::move(fun)), args(std::move(args)){}
-    std::string string() override {
-        std::stringstream ss;
-        ss << "(" << fun;
-        for (const std::shared_ptr<Term>& arg : args){
-            ss << " " << arg->string();
-        }
-        ss << ")";
-        return ss.str();
-    }
-    std::string stringInst(std::vector<std::vector<std::string>> instPairs) override {
-        std::stringstream ss;
-        ss << "(" << fun;
-        for (const std::shared_ptr<Term>& arg : args){
-            ss << " " << arg->stringInst(instPairs);
-        }
-        ss << ")";
-        return ss.str();
-    }
+    std::string getFun() {return fun;}
+    std::vector<std::shared_ptr<Term>> getArgs() {return args;}
+
+    std::shared_ptr<Term> accept(LogicVisitor*) override;
+    std::string accept(StringVisitor*) override;
+    bool accept(BooleanVisitor*) override;
 };
 
 class Quant : public Term {
@@ -83,30 +62,99 @@ class Quant : public Term {
 public:
     Quant(std::string quant, std::vector<std::shared_ptr<Term>> vars, std::vector<std::shared_ptr<Term>> sorts, std::shared_ptr<Term> coreTerm) :  quant(std::move(quant)),
           vars(std::move(vars)), sorts(std::move(sorts)), coreTerm(std::move(coreTerm)){}
-    std::string string() override {
-        std::stringstream ss;
-        ss << "(" << quant << "(";
-        for (int i = 0; i < vars.size(); i++){
-            ss << "(" << vars[i]->string() << " " << sorts[i]->string() << ")";
-            if(i+1 != vars.size()){
-                ss << " ";
-            }
-        }
-        ss << ")" << " " << coreTerm->string() << ")";
-        return ss.str();
-    }
-    std::string stringInst(std::vector<std::vector<std::string>> instPairs) override {
-        std::stringstream ss;
-        ss << "(" << quant << "(";
-        for (int i = 0; i < vars.size(); i++){
-            ss << "(" << vars[i]->string() << " " << sorts[i]->string() << ")";
-            if(i+1 != vars.size()){
-                ss << " ";
-            }
-        }
-        ss << ")" << " " << coreTerm->stringInst(instPairs) << ")";
-        return ss.str();
-    }
+    std::string getQuant() {return quant;}
+    std::vector<std::shared_ptr<Term>> getVars() {return vars;}
+    std::vector<std::shared_ptr<Term>> getSorts() {return sorts;}
+    std::shared_ptr<Term> getCoreTerm() {return coreTerm;}
+    std::shared_ptr<Term> accept(LogicVisitor*) override;
+    std::string accept(StringVisitor*) override;
+    bool accept(BooleanVisitor*) override;
+};
+
+class LogicVisitor {
+public:
+    virtual std::shared_ptr<Term> visit(Terminal*) = 0;
+    virtual std::shared_ptr<Term> visit(Quant*) = 0;
+    virtual std::shared_ptr<Term> visit(Op*) = 0;
+    virtual std::shared_ptr<Term> visit(App*) = 0;
+};
+
+class InstantiateVisitor : public LogicVisitor{
+    std::vector<std::pair<std::string, std::string>> instPairs;
+public:
+    explicit InstantiateVisitor (std::vector<std::pair<std::string, std::string>> instPairs) : instPairs(std::move(instPairs)) {}
+
+    std::shared_ptr<Term> visit(Terminal*) override;
+    std::shared_ptr<Term> visit(Quant*) override;
+    std::shared_ptr<Term> visit(Op*) override;
+    std::shared_ptr<Term> visit(App*) override;
+};
+
+class SimplifyLocatorVisitor : public LogicVisitor{
+public:
+    std::shared_ptr<Term> visit(Terminal*) override;
+    std::shared_ptr<Term> visit(Quant*) override;
+    std::shared_ptr<Term> visit(Op*) override;
+    std::shared_ptr<Term> visit(App*) override;
+};
+
+class SimplifyVisitor : public LogicVisitor{
+    std::string simplification;
+    std::shared_ptr<Term> operation;
+public:
+    SimplifyVisitor(std::string s, std::shared_ptr<Term> o) : simplification(std::move(s)), operation(std::move(o)) {}
+    std::shared_ptr<Term> visit(Terminal*) override;
+    std::shared_ptr<Term> visit(Quant*) override;
+    std::shared_ptr<Term> visit(Op*) override;
+    std::shared_ptr<Term> visit(App*) override;
+};
+
+class StringVisitor {
+public:
+    virtual std::string visit(Terminal*) = 0;
+    virtual std::string visit(Quant*) = 0;
+    virtual std::string visit(Op*) = 0;
+    virtual std::string visit(App*) = 0;
+};
+
+class PrintVisitor : public StringVisitor {
+public:
+    std::string visit(Terminal*) override;
+    std::string visit(Quant*) override;
+    std::string visit(Op*) override;
+    std::string visit(App*) override;
+};
+
+class OperateVisitor : public StringVisitor {
+public:
+    std::string visit(Terminal*) override;
+    std::string visit(Quant*) override;
+    std::string visit(Op*) override;
+    std::string visit(App*) override;
+};
+
+class SimplifyRuleVisitor : public StringVisitor {
+public:
+    std::string visit(Terminal*) override;
+    std::string visit(Quant*) override;
+    std::string visit(Op*) override;
+    std::string visit(App*) override;
+};
+
+class BooleanVisitor {
+public:
+    virtual bool visit(Terminal*) = 0;
+    virtual bool visit(Quant*) = 0;
+    virtual bool visit(Op*) = 0;
+    virtual bool visit(App*) = 0;
+};
+
+class TerminalOrAppVisitor : public BooleanVisitor {
+public:
+    bool visit(Terminal*) override;
+    bool visit(Quant*) override;
+    bool visit(Op*) override;
+    bool visit(App*) override;
 };
 
 #endif // TERM_H

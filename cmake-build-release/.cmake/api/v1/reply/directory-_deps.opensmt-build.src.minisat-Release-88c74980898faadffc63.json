@@ -1,0 +1,50 @@
+{
+	"backtraceGraph" : 
+	{
+		"commands" : 
+		[
+			"install"
+		],
+		"files" : 
+		[
+			"cmake-build-release/_deps/opensmt-src/src/minisat/CMakeLists.txt"
+		],
+		"nodes" : 
+		[
+			{
+				"file" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 9,
+				"parent" : 0
+			}
+		]
+	},
+	"installers" : 
+	[
+		{
+			"backtrace" : 1,
+			"component" : "Unspecified",
+			"destination" : "include/opensmt",
+			"paths" : 
+			[
+				"cmake-build-release/_deps/opensmt-src/src/minisat/mtl/Heap.h",
+				"cmake-build-release/_deps/opensmt-src/src/minisat/mtl/Map.h",
+				"cmake-build-release/_deps/opensmt-src/src/minisat/mtl/Vec.h",
+				"cmake-build-release/_deps/opensmt-src/src/minisat/mtl/Alg.h",
+				"cmake-build-release/_deps/opensmt-src/src/minisat/mtl/Sort.h",
+				"cmake-build-release/_deps/opensmt-src/src/minisat/mtl/Queue.h",
+				"cmake-build-release/_deps/opensmt-src/src/minisat/core/SolverTypes.h",
+				"cmake-build-release/_deps/opensmt-src/src/minisat/mtl/MapWithKeys.h"
+			],
+			"type" : "file"
+		}
+	],
+	"paths" : 
+	{
+		"build" : "_deps/opensmt-build/src/minisat",
+		"source" : "cmake-build-release/_deps/opensmt-src/src/minisat"
+	}
+}

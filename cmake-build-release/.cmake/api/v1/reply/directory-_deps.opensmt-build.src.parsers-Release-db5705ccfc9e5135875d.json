@@ -1,0 +1,14 @@
+{
+	"backtraceGraph" : 
+	{
+		"commands" : [],
+		"files" : [],
+		"nodes" : []
+	},
+	"installers" : [],
+	"paths" : 
+	{
+		"build" : "_deps/opensmt-build/src/parsers",
+		"source" : "cmake-build-release/_deps/opensmt-src/src/parsers"
+	}
+}
