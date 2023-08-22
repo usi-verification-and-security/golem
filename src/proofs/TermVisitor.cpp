@@ -249,7 +249,7 @@ std::shared_ptr<Term> SimplifyLocatorVisitor::visit(Op* term){
         }
     }
 
-    if (simplification && op != "=>"){
+    if (simplification and op != "=>"){
         std::vector<std::shared_ptr<Term>> newArgs;
         for (std::shared_ptr<Term> arg : args){
            std::shared_ptr<Term> newArg = arg->accept(this);
@@ -309,6 +309,40 @@ std::shared_ptr<Term> SimplifyVisitor::visit(Quant* term){
     return std::make_shared<Quant>(term->getQuant(), term->getVars(), term->getSorts(), term->getCoreTerm());
 }
 
+std::shared_ptr<Term> GetPrimaryBranchVisitor::visit(Terminal* term){
+    return std::make_shared<Terminal>(term->getVal(), term->getType());
+}
+
+std::shared_ptr<Term> GetPrimaryBranchVisitor::visit(Op* term){
+    auto args = term->getArgs();
+    std::vector<std::shared_ptr<Term>> newArgs;
+    auto op = term->getOp();
+
+    if (op == "=>"){
+        return args[0]->accept(this);
+    }
+
+    std::vector<std::pair<std::string, std::string>> emptyPairs;
+    InstantiateVisitor instantiateVisitor(emptyPairs);
+    PrintVisitor printVisitor;
+
+    for (auto arg : args) {
+        if (arg->accept(&printVisitor).find(operation->accept(&printVisitor)) != std::string::npos ){
+            return arg->accept(&instantiateVisitor);
+        }
+    }
+
+    return std::make_shared<Terminal>("No Primary Branch Found", Term::UNDECLARED);
+}
+
+std::shared_ptr<Term> GetPrimaryBranchVisitor::visit(App* term){
+    return std::make_shared<App>(term->getFun(), term->getArgs());
+}
+
+std::shared_ptr<Term> GetPrimaryBranchVisitor::visit(Quant* term){
+    return std::make_shared<Quant>(term->getQuant(), term->getVars(), term->getSorts(), term->getCoreTerm());
+}
+
 bool TerminalOrAppVisitor::visit(Terminal* term){
     return true;
 }
@@ -341,6 +375,35 @@ bool RequiresCongVisitor::visit(Op* term){
 }
 
 bool RequiresCongVisitor::visit(Quant* term){
+    return false;
+}
+
+bool IsPrimaryBranchVisitor::visit(Terminal* term){
+    return false;
+}
+
+bool IsPrimaryBranchVisitor::visit(Op* term){
+    PrintVisitor printVisitor;
+    auto args = term->getArgs();
+
+    if (term->getOp() == "=>"){
+        return args[0]->accept(this);
+    }
+
+    for (auto arg : args) {
+        if (branch->accept(&printVisitor) == arg->accept(&printVisitor)){
+           return true;
+        }
+    }
+
+    return false;
+}
+
+bool IsPrimaryBranchVisitor::visit(App* term){
+    return false;
+}
+
+bool IsPrimaryBranchVisitor::visit(Quant* term){
     return false;
 }
 

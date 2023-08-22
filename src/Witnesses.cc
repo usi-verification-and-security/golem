@@ -65,213 +65,208 @@ void InvalidityWitness::alethePrint(std::ostream & out, Logic & logic, ChcDirect
 
     int modusPonensStep;
 
-        for (std::size_t i = 0; i < derivationSize; ++i) {
-            auto const & step = derivation[i];
-            if (not step.premises.empty()) {
+    for (std::size_t i = 0; i < derivationSize; ++i) {
+        auto const & step = derivation[i];
+        if (not step.premises.empty()) {
 
-                std::vector<std::pair<std::string, std::string>> instPairs = getInstPairs(i, logic, originalGraph, normalizingEqualities[step.clauseId.id]);
-                InstantiateVisitor instVisitor(instPairs);
-                std::shared_ptr<Term> term = originalAssertions[step.clauseId.id];
-                std::shared_ptr<Term> instTerm = term->accept(&instVisitor);
+            std::vector<std::pair<std::string, std::string>> instPairs = getInstPairs(i, logic, originalGraph, normalizingEqualities[step.clauseId.id]);
+            InstantiateVisitor instVisitor(instPairs);
+            std::shared_ptr<Term> term = originalAssertions[step.clauseId.id];
+            std::shared_ptr<Term> instTerm = term->accept(&instVisitor);
 
-                //Instantiation
-                out << "(step t" << ++currAletheStep << " " << "(cl (or (not " << term->accept(&printVisitor) << ") " << instTerm->accept(&printVisitor) << "))"
-                    << " :rule forall_inst" << " :args (";
+            //Instantiation
+            out << "(step t" << ++currAletheStep << " " << "(cl (or (not " << term->accept(&printVisitor) << ") " << instTerm->accept(&printVisitor) << "))"
+                << " :rule forall_inst" << " :args (";
 
-                for (std::pair<std::string, std::string> pair : instPairs){
-                    out << "(:= " << pair.first << " " << pair.second << ")";
-                }
-                out << "))\n";
+            for (std::pair<std::string, std::string> pair : instPairs){
+                out << "(:= " << pair.first << " " << pair.second << ")";
+            }
+            out << "))\n";
 
-                out << "(step t" << ++currAletheStep << " " << "(cl (not " << term->accept(&printVisitor) << ") " << instTerm->accept(&printVisitor) << ")"
-                    << " :rule or :premises (t" << currAletheStep-1 << "))\n";
+            out << "(step t" << ++currAletheStep << " " << "(cl (not " << term->accept(&printVisitor) << ") " << instTerm->accept(&printVisitor) << ")"
+                << " :rule or :premises (t" << currAletheStep-1 << "))\n";
 
-                out << "(step t" << ++currAletheStep << " " << "(cl " << instTerm->accept(&printVisitor) << ") :rule resolution :premises (h"
-                    << step.clauseId.id+1 << " t" << currAletheStep-1 << "))\n";
+            out << "(step t" << ++currAletheStep << " " << "(cl " << instTerm->accept(&printVisitor) << ") :rule resolution :premises (h"
+                << step.clauseId.id+1 << " t" << currAletheStep-1 << "))\n";
 
-                //Simplification
+            //Simplification
 
-                std::shared_ptr<Term> impFirstArg = instTerm->accept(&impFirstTermVisitor);
+            std::shared_ptr<Term> impFirstArg = instTerm->accept(&impFirstTermVisitor);
 
-                out << "(step t" << ++currAletheStep << " " << "(cl (not " << impFirstArg->accept(&printVisitor) << ") " << logic.printTerm(step.derivedFact) << ") :rule implies :premises (t"
-                    << currAletheStep-1 << "))\n";
+            out << "(step t" << ++currAletheStep << " " << "(cl (not " << impFirstArg->accept(&printVisitor) << ") " << logic.printTerm(step.derivedFact) << ") :rule implies :premises (t"
+                << currAletheStep-1 << "))\n";
 
-                int impliesStep = currAletheStep;
-                int modusPonensStep;
+            int impliesStep = currAletheStep;
+            int modusPonensStep;
 
-                if (not impFirstArg->accept(&requiresCongVisitor)) {
+            // Check if the first argument of implication has an operator like "and" "or" "=>" which require additional steps
 
-                    while (not instTerm->accept(&simpVisitor)->accept(&terminalOrAppVisitor)){
-                        std::shared_ptr<Term> simplifiedTerm = instTerm->accept(&simpVisitor);
-                        std::string simplification = simplifiedTerm->accept(&opVisitor);
-
-                        out << "(step t" << ++currAletheStep << " " << "(cl (= " << simplifiedTerm->accept(&printVisitor) << " " << simplification
-                            << ")) :rule " << simplifiedTerm->accept(&simplifyRuleVisitor) << ")\n";
-
-                        out << "(step t" << ++currAletheStep << " " << "(cl " << simplifiedTerm->accept(&printVisitor) << " (not " << simplification
-                            << ")) :rule equiv2 :premises (t" << currAletheStep-1 << "))\n";
-
-                        if (simplification == "true"){
-                            out << "(step t" << ++currAletheStep << " " << "(cl true) :rule true)\n";
-
-                            out << "(step t" << ++currAletheStep << " " << "(cl " << simplifiedTerm->accept(&printVisitor) << ") :rule resolution :premises (t"
-                                << currAletheStep-1 << " t" << currAletheStep-2 << "))\n";
-
-                            out << "(step t" << ++currAletheStep << " " << "(cl " << logic.printTerm(step.derivedFact) << ") :rule resolution :premises (t"
-                                << impliesStep << " t" << currAletheStep-1 << "))\n";
-
-                            modusPonensStep = currAletheStep;
-                        }
-
-                        SimplifyVisitor simplifyVisitor(simplification, simplifiedTerm);
-
-                        instTerm =  instTerm->accept(&simplifyVisitor);
-
-                    }
-
-                } else {
-
-                    std::shared_ptr<Term> finalSimplifiedTerm;
-                    std::string finalSimplification;
-                    std::string finalRule;
-
-                    std::vector<int> simpSteps;
-
-                    while (not instTerm->accept(&simpVisitor)->accept(&terminalOrAppVisitor)) {
-
-                        std::shared_ptr<Term> simplifiedTerm = instTerm->accept(&simpVisitor);
-                        std::string simplification = simplifiedTerm->accept(&opVisitor);
-                        std::string rule = simplifiedTerm->accept(&simplifyRuleVisitor);
-
-                        if (rule != "and_simplify"){
-
-                            out << "(step t" << ++currAletheStep << " "
-                                << "(cl (= " << simplification << " " << simplifiedTerm->accept(&printVisitor)
-                                << ")) :rule " << rule << ")\n";
-
-                            SimplifyVisitor simplifyVisitor(simplification, simplifiedTerm);
-                            instTerm = instTerm->accept(&simplifyVisitor);
-
-                            if (rule != "and_simplify" and rule != "equiv_simplify" and rule != "or_simplify" and rule != "comp_simplify"){
-
-                                std::shared_ptr<Term> nextSimplifiedTerm = instTerm->accept(&simpVisitor);
-                                std::string nextSimplification = nextSimplifiedTerm->accept(&opVisitor);
-
-                                out << "(step t" << ++currAletheStep << " "
-                                    << "(cl " << nextSimplifiedTerm->accept(&printVisitor) << ") :rule refl)\n";
-
-                                out << "(step t" << ++currAletheStep << " "
-                                    << "(cl (= (= " << simplification << " " << simplifiedTerm->accept(&printVisitor) << ") " << nextSimplifiedTerm->accept(&printVisitor)
-                                    << ")) :rule cong :premises (t" << currAletheStep-2 << " t" << currAletheStep -1<< "))\n";
-
-                                out << "(step t" << ++currAletheStep << " "
-                                    << "(cl (= " << nextSimplifiedTerm->accept(&printVisitor) << " " << nextSimplification
-                                    << ")) :rule " << nextSimplifiedTerm->accept(&simplifyRuleVisitor) << ")\n";
-
-                                out << "(step t" << ++currAletheStep << " "
-                                    << "(cl (= (= " << simplification << " " << simplifiedTerm->accept(&printVisitor)
-                                    << ") " << nextSimplification << ")) :rule trans :premises (t" << currAletheStep-2 << " t" << currAletheStep-1 << "))\n";
-
-                                simpSteps.push_back(currAletheStep);
-
-                                SimplifyVisitor newSimplifyVisitor(nextSimplification, nextSimplifiedTerm);
-                                instTerm = instTerm->accept(&newSimplifyVisitor);
-                            } else {
-                                simpSteps.push_back(currAletheStep);
-                            }
-                        } else {
-                            finalRule = rule;
-                            finalSimplification = simplification;
-                            finalSimplifiedTerm = simplifiedTerm;
-
-                            SimplifyVisitor simplifyVisitor(simplification, simplifiedTerm);
-                            instTerm = instTerm->accept(&simplifyVisitor);
-                        }
-                    }
-
-                    out << "(step t" << ++currAletheStep << " "
-                        << "(cl (= " << impFirstArg->accept(&printVisitor) << " "
-                        << finalSimplifiedTerm->accept(&printVisitor) << ")) :rule cong :premises (";
-
-                    for (int i = 0; i < simpSteps.size(); i++) {
-                        out << "t" << simpSteps[i];
-                        if (i != simpSteps.size()-1) {
-                            out << " ";
-                        }
-                    }
-
-                    out << "))\n";
-
-                    out << "(step t" << ++currAletheStep << " "
-                        << "(cl (= " << finalSimplifiedTerm->accept(&printVisitor) << " " << finalSimplification
-                        << ")) :rule " << finalRule << ")\n";
-
-                    out << "(step t" << ++currAletheStep << " "
-                        << "(cl (= " << impFirstArg->accept(&printVisitor) << " "
-                        << finalSimplification << ")) :rule trans :premises (t" << currAletheStep-2 << " t" << currAletheStep-1 << "))\n";
-
-                    out << "(step t" << ++currAletheStep << " "
-                        << "(cl " << impFirstArg->accept(&printVisitor) << " (not "
-                        << finalSimplification << ")) :rule equiv2 :premises (t" << currAletheStep-1 << "))\n";
-
-                    out << "(step t" << ++currAletheStep << " "
-                        << "(cl " << impFirstArg->accept(&printVisitor)
-                        << ") :rule resolution :premises (t" << currAletheStep-1 << " t" << modusPonensStep << "))\n";
-
-                    out << "(step t" << ++currAletheStep << " " << "(cl " << logic.printTerm(step.derivedFact) << ") :rule resolution :premises (t"
-                        << impliesStep << " t" << currAletheStep-1 << "))\n";
-
-                    modusPonensStep = currAletheStep;
-
-                }
-
-                /*
-                //Simplification
-
-                int instantionStep = currAletheStep;
+            if (not impFirstArg->accept(&requiresCongVisitor)) {
 
                 while (not instTerm->accept(&simpVisitor)->accept(&terminalOrAppVisitor)){
-                    std::shared_ptr<Term> simplifiedTerm = instTerm->accept(&simpVisitor);
-                    std::string simplification = simplifiedTerm->accept(&opVisitor);
+                    std::shared_ptr<Term> termToSimplify = instTerm->accept(&simpVisitor);
+                    std::string simplification = termToSimplify->accept(&opVisitor);
 
-                    out << "(step t" << ++currAletheStep << " " << "(cl (= " << simplifiedTerm->accept(&printVisitor) << " " << simplification
-                        << ")) :rule " << simplifiedTerm->accept(&simplifyRuleVisitor) << "))\n";
+                    out << "(step t" << ++currAletheStep << " " << "(cl (= " << termToSimplify->accept(&printVisitor) << " " << simplification
+                        << ")) :rule " << termToSimplify->accept(&simplifyRuleVisitor) << ")\n";
 
-                    SimplifyVisitor simplifyVisitor(simplification, simplifiedTerm);
+                    out << "(step t" << ++currAletheStep << " " << "(cl " << termToSimplify->accept(&printVisitor) << " (not " << simplification
+                        << ")) :rule equiv2 :premises (t" << currAletheStep-1 << "))\n";
 
+                    if (simplification == "true"){
+                        out << "(step t" << ++currAletheStep << " " << "(cl true) :rule true)\n";
+
+                        out << "(step t" << ++currAletheStep << " " << "(cl " << termToSimplify->accept(&printVisitor) << ") :rule resolution :premises (t"
+                            << currAletheStep-1 << " t" << currAletheStep-2 << "))\n";
+
+                        out << "(step t" << ++currAletheStep << " " << "(cl " << logic.printTerm(step.derivedFact) << ") :rule resolution :premises (t"
+                            << impliesStep << " t" << currAletheStep-1 << "))\n";
+
+                        modusPonensStep = currAletheStep;
+                    }
+
+                    SimplifyVisitor simplifyVisitor(simplification, termToSimplify);
                     instTerm =  instTerm->accept(&simplifyVisitor);
-                    out << "(step t" << ++currAletheStep << " " << "(cl " << instTerm->accept(&printVisitor)
-                        << ") :rule substitution :premises (t" << currAletheStep-1 << " t" << instantionStep << "))\n";
 
-                    instantionStep = currAletheStep;
                 }
 
-                //Modus Ponens
+            } else {
 
-                out << "(step t" << ++currAletheStep << " (cl (not ";
-                for(std::size_t premise : step.premises){
-                    out << logic.printTerm(derivation[premise].derivedFact) << ") ";
+                std::shared_ptr<Term> finalTermToSimplify;
+                std::string finalSimplification;
+                std::string finalRule;
+
+                std::vector<int> simpSteps; //Simplification steps for final congruence
+
+                //While every possible operation hasn't been simplified
+
+                while (not instTerm->accept(&simpVisitor)->accept(&terminalOrAppVisitor)) {
+
+                    std::shared_ptr<Term> termToSimplify = instTerm->accept(&simpVisitor);  //Locating possible simplification
+                    std::string simplification = termToSimplify->accept(&opVisitor);    //Calculating simplification
+                    std::string rule = termToSimplify->accept(&simplifyRuleVisitor);    //Getting rule for simplification
+
+                    IsPrimaryBranchVisitor isPrimaryBranchVisitor(termToSimplify);  //Checking if the current term is a primary branch
+                    bool isPrimaryBranch = instTerm->accept(&isPrimaryBranchVisitor);
+
+                    std::shared_ptr<Term> primaryBranch;
+                    std::shared_ptr<Term> primaryBranchSimplified;
+
+                    if (not isPrimaryBranch) {
+                        GetPrimaryBranchVisitor getPrimaryBranchVisitor(termToSimplify);
+                        primaryBranch = instTerm->accept(&getPrimaryBranchVisitor);   //Getting the primary branch of the current term for simplification
+                        SimplifyVisitor simplifyPrimaryBranchVisitor(simplification, termToSimplify);
+                        primaryBranchSimplified = primaryBranch->accept(&simplifyPrimaryBranchVisitor);   //Simplifying said primary branch
+                    }
+
+                    SimplifyVisitor simplifyVisitor(simplification, termToSimplify);    //Simplifying said the entire tree
+                    instTerm = instTerm->accept(&simplifyVisitor);
+
+                    //If the simplified tree has possible simplification
+                    if (not instTerm->accept(&simpVisitor)->accept(&terminalOrAppVisitor)){
+
+                        out << "(step t" << ++currAletheStep << " "
+                            << "(cl (= " << simplification << " " << termToSimplify->accept(&printVisitor)
+                            << ")) :rule " << rule << ")\n";
+
+                        if (isPrimaryBranch){
+                            simpSteps.push_back(currAletheStep);
+                        }
+
+                        int depth = 0;
+
+                        while (not isPrimaryBranch){
+
+                            termToSimplify = instTerm->accept(&simpVisitor);
+                            simplification = termToSimplify->accept(&opVisitor);
+                            rule = termToSimplify->accept(&simplifyRuleVisitor);
+
+                            if (depth == 0) {
+                                out << "(step t" << ++currAletheStep << " "
+                                    << "(cl (= " << primaryBranch->accept(&printVisitor) << " "
+                                    << primaryBranchSimplified->accept(&printVisitor) << ")) :rule cong :premises (t" << currAletheStep-1 << "))\n";
+                                depth++;
+                            } else {
+                                out << "(step t" << ++currAletheStep << " "
+                                    << "(cl (= " << primaryBranch->accept(&printVisitor) << " "
+                                    << primaryBranchSimplified->accept(&printVisitor) << ")) :rule trans :premises (t" << currAletheStep-3 << " t" << currAletheStep-1 << "))\n";
+                            }
+
+                            out << "(step t" << ++currAletheStep << " "
+                                << "(cl (= " << simplification << " " << termToSimplify->accept(&printVisitor)
+                                << ")) :rule " << rule << ")\n";
+
+                            if (simplification != "true"){
+                                SimplifyVisitor newSimplifyPrimaryBranchVisitor(simplification, termToSimplify);
+                                std::shared_ptr<Term> newPrimaryBranchSimplified = primaryBranchSimplified->accept(&newSimplifyPrimaryBranchVisitor);
+
+                                out << "(step t" << ++currAletheStep << " "
+                                    << "(cl (= " << primaryBranchSimplified->accept(&printVisitor) << " "
+                                    << newPrimaryBranchSimplified->accept(&printVisitor) << ")) :rule cong :premises (t" << currAletheStep-1 << "))\n";
+
+                                primaryBranchSimplified = newPrimaryBranchSimplified;
+
+                            } else {
+                                out << "(step t" << ++currAletheStep << " "
+                                    << "(cl (= " << primaryBranch->accept(&printVisitor) << " "
+                                    << simplification << ")) :rule trans :premises (t" << currAletheStep-1 << " t" << currAletheStep-2 << "))\n";
+                            }
+
+                            simpSteps.push_back(currAletheStep);
+
+                            IsPrimaryBranchVisitor newIsPrimaryBranchVisitor(termToSimplify);
+                            isPrimaryBranch = instTerm->accept(&newIsPrimaryBranchVisitor);
+
+                            SimplifyVisitor newSimplifyVisitor(simplification, termToSimplify);
+                            instTerm = instTerm->accept(&newSimplifyVisitor);
+
+                        }
+
+                    } else {
+
+                        finalRule = rule;
+                        finalSimplification = simplification;
+                        finalTermToSimplify = termToSimplify;
+                    }
                 }
-                out << logic.printTerm(step.derivedFact) << ")) :rule implies :premises (t" << currAletheStep-1 << "))\n";
 
-                int finalImplication = currAletheStep;
+                out << "(step t" << ++currAletheStep << " "
+                    << "(cl (= " << impFirstArg->accept(&printVisitor) << " "
+                    << finalTermToSimplify->accept(&printVisitor) << ")) :rule cong :premises (";
 
-                if (i == 1){
-                    out << "(step t" << ++currAletheStep << " (cl true) :rule true)\n";
-                    modusPonensStep = currAletheStep;
-                    out << "(step t" << ++currAletheStep << " (cl " << logic.printTerm(step.derivedFact) << ") :rule resolution :premises (t"
-                        << finalImplication << " t" << modusPonensStep << "))\n";
-                    modusPonensStep = currAletheStep;
-                } else{
-                    out << "(step t" << ++currAletheStep << " (cl " << logic.printTerm(step.derivedFact) << ") :rule resolution :premises (t"
-                        << finalImplication << " t" << modusPonensStep << "))\n";
-                    modusPonensStep = currAletheStep;
+                for (int i = 0; i < simpSteps.size(); i++) {
+                    out << "t" << simpSteps[i];
+                    if (i != simpSteps.size()-1) {
+                        out << " ";
+                    }
                 }
-                 */
+
+                out << "))\n";
+
+                out << "(step t" << ++currAletheStep << " "
+                    << "(cl (= " << finalTermToSimplify->accept(&printVisitor) << " " << finalSimplification
+                    << ")) :rule " << finalRule << ")\n";
+
+                out << "(step t" << ++currAletheStep << " "
+                    << "(cl (= " << impFirstArg->accept(&printVisitor) << " "
+                    << finalSimplification << ")) :rule trans :premises (t" << currAletheStep-2 << " t" << currAletheStep-1 << "))\n";
+
+                out << "(step t" << ++currAletheStep << " "
+                    << "(cl " << impFirstArg->accept(&printVisitor) << " (not "
+                    << finalSimplification << ")) :rule equiv2 :premises (t" << currAletheStep-1 << "))\n";
+
+                out << "(step t" << ++currAletheStep << " "
+                    << "(cl " << impFirstArg->accept(&printVisitor)
+                    << ") :rule resolution :premises (t" << currAletheStep-1 << " t" << modusPonensStep << "))\n";
+
+                out << "(step t" << ++currAletheStep << " " << "(cl " << logic.printTerm(step.derivedFact) << ") :rule resolution :premises (t"
+                    << impliesStep << " t" << currAletheStep-1 << "))\n";
+
+                modusPonensStep = currAletheStep;
 
             }
+        }
     }
-
     out << "(step t" << ++currAletheStep << " (cl (not false)) :rule false)\n";
     out << "(step t" << ++currAletheStep << " (cl) :rule resolution :premises (t"
         << currAletheStep-2 << " t" << currAletheStep-1 << "))\n";

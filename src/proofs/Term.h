@@ -98,7 +98,7 @@ public:
     std::shared_ptr<Term> visit(App*) override;
 };
 
-class SimplifyVisitor : public LogicVisitor{
+class SimplifyVisitor : public LogicVisitor {
     std::string simplification;
     std::shared_ptr<Term> operation;
 public:
@@ -111,6 +111,16 @@ public:
 
 class ImpFirstTermVisitor : public LogicVisitor {
 public:
+    std::shared_ptr<Term> visit(Terminal*) override;
+    std::shared_ptr<Term> visit(Quant*) override;
+    std::shared_ptr<Term> visit(Op*) override;
+    std::shared_ptr<Term> visit(App*) override;
+};
+
+class GetPrimaryBranchVisitor : public LogicVisitor {
+    std::shared_ptr<Term> operation;
+public:
+    GetPrimaryBranchVisitor(std::shared_ptr<Term> o) : operation(std::move(o)) {}
     std::shared_ptr<Term> visit(Terminal*) override;
     std::shared_ptr<Term> visit(Quant*) override;
     std::shared_ptr<Term> visit(Op*) override;
@@ -167,6 +177,16 @@ public:
 
 class RequiresCongVisitor : public BooleanVisitor {
 public:
+    bool visit(Terminal*) override;
+    bool visit(Quant*) override;
+    bool visit(Op*) override;
+    bool visit(App*) override;
+};
+
+class IsPrimaryBranchVisitor : public BooleanVisitor {
+    std::shared_ptr<Term> branch;
+public:
+    explicit IsPrimaryBranchVisitor(std::shared_ptr<Term> b) : branch(std::move(b)) {}
     bool visit(Terminal*) override;
     bool visit(Quant*) override;
     bool visit(Op*) override;
