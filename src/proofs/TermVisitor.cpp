@@ -119,7 +119,7 @@ std::string OperateVisitor::visit(Op*term){
            return "false";
         }
     }else if (op == "and"){
-        int trues;
+        int trues = 0;
         std::string fun;
         for (auto arg : args){
            if (arg->accept(&visitor) == "false"){
