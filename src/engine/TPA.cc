@@ -719,7 +719,8 @@ TPASplit::QueryResult TPASplit::reachabilityQueryLessThan(PTRef from, PTRef to, 
                     result.result = ReachabilityResult::REACHABLE;
                     // TODO: simplify to refine only one step of exact relation (which is just Tr)
                     result.refinedTarget = refineTwoStepTarget(
-                        from, logic.mkAnd(previousLessThanTransition, translatedExactTransition), goal, *model);
+                        from, logic.mkAnd({previousLessThanTransition, translatedExactTransition,
+                                          getNextVersion(logic.mkAnd(leftInvariants)), logic.mkAnd(rightInvariants)}), goal, *model);
                     result.steps = 1;
                     TRACE(3, "Less-than: Truly reachable states are " << result.refinedTarget.x)
                     return result;
@@ -1331,8 +1332,8 @@ TPABasic::QueryResult TPABasic::reachabilityQuery(PTRef from, PTRef to, unsigned
         switch (res) {
             case ReachabilityResult::REACHABLE: {
                 TRACE(3, "Top level query was reachable")
-                PTRef previousTransition = getLevelTransition(power);
-                PTRef translatedPreviousTransition = getNextVersion(previousTransition);
+                PTRef previousTransition = logic.mkAnd(getLevelTransition(power), logic.mkAnd(rightInvariants));
+                PTRef translatedPreviousTransition = logic.mkAnd(getNextVersion(previousTransition), getNextVersion(logic.mkAnd(leftInvariants)));
                 auto model = solver->lastQueryModel();
                 if (power == 0) { // Base case, <=2 steps of the exact transition relation have been used
                     result.result = ReachabilityResult::REACHABLE;
@@ -1342,7 +1343,8 @@ TPABasic::QueryResult TPABasic::reachabilityQuery(PTRef from, PTRef to, unsigned
                         (not firstStepTaken or model->evaluate(transition) == logic.getTerm_true()) and
                         (not secondStepTaken or model->evaluate(getNextVersion(transition)) == logic.getTerm_true()));
                     result.refinedTarget = refineTwoStepTarget(
-                        from, logic.mkAnd(previousTransition, translatedPreviousTransition), goal, *model);
+                        from, logic.mkAnd({previousTransition, translatedPreviousTransition,
+                                           getNextVersion(logic.mkAnd(leftInvariants)), logic.mkAnd(rightInvariants)}), goal, *model);
                     result.steps = firstStepTaken + secondStepTaken;
                     // MB: Refined steps are computed from the whole formula representing 0-2 steps.
                     //     It might be possible that the step count is not correct ?!
