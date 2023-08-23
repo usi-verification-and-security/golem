@@ -1,0 +1,591 @@
+{
+	"artifacts" : 
+	[
+		{
+			"path" : "src/CMakeFiles/golem_lib.dir/./proofs/TermVisitor.cpp.o"
+		},
+		{
+			"path" : "src/CMakeFiles/golem_lib.dir/./ChcSystem.cc.o"
+		},
+		{
+			"path" : "src/CMakeFiles/golem_lib.dir/./ChcInterpreter.cc.o"
+		},
+		{
+			"path" : "src/CMakeFiles/golem_lib.dir/./engine/Bmc.cc.o"
+		},
+		{
+			"path" : "src/CMakeFiles/golem_lib.dir/./engine/Common.cc.o"
+		},
+		{
+			"path" : "src/CMakeFiles/golem_lib.dir/./engine/Kind.cc.o"
+		},
+		{
+			"path" : "src/CMakeFiles/golem_lib.dir/./engine/Lawi.cc.o"
+		},
+		{
+			"path" : "src/CMakeFiles/golem_lib.dir/./engine/Spacer.cc.o"
+		},
+		{
+			"path" : "src/CMakeFiles/golem_lib.dir/./engine/TPA.cc.o"
+		},
+		{
+			"path" : "src/CMakeFiles/golem_lib.dir/./engine/IMC.cc.o"
+		},
+		{
+			"path" : "src/CMakeFiles/golem_lib.dir/./TransitionSystem.cc.o"
+		},
+		{
+			"path" : "src/CMakeFiles/golem_lib.dir/./Options.cc.o"
+		},
+		{
+			"path" : "src/CMakeFiles/golem_lib.dir/./TermUtils.cc.o"
+		},
+		{
+			"path" : "src/CMakeFiles/golem_lib.dir/./TransformationUtils.cc.o"
+		},
+		{
+			"path" : "src/CMakeFiles/golem_lib.dir/./Validator.cc.o"
+		},
+		{
+			"path" : "src/CMakeFiles/golem_lib.dir/./Normalizer.cc.o"
+		},
+		{
+			"path" : "src/CMakeFiles/golem_lib.dir/./Witnesses.cc.o"
+		},
+		{
+			"path" : "src/CMakeFiles/golem_lib.dir/./ModelBasedProjection.cc.o"
+		},
+		{
+			"path" : "src/CMakeFiles/golem_lib.dir/./QuantifierElimination.cc.o"
+		},
+		{
+			"path" : "src/CMakeFiles/golem_lib.dir/./graph/ChcGraph.cc.o"
+		},
+		{
+			"path" : "src/CMakeFiles/golem_lib.dir/./graph/ChcGraphBuilder.cc.o"
+		},
+		{
+			"path" : "src/CMakeFiles/golem_lib.dir/./transformers/CommonUtils.cc.o"
+		},
+		{
+			"path" : "src/CMakeFiles/golem_lib.dir/./transformers/SimpleChainSummarizer.cc.o"
+		},
+		{
+			"path" : "src/CMakeFiles/golem_lib.dir/./transformers/NodeEliminator.cc.o"
+		},
+		{
+			"path" : "src/CMakeFiles/golem_lib.dir/./transformers/MultiEdgeMerger.cc.o"
+		},
+		{
+			"path" : "src/CMakeFiles/golem_lib.dir/./transformers/FalseClauseRemoval.cc.o"
+		},
+		{
+			"path" : "src/CMakeFiles/golem_lib.dir/./transformers/RemoveUnreachableNodes.cc.o"
+		},
+		{
+			"path" : "src/CMakeFiles/golem_lib.dir/./transformers/SingleLoopTransformation.cc.o"
+		},
+		{
+			"path" : "src/CMakeFiles/golem_lib.dir/./transformers/TransformationPipeline.cc.o"
+		},
+		{
+			"path" : "src/CMakeFiles/golem_lib.dir/./transformers/TrivialEdgePruner.cc.o"
+		},
+		{
+			"path" : "src/CMakeFiles/golem_lib.dir/./utils/SmtSolver.cc.o"
+		}
+	],
+	"backtrace" : 1,
+	"backtraceGraph" : 
+	{
+		"commands" : 
+		[
+			"add_library",
+			"target_link_libraries",
+			"add_definitions",
+			"target_compile_definitions",
+			"target_include_directories",
+			"target_sources"
+		],
+		"files" : 
+		[
+			"src/CMakeLists.txt",
+			"CMakeLists.txt"
+		],
+		"nodes" : 
+		[
+			{
+				"file" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 28,
+				"parent" : 0
+			},
+			{
+				"command" : 1,
+				"file" : 0,
+				"line" : 32,
+				"parent" : 0
+			},
+			{
+				"file" : 1
+			},
+			{
+				"command" : 2,
+				"file" : 1,
+				"line" : 9,
+				"parent" : 3
+			},
+			{
+				"command" : 3,
+				"file" : 0,
+				"line" : 72,
+				"parent" : 0
+			},
+			{
+				"command" : 4,
+				"file" : 0,
+				"line" : 67,
+				"parent" : 0
+			},
+			{
+				"command" : 4,
+				"file" : 0,
+				"line" : 74,
+				"parent" : 0
+			},
+			{
+				"command" : 5,
+				"file" : 0,
+				"line" : 34,
+				"parent" : 0
+			}
+		]
+	},
+	"compileGroups" : 
+	[
+		{
+			"compileCommandFragments" : 
+			[
+				{
+					"fragment" : "-O3 -DNDEBUG -std=gnu++17 -fdiagnostics-color=always"
+				}
+			],
+			"defines" : 
+			[
+				{
+					"backtrace" : 4,
+					"define" : "GOLEM_VERSION=\"0.5.0\""
+				},
+				{
+					"backtrace" : 5,
+					"define" : "OPENSMT_LOCAL_BUILD"
+				}
+			],
+			"includes" : 
+			[
+				{
+					"backtrace" : 6,
+					"path" : "/home/mambo/golem/src"
+				},
+				{
+					"backtrace" : 6,
+					"path" : "/home/mambo/golem/src/include"
+				},
+				{
+					"backtrace" : 7,
+					"path" : "/home/mambo/golem/cmake-build-release/_deps/opensmt-src/src/symbols"
+				},
+				{
+					"backtrace" : 7,
+					"path" : "/home/mambo/golem/cmake-build-release/_deps/opensmt-src/src/minisat/mtl"
+				},
+				{
+					"backtrace" : 7,
+					"path" : "/home/mambo/golem/cmake-build-release/_deps/opensmt-src/src/minisat/core"
+				},
+				{
+					"backtrace" : 7,
+					"path" : "/home/mambo/golem/cmake-build-release/_deps/opensmt-src/src/common"
+				},
+				{
+					"backtrace" : 7,
+					"path" : "/home/mambo/golem/cmake-build-release/_deps/opensmt-src/src/sorts"
+				},
+				{
+					"backtrace" : 7,
+					"path" : "/home/mambo/golem/cmake-build-release/_deps/opensmt-src/src/options"
+				},
+				{
+					"backtrace" : 7,
+					"path" : "/home/mambo/golem/cmake-build-release/_deps/opensmt-src/src/api"
+				},
+				{
+					"backtrace" : 7,
+					"path" : "/home/mambo/golem/cmake-build-release/_deps/opensmt-src/src/tsolvers"
+				},
+				{
+					"backtrace" : 7,
+					"path" : "/home/mambo/golem/cmake-build-release/_deps/opensmt-src/src/tsolvers/egraph"
+				},
+				{
+					"backtrace" : 7,
+					"path" : "/home/mambo/golem/cmake-build-release/_deps/opensmt-src/src/tsolvers/lasolver"
+				},
+				{
+					"backtrace" : 7,
+					"path" : "/home/mambo/golem/cmake-build-release/_deps/opensmt-src/src/tsolvers/lrasolver"
+				},
+				{
+					"backtrace" : 7,
+					"path" : "/home/mambo/golem/cmake-build-release/_deps/opensmt-src/src/tsolvers/liasolver"
+				},
+				{
+					"backtrace" : 7,
+					"path" : "/home/mambo/golem/cmake-build-release/_deps/opensmt-src/src/cnfizers"
+				},
+				{
+					"backtrace" : 7,
+					"path" : "/home/mambo/golem/cmake-build-release/_deps/opensmt-src/src/pterms"
+				},
+				{
+					"backtrace" : 7,
+					"path" : "/home/mambo/golem/cmake-build-release/_deps/opensmt-src/src/logics"
+				},
+				{
+					"backtrace" : 7,
+					"path" : "/home/mambo/golem/cmake-build-release/_deps/opensmt-src/src/smtsolvers"
+				},
+				{
+					"backtrace" : 7,
+					"path" : "/home/mambo/golem/cmake-build-release/_deps/opensmt-src/src/parsers/smt2new"
+				},
+				{
+					"backtrace" : 7,
+					"path" : "/home/mambo/golem/cmake-build-release/_deps/opensmt-src/src/simplifiers"
+				},
+				{
+					"backtrace" : 7,
+					"path" : "/home/mambo/golem/cmake-build-release/_deps/opensmt-src/src/rewriters"
+				},
+				{
+					"backtrace" : 7,
+					"path" : "/home/mambo/golem/cmake-build-release/_deps/opensmt-src/src/proof"
+				},
+				{
+					"backtrace" : 7,
+					"path" : "/home/mambo/golem/cmake-build-release/_deps/opensmt-src/src/models"
+				},
+				{
+					"backtrace" : 7,
+					"path" : "/home/mambo/golem/cmake-build-release/_deps/opensmt-src/src/itehandler"
+				},
+				{
+					"backtrace" : 7,
+					"path" : "/home/mambo/golem/cmake-build-release/_deps/opensmt-src/src/interpolation"
+				}
+			],
+			"language" : "CXX",
+			"languageStandard" : 
+			{
+				"backtraces" : 
+				[
+					1
+				],
+				"standard" : "17"
+			},
+			"sourceIndexes" : 
+			[
+				1,
+				2,
+				3,
+				4,
+				5,
+				6,
+				7,
+				8,
+				9,
+				10,
+				11,
+				12,
+				13,
+				14,
+				15,
+				16,
+				17,
+				18,
+				19,
+				20,
+				21,
+				22,
+				23,
+				24,
+				25,
+				26,
+				27,
+				28,
+				29,
+				30,
+				31
+			]
+		}
+	],
+	"dependencies" : 
+	[
+		{
+			"backtrace" : 2,
+			"id" : "OpenSMT-static::@d39afbcf983bb8969f94"
+		}
+	],
+	"id" : "golem_lib::@145eef247bfb46b6828c",
+	"name" : "golem_lib",
+	"paths" : 
+	{
+		"build" : "src",
+		"source" : "src"
+	},
+	"sourceGroups" : 
+	[
+		{
+			"name" : "Header Files",
+			"sourceIndexes" : 
+			[
+				0
+			]
+		},
+		{
+			"name" : "Source Files",
+			"sourceIndexes" : 
+			[
+				1,
+				2,
+				3,
+				4,
+				5,
+				6,
+				7,
+				8,
+				9,
+				10,
+				11,
+				12,
+				13,
+				14,
+				15,
+				16,
+				17,
+				18,
+				19,
+				20,
+				21,
+				22,
+				23,
+				24,
+				25,
+				26,
+				27,
+				28,
+				29,
+				30,
+				31
+			]
+		}
+	],
+	"sources" : 
+	[
+		{
+			"backtrace" : 1,
+			"path" : "src/proofs/Term.h",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 1,
+			"compileGroupIndex" : 0,
+			"path" : "src/proofs/TermVisitor.cpp",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 8,
+			"compileGroupIndex" : 0,
+			"path" : "src/ChcSystem.cc",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 8,
+			"compileGroupIndex" : 0,
+			"path" : "src/ChcInterpreter.cc",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 8,
+			"compileGroupIndex" : 0,
+			"path" : "src/engine/Bmc.cc",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 8,
+			"compileGroupIndex" : 0,
+			"path" : "src/engine/Common.cc",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 8,
+			"compileGroupIndex" : 0,
+			"path" : "src/engine/Kind.cc",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 8,
+			"compileGroupIndex" : 0,
+			"path" : "src/engine/Lawi.cc",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 8,
+			"compileGroupIndex" : 0,
+			"path" : "src/engine/Spacer.cc",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 8,
+			"compileGroupIndex" : 0,
+			"path" : "src/engine/TPA.cc",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 8,
+			"compileGroupIndex" : 0,
+			"path" : "src/engine/IMC.cc",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 8,
+			"compileGroupIndex" : 0,
+			"path" : "src/TransitionSystem.cc",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 8,
+			"compileGroupIndex" : 0,
+			"path" : "src/Options.cc",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 8,
+			"compileGroupIndex" : 0,
+			"path" : "src/TermUtils.cc",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 8,
+			"compileGroupIndex" : 0,
+			"path" : "src/TransformationUtils.cc",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 8,
+			"compileGroupIndex" : 0,
+			"path" : "src/Validator.cc",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 8,
+			"compileGroupIndex" : 0,
+			"path" : "src/Normalizer.cc",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 8,
+			"compileGroupIndex" : 0,
+			"path" : "src/Witnesses.cc",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 8,
+			"compileGroupIndex" : 0,
+			"path" : "src/ModelBasedProjection.cc",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 8,
+			"compileGroupIndex" : 0,
+			"path" : "src/QuantifierElimination.cc",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 8,
+			"compileGroupIndex" : 0,
+			"path" : "src/graph/ChcGraph.cc",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 8,
+			"compileGroupIndex" : 0,
+			"path" : "src/graph/ChcGraphBuilder.cc",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 8,
+			"compileGroupIndex" : 0,
+			"path" : "src/transformers/CommonUtils.cc",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 8,
+			"compileGroupIndex" : 0,
+			"path" : "src/transformers/SimpleChainSummarizer.cc",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 8,
+			"compileGroupIndex" : 0,
+			"path" : "src/transformers/NodeEliminator.cc",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 8,
+			"compileGroupIndex" : 0,
+			"path" : "src/transformers/MultiEdgeMerger.cc",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 8,
+			"compileGroupIndex" : 0,
+			"path" : "src/transformers/FalseClauseRemoval.cc",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 8,
+			"compileGroupIndex" : 0,
+			"path" : "src/transformers/RemoveUnreachableNodes.cc",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 8,
+			"compileGroupIndex" : 0,
+			"path" : "src/transformers/SingleLoopTransformation.cc",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 8,
+			"compileGroupIndex" : 0,
+			"path" : "src/transformers/TransformationPipeline.cc",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 8,
+			"compileGroupIndex" : 0,
+			"path" : "src/transformers/TrivialEdgePruner.cc",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 8,
+			"compileGroupIndex" : 0,
+			"path" : "src/utils/SmtSolver.cc",
+			"sourceGroupIndex" : 1
+		}
+	],
+	"type" : "OBJECT_LIBRARY"
+}

@@ -138,8 +138,13 @@ void InvalidityWitness::alethePrint(std::ostream & out, Logic & logic, ChcDirect
 
                 std::vector<int> simpSteps; //Simplification steps for final congruence
 
-                //While every possible operation hasn't been simplified
+                std::shared_ptr<Term> originalPrimaryBranch = nullptr;
 
+                bool lastSimplification = false;
+
+                int transStep;
+
+                //While every possible operation hasn't been simplified
                 while (not instTerm->accept(&simpVisitor)->accept(&terminalOrAppVisitor)) {
 
                     std::shared_ptr<Term> termToSimplify = instTerm->accept(&simpVisitor);  //Locating possible simplification
@@ -149,85 +154,79 @@ void InvalidityWitness::alethePrint(std::ostream & out, Logic & logic, ChcDirect
                     IsPrimaryBranchVisitor isPrimaryBranchVisitor(termToSimplify);  //Checking if the current term is a primary branch
                     bool isPrimaryBranch = instTerm->accept(&isPrimaryBranchVisitor);
 
-                    std::shared_ptr<Term> primaryBranch;
-                    std::shared_ptr<Term> primaryBranchSimplified;
+                    std::shared_ptr<Term> localParentBranch;
+                    std::shared_ptr<Term> localParentBranchSimplified;
 
-                    if (not isPrimaryBranch) {
-                        GetPrimaryBranchVisitor getPrimaryBranchVisitor(termToSimplify);
-                        primaryBranch = instTerm->accept(&getPrimaryBranchVisitor);   //Getting the primary branch of the current term for simplification
-                        SimplifyVisitor simplifyPrimaryBranchVisitor(simplification, termToSimplify);
-                        primaryBranchSimplified = primaryBranch->accept(&simplifyPrimaryBranchVisitor);   //Simplifying said primary branch
+                    if (instTerm->accept(&impFirstTermVisitor)->accept(&printVisitor) != termToSimplify->accept(&printVisitor)) {
+                        //Simplification step
+                        out << "(step t" << ++currAletheStep << " "
+                            << "(cl (= " << termToSimplify->accept(&printVisitor) << " " << simplification
+                            << ")) :rule " << rule << ")\n";
+                    } else {
+                        finalTermToSimplify = termToSimplify;
+                        finalSimplification = simplification;
+                        finalRule = rule;
+                        lastSimplification = true;
                     }
 
-                    SimplifyVisitor simplifyVisitor(simplification, termToSimplify);    //Simplifying said the entire tree
-                    instTerm = instTerm->accept(&simplifyVisitor);
+                    std::shared_ptr<Term> lastLocalParent;
+                    std::shared_ptr<Term> lastLocalSimplifiedParent;
 
-                    //If the simplified tree has possible simplification
-                    if (not instTerm->accept(&simpVisitor)->accept(&terminalOrAppVisitor)){
+                    if (not isPrimaryBranch) {
 
-                        out << "(step t" << ++currAletheStep << " "
-                            << "(cl (= " << simplification << " " << termToSimplify->accept(&printVisitor)
-                            << ")) :rule " << rule << ")\n";
+                        GetLocalParentBranchVisitor getLocalParentBranchVisitor(termToSimplify);
+                        localParentBranch = instTerm->accept(&getLocalParentBranchVisitor);   //Getting the primary branch of the current term for simplification
+                        SimplifyVisitor simplifyLocaParentBranchVisitor(simplification, termToSimplify);
+                        localParentBranchSimplified = localParentBranch->accept(&simplifyLocaParentBranchVisitor);   //Simplifying said parent branch branch
 
-                        if (isPrimaryBranch){
-                            simpSteps.push_back(currAletheStep);
-                        }
+                        IsPrimaryBranchVisitor localIsPrimary(localParentBranch);  //Checking if the current term is a primary branch
 
-                        int depth = 0;
-
-                        while (not isPrimaryBranch){
-
-                            termToSimplify = instTerm->accept(&simpVisitor);
-                            simplification = termToSimplify->accept(&opVisitor);
-                            rule = termToSimplify->accept(&simplifyRuleVisitor);
-
-                            if (depth == 0) {
-                                out << "(step t" << ++currAletheStep << " "
-                                    << "(cl (= " << primaryBranch->accept(&printVisitor) << " "
-                                    << primaryBranchSimplified->accept(&printVisitor) << ")) :rule cong :premises (t" << currAletheStep-1 << "))\n";
-                                depth++;
-                            } else {
-                                out << "(step t" << ++currAletheStep << " "
-                                    << "(cl (= " << primaryBranch->accept(&printVisitor) << " "
-                                    << primaryBranchSimplified->accept(&printVisitor) << ")) :rule trans :premises (t" << currAletheStep-3 << " t" << currAletheStep-1 << "))\n";
-                            }
-
+                        //cong steps
+                        if (instTerm->accept(&localIsPrimary)){
                             out << "(step t" << ++currAletheStep << " "
-                                << "(cl (= " << simplification << " " << termToSimplify->accept(&printVisitor)
-                                << ")) :rule " << rule << ")\n";
-
-                            if (simplification != "true"){
-                                SimplifyVisitor newSimplifyPrimaryBranchVisitor(simplification, termToSimplify);
-                                std::shared_ptr<Term> newPrimaryBranchSimplified = primaryBranchSimplified->accept(&newSimplifyPrimaryBranchVisitor);
-
+                                << "(cl (= " << localParentBranch->accept(&printVisitor) << " "
+                                << localParentBranchSimplified->accept(&printVisitor) << ")) :rule cong :premises (t" << currAletheStep-1 << "))\n";
+                            lastLocalParent = localParentBranch;
+                            lastLocalSimplifiedParent = localParentBranchSimplified;
+                        } else {
+                            while (instTerm->accept(&impFirstTermVisitor)->accept(&printVisitor) != localParentBranch->accept(&printVisitor)) {
+                                lastLocalParent = localParentBranch;
+                                lastLocalSimplifiedParent = localParentBranchSimplified;
                                 out << "(step t" << ++currAletheStep << " "
-                                    << "(cl (= " << primaryBranchSimplified->accept(&printVisitor) << " "
-                                    << newPrimaryBranchSimplified->accept(&printVisitor) << ")) :rule cong :premises (t" << currAletheStep-1 << "))\n";
-
-                                primaryBranchSimplified = newPrimaryBranchSimplified;
-
-                            } else {
-                                out << "(step t" << ++currAletheStep << " "
-                                    << "(cl (= " << primaryBranch->accept(&printVisitor) << " "
-                                    << simplification << ")) :rule trans :premises (t" << currAletheStep-1 << " t" << currAletheStep-2 << "))\n";
+                                    << "(cl (= " << localParentBranch->accept(&printVisitor) << " "
+                                    << localParentBranchSimplified->accept(&printVisitor) << ")) :rule cong :premises (t" << currAletheStep-1 << "))\n";
+                                GetLocalParentBranchVisitor newGetLocalParentBranchVisitor(localParentBranch);
+                                localParentBranch = instTerm->accept(&newGetLocalParentBranchVisitor);
+                                SimplifyVisitor simplifyLocalParentBranchVisitor(simplification, termToSimplify);
+                                localParentBranchSimplified = localParentBranch->accept(&simplifyLocalParentBranchVisitor);
                             }
-
-                            simpSteps.push_back(currAletheStep);
-
-                            IsPrimaryBranchVisitor newIsPrimaryBranchVisitor(termToSimplify);
-                            isPrimaryBranch = instTerm->accept(&newIsPrimaryBranchVisitor);
-
-                            SimplifyVisitor newSimplifyVisitor(simplification, termToSimplify);
-                            instTerm = instTerm->accept(&newSimplifyVisitor);
-
+                        }
+                        //save the original primary branch
+                        if (originalPrimaryBranch == nullptr) {
+                            transStep = currAletheStep;
+                            originalPrimaryBranch = lastLocalParent;
+                        } else {
+                            //trans step to pass along the information
+                            out << "(step t" << ++currAletheStep << " "
+                                << "(cl (= " << originalPrimaryBranch->accept(&printVisitor) << " "
+                                << lastLocalSimplifiedParent->accept(&printVisitor) << ")) :rule trans :premises (t" << currAletheStep-1 << " t" << transStep << "))\n";
+                            transStep = currAletheStep;
                         }
 
                     } else {
-
-                        finalRule = rule;
-                        finalSimplification = simplification;
-                        finalTermToSimplify = termToSimplify;
+                        if (originalPrimaryBranch != nullptr) {
+                            //trans step to pass along the information
+                            out << "(step t" << ++currAletheStep << " "
+                                << "(cl (= " << originalPrimaryBranch->accept(&printVisitor) << " "
+                                << simplification << ")) :rule trans :premises (t" << currAletheStep-1 << " t" << transStep << "))\n";
+                        }
+                        originalPrimaryBranch = nullptr;
+                        if (not lastSimplification) {
+                            simpSteps.push_back(currAletheStep);
+                        }
                     }
+                    SimplifyVisitor newSimplifyVisitor(simplification, termToSimplify);
+                    instTerm = instTerm->accept(&newSimplifyVisitor);
                 }
 
                 out << "(step t" << ++currAletheStep << " "
@@ -279,9 +278,18 @@ std::vector<std::pair<std::string, std::string>> InvalidityWitness::getInstPairs
     std::vector<std::pair<std::string, std::string>> instPairs;
 
     auto const & step = derivation[it];
+
     TermUtils utils(logic);
 
-    if(it != 1) {
+    bool skip = true;
+
+    for (std::size_t premise : step.premises) {
+        if (premise == 0){
+            skip = false;
+        }
+    }
+
+    if(skip) {
         for (std::size_t premise : step.premises) {
             auto concreteArgs = utils.predicateArgsInOrder(derivation[premise].derivedFact);
             auto targetVertex = originalGraph.getEdge(derivation[premise].clauseId).to;
@@ -303,7 +311,7 @@ std::vector<std::pair<std::string, std::string>> InvalidityWitness::getInstPairs
             }
         }
     }
-    //printing target variables instantiation
+    //Target variables instantiation
     bool redundance = false;
     auto concreteArgs = utils.predicateArgsInOrder(step.derivedFact);
     auto targetVertex = originalGraph.getEdge(step.clauseId).to;

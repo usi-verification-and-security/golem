@@ -1,0 +1,21 @@
+# ninja log v5
+0	6	1692714976948151293	opensmt-populate-prefix/src/opensmt-populate-stamp/opensmt-populate-mkdir	5339a2db9cd190d3
+0	6	1692714976948151293	/home/mambo/golem/cmake-build-release/_deps/opensmt-subbuild/opensmt-populate-prefix/src/opensmt-populate-stamp/opensmt-populate-mkdir	5339a2db9cd190d3
+6	1941	1692714978888158582	opensmt-populate-prefix/src/opensmt-populate-stamp/opensmt-populate-download	dcc91cc2b844d481
+6	1941	1692714978888158582	/home/mambo/golem/cmake-build-release/_deps/opensmt-subbuild/opensmt-populate-prefix/src/opensmt-populate-stamp/opensmt-populate-download	dcc91cc2b844d481
+1941	1989	0	opensmt-populate-prefix/src/opensmt-populate-stamp/opensmt-populate-update	3b3ab19d9f4f27d4
+1941	1989	0	/home/mambo/golem/cmake-build-release/_deps/opensmt-subbuild/opensmt-populate-prefix/src/opensmt-populate-stamp/opensmt-populate-update	3b3ab19d9f4f27d4
+1989	1994	1692714978940158777	opensmt-populate-prefix/src/opensmt-populate-stamp/opensmt-populate-patch	46175991af738e27
+1989	1994	1692714978940158777	/home/mambo/golem/cmake-build-release/_deps/opensmt-subbuild/opensmt-populate-prefix/src/opensmt-populate-stamp/opensmt-populate-patch	46175991af738e27
+1994	2004	1692714978948158807	opensmt-populate-prefix/src/opensmt-populate-stamp/opensmt-populate-configure	2d5c550f8ac0cfc
+1994	2004	1692714978948158807	/home/mambo/golem/cmake-build-release/_deps/opensmt-subbuild/opensmt-populate-prefix/src/opensmt-populate-stamp/opensmt-populate-configure	2d5c550f8ac0cfc
+2005	2031	1692714978964158868	opensmt-populate-prefix/src/opensmt-populate-stamp/opensmt-populate-build	23e267e647f7536e
+2005	2031	1692714978964158868	/home/mambo/golem/cmake-build-release/_deps/opensmt-subbuild/opensmt-populate-prefix/src/opensmt-populate-stamp/opensmt-populate-build	23e267e647f7536e
+2031	2036	1692714978980158928	opensmt-populate-prefix/src/opensmt-populate-stamp/opensmt-populate-install	393a048ff5cef1ea
+2031	2036	1692714978980158928	/home/mambo/golem/cmake-build-release/_deps/opensmt-subbuild/opensmt-populate-prefix/src/opensmt-populate-stamp/opensmt-populate-install	393a048ff5cef1ea
+2036	2061	1692714979008159034	opensmt-populate-prefix/src/opensmt-populate-stamp/opensmt-populate-test	52251df5b82612d1
+2036	2061	1692714979008159034	/home/mambo/golem/cmake-build-release/_deps/opensmt-subbuild/opensmt-populate-prefix/src/opensmt-populate-stamp/opensmt-populate-test	52251df5b82612d1
+2061	2093	1692714979040159154	CMakeFiles/opensmt-populate-complete	4bf8c7ed4bd76a98
+2061	2093	1692714979040159154	opensmt-populate-prefix/src/opensmt-populate-stamp/opensmt-populate-done	4bf8c7ed4bd76a98
+2061	2093	1692714979040159154	/home/mambo/golem/cmake-build-release/_deps/opensmt-subbuild/CMakeFiles/opensmt-populate-complete	4bf8c7ed4bd76a98
+2061	2093	1692714979040159154	/home/mambo/golem/cmake-build-release/_deps/opensmt-subbuild/opensmt-populate-prefix/src/opensmt-populate-stamp/opensmt-populate-done	4bf8c7ed4bd76a98

@@ -1,0 +1,44 @@
+{
+	"backtraceGraph" : 
+	{
+		"commands" : 
+		[
+			"install"
+		],
+		"files" : 
+		[
+			"cmake-build-release/_deps/opensmt-src/src/itehandler/CMakeLists.txt"
+		],
+		"nodes" : 
+		[
+			{
+				"file" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 2,
+				"parent" : 0
+			}
+		]
+	},
+	"installers" : 
+	[
+		{
+			"backtrace" : 1,
+			"component" : "Unspecified",
+			"destination" : "include/opensmt",
+			"paths" : 
+			[
+				"cmake-build-release/_deps/opensmt-src/src/itehandler/IteToSwitch.h",
+				"cmake-build-release/_deps/opensmt-src/src/itehandler/IteHandler.h"
+			],
+			"type" : "file"
+		}
+	],
+	"paths" : 
+	{
+		"build" : "_deps/opensmt-build/src/itehandler",
+		"source" : "cmake-build-release/_deps/opensmt-src/src/itehandler"
+	}
+}

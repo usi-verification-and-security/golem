@@ -117,10 +117,10 @@ public:
     std::shared_ptr<Term> visit(App*) override;
 };
 
-class GetPrimaryBranchVisitor : public LogicVisitor {
+class GetLocalParentBranchVisitor : public LogicVisitor {
     std::shared_ptr<Term> operation;
 public:
-    GetPrimaryBranchVisitor(std::shared_ptr<Term> o) : operation(std::move(o)) {}
+    GetLocalParentBranchVisitor(std::shared_ptr<Term> o) : operation(std::move(o)) {}
     std::shared_ptr<Term> visit(Terminal*) override;
     std::shared_ptr<Term> visit(Quant*) override;
     std::shared_ptr<Term> visit(Op*) override;
@@ -191,6 +191,7 @@ public:
     bool visit(Quant*) override;
     bool visit(Op*) override;
     bool visit(App*) override;
+    void setBranch(std::shared_ptr<Term> b) { branch = std::move(b);}
 };
 
 #endif // TERM_H
