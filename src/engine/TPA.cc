@@ -658,9 +658,10 @@ TPASplit::QueryResult TPASplit::reachabilityQueryLessThan(PTRef from, PTRef to, 
         PTRef previousLessThanTransition = getLessThanPower(power);
         PTRef translatedExactTransition = getNextVersion(getExactPower(power));
         PTRef currentToNextNextPreviousLessThanTransition = shiftOnlyNextVars(previousLessThanTransition);
-        PTRef twoStepTransition = logic.mkAnd({logic.mkOr(currentToNextNextPreviousLessThanTransition,
-                                             logic.mkAnd(previousLessThanTransition, translatedExactTransition)),
-                                               getNextVersion(logic.mkAnd(leftInvariants)), logic.mkAnd(rightInvariants)});
+        PTRef twoStepTransition = logic.mkOr(currentToNextNextPreviousLessThanTransition,
+                                             logic.mkAnd({previousLessThanTransition, translatedExactTransition,
+                                                          getNextVersion(logic.mkAnd(leftInvariants)),
+                                                          logic.mkAnd(rightInvariants)}));
         // TODO: assert from and to are current-state formulas
         solver.insertFormula(twoStepTransition);
         solver.insertFormula(logic.mkAnd(from, goal));
@@ -1152,8 +1153,8 @@ bool TPASplit::checkExactFixedPoint(unsigned short power) {
         PTRef currentLevelTransition = getExactPower(i);
         PTRef currentTwoStep = logic.mkAnd({currentLevelTransition, logic.mkAnd(rightInvariants),
          getNextVersion(logic.mkAnd(leftInvariants)), getNextVersion(currentLevelTransition)});
-        houdiniCheck(currentLevelTransition, currentLevelTransition,
-                     SafetyExplanation::FixedPointType::NONE, TPAType::EQUALS);
+//        houdiniCheck(currentLevelTransition, currentLevelTransition,
+//                     SafetyExplanation::FixedPointType::NONE, TPAType::EQUALS);
         PTRef shifted = shiftOnlyNextVars(currentLevelTransition);
         SMTSolver solverWrapper(logic, SMTSolver::WitnessProduction::NONE);
         auto & solver = solverWrapper.getCoreSolver();
