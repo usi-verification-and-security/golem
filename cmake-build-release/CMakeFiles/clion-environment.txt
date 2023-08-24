@@ -1,3 +1,0 @@
-ToolSet: 1.0 (local)Options: 
-
-Options:-DCMAKE_MAKE_PROGRAM=/home/mambo/Downloads/clion/bin/ninja/linux/x64/ninja

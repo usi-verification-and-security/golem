@@ -13,6 +13,7 @@ public:
     virtual std::shared_ptr<Term> accept(class LogicVisitor*) = 0;
     virtual std::string accept(class StringVisitor*) = 0;
     virtual bool accept(class BooleanVisitor*) = 0;
+    virtual Term* accept(class SimplifyHelperVisitor*) = 0;
 };
 
 class Terminal : public Term {
@@ -26,6 +27,7 @@ public:
     std::shared_ptr<Term> accept(LogicVisitor*) override;
     std::string accept(StringVisitor*) override;
     bool accept(BooleanVisitor*) override;
+    Term* accept(SimplifyHelperVisitor*) override;
 };
 
 class Op : public Term {
@@ -39,6 +41,7 @@ public:
     std::shared_ptr<Term> accept(LogicVisitor*) override;
     std::string accept(StringVisitor*) override;
     bool accept(BooleanVisitor*) override;
+    Term* accept(SimplifyHelperVisitor*) override;
 };
 
 class App : public Term {
@@ -52,6 +55,7 @@ public:
     std::shared_ptr<Term> accept(LogicVisitor*) override;
     std::string accept(StringVisitor*) override;
     bool accept(BooleanVisitor*) override;
+    Term* accept(SimplifyHelperVisitor*) override;
 };
 
 class Quant : public Term {
@@ -69,6 +73,7 @@ public:
     std::shared_ptr<Term> accept(LogicVisitor*) override;
     std::string accept(StringVisitor*) override;
     bool accept(BooleanVisitor*) override;
+    Term* accept(SimplifyHelperVisitor*) override;
 };
 
 class LogicVisitor {
@@ -100,9 +105,9 @@ public:
 
 class SimplifyVisitor : public LogicVisitor {
     std::string simplification;
-    std::shared_ptr<Term> operation;
+    Term* operation;
 public:
-    SimplifyVisitor(std::string s, std::shared_ptr<Term> o) : simplification(std::move(s)), operation(std::move(o)) {}
+    SimplifyVisitor(std::string s, Term* o) : simplification(std::move(s)), operation(o) {}
     std::shared_ptr<Term> visit(Terminal*) override;
     std::shared_ptr<Term> visit(Quant*) override;
     std::shared_ptr<Term> visit(Op*) override;
@@ -120,7 +125,15 @@ public:
 class GetLocalParentBranchVisitor : public LogicVisitor {
     std::shared_ptr<Term> operation;
 public:
-    GetLocalParentBranchVisitor(std::shared_ptr<Term> o) : operation(std::move(o)) {}
+    explicit GetLocalParentBranchVisitor(std::shared_ptr<Term> o) : operation(std::move(o)) {}
+    std::shared_ptr<Term> visit(Terminal*) override;
+    std::shared_ptr<Term> visit(Quant*) override;
+    std::shared_ptr<Term> visit(Op*) override;
+    std::shared_ptr<Term> visit(App*) override;
+};
+
+class SimplifyNonLinearVisitor : public LogicVisitor {
+public:
     std::shared_ptr<Term> visit(Terminal*) override;
     std::shared_ptr<Term> visit(Quant*) override;
     std::shared_ptr<Term> visit(Op*) override;
@@ -152,6 +165,14 @@ public:
 };
 
 class SimplifyRuleVisitor : public StringVisitor {
+public:
+    std::string visit(Terminal*) override;
+    std::string visit(Quant*) override;
+    std::string visit(Op*) override;
+    std::string visit(App*) override;
+};
+
+class NegatedAndVisitor : public StringVisitor {
 public:
     std::string visit(Terminal*) override;
     std::string visit(Quant*) override;
@@ -192,6 +213,22 @@ public:
     bool visit(Op*) override;
     bool visit(App*) override;
     void setBranch(std::shared_ptr<Term> b) { branch = std::move(b);}
+};
+
+class SimplifyHelperVisitor {
+public:
+    Term* visit(Terminal*);
+    Term* visit(Quant*);
+    Term* visit(Op*);
+    Term* visit(App*);
+};
+
+class NonLinearVisitor : public BooleanVisitor{
+public:
+    bool visit(Terminal*) override;
+    bool visit(Quant*) override;
+    bool visit(Op*) override;
+    bool visit(App*) override;
 };
 
 #endif // TERM_H
