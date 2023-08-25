@@ -559,8 +559,7 @@ TPASplit::QueryResult TPASplit::reachabilityQueryExact(PTRef from, PTRef to, uns
                 if (power == 0) { // Base case, the 2 steps of the exact transition relation have been used
                     result.result = ReachabilityResult::REACHABLE;
                     result.refinedTarget = refineTwoStepTarget(
-                        from, logic.mkAnd({previousTransition, translatedPreviousTransition,
-                                           getNextVersion(logic.mkAnd(leftInvariants)), logic.mkAnd(rightInvariants)}), goal, *model);
+                        from, logic.mkAnd({previousTransition, translatedPreviousTransition}), goal, *model);
                     result.steps = 2;
                     TRACE(3, "Exact: Truly reachable states are " << result.refinedTarget.x)
                     TRACE(4, "Exact: Truly reachable states are " << logic.pp(result.refinedTarget))
@@ -571,8 +570,7 @@ TPASplit::QueryResult TPASplit::reachabilityQueryExact(PTRef from, PTRef to, uns
                 // Create the three states corresponding to current, next and next-next variables from the query
                 //              PTRef modelMidpoint = getNextVersion(extractStateFromModel(getStateVars(1), *model),
                 //              -1);
-                PTRef nextState = extractMidPoint(from, logic.mkAnd(previousTransition, logic.mkAnd(rightInvariants)),
-                                                  logic.mkAnd(getNextVersion(logic.mkAnd(leftInvariants)), translatedPreviousTransition), goal, *model);
+                PTRef nextState = extractMidPoint(from, previousTransition,translatedPreviousTransition, goal, *model);
                 //              std::cout << "Midpoint single point: " << logic.printTerm(modelMidpoint) << '\n';
                 TRACE(3, "Midpoint from MBP: " << nextState.x)
                 // check the reachability using lower level abstraction
