@@ -58,7 +58,7 @@ std::string OperateVisitor::visit(Op*term){
     std::string firstStr;
     std::string secondStr;
 
-    if (op == "+" or op == "-" or op == "/" or op == "*" or op == ">" or op == "<" or op == "<=" or op == ">="){
+    if (op == ">" or op == "<" or op == "<=" or op == ">="){
         firstStr = args[0]->accept(&visitor);
         secondStr = args[1]->accept(&visitor);
         firstStr.erase(remove(firstStr.begin(), firstStr.end(), '('), firstStr.end());
@@ -125,28 +125,68 @@ std::string OperateVisitor::visit(Op*term){
         }
         return "false";
     }else if (op == "+"){
-        int result = std::stoi(firstStr) + std::stoi(secondStr);
+        int result = 0;
+        for (auto arg : args) {
+           std::string str = arg->accept(&visitor);
+           str.erase(remove(str.begin(), str.end(), '('), str.end());
+           str.erase(remove(str.begin(), str.end(), ')'), str.end());
+           str.erase(remove(str.begin(), str.end(), ' '), str.end());
+           result += std::stoi(str);
+        }
         if (result < 0){
            return "(- " + std::to_string(result*(-1)) + ")";
         } else {
            return std::to_string(result);
         }
     }else if (op == "-"){
-        int result = std::stoi(firstStr) - std::stoi(secondStr);
+        std::string str = args[0]->accept(&visitor);
+        str.erase(remove(str.begin(), str.end(), '('), str.end());
+        str.erase(remove(str.begin(), str.end(), ')'), str.end());
+        str.erase(remove(str.begin(), str.end(), ' '), str.end());
+        int result = std::stoi(str);
+        for (int i = 1; i < args.size(); i++) {
+           str = args[i]->accept(&visitor);
+           str.erase(remove(str.begin(), str.end(), '('), str.end());
+           str.erase(remove(str.begin(), str.end(), ')'), str.end());
+           str.erase(remove(str.begin(), str.end(), ' '), str.end());
+           result -= std::stoi(str);
+        }
         if (result < 0){
            return "(- " + std::to_string(result*(-1)) + ")";
         } else {
            return std::to_string(result);
         }
     }else if (op == "/"){
-        int result = std::stoi(firstStr) / std::stoi(secondStr);
+        std::string str = args[0]->accept(&visitor);
+        str.erase(remove(str.begin(), str.end(), '('), str.end());
+        str.erase(remove(str.begin(), str.end(), ')'), str.end());
+        str.erase(remove(str.begin(), str.end(), ' '), str.end());
+        int result = std::stoi(str);
+        for (int i = 1; i < args.size(); i++) {
+           str = args[i]->accept(&visitor);
+           str.erase(remove(str.begin(), str.end(), '('), str.end());
+           str.erase(remove(str.begin(), str.end(), ')'), str.end());
+           str.erase(remove(str.begin(), str.end(), ' '), str.end());
+           result /= std::stoi(str);
+        }
         if (result < 0){
            return "(- " + std::to_string(result*(-1)) + ")";
         } else {
            return std::to_string(result);
         }
     }else if (op == "*"){
-        int result = std::stoi(firstStr) * std::stoi(secondStr);
+        std::string str = args[0]->accept(&visitor);
+        str.erase(remove(str.begin(), str.end(), '('), str.end());
+        str.erase(remove(str.begin(), str.end(), ')'), str.end());
+        str.erase(remove(str.begin(), str.end(), ' '), str.end());
+        int result = std::stoi(str);
+        for (int i = 1; i < args.size(); i++) {
+           str = args[i]->accept(&visitor);
+           str.erase(remove(str.begin(), str.end(), '('), str.end());
+           str.erase(remove(str.begin(), str.end(), ')'), str.end());
+           str.erase(remove(str.begin(), str.end(), ' '), str.end());
+           result *= std::stoi(str);
+        }
         if (result < 0){
            return "(- " + std::to_string(result*(-1)) + ")";
         } else {
@@ -157,6 +197,12 @@ std::string OperateVisitor::visit(Op*term){
            return "true";
         }else{
            return "false";
+        }
+    } else if (op == "ite"){
+        if (args[0]->accept(&visitor) == "true") {
+           return args[1]->accept(&visitor);
+        } else {
+           return args[2]->accept(&visitor);
         }
     }
 }
@@ -171,8 +217,14 @@ std::string SimplifyRuleVisitor::visit(Terminal* term) {
 
 std::string SimplifyRuleVisitor::visit(Op* term) {
     std::string op = term->getOp();
+    PrintVisitor printVisitor;
+    auto args = term->getArgs();
     if (op == "="){
-        return "equiv_simplify";
+        if ((args[0]->accept(&printVisitor).find_first_not_of("( )-0123456789") == std::string::npos) and (args[0]->accept(&printVisitor).find_first_not_of("( )-0123456789") == std::string::npos)){
+           return "eq_simplify";
+        } else {
+           return "equiv_simplify";
+        }
     }else if ((op == ">") or (op == "<") or (op == "<=") or (op == ">=")){
         return "comp_simplify";
     }else if (op == "and"){
@@ -189,6 +241,8 @@ std::string SimplifyRuleVisitor::visit(Op* term) {
         return "prod_simplify";
     }else if (op == "not"){
         return "not_simplify";
+    } else if (op == "ite") {
+        return "ite_simplify";
     }
     return "Error";
 }

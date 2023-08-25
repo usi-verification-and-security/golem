@@ -85,7 +85,7 @@ public:
     std::unique_ptr<ChcSystem> interpretSystemAst(const ASTNode * root);
     ChcInterpreterContext(Logic & logic, Options const & opts) : logic(logic), opts(opts) {}
 
-    std::vector<std::string> operators = {"+", "-", "/", "*", "and", "or", "=>", "not", "=", ">=", "<=", ">", "<"};
+    std::vector<std::string> operators = {"+", "-", "/", "*", "and", "or", "=>", "not", "=", ">=", "<=", ">", "<", "ite"};
 
     bool isOperator (const std::string& val){
         for (const std::string& op : operators){
