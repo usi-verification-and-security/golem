@@ -43,12 +43,19 @@ std::string PrintVisitor::visit(Quant* term) {
     return ss.str();
 }
 
-std::string OperateVisitor::visit(Terminal*term){
-    return "Error";
-}
-
-std::string OperateVisitor::visit(Quant*term){
-    return "Error";
+std::string PrintVisitor::visit(Let* term) {
+    std::stringstream ss;
+    auto names = term->getTermNames();
+    ss << "(" << "let" << " (";
+    for (int i = 0; i < names.size(); i++){
+        ss << "(" << names[i]
+           << " " << term->getDeclarations()[i]->accept(this) << ")";
+        if(i+1 != names.size()){
+           ss << " ";
+        }
+    }
+    ss << ")" << " " << term->getApplication()->accept(this) << ")";
+    return ss.str();
 }
 
 std::string OperateVisitor::visit(Op*term){
@@ -207,11 +214,7 @@ std::string OperateVisitor::visit(Op*term){
     }
 }
 
-std::string OperateVisitor::visit(App*term) {
-    return "Error";
-}
-
-std::string SimplifyRuleVisitor::visit(Terminal* term) {
+std::string OperateVisitor::visit(Let*term) {
     return "Error";
 }
 
@@ -247,22 +250,6 @@ std::string SimplifyRuleVisitor::visit(Op* term) {
     return "Error";
 }
 
-std::string SimplifyRuleVisitor::visit(App* term) {
-    return "Error";
-}
-
-std::string SimplifyRuleVisitor::visit(Quant* term) {
-    return "Error";
-}
-
-std::string NegatedAndVisitor::visit(Terminal* term) {
-    return "Error";
-}
-
-std::string NegatedAndVisitor::visit(App* term) {
-    return "Error";
-}
-
 std::string NegatedAndVisitor::visit(Op* term) {
     std::stringstream ss;
     PrintVisitor printVisitor;
@@ -280,11 +267,6 @@ std::string NegatedAndVisitor::visit(Op* term) {
         return "Error";
     }
 }
-
-std::string NegatedAndVisitor::visit(Quant* term) {
-
-}
-
 
 std::shared_ptr<Term> InstantiateVisitor::visit(Terminal* term){
     auto val = term->getVal();
@@ -321,6 +303,16 @@ std::shared_ptr<Term> InstantiateVisitor::visit(Quant* term){
     return coreTerm;
 }
 
+std::shared_ptr<Term> InstantiateVisitor::visit(Let* term){
+    std::vector<std::shared_ptr<Term>> declarations;
+    auto application = term->getApplication();
+    for (std::shared_ptr<Term> dec : term->getDeclarations()) {
+        declarations.push_back(dec->accept(this));
+    }
+    application->accept(this);
+    return std::make_shared<Let>(term->getTermNames(), declarations, application);
+}
+
 std::shared_ptr<Term> ImpFirstTermVisitor::visit(Terminal* term){
     return std::make_shared<Terminal>(term->getVal(), term->getType());
 }
@@ -348,11 +340,11 @@ std::shared_ptr<Term> ImpFirstTermVisitor::visit(App* term){
 
 std::shared_ptr<Term> ImpFirstTermVisitor::visit(Quant* term){
     std::shared_ptr<Term> coreTerm = term->getCoreTerm()->accept(this);
-    return coreTerm;
+    return coreTerm->accept(this);
 }
 
-std::shared_ptr<Term> SimplifyNonLinearVisitor::visit(Terminal* term){
-   return std::make_shared<Terminal>(term->getVal(), term->getType());
+std::shared_ptr<Term> ImpFirstTermVisitor::visit(Let* term){
+    return std::make_shared<Let>(term->getTermNames(), term->getDeclarations(), term->getApplication());
 }
 
 std::shared_ptr<Term> SimplifyNonLinearVisitor::visit(Op* term){
@@ -367,19 +359,8 @@ std::shared_ptr<Term> SimplifyNonLinearVisitor::visit(Op* term){
            newArgs.push_back(arg);
         }
     }
-
     return std::make_shared<Op>(op, newArgs);
-
 }
-
-std::shared_ptr<Term> SimplifyNonLinearVisitor::visit(App* term){
-   return std::make_shared<App>(term->getFun(), term->getArgs());
-}
-
-std::shared_ptr<Term> SimplifyNonLinearVisitor::visit(Quant* term){
-   return std::make_shared<Quant>(term->getQuant(), term->getVars(), term->getSorts(), term->getCoreTerm());
-}
-
 
 std::shared_ptr<Term> SimplifyLocatorVisitor::visit(Terminal* term){
     return std::make_shared<Terminal>(term->getVal(), term->getType());
@@ -428,6 +409,10 @@ std::shared_ptr<Term> SimplifyLocatorVisitor::visit(Quant* term){
     return term->getCoreTerm()->accept(this);
 }
 
+std::shared_ptr<Term> SimplifyLocatorVisitor::visit(Let* term){
+    return std::make_shared<Let>(term->getTermNames(), term->getDeclarations(), term->getApplication());
+}
+
 std::shared_ptr<Term> SimplifyVisitor::visit(Terminal* term){
     return std::make_shared<Terminal>(term->getVal(), term->getType());
 }
@@ -456,11 +441,74 @@ std::shared_ptr<Term> SimplifyVisitor::visit(Quant* term){
     return std::make_shared<Quant>(term->getQuant(), term->getVars(), term->getSorts(), term->getCoreTerm());
 }
 
-std::shared_ptr<Term> GetLocalParentBranchVisitor::visit(Terminal* term){
-    return std::make_shared<Terminal>("No Primary Branch Found", Term::UNDECLARED);
+std::shared_ptr<Term> SimplifyLetTermVisitor::visit(Terminal* term){
+    return std::make_shared<Terminal>(term->getVal(), term->getType());
 }
 
-std::shared_ptr<Term> GetLocalParentBranchVisitor::visit(Op* term){
+std::shared_ptr<Term> SimplifyLetTermVisitor::visit(Op* term){
+
+    auto args = term->getArgs();
+    std::vector<std::shared_ptr<Term>> newArgs;
+    auto op = term->getOp();
+
+    for (auto arg : args){
+        newArgs.push_back(arg->accept(this));
+    }
+    return std::make_shared<Op>(op, newArgs);
+}
+
+std::shared_ptr<Term> SimplifyLetTermVisitor::visit(App* term){
+    return std::make_shared<App>(term->getFun(), term->getArgs());
+}
+
+std::shared_ptr<Term> SimplifyLetTermVisitor::visit(Quant* term){
+    std::shared_ptr<Term> coreTerm = term->getCoreTerm()->accept(this);
+    return std::make_shared<Quant>(term->getQuant(), term->getVars(), term->getSorts(), coreTerm);
+}
+
+std::shared_ptr<Term> SimplifyLetTermVisitor::visit(Let* term){
+
+    if (letTerm == term) {
+        return simplification;
+    }
+    return std::make_shared<Let>(term->getTermNames(), term->getDeclarations(), term->getApplication());
+}
+
+std::shared_ptr<Term> OperateLetTermVisitor::visit(Terminal* term){
+
+    for (int i = 0; i < terms.size(); i++) {
+        if (term->getVal() == terms[i]) {
+           return substitutions[i];
+        }
+    }
+    return std::make_shared<Terminal>(term->getVal(), term->getType());
+}
+
+std::shared_ptr<Term> OperateLetTermVisitor::visit(Op* term){
+    std::vector<std::shared_ptr<Term>> args;
+    std::string opcode = term->getOp();
+    for (std::shared_ptr<Term> arg : term->getArgs()) {
+        args.push_back(arg->accept(this));
+    }
+    return std::make_shared<Op>(opcode, args);
+}
+
+std::shared_ptr<Term> OperateLetTermVisitor::visit(App* term){
+    std::vector<std::shared_ptr<Term>> args;
+    std::string fun = term->getFun();
+    for (std::shared_ptr<Term> arg : term->getArgs()) {
+        args.push_back(arg->accept(this));
+    }
+    return std::make_shared<App>(fun, args);
+}
+
+std::shared_ptr<Term> OperateLetTermVisitor::visit(Let* term){
+    terms = term->getTermNames();
+    substitutions = term->getDeclarations();
+    return term->getApplication()->accept(this);
+}
+
+Term* GetLocalParentBranchVisitor::visit(Op* term){
     auto args = term->getArgs();
     std::vector<std::shared_ptr<Term>> newArgs;
     auto op = term->getOp();
@@ -469,65 +517,29 @@ std::shared_ptr<Term> GetLocalParentBranchVisitor::visit(Op* term){
         return args[0]->accept(this);
     }
 
-    std::vector<std::pair<std::string, std::string>> emptyPairs;
-    InstantiateVisitor instantiateVisitor(emptyPairs);
     PrintVisitor printVisitor;
 
     for (auto arg : args) {
-        if (operation->accept(&printVisitor) == arg->accept(&printVisitor)){
-            return term->accept(&instantiateVisitor);
+        if (operation == arg.get()){
+            return term;
         } else if (arg->accept(&printVisitor).find(operation->accept(&printVisitor)) != std::string::npos) {
-             return arg->accept(this);
+             Term* potential = arg->accept(this);
+             if (potential != nullptr) {
+               return potential;
+             }
         }
     }
 
-    return std::make_shared<Terminal>("No Primary Branch Found", Term::UNDECLARED);
-}
-
-std::shared_ptr<Term> GetLocalParentBranchVisitor::visit(App* term){
-    return std::make_shared<Terminal>("No Primary Branch Found", Term::UNDECLARED);
-}
-
-std::shared_ptr<Term> GetLocalParentBranchVisitor::visit(Quant* term){
-    return std::make_shared<Terminal>("No Primary Branch Found", Term::UNDECLARED);
-}
-
-bool TerminalOrAppVisitor::visit(Terminal* term){
-    return true;
-}
-
-bool TerminalOrAppVisitor::visit(Op* term){
-    return false;
-}
-
-bool TerminalOrAppVisitor::visit(App* term){
-    return true;
-}
-
-bool TerminalOrAppVisitor::visit(Quant* term){
-    return false;
-}
-
-bool RequiresCongVisitor::visit(Terminal* term){
-    return false;
-}
-
-bool RequiresCongVisitor::visit(App* term){
-    return false;
+    return nullptr;
 }
 
 bool RequiresCongVisitor::visit(Op* term){
-    if (term->getOp() != "and" and term->getOp() != "or" and term->getOp() != "=>"){
-        return false;
+    TerminalOrAppVisitor terminalOrAppVisitor;
+    for (auto arg : term->getArgs()) {
+        if  (not arg->accept(&terminalOrAppVisitor)) {
+             return true;
+        }
     }
-    return true;
-}
-
-bool RequiresCongVisitor::visit(Quant* term){
-    return false;
-}
-
-bool IsPrimaryBranchVisitor::visit(Terminal* term){
     return false;
 }
 
@@ -536,7 +548,7 @@ bool IsPrimaryBranchVisitor::visit(Op* term){
     auto args = term->getArgs();
 
     if (term->getOp() == "=>"){
-        if (branch->accept(&printVisitor) == args[0]->accept(&printVisitor)) {
+        if (branch == args[0].get()) {
              return true;
         } else {
              return args[0]->accept(this);
@@ -544,23 +556,11 @@ bool IsPrimaryBranchVisitor::visit(Op* term){
     }
 
     for (auto arg : args) {
-        if (branch->accept(&printVisitor) == arg->accept(&printVisitor)){
+        if (branch == arg.get()){
            return true;
         }
     }
 
-    return false;
-}
-
-bool IsPrimaryBranchVisitor::visit(App* term){
-    return false;
-}
-
-bool IsPrimaryBranchVisitor::visit(Quant* term){
-    return false;
-}
-
-bool NonLinearVisitor::visit(Terminal* term){
     return false;
 }
 
@@ -589,14 +589,6 @@ bool NonLinearVisitor::visit(Op* term){
     } else {
         return false;
     }
-}
-
-bool NonLinearVisitor::visit(App* term){
-    return true;
-}
-
-bool NonLinearVisitor::visit(Quant* term){
-    return false;
 }
 
 Term* SimplifyHelperVisitor::visit(Terminal* term) {
@@ -633,11 +625,33 @@ Term* SimplifyHelperVisitor::visit(Op* term) {
     }
 }
 
+Term* SimplifyHelperVisitor::visit(Let * term) {
+    return term;
+}
+
 Term* SimplifyHelperVisitor::visit(App* term) {
     return term;
 }
 
 Term* SimplifyHelperVisitor::visit(Quant* term) {
+    return term;
+}
+
+Term* LetLocatorVisitor::visit(Quant* term) {
+    return term->getCoreTerm()->accept(this);
+}
+
+Term* LetLocatorVisitor::visit(Op* term) {
+    auto args = term->getArgs();
+    for (auto arg : args) {
+        if (arg->accept(this) != nullptr) {
+           return arg->accept(this);
+        }
+    }
+    return nullptr;
+}
+
+Term* LetLocatorVisitor::visit(Let* term) {
     return term;
 }
 
@@ -657,6 +671,10 @@ std::string Quant::accept(StringVisitor* visitor) {
     return visitor->visit(this);
 }
 
+std::string Let::accept(StringVisitor* visitor) {
+    return visitor->visit(this);
+}
+
 std::shared_ptr<Term> Terminal::accept(LogicVisitor* visitor) {
     return visitor->visit(this);
 }
@@ -670,6 +688,10 @@ std::shared_ptr<Term> App::accept(LogicVisitor* visitor) {
 }
 
 std::shared_ptr<Term> Quant::accept(LogicVisitor* visitor) {
+    return visitor->visit(this);
+}
+
+std::shared_ptr<Term> Let::accept(LogicVisitor* visitor) {
     return visitor->visit(this);
 }
 
@@ -689,19 +711,27 @@ bool Quant::accept(BooleanVisitor* visitor){
     return visitor->visit(this);
 }
 
-Term* Terminal::accept(SimplifyHelperVisitor* visitor){
+bool Let::accept(BooleanVisitor* visitor){
     return visitor->visit(this);
 }
 
-Term* Op::accept(SimplifyHelperVisitor* visitor){
+Term* Terminal::accept(PointerVisitor* visitor){
     return visitor->visit(this);
 }
 
-Term* App::accept(SimplifyHelperVisitor* visitor){
+Term* Op::accept(PointerVisitor* visitor){
     return visitor->visit(this);
 }
 
-Term* Quant::accept(SimplifyHelperVisitor* visitor){
+Term* App::accept(PointerVisitor* visitor){
+    return visitor->visit(this);
+}
+
+Term* Quant::accept(PointerVisitor* visitor){
+    return visitor->visit(this);
+}
+
+Term* Let::accept(PointerVisitor* visitor){
     return visitor->visit(this);
 }
 

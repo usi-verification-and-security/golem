@@ -243,8 +243,30 @@ std::shared_ptr<Term> ChcInterpreterContext::ASTtoTerm(const ASTNode & node){
             auto term = std::make_shared<App>(op, args);
             return  term;
         }
+    } else if (t == LET_T){
+        auto ch = node.children->begin();
+        auto vbl = (**ch).children->begin();
+        std::vector<std::shared_ptr<Term>> declarations;
+        std::vector<std::string> termNames;
+
+        // First read the term declarations in the let statement
+        while (vbl != (**ch).children->end()) {
+            std::shared_ptr<Term> declaration = ASTtoTerm(**((**vbl).children->begin()));
+            declarations.push_back(declaration);
+            std::string name = (**vbl).getValue();
+            termNames.push_back(name);
+            vbl++;
+        }
+
+        ch++;
+        // This is now constructed with the let declarations context in let_branch
+        std::shared_ptr<Term> application = ASTtoTerm(**(ch));
+        return std::make_shared<Let>(termNames, declarations, application);
     }
+
+    return std::make_shared<Terminal>("Error", Term::UNDECLARED);
 }
+
 
 PTRef ChcInterpreterContext::parseTerm(const ASTNode & termNode) {
     ASTType t = termNode.getType();

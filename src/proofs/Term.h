@@ -13,7 +13,7 @@ public:
     virtual std::shared_ptr<Term> accept(class LogicVisitor*) = 0;
     virtual std::string accept(class StringVisitor*) = 0;
     virtual bool accept(class BooleanVisitor*) = 0;
-    virtual Term* accept(class SimplifyHelperVisitor*) = 0;
+    virtual Term* accept(class PointerVisitor*) = 0;
 };
 
 class Terminal : public Term {
@@ -27,7 +27,7 @@ public:
     std::shared_ptr<Term> accept(LogicVisitor*) override;
     std::string accept(StringVisitor*) override;
     bool accept(BooleanVisitor*) override;
-    Term* accept(SimplifyHelperVisitor*) override;
+    Term* accept(PointerVisitor*) override;
 };
 
 class Op : public Term {
@@ -41,7 +41,7 @@ public:
     std::shared_ptr<Term> accept(LogicVisitor*) override;
     std::string accept(StringVisitor*) override;
     bool accept(BooleanVisitor*) override;
-    Term* accept(SimplifyHelperVisitor*) override;
+    Term* accept(PointerVisitor*) override;
 };
 
 class App : public Term {
@@ -55,7 +55,7 @@ public:
     std::shared_ptr<Term> accept(LogicVisitor*) override;
     std::string accept(StringVisitor*) override;
     bool accept(BooleanVisitor*) override;
-    Term* accept(SimplifyHelperVisitor*) override;
+    Term* accept(PointerVisitor*) override;
 };
 
 class Quant : public Term {
@@ -73,8 +73,28 @@ public:
     std::shared_ptr<Term> accept(LogicVisitor*) override;
     std::string accept(StringVisitor*) override;
     bool accept(BooleanVisitor*) override;
-    Term* accept(SimplifyHelperVisitor*) override;
+    Term* accept(PointerVisitor*) override;
 };
+
+class Let : public Term {
+    std::vector<std::string> termNames;
+    std::vector<std::shared_ptr<Term>> declarations;
+    std::shared_ptr<Term> application;
+
+public:
+    Let(std::vector<std::string> termNames,  std::vector<std::shared_ptr<Term>> declarations,   std::shared_ptr<Term> application) : termNames(std::move(termNames)),
+          declarations(std::move(declarations)), application(std::move(application)) {}
+    std::vector<std::shared_ptr<Term>> getDeclarations() {return declarations;}
+    std::shared_ptr<Term> getApplication() {return application;}
+    std::vector<std::string> getTermNames() {return termNames;}
+
+    std::shared_ptr<Term> accept(LogicVisitor*) override;
+    std::string accept(StringVisitor*) override;
+    bool accept(BooleanVisitor*) override;
+    Term* accept(PointerVisitor*) override;
+};
+
+// Visitors
 
 class LogicVisitor {
 public:
@@ -82,6 +102,7 @@ public:
     virtual std::shared_ptr<Term> visit(Quant*) = 0;
     virtual std::shared_ptr<Term> visit(Op*) = 0;
     virtual std::shared_ptr<Term> visit(App*) = 0;
+    virtual std::shared_ptr<Term> visit(Let*) = 0;
 };
 
 class InstantiateVisitor : public LogicVisitor{
@@ -93,6 +114,7 @@ public:
     std::shared_ptr<Term> visit(Quant*) override;
     std::shared_ptr<Term> visit(Op*) override;
     std::shared_ptr<Term> visit(App*) override;
+    std::shared_ptr<Term> visit(Let*) override;
 };
 
 class SimplifyLocatorVisitor : public LogicVisitor{
@@ -101,6 +123,7 @@ public:
     std::shared_ptr<Term> visit(Quant*) override;
     std::shared_ptr<Term> visit(Op*) override;
     std::shared_ptr<Term> visit(App*) override;
+    std::shared_ptr<Term> visit(Let*) override;
 };
 
 class SimplifyVisitor : public LogicVisitor {
@@ -112,6 +135,7 @@ public:
     std::shared_ptr<Term> visit(Quant*) override;
     std::shared_ptr<Term> visit(Op*) override;
     std::shared_ptr<Term> visit(App*) override;
+    std::shared_ptr<Term> visit(Let*) override {return std::make_shared<Terminal>("Error", Term::UNDECLARED);};
 };
 
 class ImpFirstTermVisitor : public LogicVisitor {
@@ -120,24 +144,39 @@ public:
     std::shared_ptr<Term> visit(Quant*) override;
     std::shared_ptr<Term> visit(Op*) override;
     std::shared_ptr<Term> visit(App*) override;
+    std::shared_ptr<Term> visit(Let*) override;
 };
 
-class GetLocalParentBranchVisitor : public LogicVisitor {
-    std::shared_ptr<Term> operation;
-public:
-    explicit GetLocalParentBranchVisitor(std::shared_ptr<Term> o) : operation(std::move(o)) {}
+class OperateLetTermVisitor : public LogicVisitor {
+    std::vector<std::string> terms;
+    std::vector<std::shared_ptr<Term>> substitutions;
+public :
+    std::shared_ptr<Term> visit(Terminal*) override;
+    std::shared_ptr<Term> visit(Quant*) override {return std::make_shared<Terminal>("Error", Term::UNDECLARED);};
+    std::shared_ptr<Term> visit(Op*) override;
+    std::shared_ptr<Term> visit(App*) override;
+    std::shared_ptr<Term> visit(Let*) override;
+};
+
+class SimplifyLetTermVisitor : public LogicVisitor {
+    std::shared_ptr<Term> simplification;
+    Term* letTerm;
+public :
+    SimplifyLetTermVisitor(std::shared_ptr<Term> simplification, Term* letTerm) : simplification(std::move(simplification)), letTerm(letTerm) {}
     std::shared_ptr<Term> visit(Terminal*) override;
     std::shared_ptr<Term> visit(Quant*) override;
     std::shared_ptr<Term> visit(Op*) override;
     std::shared_ptr<Term> visit(App*) override;
+    std::shared_ptr<Term> visit(Let*) override;
 };
 
 class SimplifyNonLinearVisitor : public LogicVisitor {
 public:
-    std::shared_ptr<Term> visit(Terminal*) override;
-    std::shared_ptr<Term> visit(Quant*) override;
+    std::shared_ptr<Term> visit(Terminal*) override {return std::make_shared<Terminal>("Error", Term::UNDECLARED);};
+    std::shared_ptr<Term> visit(Quant*) override {return std::make_shared<Terminal>("Error", Term::UNDECLARED);};
     std::shared_ptr<Term> visit(Op*) override;
-    std::shared_ptr<Term> visit(App*) override;
+    std::shared_ptr<Term> visit(App*) override {return std::make_shared<Terminal>("Error", Term::UNDECLARED);};
+    std::shared_ptr<Term> visit(Let*) override {return std::make_shared<Terminal>("Error", Term::UNDECLARED);};
 };
 
 class StringVisitor {
@@ -146,6 +185,7 @@ public:
     virtual std::string visit(Quant*) = 0;
     virtual std::string visit(Op*) = 0;
     virtual std::string visit(App*) = 0;
+    virtual std::string visit(Let*) = 0;
 };
 
 class PrintVisitor : public StringVisitor {
@@ -154,30 +194,34 @@ public:
     std::string visit(Quant*) override;
     std::string visit(Op*) override;
     std::string visit(App*) override;
+    std::string visit(Let*) override;
 };
 
 class OperateVisitor : public StringVisitor {
 public:
-    std::string visit(Terminal*) override;
-    std::string visit(Quant*) override;
+    std::string visit(Terminal*) override {return "Error";};
+    std::string visit(Quant*) override {return "Error";};
     std::string visit(Op*) override;
-    std::string visit(App*) override;
+    std::string visit(App*) override {return "Error";};
+    std::string visit(Let*) override;
 };
 
 class SimplifyRuleVisitor : public StringVisitor {
 public:
-    std::string visit(Terminal*) override;
-    std::string visit(Quant*) override;
+    std::string visit(Terminal*) override {return "Error";};
+    std::string visit(Quant*) override {return "Error";};
     std::string visit(Op*) override;
-    std::string visit(App*) override;
+    std::string visit(App*) override {return "Error";};
+    std::string visit(Let*) override {return "let";};
 };
 
 class NegatedAndVisitor : public StringVisitor {
 public:
-    std::string visit(Terminal*) override;
-    std::string visit(Quant*) override;
+    std::string visit(Terminal*) override {return "Error";};
+    std::string visit(Quant*) override {return "Error";};
     std::string visit(Op*) override;
-    std::string visit(App*) override;
+    std::string visit(App*) override {return "Error";};
+    std::string visit(Let*) override {return "Error";};
 };
 
 class BooleanVisitor {
@@ -186,49 +230,83 @@ public:
     virtual bool visit(Quant*) = 0;
     virtual bool visit(Op*) = 0;
     virtual bool visit(App*) = 0;
+    virtual bool visit(Let*) = 0;
 };
 
 class TerminalOrAppVisitor : public BooleanVisitor {
 public:
-    bool visit(Terminal*) override;
-    bool visit(Quant*) override;
-    bool visit(Op*) override;
-    bool visit(App*) override;
+    bool visit(Terminal*) override {return true;};
+    bool visit(Quant*) override {return false;};
+    bool visit(Op*) override {return false;};
+    bool visit(App*) override {return true;};
+    bool visit(Let*) override {return false;};
 };
 
 class RequiresCongVisitor : public BooleanVisitor {
 public:
-    bool visit(Terminal*) override;
-    bool visit(Quant*) override;
+    bool visit(Terminal*) override {return false;};
+    bool visit(Quant*) override {return false;};
     bool visit(Op*) override;
-    bool visit(App*) override;
+    bool visit(App*) override {return false;};
+    bool visit(Let*) override {return true;};
 };
 
 class IsPrimaryBranchVisitor : public BooleanVisitor {
-    std::shared_ptr<Term> branch;
+    Term* branch;
 public:
-    explicit IsPrimaryBranchVisitor(std::shared_ptr<Term> b) : branch(std::move(b)) {}
-    bool visit(Terminal*) override;
-    bool visit(Quant*) override;
+    explicit IsPrimaryBranchVisitor(Term* b) : branch(b) {}
+    bool visit(Terminal*) override {return false;};
+    bool visit(Quant*) override {return false;};
     bool visit(Op*) override;
-    bool visit(App*) override;
-    void setBranch(std::shared_ptr<Term> b) { branch = std::move(b);}
-};
-
-class SimplifyHelperVisitor {
-public:
-    Term* visit(Terminal*);
-    Term* visit(Quant*);
-    Term* visit(Op*);
-    Term* visit(App*);
+    bool visit(App*) override {return false;};
+    bool visit(Let*) override {return false;};
 };
 
 class NonLinearVisitor : public BooleanVisitor{
 public:
-    bool visit(Terminal*) override;
-    bool visit(Quant*) override;
+    bool visit(Terminal*) override {return false;};
+    bool visit(Quant*) override {return false;};
     bool visit(Op*) override;
-    bool visit(App*) override;
+    bool visit(App*) override {return true;};
+    bool visit(Let*) override {return false;};
+};
+
+class PointerVisitor {
+public:
+    virtual Term* visit(Terminal*) = 0;
+    virtual Term* visit(Quant*) = 0;
+    virtual Term* visit(Op*) = 0;
+    virtual Term* visit(App*) = 0;
+    virtual Term* visit(Let*) = 0;
+};
+
+class SimplifyHelperVisitor : public PointerVisitor{
+public:
+    Term* visit(Terminal*) override;
+    Term* visit(Quant*) override;
+    Term* visit(Op*) override;
+    Term* visit(App*) override;
+    Term* visit(Let*) override;
+};
+
+class LetLocatorVisitor : public PointerVisitor{
+public:
+    Term* visit(Terminal*) override {return nullptr;};
+    Term* visit(Quant*) override;
+    Term* visit(Op*) override;
+    Term* visit(App*) override {return nullptr;};
+    Term* visit(Let*) override;
+};
+
+class GetLocalParentBranchVisitor : public PointerVisitor {
+    Term* operation;
+public:
+    explicit GetLocalParentBranchVisitor(Term* o) : operation(o) {}
+    Term* visit(Terminal*) override {return nullptr;};
+    Term* visit(Quant*) override {return nullptr;};
+    Term* visit(Op*) override;
+    Term* visit(App*) override {return nullptr;};
+    Term* visit(Let*) override {return nullptr;};
 };
 
 #endif // TERM_H

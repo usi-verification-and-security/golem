@@ -123,8 +123,6 @@ private:
 
     PTRef parseTerm(ASTNode const & node);
 
-    std::string ASTtoString(ASTNode const & node);
-
     std::shared_ptr<Term> ASTtoTerm(ASTNode const & node);
 
     // Building CHCs and helper methods

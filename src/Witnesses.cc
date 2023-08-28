@@ -58,9 +58,17 @@ void InvalidityWitness::alethePrint(std::ostream & out, Logic & logic, ChcDirect
     NonLinearVisitor nonLinearVisitor;
     SimplifyNonLinearVisitor simplifyNonLinearVisitor;
     NegatedAndVisitor negatedAndVisitor;
+    OperateLetTermVisitor operateLetTermVisitor;
+    LetLocatorVisitor letLocatorVisitor;
 
     for (std::size_t i = 1; i <= assertionSize; ++i) {
-        // Printing assumptions
+        // Printing assumptions and preprocessing of let terms
+        Term* potentialLet = originalAssertions[i-1]->accept(&letLocatorVisitor);
+        if (potentialLet != nullptr) {
+            auto simplifiedLet = potentialLet->accept(&operateLetTermVisitor);
+            SimplifyLetTermVisitor simplifyLetTermVisitor(simplifiedLet, potentialLet);
+            originalAssertions[i-1] = originalAssertions[i-1]->accept(&simplifyLetTermVisitor);
+        }
         out << "(assume h" << i << ' ' << originalAssertions[i-1]->accept(&printVisitor) << ")\n";
     }
 
@@ -78,12 +86,13 @@ void InvalidityWitness::alethePrint(std::ostream & out, Logic & logic, ChcDirect
             InstantiateVisitor instVisitor(instPairs);
             std::shared_ptr<Term> term = originalAssertions[step.clauseId.id];
             std::shared_ptr<Term> instTerm = term->accept(&instVisitor);
+            std::shared_ptr<Term> impFirstArg = instTerm->accept(&impFirstTermVisitor);
 
             //Instantiation
             out << "(step t" << ++currAletheStep << " " << "(cl (or (not " << term->accept(&printVisitor) << ") " << instTerm->accept(&printVisitor) << "))"
                 << " :rule forall_inst" << " :args (";
 
-            for (std::pair<std::string, std::string> pair : instPairs){
+            for (const std::pair<std::string, std::string>& pair : instPairs){
                 out << "(:= " << pair.first << " " << pair.second << ")";
             }
             out << "))\n";
@@ -96,14 +105,12 @@ void InvalidityWitness::alethePrint(std::ostream & out, Logic & logic, ChcDirect
 
             //Simplification
 
-            std::shared_ptr<Term> impFirstArg = instTerm->accept(&impFirstTermVisitor);
-
             out << "(step t" << ++currAletheStep << " " << "(cl (not " << impFirstArg->accept(&printVisitor) << ") " << logic.printTerm(step.derivedFact) << ") :rule implies :premises (t"
                 << currAletheStep-1 << "))\n";
 
             impliesStep = currAletheStep;
 
-            // Check if the first argument of implication has an operator like "and" "or" "=>" which require additional steps
+            // Check if the first argument of implication has a height greater than 0, as it will require additional steps.
 
             if (not impFirstArg->accept(&requiresCongVisitor)) {
 
@@ -152,13 +159,13 @@ void InvalidityWitness::alethePrint(std::ostream & out, Logic & logic, ChcDirect
                 while (not instTerm->accept(&simpVisitor)->accept(&terminalOrAppVisitor)) {
 
                     std::shared_ptr<Term> termToSimplify = instTerm->accept(&simpVisitor);  //Locating possible simplification
-                    std::string simplification = termToSimplify->accept(&opVisitor);    //Calculating simplification
                     std::string rule = termToSimplify->accept(&simplifyRuleVisitor);    //Getting rule for simplification
+                    std::string simplification = termToSimplify->accept(&opVisitor);    //Calculating simplification
 
                     //Check if we are dealing with a non-linear simplification
                     if (termToSimplify->accept(&nonLinearVisitor)) {
 
-                        if (simpSteps.size() > 0) {
+                        if (!simpSteps.empty()) {
 
                             out << "(step t" << ++currAletheStep << " "
                                 << "(cl (= " << impFirstArg->accept(&printVisitor) << " "
@@ -192,19 +199,21 @@ void InvalidityWitness::alethePrint(std::ostream & out, Logic & logic, ChcDirect
                         break;
 
                     } else {
-                        //If not, proceed normally;
+                        //If not, proceed normally
 
-                        IsPrimaryBranchVisitor isPrimaryBranchVisitor(termToSimplify);  //Checking if the current term is a primary branch
+                        IsPrimaryBranchVisitor isPrimaryBranchVisitor(instTerm->accept(&helperVisitor));  //Checking if the current term is a primary branch
                         bool isPrimaryBranch = instTerm->accept(&isPrimaryBranchVisitor);
 
-                        std::shared_ptr<Term> localParentBranch;
+                        Term* localParentBranch;
                         std::shared_ptr<Term> localParentBranchSimplified;
 
                         if (instTerm->accept(&impFirstTermVisitor)->accept(&printVisitor) != termToSimplify->accept(&printVisitor)) {
+
                             //Simplification step
                             out << "(step t" << ++currAletheStep << " "
                                 << "(cl (= " << termToSimplify->accept(&printVisitor) << " " << simplification
                                 << ")) :rule " << rule << ")\n";
+
                         } else {
                             finalTermToSimplify = termToSimplify;
                             finalSimplification = simplification;
@@ -212,15 +221,16 @@ void InvalidityWitness::alethePrint(std::ostream & out, Logic & logic, ChcDirect
                             lastSimplification = true;
                         }
 
-                        std::shared_ptr<Term> lastLocalParent;
+                        Term* lastLocalParent;
                         std::shared_ptr<Term> lastLocalSimplifiedParent;
 
                         if (not isPrimaryBranch) {
 
-                            GetLocalParentBranchVisitor getLocalParentBranchVisitor(termToSimplify);
-                            localParentBranch = instTerm->accept(&getLocalParentBranchVisitor);   //Getting the primary branch of the current term for simplification
-                            SimplifyVisitor simplifyLocaParentBranchVisitor(simplification, localParentBranch->accept(&helperVisitor));
-                            localParentBranchSimplified = localParentBranch->accept(&simplifyLocaParentBranchVisitor);   //Simplifying said parent branch branch
+                            GetLocalParentBranchVisitor getLocalParentBranchVisitor(instTerm->accept(&helperVisitor));
+                            localParentBranch = instTerm->accept(&getLocalParentBranchVisitor);   //Getting the parent branch of the current term for simplification
+
+                            SimplifyVisitor simplifyLocalParentBranchVisitor(simplification, localParentBranch->accept(&helperVisitor));
+                            localParentBranchSimplified = localParentBranch->accept(&simplifyLocalParentBranchVisitor);   //Simplifying said parent branch branch
 
                             IsPrimaryBranchVisitor localIsPrimary(localParentBranch);  //Checking if the current term is a primary branch
 
@@ -246,8 +256,12 @@ void InvalidityWitness::alethePrint(std::ostream & out, Logic & logic, ChcDirect
                             }
                             //save the original primary branch
                             if (originalPrimaryBranch == nullptr) {
+
+                                std::vector<std::pair<std::string, std::string>> emptypair;
+                                InstantiateVisitor tempInstVisitor(emptypair);
+
                                 transStep = currAletheStep;
-                                originalPrimaryBranch = lastLocalParent;
+                                originalPrimaryBranch = lastLocalParent->accept(&tempInstVisitor);
                             } else {
                                 //trans step to pass along the information
                                 out << "(step t" << ++currAletheStep << " "
@@ -257,6 +271,7 @@ void InvalidityWitness::alethePrint(std::ostream & out, Logic & logic, ChcDirect
                             }
 
                         } else {
+
                             if (originalPrimaryBranch != nullptr) {
                                 //trans step to pass along the information
                                 out << "(step t" << ++currAletheStep << " "
@@ -264,12 +279,15 @@ void InvalidityWitness::alethePrint(std::ostream & out, Logic & logic, ChcDirect
                                     << simplification << ")) :rule trans :premises (t" << currAletheStep-1 << " t" << transStep << "))\n";
                             }
                             originalPrimaryBranch = nullptr;
+
                             if (not lastSimplification) {
                                 simpSteps.push_back(currAletheStep);
                             }
                         }
-                        SimplifyVisitor newSimplifyVisitor(simplification, instTerm->accept(&helperVisitor));
-                        instTerm = instTerm->accept(&newSimplifyVisitor);
+
+                        SimplifyVisitor simplifyVisitor(simplification, instTerm->accept(&helperVisitor));
+                        instTerm = instTerm->accept(&simplifyVisitor);
+
                     }
                 }
 
@@ -300,6 +318,7 @@ void InvalidityWitness::alethePrint(std::ostream & out, Logic & logic, ChcDirect
                     modusPonensSteps.push_back(currAletheStep);
 
                 } else {
+
                     out << "(step t" << ++currAletheStep << " "
                         << "(cl (= " << impFirstArg->accept(&printVisitor) << " "
                         << finalTermToSimplify->accept(&printVisitor) << ")) :rule cong :premises (";
