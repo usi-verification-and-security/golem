@@ -91,7 +91,9 @@ protected:
     vec<PTRef> auxiliaryVariables;
     vec<PTRef> leftInvariants;
     vec<PTRef> rightInvariants;
+    vec<int> rightInvariantsLevels;
     vec<PTRef> exactInvariants;
+    vec<int> leftInvariantsLevels;
 
     PTRef identity{PTRef_Undef};
 
@@ -185,7 +187,7 @@ protected:
 
     PTRef safeSupersetOfInitialStates(PTRef start, PTRef transitionInvariant, PTRef target) const;
 
-    void houdiniCheck(PTRef invCandidates, PTRef transition, SafetyExplanation::FixedPointType alignment, TPAType type);
+    void houdiniCheck(PTRef invCandidates, PTRef transition, SafetyExplanation::FixedPointType alignment, TPAType type, uint power);
 
     bool checkLessThanFixedPoint(unsigned short power);
 
