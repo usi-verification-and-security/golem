@@ -6,6 +6,7 @@
 
 #include "Witnesses.h"
 #include "TransformationUtils.h"
+#include "proofs/AletheSteps.h"
 #include "utils/SmtSolver.h"
 #include <memory>
 
@@ -35,7 +36,13 @@ void VerificationResult::printWitness_(std::ostream & out, Logic & logic, const 
         }
         case VerificationAnswer::UNSAFE: {
 
-            getInvalidityWitness().alethePrint(out, logic, originalGraph, originalAssertions, normalizingEqualities);
+            StepHandler stepHandler(getInvalidityWitness().getDerivation(), originalAssertions,
+                                    normalizingEqualities, out,
+                                    logic, originalGraph);
+
+            stepHandler.buildAletheProof();
+            stepHandler.displayProof();
+
             return;
         }
         default:
@@ -52,7 +59,7 @@ void InvalidityWitness::alethePrint(std::ostream & out, Logic & logic, ChcDirect
     OperateVisitor opVisitor;
     SimplifyRuleVisitor simplifyRuleVisitor;
     TerminalOrAppVisitor terminalOrAppVisitor;
-    ImpFirstTermVisitor impFirstTermVisitor;
+    ImplicationLHSVisitor impFirstTermVisitor;
     RequiresCongVisitor requiresCongVisitor;
     SimplifyHelperVisitor helperVisitor;
     NonLinearVisitor nonLinearVisitor;
@@ -230,7 +237,7 @@ void InvalidityWitness::alethePrint(std::ostream & out, Logic & logic, ChcDirect
                             localParentBranch = instTerm->accept(&getLocalParentBranchVisitor);   //Getting the parent branch of the current term for simplification
 
                             SimplifyVisitor simplifyLocalParentBranchVisitor(simplification, localParentBranch->accept(&helperVisitor));
-                            localParentBranchSimplified = localParentBranch->accept(&simplifyLocalParentBranchVisitor);   //Simplifying said parent branch branch
+                            localParentBranchSimplified = localParentBranch->accept(&simplifyLocalParentBranchVisitor);   //Simplifying said parent branch
 
                             IsPrimaryBranchVisitor localIsPrimary(localParentBranch);  //Checking if the current term is a primary branch
 

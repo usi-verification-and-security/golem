@@ -9,7 +9,7 @@
 
 class Term {
 public:
-    enum terminalType{ VAR, REAL, INT, SORT, UNDECLARED};
+    enum terminalType{ VAR, REAL, INT, SORT, BOOL, UNDECLARED};
     virtual std::string Iam() = 0;
     virtual std::shared_ptr<Term> accept(class LogicVisitor*) = 0;
     virtual std::string accept(class StringVisitor*) = 0;
@@ -116,6 +116,7 @@ class InstantiateVisitor : public LogicVisitor{
     std::vector<std::pair<std::string, std::string>> instPairs;
 public:
     explicit InstantiateVisitor (std::vector<std::pair<std::string, std::string>> instPairs) : instPairs(std::move(instPairs)) {}
+    explicit InstantiateVisitor () = default;
 
     std::shared_ptr<Term> visit(Terminal*) override;
     std::shared_ptr<Term> visit(Quant*) override;
@@ -145,7 +146,7 @@ public:
     std::shared_ptr<Term> visit(Let*) override {return std::make_shared<Terminal>("Error", Term::UNDECLARED);};
 };
 
-class ImpFirstTermVisitor : public LogicVisitor {
+class ImplicationLHSVisitor : public LogicVisitor {
 public:
     std::shared_ptr<Term> visit(Terminal*) override;
     std::shared_ptr<Term> visit(Quant*) override;

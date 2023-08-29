@@ -313,11 +313,11 @@ std::shared_ptr<Term> InstantiateVisitor::visit(Let* term){
     return std::make_shared<Let>(term->getTermNames(), declarations, application);
 }
 
-std::shared_ptr<Term> ImpFirstTermVisitor::visit(Terminal* term){
+std::shared_ptr<Term> ImplicationLHSVisitor::visit(Terminal* term){
     return std::make_shared<Terminal>(term->getVal(), term->getType());
 }
 
-std::shared_ptr<Term> ImpFirstTermVisitor::visit(Op* term){
+std::shared_ptr<Term> ImplicationLHSVisitor::visit(Op* term){
     std::string opcode = term->getOp();
     if (opcode == "=>"){
         return term->getArgs()[0]->accept(this);
@@ -329,7 +329,7 @@ std::shared_ptr<Term> ImpFirstTermVisitor::visit(Op* term){
     return std::make_shared<Op>(opcode, args);
 }
 
-std::shared_ptr<Term> ImpFirstTermVisitor::visit(App* term){
+std::shared_ptr<Term> ImplicationLHSVisitor::visit(App* term){
     std::vector<std::shared_ptr<Term>> args;
     std::string fun = term->getFun();
     for (std::shared_ptr<Term> arg : term->getArgs()) {
@@ -338,12 +338,12 @@ std::shared_ptr<Term> ImpFirstTermVisitor::visit(App* term){
     return std::make_shared<App>(fun, args);
 }
 
-std::shared_ptr<Term> ImpFirstTermVisitor::visit(Quant* term){
+std::shared_ptr<Term> ImplicationLHSVisitor::visit(Quant* term){
     std::shared_ptr<Term> coreTerm = term->getCoreTerm()->accept(this);
     return coreTerm->accept(this);
 }
 
-std::shared_ptr<Term> ImpFirstTermVisitor::visit(Let* term){
+std::shared_ptr<Term> ImplicationLHSVisitor::visit(Let* term){
     return std::make_shared<Let>(term->getTermNames(), term->getDeclarations(), term->getApplication());
 }
 
