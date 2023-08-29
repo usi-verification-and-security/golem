@@ -559,8 +559,7 @@ TPASplit::QueryResult TPASplit::reachabilityQueryExact(PTRef from, PTRef to, uns
                 if (power == 0) { // Base case, the 2 steps of the exact transition relation have been used
                     result.result = ReachabilityResult::REACHABLE;
                     result.refinedTarget = refineTwoStepTarget(
-                        from, logic.mkAnd({previousTransition, translatedPreviousTransition,
-                                           getNextVersion(logic.mkAnd(leftInvariants)), logic.mkAnd(rightInvariants)}), goal, *model);
+                        from, logic.mkAnd({previousTransition, translatedPreviousTransition}), goal, *model);
                     result.steps = 2;
                     TRACE(3, "Exact: Truly reachable states are " << result.refinedTarget.x)
                     TRACE(4, "Exact: Truly reachable states are " << logic.pp(result.refinedTarget))
@@ -655,13 +654,15 @@ TPASplit::QueryResult TPASplit::reachabilityQueryLessThan(PTRef from, PTRef to, 
         config.setSimplifyInterpolant(4);
         config.setLRAInterpolationAlgorithm(itp_lra_alg_decomposing_strong);
         // Tr^{<n} or (Tr^{<n} concat Tr^{=n})
-        PTRef previousLessThanTransition = getLessThanPower(power);
+//        vec<PTRef> rightInvariantsPower;
+//        for(int i = 0; rightInvariantsLevels.size() > power && i < rightInvariantsLevels[power]; i++){
+//            rightInvariantsPower.push(rightInvariants[i]);
+//        }
+        PTRef previousLessThanTransition = logic.mkAnd(getLessThanPower(power), logic.mkAnd(rightInvariants));
         PTRef translatedExactTransition = getNextVersion(getExactPower(power));
         PTRef currentToNextNextPreviousLessThanTransition = shiftOnlyNextVars(previousLessThanTransition);
         PTRef twoStepTransition = logic.mkOr(currentToNextNextPreviousLessThanTransition,
-                                             logic.mkAnd({previousLessThanTransition, translatedExactTransition,
-                                                          getNextVersion(logic.mkAnd(leftInvariants)),
-                                                          logic.mkAnd(rightInvariants)}));
+                                             logic.mkAnd(previousLessThanTransition, translatedExactTransition));
         // TODO: assert from and to are current-state formulas
         solver.insertFormula(twoStepTransition);
         solver.insertFormula(logic.mkAnd(from, goal));
@@ -720,8 +721,7 @@ TPASplit::QueryResult TPASplit::reachabilityQueryLessThan(PTRef from, PTRef to, 
                     result.result = ReachabilityResult::REACHABLE;
                     // TODO: simplify to refine only one step of exact relation (which is just Tr)
                     result.refinedTarget = refineTwoStepTarget(
-                        from, logic.mkAnd({previousLessThanTransition, translatedExactTransition,
-                                          getNextVersion(logic.mkAnd(leftInvariants)), logic.mkAnd(rightInvariants)}), goal, *model);
+                        from, logic.mkAnd(previousLessThanTransition, translatedExactTransition), goal, *model);
                     result.steps = 1;
                     TRACE(3, "Less-than: Truly reachable states are " << result.refinedTarget.x)
                     return result;
@@ -960,7 +960,7 @@ void TPABase::squashInvariants(vec<PTRef> & candidates) {
     }
 }
 
-void TPABase::houdiniCheck(PTRef invCandidates, PTRef transition, SafetyExplanation::FixedPointType alignment, TPAType type) {
+void TPABase::houdiniCheck(PTRef invCandidates, PTRef transition, SafetyExplanation::FixedPointType alignment, TPAType type, uint power) {
     // RIGHT:
     //   rightInvariants /\ currentLevelTransition /\ getNextVersion(transition) =>
     //     shiftOnlyNextVars(currentLevelTransition);
@@ -1031,14 +1031,20 @@ void TPABase::houdiniCheck(PTRef invCandidates, PTRef transition, SafetyExplanat
         } else if (alignment == SafetyExplanation::FixedPointType::RIGHT) {
             if (std::find(rightInvariants.begin(), rightInvariants.end(), cand) != rightInvariants.end()) { continue; }
             rightInvariants.push(cand);
+            rightInvariantsLevels[power] = rightInvariants.size();
         } else {
             if (std::find(leftInvariants.begin(), leftInvariants.end(), cand) != leftInvariants.end()) { continue; }
             leftInvariants.push(cand);
+            leftInvariantsLevels[power] = rightInvariants.size();
         }
     }
 }
 
 bool TPABase::checkLessThanFixedPoint(unsigned short power) {
+    while(power >= rightInvariantsLevels.size()){
+        rightInvariantsLevels.push();
+        leftInvariantsLevels.push();
+    }
     assert(verifyPower(power, TPAType::LESS_THAN));
     for (unsigned short i = 1; i <= power; ++i) {
         PTRef currentLevelTransition = getPower(i, TPAType::LESS_THAN);
@@ -1046,7 +1052,7 @@ bool TPABase::checkLessThanFixedPoint(unsigned short power) {
         SMTSolver solverWrapper(logic, SMTSolver::WitnessProduction::NONE);
         {
             auto & solver = solverWrapper.getCoreSolver();
-            houdiniCheck(currentLevelTransition, transition, SafetyExplanation::FixedPointType::RIGHT, TPAType::LESS_THAN);
+            houdiniCheck(currentLevelTransition, transition, SafetyExplanation::FixedPointType::RIGHT, TPAType::LESS_THAN, power);
             solver.insertFormula(
                 logic.mkAnd({logic.mkAnd(rightInvariants), currentLevelTransition, getNextVersion(transition),
                              logic.mkNot(shiftOnlyNextVars(currentLevelTransition))}));
@@ -1081,7 +1087,7 @@ bool TPABase::checkLessThanFixedPoint(unsigned short power) {
         {
             solverWrapper.resetSolver();
             auto & solver = solverWrapper.getCoreSolver();
-            houdiniCheck(currentLevelTransition, transition, SafetyExplanation::FixedPointType::LEFT, TPAType::LESS_THAN);
+            houdiniCheck(currentLevelTransition, transition, SafetyExplanation::FixedPointType::LEFT, TPAType::LESS_THAN, power);
             solver.insertFormula(logic.mkAnd({transition, getNextVersion(logic.mkAnd(leftInvariants)),
                                               getNextVersion(currentLevelTransition),
                                               logic.mkNot(shiftOnlyNextVars(currentLevelTransition))}));
@@ -1151,8 +1157,7 @@ bool TPASplit::checkExactFixedPoint(unsigned short power) {
     assert(power == 0 or verifyExactPower(power));
     for (unsigned short i = 1; i <= power; ++i) {
         PTRef currentLevelTransition = getExactPower(i);
-        PTRef currentTwoStep = logic.mkAnd({currentLevelTransition, logic.mkAnd(rightInvariants),
-         getNextVersion(logic.mkAnd(leftInvariants)), getNextVersion(currentLevelTransition)});
+        PTRef currentTwoStep = logic.mkAnd(currentLevelTransition, getNextVersion(currentLevelTransition));
 //        houdiniCheck(currentLevelTransition, currentLevelTransition,
 //                     SafetyExplanation::FixedPointType::NONE, TPAType::EQUALS);
         PTRef shifted = shiftOnlyNextVars(currentLevelTransition);
@@ -1333,8 +1338,8 @@ TPABasic::QueryResult TPABasic::reachabilityQuery(PTRef from, PTRef to, unsigned
         switch (res) {
             case ReachabilityResult::REACHABLE: {
                 TRACE(3, "Top level query was reachable")
-                PTRef previousTransition = logic.mkAnd(getLevelTransition(power), logic.mkAnd(rightInvariants));
-                PTRef translatedPreviousTransition = logic.mkAnd(getNextVersion(previousTransition), getNextVersion(logic.mkAnd(leftInvariants)));
+                PTRef previousTransition = getLevelTransition(power);
+                PTRef translatedPreviousTransition = getNextVersion(previousTransition);
                 auto model = solver->lastQueryModel();
                 if (power == 0) { // Base case, <=2 steps of the exact transition relation have been used
                     result.result = ReachabilityResult::REACHABLE;
@@ -1427,7 +1432,6 @@ bool TPABasic::verifyPower(unsigned short level) const {
     PTRef current = getLevelTransition(level);
     PTRef previous = getLevelTransition(level - 1);
     solver.insertFormula(logic.mkAnd(previous, getNextVersion(previous)));
-    solver.insertFormula(logic.mkNot(shiftOnlyNextVars(current)));
     solver.insertFormula(logic.mkNot(shiftOnlyNextVars(current)));
     auto res = solver.check();
     return res == s_False;
