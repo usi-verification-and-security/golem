@@ -1,5 +1,6 @@
 build
 
+cmake-build-release
 
 ## idea
 cmake-build-debug

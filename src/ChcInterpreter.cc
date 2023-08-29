@@ -196,6 +196,7 @@ void ChcInterpreterContext::interpretAssert(ASTNode & node) {
 }
 
 std::shared_ptr<Term> ChcInterpreterContext::ASTtoTerm(const ASTNode & node){
+
     ASTType t = node.getType();
     if (t == TERM_T) {
         std::string name = (**(node.children->begin())).getValue();
@@ -236,6 +237,12 @@ std::shared_ptr<Term> ChcInterpreterContext::ASTtoTerm(const ASTNode & node){
         }
         assert(args.size() > 0);
 
+        if (op == "-" or op == "+"){
+            if (args.size() <= 1) {
+                PrintVisitor printVisitor;
+                return std::make_shared<Terminal>("(- " + args[0]->accept(&printVisitor) + ")", Term::INT);
+            }
+        }
         if (isOperator(op)){
             auto term = std::make_shared<Op>(op, args);
             return  term;

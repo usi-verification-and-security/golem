@@ -385,20 +385,22 @@ std::shared_ptr<Term> SimplifyLocatorVisitor::visit(Op* term){
            newArgs.push_back(newArg);
         }
         return std::make_shared<Op>(term->getOp(), newArgs);
-    } else {
-        for (std::shared_ptr<Term> arg : args){
-           //check if it is a terminal
-           if (not arg->accept(&visitor)){
-               //if it is not, call the visit method on it
-               std::shared_ptr<Term> possible = arg->accept(this);
-               //check if it returned another terminal
-               if (not possible->accept(&visitor)){
-                   return possible;
-               }
+    }
+
+    for (std::shared_ptr<Term> arg : args){
+        //check if it is a terminal
+        if (not arg->accept(&visitor)){
+           //if it is not, call the visit method on it
+           std::shared_ptr<Term> possible = arg->accept(this);
+           //check if it returned another terminal
+           if (not possible->accept(&visitor)){
+               return possible;
            }
         }
-        return std::make_shared<Terminal>("No Possible Simplification", Term::UNDECLARED);
     }
+
+    return std::make_shared<Terminal>("No Possible Simplification", Term::UNDECLARED);
+
 }
 
 std::shared_ptr<Term> SimplifyLocatorVisitor::visit(App* term){
@@ -600,6 +602,7 @@ Term* SimplifyHelperVisitor::visit(Op* term) {
     std::vector<std::shared_ptr<Term>> args = term->getArgs();
     std::string op = term->getOp();
     TerminalOrAppVisitor visitor;
+    PrintVisitor printVisitor;
 
     for (std::shared_ptr<Term> arg : args){
         if (not arg->accept(&visitor)){
@@ -607,22 +610,22 @@ Term* SimplifyHelperVisitor::visit(Op* term) {
         }
     }
 
-    if (simplification and op != "=>"){
-        return term;
-    } else {
-        for (std::shared_ptr<Term> arg : args){
-           //check if it is a terminal
-           if (not arg->accept(&visitor)){
-               //if it is not, call the visit method on it
-               Term* possible = arg->accept(this);
-               //check if it returned another terminal
-               if (not possible->accept(&visitor)){
-                   return possible;
-               }
+    if (simplification and op != "=>") { return term; }
+
+    for (std::shared_ptr<Term> arg : args){
+        //check if it is a terminal
+        if (not arg->accept(&visitor)){
+           //if it is not, call the visit method on it
+           Term* possible = arg->accept(this);
+           //check if it returned another terminal
+           if (not possible->accept(&visitor)){
+               return possible;
            }
         }
-        return nullptr;
     }
+
+    std::make_shared<Terminal>("No Possible Simplification", Term::UNDECLARED).get();
+
 }
 
 Term* SimplifyHelperVisitor::visit(Let * term) {
