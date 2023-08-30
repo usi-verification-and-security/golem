@@ -69,7 +69,6 @@ class StepHandler {
     RequiresCongVisitor requiresCongVisitor;
     SimplifyHelperVisitor helperVisitor;
     NonLinearVisitor nonLinearVisitor;
-    SimplifyNonLinearVisitor simplifyNonLinearVisitor;
     NegatedAndVisitor negatedAndVisitor;
     OperateLetTermVisitor operateLetTermVisitor;
     LetLocatorVisitor letLocatorVisitor;
@@ -89,7 +88,7 @@ public :
 
     void instantiationSteps(int i);
     void assumptionSteps();
-    void noCongRequiredSteps();
+    void noCongRequiredSteps(std::vector<int> requiredMP);
     void notLhsPrimaryBranchSteps();
     void nonLinearSimplification(std::vector<int> requiredMP);
     void linearSimplification(std::vector<int> requiredMP);

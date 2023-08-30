@@ -58,166 +58,6 @@ std::string PrintVisitor::visit(Let* term) {
     return ss.str();
 }
 
-std::string OperateVisitor::visit(Op*term){
-    std::string op = term->getOp();
-    std::vector<std::shared_ptr<Term>> args = term->getArgs();
-    PrintVisitor visitor;
-    std::string firstStr;
-    std::string secondStr;
-
-    if (op == ">" or op == "<" or op == "<=" or op == ">="){
-        firstStr = args[0]->accept(&visitor);
-        secondStr = args[1]->accept(&visitor);
-        firstStr.erase(remove(firstStr.begin(), firstStr.end(), '('), firstStr.end());
-        firstStr.erase(remove(firstStr.begin(), firstStr.end(), ')'), firstStr.end());
-        firstStr.erase(remove(firstStr.begin(), firstStr.end(), ' '), firstStr.end());
-        secondStr.erase(remove(secondStr.begin(), secondStr.end(), '('), secondStr.end());
-        secondStr.erase(remove(secondStr.begin(), secondStr.end(), ')'), secondStr.end());
-        secondStr.erase(remove(secondStr.begin(), secondStr.end(), ' '), secondStr.end());
-    }
-
-    if (op == "="){
-        if(args[0]->accept(&visitor) == args[1]->accept(&visitor)){
-           return "true";
-        }else{
-           return "false";
-        }
-    }else if (op == ">"){
-        if(stoi(firstStr) > stoi(secondStr)){
-           return "true";
-        }else{
-           return "false";
-        }
-    }else if (op == "<"){
-        if(stoi(firstStr) < stoi(secondStr)){
-           return "true";
-        }else{
-           return "false";
-        }
-    }else if (op == "<="){
-        if(stoi(firstStr) <= stoi(secondStr)){
-           return "true";
-        }else{
-           return "false";
-        }
-    }else if (op == ">="){
-        if(stoi(firstStr) >= stoi(secondStr)){
-           return "true";
-        }else{
-           return "false";
-        }
-    }else if (op == "and"){
-        int trues = 0;
-        std::string fun;
-        for (auto arg : args){
-           if (arg->accept(&visitor) == "false"){
-               return "false";
-           }
-           if (arg->accept(&visitor) == "true"){
-               trues++;
-           }
-           if (arg->accept(&visitor) != "true"){
-               fun = arg->accept(&visitor);
-           }
-        }
-        if (trues == args.size()){
-           return "true";
-        }
-        return fun;
-    }else if (op == "or"){
-        for (auto arg : args){
-           if (arg->accept(&visitor) == "true"){
-               return "true";
-           }
-        }
-        return "false";
-    }else if (op == "+"){
-        int result = 0;
-        for (auto arg : args) {
-           std::string str = arg->accept(&visitor);
-           str.erase(remove(str.begin(), str.end(), '('), str.end());
-           str.erase(remove(str.begin(), str.end(), ')'), str.end());
-           str.erase(remove(str.begin(), str.end(), ' '), str.end());
-           result += std::stoi(str);
-        }
-        if (result < 0){
-           return "(- " + std::to_string(result*(-1)) + ")";
-        } else {
-           return std::to_string(result);
-        }
-    }else if (op == "-"){
-        std::string str = args[0]->accept(&visitor);
-        str.erase(remove(str.begin(), str.end(), '('), str.end());
-        str.erase(remove(str.begin(), str.end(), ')'), str.end());
-        str.erase(remove(str.begin(), str.end(), ' '), str.end());
-        int result = std::stoi(str);
-        for (int i = 1; i < args.size(); i++) {
-           str = args[i]->accept(&visitor);
-           str.erase(remove(str.begin(), str.end(), '('), str.end());
-           str.erase(remove(str.begin(), str.end(), ')'), str.end());
-           str.erase(remove(str.begin(), str.end(), ' '), str.end());
-           result -= std::stoi(str);
-        }
-        if (result < 0){
-           return "(- " + std::to_string(result*(-1)) + ")";
-        } else {
-           return std::to_string(result);
-        }
-    }else if (op == "/"){
-        std::string str = args[0]->accept(&visitor);
-        str.erase(remove(str.begin(), str.end(), '('), str.end());
-        str.erase(remove(str.begin(), str.end(), ')'), str.end());
-        str.erase(remove(str.begin(), str.end(), ' '), str.end());
-        int result = std::stoi(str);
-        for (int i = 1; i < args.size(); i++) {
-           str = args[i]->accept(&visitor);
-           str.erase(remove(str.begin(), str.end(), '('), str.end());
-           str.erase(remove(str.begin(), str.end(), ')'), str.end());
-           str.erase(remove(str.begin(), str.end(), ' '), str.end());
-           result /= std::stoi(str);
-        }
-        if (result < 0){
-           return "(- " + std::to_string(result*(-1)) + ")";
-        } else {
-           return std::to_string(result);
-        }
-    }else if (op == "*"){
-        std::string str = args[0]->accept(&visitor);
-        str.erase(remove(str.begin(), str.end(), '('), str.end());
-        str.erase(remove(str.begin(), str.end(), ')'), str.end());
-        str.erase(remove(str.begin(), str.end(), ' '), str.end());
-        int result = std::stoi(str);
-        for (int i = 1; i < args.size(); i++) {
-           str = args[i]->accept(&visitor);
-           str.erase(remove(str.begin(), str.end(), '('), str.end());
-           str.erase(remove(str.begin(), str.end(), ')'), str.end());
-           str.erase(remove(str.begin(), str.end(), ' '), str.end());
-           result *= std::stoi(str);
-        }
-        if (result < 0){
-           return "(- " + std::to_string(result*(-1)) + ")";
-        } else {
-           return std::to_string(result);
-        }
-    }else if (op == "not"){
-        if(args[0]->accept(&visitor) == "false"){
-           return "true";
-        }else{
-           return "false";
-        }
-    } else if (op == "ite"){
-        if (args[0]->accept(&visitor) == "true") {
-           return args[1]->accept(&visitor);
-        } else {
-           return args[2]->accept(&visitor);
-        }
-    }
-}
-
-std::string OperateVisitor::visit(Let*term) {
-    return "Error";
-}
-
 std::string SimplifyRuleVisitor::visit(Op* term) {
     std::string op = term->getOp();
     PrintVisitor printVisitor;
@@ -347,21 +187,6 @@ std::shared_ptr<Term> ImplicationLHSVisitor::visit(Let* term){
     return std::make_shared<Let>(term->getTermNames(), term->getDeclarations(), term->getApplication());
 }
 
-std::shared_ptr<Term> SimplifyNonLinearVisitor::visit(Op* term){
-    auto args = term->getArgs();
-    auto op = term->getOp();
-    std::vector<std::shared_ptr<Term>> newArgs;
-
-    NonLinearVisitor nonLinearVisitor;
-
-    for (auto arg : args) {
-        if (arg->accept(&nonLinearVisitor)) {
-           newArgs.push_back(arg);
-        }
-    }
-    return std::make_shared<Op>(op, newArgs);
-}
-
 std::shared_ptr<Term> SimplifyLocatorVisitor::visit(Terminal* term){
     return std::make_shared<Terminal>(term->getVal(), term->getType());
 }
@@ -425,7 +250,7 @@ std::shared_ptr<Term> SimplifyVisitor::visit(Op* term){
     auto op = term->getOp();
 
     if (operation == term){
-        return std::make_shared<Terminal>(simplification, Term::INT);
+        return simplification;
     } else {
         for (auto arg : args){
            newArgs.push_back(arg->accept(this));
@@ -442,37 +267,172 @@ std::shared_ptr<Term> SimplifyVisitor::visit(Quant* term){
     return std::make_shared<Quant>(term->getQuant(), term->getVars(), term->getSorts(), term->getCoreTerm());
 }
 
-std::shared_ptr<Term> SimplifyLetTermVisitor::visit(Terminal* term){
-    return std::make_shared<Terminal>(term->getVal(), term->getType());
-}
+std::shared_ptr<Term> SimplifyVisitor::visit(Let* term){
 
-std::shared_ptr<Term> SimplifyLetTermVisitor::visit(Op* term){
-
-    auto args = term->getArgs();
-    std::vector<std::shared_ptr<Term>> newArgs;
-    auto op = term->getOp();
-
-    for (auto arg : args){
-        newArgs.push_back(arg->accept(this));
-    }
-    return std::make_shared<Op>(op, newArgs);
-}
-
-std::shared_ptr<Term> SimplifyLetTermVisitor::visit(App* term){
-    return std::make_shared<App>(term->getFun(), term->getArgs());
-}
-
-std::shared_ptr<Term> SimplifyLetTermVisitor::visit(Quant* term){
-    std::shared_ptr<Term> coreTerm = term->getCoreTerm()->accept(this);
-    return std::make_shared<Quant>(term->getQuant(), term->getVars(), term->getSorts(), coreTerm);
-}
-
-std::shared_ptr<Term> SimplifyLetTermVisitor::visit(Let* term){
-
-    if (letTerm == term) {
+    if (operation == term) {
         return simplification;
     }
     return std::make_shared<Let>(term->getTermNames(), term->getDeclarations(), term->getApplication());
+}
+
+std::shared_ptr<Term> OperateVisitor::visit(Op* term){
+    std::string op = term->getOp();
+    std::vector<std::shared_ptr<Term>> args = term->getArgs();
+    std::vector<std::shared_ptr<Term>> newArgs;
+    PrintVisitor visitor;
+    InstantiateVisitor fakeInstantiation;
+    std::string firstStr;
+    std::string secondStr;
+
+    if (op == ">" or op == "<" or op == "<=" or op == ">="){
+        firstStr = args[0]->accept(&visitor);
+        secondStr = args[1]->accept(&visitor);
+        firstStr.erase(remove(firstStr.begin(), firstStr.end(), '('), firstStr.end());
+        firstStr.erase(remove(firstStr.begin(), firstStr.end(), ')'), firstStr.end());
+        firstStr.erase(remove(firstStr.begin(), firstStr.end(), ' '), firstStr.end());
+        secondStr.erase(remove(secondStr.begin(), secondStr.end(), '('), secondStr.end());
+        secondStr.erase(remove(secondStr.begin(), secondStr.end(), ')'), secondStr.end());
+        secondStr.erase(remove(secondStr.begin(), secondStr.end(), ' '), secondStr.end());
+    }
+
+    if (op == "="){
+        if(args[0]->accept(&visitor) == args[1]->accept(&visitor)){
+           return std::make_shared<Terminal>("true", Term::BOOL);
+        }else{
+           return std::make_shared<Terminal>("false", Term::BOOL);
+        }
+    }else if (op == ">"){
+        return std::make_shared<Op>("not", std::vector<std::shared_ptr<Term>>{std::make_shared<Op>("<=", args)});
+    }else if (op == "<"){
+        if(stoi(firstStr) < stoi(secondStr)){
+           return std::make_shared<Terminal>("true", Term::BOOL);
+        }else{
+           return std::make_shared<Terminal>("false", Term::BOOL);
+        }
+    }else if (op == "<="){
+        if(stoi(firstStr) <= stoi(secondStr)){
+           return std::make_shared<Terminal>("true", Term::BOOL);
+        }else{
+           return std::make_shared<Terminal>("false", Term::BOOL);
+        }
+    }else if (op == ">="){
+        newArgs.push_back(args[1]);
+        newArgs.push_back(args[0]);
+        return std::make_shared<Op>("<=", newArgs);
+    }else if (op == "and"){
+        int trues = 0;
+        std::vector<std::shared_ptr<Term>> predicates;
+
+        for (auto arg : args){
+           if (arg->accept(&visitor) == "false"){
+               return std::make_shared<Terminal>("false", Term::BOOL);
+           }
+           if (arg->accept(&visitor) == "true"){
+               trues++;
+           }
+           if (arg->accept(&visitor) != "true"){
+               predicates.push_back(arg);
+           }
+        }
+        if (trues == args.size()){
+           return std::make_shared<Terminal>("true", Term::BOOL);
+        }
+        if (predicates.size() == 1) {
+           return predicates[0]->accept(&fakeInstantiation);
+        } else {
+            for (auto predicate : predicates) {
+               newArgs.push_back(predicate->accept(&fakeInstantiation));
+            }
+            return std::make_shared<Op>("and", newArgs);
+        }
+    }else if (op == "or"){
+        for (auto arg : args){
+           if (arg->accept(&visitor) == "true"){
+               return std::make_shared<Terminal>("true", Term::BOOL);
+           }
+        }
+        return std::make_shared<Terminal>("false", Term::BOOL);
+    }else if (op == "+"){
+        int result = 0;
+        for (auto arg : args) {
+           std::string str = arg->accept(&visitor);
+           str.erase(remove(str.begin(), str.end(), '('), str.end());
+           str.erase(remove(str.begin(), str.end(), ')'), str.end());
+           str.erase(remove(str.begin(), str.end(), ' '), str.end());
+           result += std::stoi(str);
+        }
+        if (result < 0){
+           return std::make_shared<Terminal>("(- " + std::to_string(result*(-1)) + ")", Term::INT);
+        } else {
+           return std::make_shared<Terminal>(std::to_string(result), Term::INT);
+        }
+    }else if (op == "-"){
+        std::string str = args[0]->accept(&visitor);
+        str.erase(remove(str.begin(), str.end(), '('), str.end());
+        str.erase(remove(str.begin(), str.end(), ')'), str.end());
+        str.erase(remove(str.begin(), str.end(), ' '), str.end());
+        int result = std::stoi(str);
+        for (int i = 1; i < args.size(); i++) {
+           str = args[i]->accept(&visitor);
+           str.erase(remove(str.begin(), str.end(), '('), str.end());
+           str.erase(remove(str.begin(), str.end(), ')'), str.end());
+           str.erase(remove(str.begin(), str.end(), ' '), str.end());
+           result -= std::stoi(str);
+        }
+        if (result < 0){
+           return std::make_shared<Terminal>("(- " + std::to_string(result*(-1)) + ")", Term::INT);
+        } else {
+           return std::make_shared<Terminal>(std::to_string(result), Term::INT);
+        }
+    }else if (op == "/"){
+        std::string str = args[0]->accept(&visitor);
+        str.erase(remove(str.begin(), str.end(), '('), str.end());
+        str.erase(remove(str.begin(), str.end(), ')'), str.end());
+        str.erase(remove(str.begin(), str.end(), ' '), str.end());
+        int result = std::stoi(str);
+        for (int i = 1; i < args.size(); i++) {
+           str = args[i]->accept(&visitor);
+           str.erase(remove(str.begin(), str.end(), '('), str.end());
+           str.erase(remove(str.begin(), str.end(), ')'), str.end());
+           str.erase(remove(str.begin(), str.end(), ' '), str.end());
+           result /= std::stoi(str);
+        }
+        if (result < 0){
+           return std::make_shared<Terminal>("(- " + std::to_string(result*(-1)) + ")", Term::INT);
+        } else {
+           return std::make_shared<Terminal>(std::to_string(result), Term::INT);
+        }
+    }else if (op == "*"){
+        std::string str = args[0]->accept(&visitor);
+        str.erase(remove(str.begin(), str.end(), '('), str.end());
+        str.erase(remove(str.begin(), str.end(), ')'), str.end());
+        str.erase(remove(str.begin(), str.end(), ' '), str.end());
+        int result = std::stoi(str);
+        for (int i = 1; i < args.size(); i++) {
+           str = args[i]->accept(&visitor);
+           str.erase(remove(str.begin(), str.end(), '('), str.end());
+           str.erase(remove(str.begin(), str.end(), ')'), str.end());
+           str.erase(remove(str.begin(), str.end(), ' '), str.end());
+           result *= std::stoi(str);
+        }
+        if (result < 0){
+           return std::make_shared<Terminal>("(- " + std::to_string(result*(-1)) + ")", Term::INT);
+        } else {
+           return std::make_shared<Terminal>(std::to_string(result), Term::INT);
+        }
+    }else if (op == "not"){
+        if(args[0]->accept(&visitor) == "false"){
+           return std::make_shared<Terminal>("true", Term::BOOL);
+        }else{
+           return std::make_shared<Terminal>("false", Term::BOOL);
+        }
+    } else if (op == "ite"){
+        if (args[0]->accept(&visitor) == "true") {
+           return args[1]->accept(&fakeInstantiation);
+        } else {
+           return args[2]->accept(&fakeInstantiation);
+        }
+    }
 }
 
 std::shared_ptr<Term> OperateLetTermVisitor::visit(Terminal* term){

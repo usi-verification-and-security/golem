@@ -135,18 +135,6 @@ public:
     std::shared_ptr<Term> visit(Let*) override;
 };
 
-class SimplifyVisitor : public LogicVisitor {
-    std::string simplification;
-    Term* operation;
-public:
-    SimplifyVisitor(std::string s, Term* o) : simplification(std::move(s)), operation(o) {}
-    std::shared_ptr<Term> visit(Terminal*) override;
-    std::shared_ptr<Term> visit(Quant*) override;
-    std::shared_ptr<Term> visit(Op*) override;
-    std::shared_ptr<Term> visit(App*) override;
-    std::shared_ptr<Term> visit(Let*) override {return std::make_shared<Terminal>("Error", Term::UNDECLARED);};
-};
-
 class ImplicationLHSVisitor : public LogicVisitor {
 public:
     std::shared_ptr<Term> visit(Terminal*) override;
@@ -154,6 +142,15 @@ public:
     std::shared_ptr<Term> visit(Op*) override;
     std::shared_ptr<Term> visit(App*) override;
     std::shared_ptr<Term> visit(Let*) override;
+};
+
+class OperateVisitor : public LogicVisitor {
+public :
+    std::shared_ptr<Term> visit(Terminal*) override {return std::make_shared<Terminal>("Error", Term::UNDECLARED);};
+    std::shared_ptr<Term> visit(Quant*) override {return std::make_shared<Terminal>("Error", Term::UNDECLARED);};
+    std::shared_ptr<Term> visit(Op*) override;
+    std::shared_ptr<Term> visit(App*) override {return std::make_shared<Terminal>("Error", Term::UNDECLARED);};
+    std::shared_ptr<Term> visit(Let*) override {return std::make_shared<Terminal>("Error", Term::UNDECLARED);};
 };
 
 class OperateLetTermVisitor : public LogicVisitor {
@@ -167,25 +164,16 @@ public :
     std::shared_ptr<Term> visit(Let*) override;
 };
 
-class SimplifyLetTermVisitor : public LogicVisitor {
+class SimplifyVisitor : public LogicVisitor {
     std::shared_ptr<Term> simplification;
-    Term* letTerm;
+    Term* operation;
 public :
-    SimplifyLetTermVisitor(std::shared_ptr<Term> simplification, Term* letTerm) : simplification(std::move(simplification)), letTerm(letTerm) {}
+    SimplifyVisitor(std::shared_ptr<Term> simplification, Term* operation) : simplification(std::move(simplification)), operation(operation) {}
     std::shared_ptr<Term> visit(Terminal*) override;
     std::shared_ptr<Term> visit(Quant*) override;
     std::shared_ptr<Term> visit(Op*) override;
     std::shared_ptr<Term> visit(App*) override;
     std::shared_ptr<Term> visit(Let*) override;
-};
-
-class SimplifyNonLinearVisitor : public LogicVisitor {
-public:
-    std::shared_ptr<Term> visit(Terminal*) override {return std::make_shared<Terminal>("Error", Term::UNDECLARED);};
-    std::shared_ptr<Term> visit(Quant*) override {return std::make_shared<Terminal>("Error", Term::UNDECLARED);};
-    std::shared_ptr<Term> visit(Op*) override;
-    std::shared_ptr<Term> visit(App*) override {return std::make_shared<Terminal>("Error", Term::UNDECLARED);};
-    std::shared_ptr<Term> visit(Let*) override {return std::make_shared<Terminal>("Error", Term::UNDECLARED);};
 };
 
 class StringVisitor {
@@ -203,15 +191,6 @@ public:
     std::string visit(Quant*) override;
     std::string visit(Op*) override;
     std::string visit(App*) override;
-    std::string visit(Let*) override;
-};
-
-class OperateVisitor : public StringVisitor {
-public:
-    std::string visit(Terminal*) override {return "Error";};
-    std::string visit(Quant*) override {return "Error";};
-    std::string visit(Op*) override;
-    std::string visit(App*) override {return "Error";};
     std::string visit(Let*) override;
 };
 
