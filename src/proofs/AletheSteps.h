@@ -82,8 +82,8 @@ public :
 
 
     std::vector<std::pair<std::string, std::string>> getInstPairs(int it, std::vector<PTRef> stepNormEq);
-    std::vector<std::shared_ptr<Term>> packClause(std::shared_ptr<Term> term);
-    std::vector<std::shared_ptr<Term>> packClause(std::shared_ptr<Term> term1, std::shared_ptr<Term> term2);
+    static std::vector<std::shared_ptr<Term>> packClause(const std::shared_ptr<Term>& term);
+    static std::vector<std::shared_ptr<Term>> packClause(const std::shared_ptr<Term>& term1, const std::shared_ptr<Term>& term2);
     void buildAletheProof();
     void displayProof();
 

@@ -9,8 +9,9 @@
 
 class Term {
 public:
+    enum termType{APP, OP, TERMINAL, QUANT, LET};
     enum terminalType{ VAR, REAL, INT, SORT, BOOL, UNDECLARED};
-    virtual std::string Iam() = 0;
+    virtual termType getTermType() = 0;
     virtual std::shared_ptr<Term> accept(class LogicVisitor*) = 0;
     virtual std::string accept(class StringVisitor*) = 0;
     virtual bool accept(class BooleanVisitor*) = 0;
@@ -24,7 +25,7 @@ public:
     Terminal(std::string  val, terminalType t) : val(std::move(val)), type(t) {}
     std::string getVal() { return val;}
     terminalType getType() {return type;}
-    std::string Iam() override {return "Terminal";}
+    termType getTermType() override {return TERMINAL;}
 
     std::shared_ptr<Term> accept(LogicVisitor*) override;
     std::string accept(StringVisitor*) override;
@@ -39,7 +40,7 @@ public:
     Op(std::string  opcode, std::vector<std::shared_ptr<Term>> args) : operation(std::move(opcode)), args(std::move(args)) {}
     std::string getOp() { return operation;}
     std::vector<std::shared_ptr<Term>> getArgs() {return args;}
-    std::string Iam() override {return "Op";}
+    termType getTermType() override {return OP;}
 
     std::shared_ptr<Term> accept(LogicVisitor*) override;
     std::string accept(StringVisitor*) override;
@@ -54,7 +55,7 @@ public:
     App(std::string  fun, std::vector<std::shared_ptr<Term>> args) : fun(std::move(fun)), args(std::move(args)){}
     std::string getFun() {return fun;}
     std::vector<std::shared_ptr<Term>> getArgs() {return args;}
-    std::string Iam() override {return "App";}
+    termType getTermType() override {return APP;}
 
     std::shared_ptr<Term> accept(LogicVisitor*) override;
     std::string accept(StringVisitor*) override;
@@ -74,7 +75,7 @@ public:
     std::vector<std::shared_ptr<Term>> getVars() {return vars;}
     std::vector<std::shared_ptr<Term>> getSorts() {return sorts;}
     std::shared_ptr<Term> getCoreTerm() {return coreTerm;}
-    std::string Iam() override {return "Quant";}
+    termType getTermType() override {return QUANT;}
 
     std::shared_ptr<Term> accept(LogicVisitor*) override;
     std::string accept(StringVisitor*) override;
@@ -93,7 +94,7 @@ public:
     std::vector<std::shared_ptr<Term>> getDeclarations() {return declarations;}
     std::shared_ptr<Term> getApplication() {return application;}
     std::vector<std::string> getTermNames() {return termNames;}
-    std::string Iam() override {return "Let";}
+    termType getTermType() override {return LET;}
 
     std::shared_ptr<Term> accept(LogicVisitor*) override;
     std::string accept(StringVisitor*) override;
@@ -239,15 +240,6 @@ public:
     virtual bool visit(Op*) = 0;
     virtual bool visit(App*) = 0;
     virtual bool visit(Let*) = 0;
-};
-
-class TerminalOrAppVisitor : public BooleanVisitor {
-public:
-    bool visit(Terminal*) override {return true;};
-    bool visit(Quant*) override {return false;};
-    bool visit(Op*) override {return false;};
-    bool visit(App*) override {return true;};
-    bool visit(Let*) override {return false;};
 };
 
 class RequiresCongVisitor : public BooleanVisitor {

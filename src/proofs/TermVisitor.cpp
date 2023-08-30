@@ -370,10 +370,9 @@ std::shared_ptr<Term> SimplifyLocatorVisitor::visit(Op* term){
     bool simplification = true;
     std::vector<std::shared_ptr<Term>> args = term->getArgs();
     std::string op = term->getOp();
-    TerminalOrAppVisitor visitor;
 
     for (std::shared_ptr<Term> arg : args){
-        if (not arg->accept(&visitor)){
+        if (not (arg->getTermType() == Term::TERMINAL or arg->getTermType() == Term::APP)){
            simplification = false;
         }
     }
@@ -389,11 +388,11 @@ std::shared_ptr<Term> SimplifyLocatorVisitor::visit(Op* term){
 
     for (std::shared_ptr<Term> arg : args){
         //check if it is a terminal
-        if (not arg->accept(&visitor)){
+        if (not (arg->getTermType() == Term::TERMINAL or arg->getTermType() == Term::APP)){
            //if it is not, call the visit method on it
            std::shared_ptr<Term> possible = arg->accept(this);
            //check if it returned another terminal
-           if (not possible->accept(&visitor)){
+           if (not (possible->getTermType() == Term::TERMINAL or possible->getTermType() == Term::APP)){
                return possible;
            }
         }
@@ -536,9 +535,9 @@ Term* GetLocalParentBranchVisitor::visit(Op* term){
 }
 
 bool RequiresCongVisitor::visit(Op* term){
-    TerminalOrAppVisitor terminalOrAppVisitor;
+
     for (auto arg : term->getArgs()) {
-        if  (not arg->accept(&terminalOrAppVisitor)) {
+        if  (not (arg->getTermType() == Term::TERMINAL or arg->getTermType() == Term::APP)) {
              return true;
         }
     }
@@ -601,11 +600,10 @@ Term* SimplifyHelperVisitor::visit(Op* term) {
     bool simplification = true;
     std::vector<std::shared_ptr<Term>> args = term->getArgs();
     std::string op = term->getOp();
-    TerminalOrAppVisitor visitor;
     PrintVisitor printVisitor;
 
     for (std::shared_ptr<Term> arg : args){
-        if (not arg->accept(&visitor)){
+        if (not (arg->getTermType() == Term::TERMINAL or arg->getTermType() == Term::APP)){
            simplification = false;
         }
     }
@@ -614,11 +612,11 @@ Term* SimplifyHelperVisitor::visit(Op* term) {
 
     for (std::shared_ptr<Term> arg : args){
         //check if it is a terminal
-        if (not arg->accept(&visitor)){
+        if (not (arg->getTermType() == Term::TERMINAL or arg->getTermType() == Term::APP)){
            //if it is not, call the visit method on it
            Term* possible = arg->accept(this);
            //check if it returned another terminal
-           if (not possible->accept(&visitor)){
+           if (not (possible->getTermType() == Term::TERMINAL or possible->getTermType() == Term::APP)){
                return possible;
            }
         }
