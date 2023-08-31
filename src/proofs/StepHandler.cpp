@@ -260,7 +260,7 @@ void StepHandler::assumptionSteps() {
             SimplifyVisitor simplifyLetTermVisitor(simplifiedLet, potentialLet);
             originalAssertions[i-1] = originalAssertions[i-1]->accept(&simplifyLetTermVisitor);
         }
-
+        
         proofSteps.emplace_back(currStep, Step::ASSUME, packClause(originalAssertions[i-1]));
 
         currStep++;

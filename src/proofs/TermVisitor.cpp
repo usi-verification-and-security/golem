@@ -86,6 +86,8 @@ std::string SimplifyRuleVisitor::visit(Op* term) {
         return "not_simplify";
     } else if (op == "ite") {
         return "ite_simplify";
+    } else if (op == "mod") {
+        return "mod_simplify";
     }
     return "Error";
 }
@@ -264,7 +266,8 @@ std::shared_ptr<Term> SimplifyVisitor::visit(App* term){
 }
 
 std::shared_ptr<Term> SimplifyVisitor::visit(Quant* term){
-    return std::make_shared<Quant>(term->getQuant(), term->getVars(), term->getSorts(), term->getCoreTerm());
+
+    return std::make_shared<Quant>(term->getQuant(), term->getVars(), term->getSorts(), term->getCoreTerm()->accept(this));
 }
 
 std::shared_ptr<Term> SimplifyVisitor::visit(Let* term){
@@ -284,7 +287,7 @@ std::shared_ptr<Term> OperateVisitor::visit(Op* term){
     std::string firstStr;
     std::string secondStr;
 
-    if (op == ">" or op == "<" or op == "<=" or op == ">="){
+    if (op == "<" or op == "<="){
         firstStr = args[0]->accept(&visitor);
         secondStr = args[1]->accept(&visitor);
         firstStr.erase(remove(firstStr.begin(), firstStr.end(), '('), firstStr.end());
@@ -431,6 +434,24 @@ std::shared_ptr<Term> OperateVisitor::visit(Op* term){
            return args[1]->accept(&fakeInstantiation);
         } else {
            return args[2]->accept(&fakeInstantiation);
+        }
+    } else if (op == "mod") {
+        std::string str = args[0]->accept(&visitor);
+        str.erase(remove(str.begin(), str.end(), '('), str.end());
+        str.erase(remove(str.begin(), str.end(), ')'), str.end());
+        str.erase(remove(str.begin(), str.end(), ' '), str.end());
+        int result = std::stoi(str);
+        for (int i = 1; i < args.size(); i++) {
+           str = args[i]->accept(&visitor);
+           str.erase(remove(str.begin(), str.end(), '('), str.end());
+           str.erase(remove(str.begin(), str.end(), ')'), str.end());
+           str.erase(remove(str.begin(), str.end(), ' '), str.end());
+           result %= std::stoi(str);
+        }
+        if (result < 0){
+           return std::make_shared<Terminal>("(- " + std::to_string(result*(-1)) + ")", Term::INT);
+        } else {
+           return std::make_shared<Terminal>(std::to_string(result), Term::INT);
         }
     }
 }
