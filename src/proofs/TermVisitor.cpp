@@ -307,13 +307,13 @@ std::shared_ptr<Term> OperateVisitor::visit(Op* term){
     }else if (op == ">"){
         return std::make_shared<Op>("not", std::vector<std::shared_ptr<Term>>{std::make_shared<Op>("<=", args)});
     }else if (op == "<"){
-        if(stoi(firstStr) < stoi(secondStr)){
+        if(std::stoll(firstStr) < std::stoll(secondStr)){
            return std::make_shared<Terminal>("true", Term::BOOL);
         }else{
            return std::make_shared<Terminal>("false", Term::BOOL);
         }
     }else if (op == "<="){
-        if(stoi(firstStr) <= stoi(secondStr)){
+        if(std::stoll(firstStr) <= std::stoll(secondStr)){
            return std::make_shared<Terminal>("true", Term::BOOL);
         }else{
            return std::make_shared<Terminal>("false", Term::BOOL);
@@ -356,13 +356,13 @@ std::shared_ptr<Term> OperateVisitor::visit(Op* term){
         }
         return std::make_shared<Terminal>("false", Term::BOOL);
     }else if (op == "+"){
-        int result = 0;
+        __int64_t result = 0;
         for (auto arg : args) {
            std::string str = arg->accept(&visitor);
            str.erase(remove(str.begin(), str.end(), '('), str.end());
            str.erase(remove(str.begin(), str.end(), ')'), str.end());
            str.erase(remove(str.begin(), str.end(), ' '), str.end());
-           result += std::stoi(str);
+           result += std::stoll(str);
         }
         if (result < 0){
            return std::make_shared<Terminal>("(- " + std::to_string(result*(-1)) + ")", Term::INT);
@@ -374,13 +374,13 @@ std::shared_ptr<Term> OperateVisitor::visit(Op* term){
         str.erase(remove(str.begin(), str.end(), '('), str.end());
         str.erase(remove(str.begin(), str.end(), ')'), str.end());
         str.erase(remove(str.begin(), str.end(), ' '), str.end());
-        int result = std::stoi(str);
+        __int64_t result = std::stoll(str);
         for (int i = 1; i < args.size(); i++) {
            str = args[i]->accept(&visitor);
            str.erase(remove(str.begin(), str.end(), '('), str.end());
            str.erase(remove(str.begin(), str.end(), ')'), str.end());
            str.erase(remove(str.begin(), str.end(), ' '), str.end());
-           result -= std::stoi(str);
+           result -= std::stoll(str);
         }
         if (result < 0){
            return std::make_shared<Terminal>("(- " + std::to_string(result*(-1)) + ")", Term::INT);
@@ -392,13 +392,13 @@ std::shared_ptr<Term> OperateVisitor::visit(Op* term){
         str.erase(remove(str.begin(), str.end(), '('), str.end());
         str.erase(remove(str.begin(), str.end(), ')'), str.end());
         str.erase(remove(str.begin(), str.end(), ' '), str.end());
-        int result = std::stoi(str);
+        __int64_t result = std::stoi(str);
         for (int i = 1; i < args.size(); i++) {
            str = args[i]->accept(&visitor);
            str.erase(remove(str.begin(), str.end(), '('), str.end());
            str.erase(remove(str.begin(), str.end(), ')'), str.end());
            str.erase(remove(str.begin(), str.end(), ' '), str.end());
-           result /= std::stoi(str);
+           result /= std::stoll(str);
         }
         if (result < 0){
            return std::make_shared<Terminal>("(- " + std::to_string(result*(-1)) + ")", Term::INT);
@@ -410,13 +410,13 @@ std::shared_ptr<Term> OperateVisitor::visit(Op* term){
         str.erase(remove(str.begin(), str.end(), '('), str.end());
         str.erase(remove(str.begin(), str.end(), ')'), str.end());
         str.erase(remove(str.begin(), str.end(), ' '), str.end());
-        int result = std::stoi(str);
+        __int64_t result = std::stoll(str);
         for (int i = 1; i < args.size(); i++) {
            str = args[i]->accept(&visitor);
            str.erase(remove(str.begin(), str.end(), '('), str.end());
            str.erase(remove(str.begin(), str.end(), ')'), str.end());
            str.erase(remove(str.begin(), str.end(), ' '), str.end());
-           result *= std::stoi(str);
+           result *= std::stoll(str);
         }
         if (result < 0){
            return std::make_shared<Terminal>("(- " + std::to_string(result*(-1)) + ")", Term::INT);
@@ -440,13 +440,13 @@ std::shared_ptr<Term> OperateVisitor::visit(Op* term){
         str.erase(remove(str.begin(), str.end(), '('), str.end());
         str.erase(remove(str.begin(), str.end(), ')'), str.end());
         str.erase(remove(str.begin(), str.end(), ' '), str.end());
-        int result = std::stoi(str);
+        __int64_t result = std::stoll(str);
         for (int i = 1; i < args.size(); i++) {
            str = args[i]->accept(&visitor);
            str.erase(remove(str.begin(), str.end(), '('), str.end());
            str.erase(remove(str.begin(), str.end(), ')'), str.end());
            str.erase(remove(str.begin(), str.end(), ' '), str.end());
-           result %= std::stoi(str);
+           result %= std::stoll(str);
         }
         if (result < 0){
            return std::make_shared<Terminal>("(- " + std::to_string(result*(-1)) + ")", Term::INT);
