@@ -88,6 +88,8 @@ std::string SimplifyRuleVisitor::visit(Op* term) {
         return "ite_simplify";
     } else if (op == "mod") {
         return "mod_simplify";
+    } else if (op == "div") {
+        return "div_simplify";
     }
     return "Error";
 }
@@ -387,7 +389,7 @@ std::shared_ptr<Term> OperateVisitor::visit(Op* term){
         } else {
            return std::make_shared<Terminal>(std::to_string(result), Term::INT);
         }
-    }else if (op == "/"){
+    }else if (op == "/" or op == "div"){
         std::string str = args[0]->accept(&visitor);
         str.erase(remove(str.begin(), str.end(), '('), str.end());
         str.erase(remove(str.begin(), str.end(), ')'), str.end());
