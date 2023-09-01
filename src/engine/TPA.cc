@@ -919,7 +919,7 @@ bool TPASplit::verifyLessThanPower(unsigned short power) const {
     SMTSolver solverWrapper(logic, SMTSolver::WitnessProduction::NONE);
     auto & solver = solverWrapper.getCoreSolver();
     PTRef current = getLessThanPower(power);
-    PTRef previous = getLessThanPower(power - 1);
+    PTRef previous = logic.mkAnd(getLessThanPower(power - 1), logic.mkAnd(rightInvariants));
     PTRef previousExact = getExactPower(power - 1);
     //    std::cout << "Previous exact: " << logic.printTerm(previousExact) << std::endl;
     // check that previous or previousExact concatenated with previous implies current
@@ -1349,8 +1349,7 @@ TPABasic::QueryResult TPABasic::reachabilityQuery(PTRef from, PTRef to, unsigned
                         (not firstStepTaken or model->evaluate(transition) == logic.getTerm_true()) and
                         (not secondStepTaken or model->evaluate(getNextVersion(transition)) == logic.getTerm_true()));
                     result.refinedTarget = refineTwoStepTarget(
-                        from, logic.mkAnd({previousTransition, translatedPreviousTransition,
-                                           getNextVersion(logic.mkAnd(leftInvariants)), logic.mkAnd(rightInvariants)}), goal, *model);
+                        from, logic.mkAnd(previousTransition, translatedPreviousTransition), goal, *model);
                     result.steps = firstStepTaken + secondStepTaken;
                     // MB: Refined steps are computed from the whole formula representing 0-2 steps.
                     //     It might be possible that the step count is not correct ?!
@@ -1430,8 +1429,8 @@ bool TPABasic::verifyPower(unsigned short level) const {
     SMTSolver solverWrapper(logic, SMTSolver::WitnessProduction::NONE);
     auto & solver = solverWrapper.getCoreSolver();
     PTRef current = getLevelTransition(level);
-    PTRef previous = getLevelTransition(level - 1);
-    solver.insertFormula(logic.mkAnd(previous, getNextVersion(previous)));
+    PTRef previous = logic.mkAnd(getLevelTransition(level - 1), logic.mkAnd(rightInvariants));
+    solver.insertFormula(logic.mkAnd(previous, getNextVersion(getLevelTransition(level - 1))));
     solver.insertFormula(logic.mkNot(shiftOnlyNextVars(current)));
     auto res = solver.check();
     return res == s_False;
@@ -1443,10 +1442,10 @@ PTRef TPABase::safeSupersetOfInitialStates(PTRef start, PTRef transitionInvarian
     solverWrapper.getConfig().setLRAInterpolationAlgorithm(itp_lra_alg_decomposing_strong);
     solverWrapper.getConfig().setSimplifyInterpolant(4);
     solver.insertFormula(start);
-    solver.insertFormula(transitionInvariant);
+    solver.insertFormula(logic.mkAnd(transitionInvariant, logic.mkAnd(rightInvariants)));
     solver.insertFormula(target);
     auto res = solver.check();
-    if (res != s_False) { throw std::logic_error("SMT query was suppose to be unsat, but is not!"); }
+    if (res != s_False) { throw std::logic_error("SMT query was supposed to be unsat, but is not!"); }
     auto itpContext = solver.getInterpolationContext();
     ipartitions_t mask = (1 << 1) + (1 << 2); // This puts transition + query into the A-part
     vec<PTRef> itps;
