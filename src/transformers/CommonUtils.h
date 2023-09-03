@@ -75,4 +75,14 @@ InvalidityWitness::Derivation replaceSummarizingStep(
     Logic & logic
     );
 
+using ContractionInfo = std::pair<DirectedHyperEdge, std::pair<DirectedHyperEdge, DirectedHyperEdge>>;
+
+InvalidityWitness::Derivation expandStepWithHyperEdge(
+    InvalidityWitness::Derivation const & derivation,
+    std::size_t stepIndex,
+    ContractionInfo const & contractionInfo,
+    NonlinearCanonicalPredicateRepresentation const & predicateRepresentation,
+    Logic & logic
+);
+
 #endif //GOLEM_COMMONUTILS_H

@@ -326,6 +326,38 @@ void ChcDirectedHyperGraph::deleteNode(SymRef sym) {
     });
 }
 
+DirectedHyperEdge ChcDirectedHyperGraph::mergeEdgePair(EId incoming, EId outgoing) {
+    assert(getSources(incoming).size() == 1); // Incoming must be a simple edge
+    if (getSources(outgoing).size() == 1) { // Outgoing is a simple edge
+        return mergeEdges({incoming, outgoing});
+    }
+    TermUtils utils(logic);
+    auto common = getTarget(incoming);
+    auto source = getSources(incoming)[0];
+    auto target = getTarget(outgoing);
+    // Special handling of outgoing hyperedge
+    auto sources = getSources(outgoing);
+    assert(std::count(sources.begin(), sources.end(), common) == 1);
+    TermUtils::substitutions_map substitutionsMap;
+    utils.mapFromPredicate(getNextStateVersion(common), getStateVersion(common, 0), substitutionsMap);
+    PTRef renamedLabel = utils.varSubstitute(getEdgeLabel(incoming), substitutionsMap);
+
+    PTRef newLabel = logic.mkAnd(renamedLabel, getEdgeLabel(outgoing));
+    PTRef simplifiedLabel = TrivialQuantifierElimination(logic).tryEliminateVarsExcept(
+        utils.predicateArgsInOrder(getStateVersion(source)) + utils.predicateArgsInOrder(getNextStateVersion(target)), newLabel);
+
+    for (auto & v : sources) {
+        if (v == common) { v = source; }
+    }
+    if (source == getEntry()) {
+        sources.erase(std::remove(sources.begin(), sources.end(), getEntry()), sources.end());
+        if (sources.empty()) { sources.push_back(getEntry()); }
+    }
+    auto eid = newEdge(std::move(sources), target, InterpretedFla{simplifiedLabel});
+    return getEdge(eid);
+
+}
+
 DirectedHyperEdge ChcDirectedHyperGraph::mergeEdges(std::vector<EId> const & chain) {
     assert(getSources(chain.front()).size() == 1);
     auto source = getSources(chain.front()).front();
@@ -412,12 +444,12 @@ ChcDirectedHyperGraph::VertexContractionResult ChcDirectedHyperGraph::contractVe
     });
     for (std::size_t incomingIndex = 0; incomingIndex < incomingEdges.size(); ++incomingIndex) {
         EId incomingId = incomingEdges[incomingIndex];
-        if (getSources(incomingId).size() > 1) { throw std::logic_error("Unable to contract vertex with hyperedge!"); }
+        if (getSources(incomingId).size() > 1) { throw std::logic_error("Unable to contract vertex with incoming hyperedge!"); }
 
         for (std::size_t outgoingIndex = 0; outgoingIndex < outgoingEdges.size(); ++outgoingIndex) {
             EId outgoingId = outgoingEdges[outgoingIndex];
-            if (getSources(outgoingId).size() > 1) { throw std::logic_error("Unable to contract vertex with hyperedge!"); }
-            auto replacingEdge = mergeEdges({incomingId, outgoingId});
+            if (getSources(outgoingId).size() > 1 and incomingEdges.size() > 1) { throw std::logic_error("Unable to contract vertex with outgoing hyperedge!"); }
+            auto replacingEdge = mergeEdgePair(incomingId, outgoingId);
             result.replacing.emplace_back(std::move(replacingEdge), std::make_pair(incomingIndex, outgoingIndex));
         }
     }
