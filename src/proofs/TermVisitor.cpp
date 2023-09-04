@@ -1,6 +1,7 @@
 //
 // Created by mambo on 8/15/23.
 //
+#include "FastRational.h"
 #include "Term.h"
 #include <memory>
 #include <string>
@@ -89,7 +90,7 @@ std::string SimplifyRuleVisitor::visit(Op* term) {
     } else if (op == "mod") {
         return "mod_simplify";
     } else if (op == "div") {
-        return "div_simplify";
+        return "intdiv_simplify";
     }
     return "Error";
 }
@@ -288,8 +289,10 @@ std::shared_ptr<Term> OperateVisitor::visit(Op* term){
     InstantiateVisitor fakeInstantiation;
     std::string firstStr;
     std::string secondStr;
+    FastRational firstTerm;
+    FastRational secondTerm;
 
-    if (op == "<" or op == "<="){
+    if (op == "<" or op == "<=" or op == "-" or op == "*" or op == "/" or op == "mod" or op == "div"){
         firstStr = args[0]->accept(&visitor);
         secondStr = args[1]->accept(&visitor);
         firstStr.erase(remove(firstStr.begin(), firstStr.end(), '('), firstStr.end());
@@ -298,6 +301,8 @@ std::shared_ptr<Term> OperateVisitor::visit(Op* term){
         secondStr.erase(remove(secondStr.begin(), secondStr.end(), '('), secondStr.end());
         secondStr.erase(remove(secondStr.begin(), secondStr.end(), ')'), secondStr.end());
         secondStr.erase(remove(secondStr.begin(), secondStr.end(), ' '), secondStr.end());
+        firstTerm = FastRational(&firstStr[0], 10);
+        secondTerm = FastRational(&secondStr[0], 10);
     }
 
     if (op == "="){
@@ -309,13 +314,13 @@ std::shared_ptr<Term> OperateVisitor::visit(Op* term){
     }else if (op == ">"){
         return std::make_shared<Op>("not", std::vector<std::shared_ptr<Term>>{std::make_shared<Op>("<=", args)});
     }else if (op == "<"){
-        if(std::stoll(firstStr) < std::stoll(secondStr)){
+        if(firstTerm < secondTerm){
            return std::make_shared<Terminal>("true", Term::BOOL);
         }else{
            return std::make_shared<Terminal>("false", Term::BOOL);
         }
     }else if (op == "<="){
-        if(std::stoll(firstStr) <= std::stoll(secondStr)){
+        if(firstTerm <= secondTerm){
            return std::make_shared<Terminal>("true", Term::BOOL);
         }else{
            return std::make_shared<Terminal>("false", Term::BOOL);
@@ -358,72 +363,45 @@ std::shared_ptr<Term> OperateVisitor::visit(Op* term){
         }
         return std::make_shared<Terminal>("false", Term::BOOL);
     }else if (op == "+"){
-        __int64_t result = 0;
+        FastRational result = 0;
         for (auto arg : args) {
            std::string str = arg->accept(&visitor);
            str.erase(remove(str.begin(), str.end(), '('), str.end());
            str.erase(remove(str.begin(), str.end(), ')'), str.end());
            str.erase(remove(str.begin(), str.end(), ' '), str.end());
-           result += std::stoll(str);
+           const char* ptr = &str[0];
+           FastRational temp(ptr, 10);
+           result += temp;
         }
         if (result < 0){
-           return std::make_shared<Terminal>("(- " + std::to_string(result*(-1)) + ")", Term::INT);
+           result*=-1;
+           return std::make_shared<Terminal>("(- " + result.get_str() + ")", Term::INT);
         } else {
-           return std::make_shared<Terminal>(std::to_string(result), Term::INT);
+           return std::make_shared<Terminal>(result.get_str(), Term::INT);
         }
     }else if (op == "-"){
-        std::string str = args[0]->accept(&visitor);
-        str.erase(remove(str.begin(), str.end(), '('), str.end());
-        str.erase(remove(str.begin(), str.end(), ')'), str.end());
-        str.erase(remove(str.begin(), str.end(), ' '), str.end());
-        __int64_t result = std::stoll(str);
-        for (int i = 1; i < args.size(); i++) {
-           str = args[i]->accept(&visitor);
-           str.erase(remove(str.begin(), str.end(), '('), str.end());
-           str.erase(remove(str.begin(), str.end(), ')'), str.end());
-           str.erase(remove(str.begin(), str.end(), ' '), str.end());
-           result -= std::stoll(str);
-        }
+        FastRational result = firstTerm - secondTerm;
         if (result < 0){
-           return std::make_shared<Terminal>("(- " + std::to_string(result*(-1)) + ")", Term::INT);
+           result*=-1;
+           return std::make_shared<Terminal>("(- " + result.get_str() + ")", Term::INT);
         } else {
-           return std::make_shared<Terminal>(std::to_string(result), Term::INT);
+           return std::make_shared<Terminal>(result.get_str(), Term::INT);
         }
-    }else if (op == "/" or op == "div"){
-        std::string str = args[0]->accept(&visitor);
-        str.erase(remove(str.begin(), str.end(), '('), str.end());
-        str.erase(remove(str.begin(), str.end(), ')'), str.end());
-        str.erase(remove(str.begin(), str.end(), ' '), str.end());
-        __int64_t result = std::stoi(str);
-        for (int i = 1; i < args.size(); i++) {
-           str = args[i]->accept(&visitor);
-           str.erase(remove(str.begin(), str.end(), '('), str.end());
-           str.erase(remove(str.begin(), str.end(), ')'), str.end());
-           str.erase(remove(str.begin(), str.end(), ' '), str.end());
-           result /= std::stoll(str);
-        }
+    }else if (op == "/"){
+        FastRational result = firstTerm / secondTerm;
         if (result < 0){
-           return std::make_shared<Terminal>("(- " + std::to_string(result*(-1)) + ")", Term::INT);
+           result*=-1;
+           return std::make_shared<Terminal>("(- " + result.get_str() + ")", Term::INT);
         } else {
-           return std::make_shared<Terminal>(std::to_string(result), Term::INT);
+           return std::make_shared<Terminal>(result.get_str(), Term::INT);
         }
     }else if (op == "*"){
-        std::string str = args[0]->accept(&visitor);
-        str.erase(remove(str.begin(), str.end(), '('), str.end());
-        str.erase(remove(str.begin(), str.end(), ')'), str.end());
-        str.erase(remove(str.begin(), str.end(), ' '), str.end());
-        __int64_t result = std::stoll(str);
-        for (int i = 1; i < args.size(); i++) {
-           str = args[i]->accept(&visitor);
-           str.erase(remove(str.begin(), str.end(), '('), str.end());
-           str.erase(remove(str.begin(), str.end(), ')'), str.end());
-           str.erase(remove(str.begin(), str.end(), ' '), str.end());
-           result *= std::stoll(str);
-        }
+        FastRational result = firstTerm * secondTerm;
         if (result < 0){
-           return std::make_shared<Terminal>("(- " + std::to_string(result*(-1)) + ")", Term::INT);
+           result*=-1;
+           return std::make_shared<Terminal>("(- " + result.get_str() + ")", Term::INT);
         } else {
-           return std::make_shared<Terminal>(std::to_string(result), Term::INT);
+           return std::make_shared<Terminal>(result.get_str(), Term::INT);
         }
     }else if (op == "not"){
         if(args[0]->accept(&visitor) == "false"){
@@ -438,22 +416,20 @@ std::shared_ptr<Term> OperateVisitor::visit(Op* term){
            return args[2]->accept(&fakeInstantiation);
         }
     } else if (op == "mod") {
-        std::string str = args[0]->accept(&visitor);
-        str.erase(remove(str.begin(), str.end(), '('), str.end());
-        str.erase(remove(str.begin(), str.end(), ')'), str.end());
-        str.erase(remove(str.begin(), str.end(), ' '), str.end());
-        __int64_t result = std::stoll(str);
-        for (int i = 1; i < args.size(); i++) {
-           str = args[i]->accept(&visitor);
-           str.erase(remove(str.begin(), str.end(), '('), str.end());
-           str.erase(remove(str.begin(), str.end(), ')'), str.end());
-           str.erase(remove(str.begin(), str.end(), ' '), str.end());
-           result %= std::stoll(str);
-        }
+        FastRational result = firstTerm % secondTerm;
         if (result < 0){
-           return std::make_shared<Terminal>("(- " + std::to_string(result*(-1)) + ")", Term::INT);
+           result*=-1;
+           return std::make_shared<Terminal>("(- " + result.get_str() + ")", Term::INT);
         } else {
-           return std::make_shared<Terminal>(std::to_string(result), Term::INT);
+           return std::make_shared<Terminal>(result.get_str(), Term::INT);
+        }
+    } else if (op == "div") {
+        FastRational result = firstTerm / secondTerm;
+        if (result < 0){
+           result*=-1;
+           return std::make_shared<Terminal>("(- " + result.ceil().get_str() + ")", Term::INT);
+        } else {
+           return std::make_shared<Terminal>(result.floor().get_str(), Term::INT);
         }
     }
 }
