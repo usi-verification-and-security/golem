@@ -361,6 +361,7 @@ void StepHandler::noCongRequiredSteps(std::vector<int> requiredMP){
             proofSteps.emplace_back(currStep, Step::STEP,
                                     packClause(std::make_shared<Op>("=", packClause(implicationLHS, simplification))),
                                     "trans", std::vector<int>{transitivityStep, currStep-1});
+            currStep++;
         }
 
         proofSteps.emplace_back(currStep, Step::STEP,
