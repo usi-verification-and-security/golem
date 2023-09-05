@@ -72,6 +72,7 @@ class StepHandler {
     NegatedAndVisitor negatedAndVisitor;
     OperateLetTermVisitor operateLetTermVisitor;
     LetLocatorVisitor letLocatorVisitor;
+    RemoveUnusedVisitor removeUnusedVisitor;
 
 public :
 

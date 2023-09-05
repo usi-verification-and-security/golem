@@ -158,6 +158,56 @@ std::shared_ptr<Term> InstantiateVisitor::visit(Let* term){
     return std::make_shared<Let>(term->getTermNames(), declarations, application);
 }
 
+std::shared_ptr<Term> RemoveUnusedVisitor::visit(Quant* term) {
+
+    auto vars = term->getVars();
+    auto sorts = term->getSorts();
+    for (int i = 0; i < vars.size(); i++) {
+
+        currVar = vars[i];
+
+        if (term->getCoreTerm()->accept(this) == nullptr) {
+           vars.erase(vars.begin()+i);
+           sorts.erase(sorts.begin()+i);
+        }
+
+    }
+
+    if (vars.empty()) {
+        return term->getCoreTerm();
+    }
+    return std::make_shared<Quant>(term->getQuant(), vars, sorts, term->getCoreTerm());
+}
+
+std::shared_ptr<Term> RemoveUnusedVisitor::visit(Terminal* term) {
+    PrintVisitor printVisitor;
+    if (currVar->accept(&printVisitor) == term->accept(&printVisitor)) {
+        return std::make_shared<Terminal>(term->getVal(), term->getType());
+    } else {
+        return nullptr;
+    }
+}
+
+std::shared_ptr<Term> RemoveUnusedVisitor::visit(Op* term) {
+    auto args = term->getArgs();
+    for (auto arg : args) {
+        if (arg->accept(this) != nullptr) {
+           return std::make_shared<Op>(term->getOp(), term->getArgs());
+        }
+    }
+    return nullptr;
+}
+
+std::shared_ptr<Term> RemoveUnusedVisitor::visit(App* term) {
+    auto args = term->getArgs();
+    for (auto arg : args) {
+        if (arg->accept(this) != nullptr) {
+           return std::make_shared<App>(term->getFun(), term->getArgs());
+        }
+    }
+    return nullptr;
+}
+
 std::shared_ptr<Term> ImplicationLHSVisitor::visit(Terminal* term){
     return std::make_shared<Terminal>(term->getVal(), term->getType());
 }

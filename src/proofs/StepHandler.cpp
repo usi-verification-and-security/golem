@@ -229,26 +229,55 @@ void StepHandler::instantiationSteps(int i) {
 
     auto const & step = derivation[i];
 
+    std::shared_ptr<Term> unusedRem = currTerm->accept(&removeUnusedVisitor);
+
+    int quantStep = static_cast<int>(step.clauseId.id);
+
     //Getting the instantiated variable-value pairs
     std::vector<std::pair<std::string, std::string>> instPairs = getInstPairs(i, normalizingEqualities[step.clauseId.id]);
     InstantiateVisitor instantiateVisitor(instPairs);
 
-    proofSteps.emplace_back(currStep, Step::STEP,
-                            packClause(std::make_shared<Op>("or", packClause(std::make_shared<Op>("not", packClause(currTerm)), currTerm->accept(&instantiateVisitor)))),
-                            "forall_inst", instPairs);
-    currStep++;
+    if (unusedRem->accept(&printVisitor) != currTerm->accept(&printVisitor)) {
+        proofSteps.emplace_back(currStep, Step::STEP,
+                                packClause(std::make_shared<Op>("=", packClause(currTerm, unusedRem))),
+                                "qnt_rm_unused");
+        currStep++;
 
-    proofSteps.emplace_back(currStep, Step::STEP,
-                            packClause(std::make_shared<Op>("not", packClause(currTerm)), currTerm->accept(&instantiateVisitor)),
-                            "or", std::vector<int>{currStep-1});
-    currStep++;
+        proofSteps.emplace_back(currStep, Step::STEP,
+                                packClause(std::make_shared<Op>("not", packClause(currTerm)), unusedRem),
+                                "equiv1", std::vector<int>{currStep-1});
 
-    currTerm = currTerm->accept(&instantiateVisitor);
+        currStep++;
 
-    proofSteps.emplace_back(currStep, Step::STEP,
-                            packClause(currTerm),
-                            "resolution", std::vector<int>{currStep-1, static_cast<int>(step.clauseId.id)});
-    currStep++;
+        proofSteps.emplace_back(currStep, Step::STEP,
+                                packClause(unusedRem),
+                                "resolution", std::vector<int>{quantStep, currStep-1});
+
+        currStep++;
+
+        currTerm = unusedRem;
+        quantStep = currStep-1;
+    }
+
+    if (not instPairs.empty()) {
+
+        proofSteps.emplace_back(currStep, Step::STEP,
+                                packClause(std::make_shared<Op>("or", packClause(std::make_shared<Op>("not", packClause(currTerm)), currTerm->accept(&instantiateVisitor)))),
+                                "forall_inst", instPairs);
+        currStep++;
+
+        proofSteps.emplace_back(currStep, Step::STEP,
+                                packClause(std::make_shared<Op>("not", packClause(currTerm)), currTerm->accept(&instantiateVisitor)),
+                                "or", std::vector<int>{currStep-1});
+        currStep++;
+
+        currTerm = currTerm->accept(&instantiateVisitor);
+
+        proofSteps.emplace_back(currStep, Step::STEP,
+                                packClause(currTerm),
+                                "resolution", std::vector<int>{currStep-1, quantStep});
+        currStep++;
+    }
 }
 
 void StepHandler::assumptionSteps() {

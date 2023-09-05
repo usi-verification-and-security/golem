@@ -144,6 +144,16 @@ public:
     std::shared_ptr<Term> visit(Let*) override;
 };
 
+class RemoveUnusedVisitor : public LogicVisitor{
+    std::shared_ptr<Term> currVar;
+public:
+    std::shared_ptr<Term> visit(Terminal*) override;
+    std::shared_ptr<Term> visit(Quant*) override;
+    std::shared_ptr<Term> visit(Op*) override;
+    std::shared_ptr<Term> visit(App*) override;
+    std::shared_ptr<Term> visit(Let*) override {return nullptr;}; //because we have already got rid of the let terms
+};
+
 class OperateVisitor : public LogicVisitor {
 public :
     std::shared_ptr<Term> visit(Terminal*) override {return std::make_shared<Terminal>("Error", Term::UNDECLARED);};
