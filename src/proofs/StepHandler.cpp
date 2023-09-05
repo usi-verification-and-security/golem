@@ -493,52 +493,45 @@ std::vector<std::pair<std::string, std::string>> StepHandler::getInstPairs(int i
 
     TermUtils utils(logic);
 
-    bool skip = false;
-
-    for (std::size_t premise : step.premises) {
-        if (premise == 0){
-            skip = true;
-        }
-    }
+    auto premises = step.premises;
+    premises.erase(std::remove(premises.begin(), premises.end(), 0), premises.end());
 
     std::vector<std::pair<int, PTRef>> instanceVertexPairs;
     bool present = false;
 
-    if(!skip) {
-        for (std::size_t premise : step.premises) {
-            auto concreteArgs = utils.predicateArgsInOrder(derivation[premise].derivedFact);
-            auto targetVertex = originalGraph.getEdge(derivation[premise].clauseId).to;
+    for (std::size_t premise : premises) {
+        auto concreteArgs = utils.predicateArgsInOrder(derivation[premise].derivedFact);
+        auto targetVertex = originalGraph.getEdge(derivation[premise].clauseId).to;
 
-            PTRef clauseBody =  originalGraph.getStateVersion(targetVertex);
+        PTRef clauseBody =  originalGraph.getStateVersion(targetVertex);
 
-            //Dealing with repeated predicates
-            unsigned instance;
-            for (auto pair : instanceVertexPairs) {
-                if (clauseBody == pair.second) {
-                    present = true;
-                    pair.first++;
-                    instance = pair.first;
-                    break;
-                }
+        //Dealing with repeated predicates
+        unsigned instance;
+        for (auto pair : instanceVertexPairs) {
+            if (clauseBody == pair.second) {
+                present = true;
+                pair.first++;
+                instance = pair.first;
+                break;
             }
-            if (not present) {
-                instanceVertexPairs.emplace_back(0, clauseBody);
-            } else {
-                clauseBody =  originalGraph.getStateVersion(targetVertex, instance);
-            }
+        }
+        if (not present) {
+            instanceVertexPairs.emplace_back(0, clauseBody);
+        } else {
+            clauseBody =  originalGraph.getStateVersion(targetVertex, instance);
+        }
 
-            auto formalArgs = utils.predicateArgsInOrder(clauseBody);
-            assert(concreteArgs.size() == formalArgs.size());
-            //Building the pairs
-            for (int m = 0; m < formalArgs.size(); m++) {
-                for (auto const & equality : stepNormEq) {
-                    if (equality.normalizedVar == formalArgs[m]) {
-                        sourceVariables.push_back(equality.originalArg);
-                        std::pair<std::string, std::string> pair;
-                        pair.first = logic.printTerm(equality.originalArg);
-                        pair.second = logic.printTerm(concreteArgs[m]);
-                        instPairs.push_back(pair);
-                    }
+        auto formalArgs = utils.predicateArgsInOrder(clauseBody);
+        assert(concreteArgs.size() == formalArgs.size());
+        //Building the pairs
+        for (int m = 0; m < formalArgs.size(); m++) {
+            for (auto const & equality : stepNormEq) {
+                if (equality.normalizedVar == formalArgs[m]) {
+                    sourceVariables.push_back(equality.originalArg);
+                    std::pair<std::string, std::string> pair;
+                    pair.first = logic.printTerm(equality.originalArg);
+                    pair.second = logic.printTerm(concreteArgs[m]);
+                    instPairs.push_back(pair);
                 }
             }
         }
