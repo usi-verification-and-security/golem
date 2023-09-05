@@ -92,6 +92,7 @@ public :
     void notLhsPrimaryBranchSteps();
     void nonLinearSimplification(std::vector<int> requiredMP);
     void linearSimplification(std::vector<int> requiredMP);
+
 };
 
 

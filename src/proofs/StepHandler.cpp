@@ -160,6 +160,7 @@ void StepHandler::buildAletheProof() {
 
                     //If the current term to simplify is not a primary branch we require additional steps
                     if (not isPrimaryBranch) {
+
                         //Proof simplification from bottom up
                         notLhsPrimaryBranchSteps();
                     }else {
@@ -277,10 +278,64 @@ void StepHandler::noCongRequiredSteps(std::vector<int> requiredMP){
 
         proofSteps.emplace_back(currStep, Step::STEP,
                                 packClause(std::make_shared<Op>("=", packClause(termToSimplify, simplification))), simplificationRule);
+        transitivityStep = currStep;
+
         currStep++;
 
+        //Simplifying the main LHS tree
+        SimplifyVisitor simplifyVisitor(simplification, currTerm->accept(&helperVisitor));
+        currTerm = currTerm->accept(&simplifyVisitor);
+
+        if (simplification->getTermType() == Term::OP) {
+
+            std::shared_ptr<Term> localParentBranchSimplified;
+            std::shared_ptr<Term> localParentBranch;
+
+            while (true) {
+
+                termToSimplify = currTerm->accept(&simplifyLocatorVisitor);  //Locating possible simplification
+                simplificationRule = termToSimplify->accept(&simplifyRuleVisitor);    //Getting rule for simplification
+                simplification = termToSimplify->accept(&operateVisitor);
+
+                proofSteps.emplace_back(currStep, Step::STEP,
+                                        packClause(std::make_shared<Op>("=", packClause(termToSimplify, simplification))), simplificationRule);
+                currStep++;
+
+                localParentBranch = currTerm->accept(&implicationLhsVisitor);
+
+                //Simplifying the main LHS tree
+                SimplifyVisitor simplifyVisitor(simplification, currTerm->accept(&helperVisitor));
+                currTerm = currTerm->accept(&simplifyVisitor);
+
+                if (currTerm->accept(&implicationLhsVisitor)->accept(&printVisitor) == simplification->accept(&printVisitor)) {
+                    break;
+                }
+
+                SimplifyVisitor simplifyLocalParentBranchVisitor(simplification, localParentBranch->accept(&helperVisitor));
+
+                localParentBranchSimplified = localParentBranch->accept(&simplifyLocalParentBranchVisitor);
+
+                proofSteps.emplace_back(currStep, Step::STEP,
+                                        packClause(std::make_shared<Op>("=", packClause(localParentBranch, localParentBranchSimplified))),
+                                        "cong", std::vector<int>{currStep-1});
+
+                currStep++;
+
+                proofSteps.emplace_back(currStep, Step::STEP,
+                                        packClause(std::make_shared<Op>("=", packClause(implicationLHS, localParentBranchSimplified))),
+                                        "trans", std::vector<int>{transitivityStep, currStep-1});
+
+                transitivityStep = currStep;
+
+                currStep++;
+            }
+            proofSteps.emplace_back(currStep, Step::STEP,
+                                    packClause(std::make_shared<Op>("=", packClause(implicationLHS, simplification))),
+                                    "trans", std::vector<int>{transitivityStep, currStep-1});
+        }
+
         proofSteps.emplace_back(currStep, Step::STEP,
-                                packClause(termToSimplify, std::make_shared<Op>("not", packClause(simplification))),
+                                packClause(implicationLHS, std::make_shared<Op>("not", packClause(simplification))),
                                 "equiv2", std::vector<int>{currStep-1});
         currStep++;
 
@@ -291,7 +346,7 @@ void StepHandler::noCongRequiredSteps(std::vector<int> requiredMP){
             currStep++;
 
             proofSteps.emplace_back(currStep, Step::STEP,
-                                    packClause(termToSimplify),
+                                    packClause(implicationLHS),
                                     "resolution", std::vector<int>{currStep-2, currStep-1});
             currStep++;
 
@@ -358,9 +413,12 @@ void StepHandler::notLhsPrimaryBranchSteps() {
         GetLocalParentBranchVisitor newGetLocalParentBranchVisitor(localParentBranch);
 
         //If we reached the top, break the loop
-        if (currTerm->accept(&implicationLhsVisitor)->accept(&printVisitor) == currTerm->accept(&newGetLocalParentBranchVisitor)->accept(&printVisitor)) {
+        if (currTerm->accept(&localIsPrimary)) {
+            break;
+        } else if (currTerm->accept(&implicationLhsVisitor)->accept(&printVisitor) == currTerm->accept(&newGetLocalParentBranchVisitor)->accept(&printVisitor)) {
             break;
         }
+
         //If not, get new local parent and keep looping
         localParentBranch = currTerm->accept(&newGetLocalParentBranchVisitor);
         SimplifyVisitor newSimplifyLocalParentBranchVisitor(simplification, localParentBranch->accept(&helperVisitor));
@@ -596,5 +654,6 @@ std::vector<std::pair<std::string, std::string>> StepHandler::getInstPairs(int i
     std::transform(instPairsBeforeNormalization.begin(), instPairsBeforeNormalization.end(), std::back_inserter(res), [&](auto const & varVal) {
        return std::make_pair(logic.printTerm(varVal.var), logic.printTerm(varVal.val));
     });
+
     return res;
 }
