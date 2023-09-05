@@ -682,7 +682,9 @@ std::vector<std::pair<std::string, std::string>> StepHandler::getInstPairs(int i
 
     std::vector<std::pair<std::string, std::string>> res;
     std::transform(instPairsBeforeNormalization.begin(), instPairsBeforeNormalization.end(), std::back_inserter(res), [&](auto const & varVal) {
-       return std::make_pair(logic.printTerm(varVal.var), logic.printTerm(varVal.val));
+        assert(logic.isVar(varVal.var));
+        std::string varName = logic.getSymName(varVal.var);
+        return std::make_pair(varName, logic.printTerm(varVal.val));
     });
 
     return res;
