@@ -488,7 +488,8 @@ void StepHandler::linearSimplification(std::vector<int> requiredMP) {
 std::vector<std::pair<std::string, std::string>> StepHandler::getInstPairs(int it, vec<Normalizer::Equality> const & stepNormEq) {
     struct VarValPair { PTRef var; PTRef val; };
     std::vector<PTRef> sourceVariables;
-    std::vector<VarValPair> instPairs;
+    std::vector<VarValPair> instPairsBeforeNormalization;
+    std::vector<VarValPair> instPairsAfterNormalization;
 
     auto const & step = derivation[it];
 
@@ -530,7 +531,8 @@ std::vector<std::pair<std::string, std::string>> StepHandler::getInstPairs(int i
                 if (equality.normalizedVar == formalArgs[m]) {
                     sourceVariables.push_back(equality.originalArg);
                     assert(logic.isConstant(concreteArgs[m]));
-                    instPairs.push_back({equality.originalArg, concreteArgs[m]});
+                    instPairsBeforeNormalization.push_back({equality.originalArg, concreteArgs[m]});
+                    instPairsAfterNormalization.push_back({equality.normalizedVar, concreteArgs[m]});
                 }
             }
         }
@@ -554,15 +556,44 @@ std::vector<std::pair<std::string, std::string>> StepHandler::getInstPairs(int i
                 }
                 if (!redundance) {
                     assert(logic.isConstant(concreteArgs[m]));
-                    instPairs.push_back({equality.originalArg, concreteArgs[m]});
+                    instPairsBeforeNormalization.push_back({equality.originalArg, concreteArgs[m]});
+                    instPairsAfterNormalization.push_back({equality.normalizedVar, concreteArgs[m]});
                 } else {
                     redundance = false;
                 }
             }
         }
     }
+    // Compute values for possible auxiliary variables
+    PTRef originalConstraint = originalGraph.getEdgeLabel(step.clauseId);
+    TermUtils::substitutions_map substitutionsMap;
+    for (auto const & varVal : instPairsAfterNormalization) {
+        substitutionsMap.insert({varVal.var, varVal.val});
+    }
+
+    PTRef instantiatedConstraint = utils.varSubstitute(originalConstraint, substitutionsMap);
+    if (instantiatedConstraint != logic.getTerm_true()) {
+        assert(instantiatedConstraint != logic.getTerm_false());
+        auto auxVars = utils.getVars(instantiatedConstraint);
+        // Find values for auxiliary variables
+        SMTSolver solver(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
+        solver.getCoreSolver().insertFormula(instantiatedConstraint);
+        auto res = solver.getCoreSolver().check();
+        assert(res == s_True);
+        auto model = solver.getCoreSolver().getModel();
+        for (PTRef auxVar : auxVars) {
+            PTRef val = model->evaluate(auxVar);
+            auto it = std::find_if(stepNormEq.begin(), stepNormEq.end(), [&](auto const & eq) {
+                return eq.normalizedVar == auxVar;
+            });
+            if (it == stepNormEq.end()) { throw std::logic_error("Auxiliary variable should have been found in normalizing equalities"); }
+            PTRef originalVar = it->originalArg;
+            instPairsBeforeNormalization.push_back({originalVar, val});
+        }
+    }
+
     std::vector<std::pair<std::string, std::string>> res;
-    std::transform(instPairs.begin(), instPairs.end(), std::back_inserter(res), [&](auto const & varVal) {
+    std::transform(instPairsBeforeNormalization.begin(), instPairsBeforeNormalization.end(), std::back_inserter(res), [&](auto const & varVal) {
        return std::make_pair(logic.printTerm(varVal.var), logic.printTerm(varVal.val));
     });
     return res;
