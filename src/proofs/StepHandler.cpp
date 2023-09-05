@@ -486,8 +486,9 @@ void StepHandler::linearSimplification(std::vector<int> requiredMP) {
 
 
 std::vector<std::pair<std::string, std::string>> StepHandler::getInstPairs(int it, vec<Normalizer::Equality> const & stepNormEq) {
+    struct VarValPair { PTRef var; PTRef val; };
     std::vector<PTRef> sourceVariables;
-    std::vector<std::pair<std::string, std::string>> instPairs;
+    std::vector<VarValPair> instPairs;
 
     auto const & step = derivation[it];
 
@@ -528,10 +529,8 @@ std::vector<std::pair<std::string, std::string>> StepHandler::getInstPairs(int i
             for (auto const & equality : stepNormEq) {
                 if (equality.normalizedVar == formalArgs[m]) {
                     sourceVariables.push_back(equality.originalArg);
-                    std::pair<std::string, std::string> pair;
-                    pair.first = logic.printTerm(equality.originalArg);
-                    pair.second = logic.printTerm(concreteArgs[m]);
-                    instPairs.push_back(pair);
+                    assert(logic.isConstant(concreteArgs[m]));
+                    instPairs.push_back({equality.originalArg, concreteArgs[m]});
                 }
             }
         }
@@ -554,15 +553,17 @@ std::vector<std::pair<std::string, std::string>> StepHandler::getInstPairs(int i
                     }
                 }
                 if (!redundance) {
-                    std::pair<std::string, std::string> pair;
-                    pair.first = logic.printTerm(equality.originalArg);
-                    pair.second = logic.printTerm(concreteArgs[m]);
-                    instPairs.push_back(pair);
+                    assert(logic.isConstant(concreteArgs[m]));
+                    instPairs.push_back({equality.originalArg, concreteArgs[m]});
                 } else {
                     redundance = false;
                 }
             }
         }
     }
-    return instPairs;
+    std::vector<std::pair<std::string, std::string>> res;
+    std::transform(instPairs.begin(), instPairs.end(), std::back_inserter(res), [&](auto const & varVal) {
+       return std::make_pair(logic.printTerm(varVal.var), logic.printTerm(varVal.val));
+    });
+    return res;
 }
