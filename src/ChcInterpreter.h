@@ -117,7 +117,7 @@ private:
     VerificationResult solve(std::string engine, ChcDirectedHyperGraph const & hyperGraph);
 
     void validate(VerificationResult result, ChcDirectedHyperGraph const & originalGraph, bool validateWitness,
-                  bool printWitness, WitnessBackTranslator & translator, std::vector<std::vector<PTRef>> normalizingEqualities);
+                  bool printWitness, WitnessBackTranslator & translator, Normalizer::Equalities const & normalizingEqualities);
 
     SRef sortFromASTNode(ASTNode const & node) const;
 

@@ -485,7 +485,7 @@ void StepHandler::linearSimplification(std::vector<int> requiredMP) {
 }
 
 
-std::vector<std::pair<std::string, std::string>> StepHandler::getInstPairs(int it, std::vector<PTRef> stepNormEq) {
+std::vector<std::pair<std::string, std::string>> StepHandler::getInstPairs(int it, vec<Normalizer::Equality> const & stepNormEq) {
     std::vector<PTRef> sourceVariables;
     std::vector<std::pair<std::string, std::string>> instPairs;
 
@@ -531,11 +531,11 @@ std::vector<std::pair<std::string, std::string>> StepHandler::getInstPairs(int i
             assert(concreteArgs.size() == formalArgs.size());
             //Building the pairs
             for (int m = 0; m < formalArgs.size(); m++) {
-                for (int n = 0; n < stepNormEq.size(); n++) {
-                    if (stepNormEq[n] == formalArgs[m]) {
-                        sourceVariables.push_back(stepNormEq[n-1]);
+                for (auto const & equality : stepNormEq) {
+                    if (equality.normalizedVar == formalArgs[m]) {
+                        sourceVariables.push_back(equality.originalArg);
                         std::pair<std::string, std::string> pair;
-                        pair.first = logic.printTerm(stepNormEq[n-1]);
+                        pair.first = logic.printTerm(equality.originalArg);
                         pair.second = logic.printTerm(concreteArgs[m]);
                         instPairs.push_back(pair);
                     }
@@ -553,16 +553,16 @@ std::vector<std::pair<std::string, std::string>> StepHandler::getInstPairs(int i
 
     //Building the pairs
     for (int m = 0; m < formalArgs.size(); m++){
-        for (int n = 0; n < stepNormEq.size(); n++) {
-            if (stepNormEq[n] == formalArgs[m]) {
+        for (auto const & equality : stepNormEq) {
+            if (equality.normalizedVar == formalArgs[m]) {
                 for (PTRef variable : sourceVariables){
-                    if (variable == stepNormEq[n-1]){
+                    if (variable == equality.originalArg){
                         redundance = true;
                     }
                 }
                 if (!redundance) {
                     std::pair<std::string, std::string> pair;
-                    pair.first = logic.printTerm(stepNormEq[n-1]);
+                    pair.first = logic.printTerm(equality.originalArg);
                     pair.second = logic.printTerm(concreteArgs[m]);
                     instPairs.push_back(pair);
                 } else {

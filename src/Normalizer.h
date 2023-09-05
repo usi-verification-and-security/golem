@@ -19,16 +19,21 @@ struct NormalizedChcSystem{
 };
 
 class Normalizer{
-    Logic& logic;
-    TimeMachine timeMachine;
-    NonlinearCanonicalPredicateRepresentation canonicalPredicateRepresentation;
-    long long counter = 0;
+public:
     struct Equality {
         PTRef normalizedVar;
         PTRef originalArg;
     };
+
+    using Equalities = std::vector<vec<Equality>>;
+private:
+    Logic& logic;
+    TimeMachine timeMachine;
+    NonlinearCanonicalPredicateRepresentation canonicalPredicateRepresentation;
+    long long counter = 0;
+
     vec<Equality> topLevelEqualities;
-    std::vector<vec<Equality>> normalizingEqualities;
+    Equalities normalizingEqualities;
 
     ChClause normalize(ChClause const & clause);
 
@@ -64,7 +69,7 @@ public:
     NormalizedChcSystem normalize(ChcSystem const & system);
 
     const vec<Equality> & getNormalizingEqualities(std::size_t index) const { return std::move(normalizingEqualities.at(index)); }
-    std::vector<std::vector<PTRef>> getPTRefNormalizingEqualities();
+    auto const & getNormalizingEqualities() const { return normalizingEqualities; };
 
 };
 

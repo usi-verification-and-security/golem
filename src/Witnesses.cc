@@ -27,7 +27,7 @@ void VerificationResult::printWitness(std::ostream & out, Logic & logic) const {
 }
 
 void VerificationResult::printWitness_(std::ostream & out, Logic & logic, const ChcDirectedHyperGraph & originalGraph,
-                                       std::vector<std::shared_ptr<Term>> originalAssertions, std::vector<std::vector<PTRef>> normalizingEqualities) const {
+                                       std::vector<std::shared_ptr<Term>> originalAssertions, Normalizer::Equalities const & normalizingEqualities) const {
 
     if (not hasWitness()) { return; }
     switch (answer) {

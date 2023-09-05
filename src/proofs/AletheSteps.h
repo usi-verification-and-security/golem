@@ -38,7 +38,7 @@ class StepHandler {
 
     InvalidityWitness::Derivation derivation;
     std::vector<std::shared_ptr<Term>> originalAssertions;
-    std::vector<std::vector<PTRef>> normalizingEqualities;
+    Normalizer::Equalities const & normalizingEqualities;
     std::ostream & out;
     Logic & logic;
     ChcDirectedHyperGraph originalGraph;
@@ -76,11 +76,11 @@ class StepHandler {
 public :
 
     StepHandler(InvalidityWitness::Derivation derivation, std::vector<std::shared_ptr<Term>> originalAssertions,
-                std::vector<std::vector<PTRef>> normalizingEqualities, std::ostream & out,
+                Normalizer::Equalities const & normalizingEqualities, std::ostream & out,
                 Logic & logic, ChcDirectedHyperGraph originalGraph) : derivation(std::move(derivation)), originalAssertions(std::move(originalAssertions)), normalizingEqualities(std::move(normalizingEqualities)), originalGraph(std::move(originalGraph)), out(out), logic(logic) {}
 
 
-    std::vector<std::pair<std::string, std::string>> getInstPairs(int it, std::vector<PTRef> stepNormEq);
+    std::vector<std::pair<std::string, std::string>> getInstPairs(int it, vec<Normalizer::Equality> const & stepNormEq);
     static std::vector<std::shared_ptr<Term>> packClause(const std::shared_ptr<Term>& term);
     static std::vector<std::shared_ptr<Term>> packClause(const std::shared_ptr<Term>& term1, const std::shared_ptr<Term>& term2);
     void buildAletheProof();

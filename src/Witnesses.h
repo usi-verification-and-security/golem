@@ -11,6 +11,7 @@
 #include "graph/ChcGraph.h"
 #include "osmt_solver.h"
 #include "proofs/Term.h"
+#include "Normalizer.h"
 #include <memory>
 #include <variant>
 
@@ -154,7 +155,7 @@ public:
 
     void printWitness(std::ostream & out, Logic & logic) const;
     void printWitness_(std::ostream & out, Logic & logic, ChcDirectedHyperGraph const & originalGraph, std::vector<std::shared_ptr<Term>> originalAssertions,
-                       std::vector<std::vector<PTRef>> normalizingEqualities) const;
+                       Normalizer::Equalities const & normalizingEqualities) const;
 };
 
 struct TransitionSystemVerificationResult {

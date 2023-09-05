@@ -404,7 +404,7 @@ VerificationResult ChcInterpreterContext::solve(std::string engine_s, ChcDirecte
 }
 
 void ChcInterpreterContext::validate(VerificationResult result, ChcDirectedHyperGraph const & originalGraph,
-                                     bool validateWitness, bool printWitness, WitnessBackTranslator & translator, std::vector<std::vector<PTRef>> normalizingEqualities) {
+                                     bool validateWitness, bool printWitness, WitnessBackTranslator & translator, Normalizer::Equalities const & normalizingEqualities) {
 
     result = translator.translate(std::move(result));
     if (not result.hasWitness()) {
@@ -440,7 +440,7 @@ void ChcInterpreterContext::interpretCheckSat() {
 
     Normalizer normalizer(logic);
     auto normalizedSystem = normalizer.normalize(*system);
-    std::vector<std::vector<PTRef>> normalizingEqualities = normalizer.getPTRefNormalizingEqualities();
+    auto const & normalizingEqualities = normalizer.getNormalizingEqualities();
 
     auto hypergraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
     std::unique_ptr<ChcDirectedHyperGraph> originalGraph{nullptr};
