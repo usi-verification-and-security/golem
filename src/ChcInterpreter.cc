@@ -10,6 +10,7 @@
 #include "graph/ChcGraph.h"
 #include "graph/ChcGraphBuilder.h"
 #include "proofs/Term.h"
+#include "transformers/ConstraintSimplifier.h"
 #include "transformers/MultiEdgeMerger.h"
 #include "transformers/NodeEliminator.h"
 #include "transformers/RemoveUnreachableNodes.h"
@@ -455,6 +456,7 @@ void ChcInterpreterContext::interpretCheckSat() {
     }
 
     TransformationPipeline::pipeline_t transformations;
+    transformations.push_back(std::make_unique<ConstraintSimplifier>());
     transformations.push_back(std::make_unique<SimpleChainSummarizer>());
     transformations.push_back(std::make_unique<RemoveUnreachableNodes>());
     transformations.push_back(std::make_unique<SimpleNodeEliminator>());

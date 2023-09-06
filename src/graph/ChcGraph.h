@@ -283,6 +283,13 @@ public:
         }
     }
 
+    template<typename TAction>
+    void forEachEdge(TAction action) {
+        for (auto & entry : edges) {
+            action(entry.second);
+        }
+    }
+
     void deleteFalseEdges();
     void deleteEdges(std::vector<EId> const & edgesToDelete);
     void deleteNode(SymRef sym);

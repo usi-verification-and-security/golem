@@ -59,9 +59,7 @@ private:
 
     ChClause eliminateRedundantVariables(ChClause && clause);
 
-    PTRef eliminateItes(PTRef fla);
-    PTRef eliminateDivMod(PTRef fla);
-    PTRef eliminateDistincts(PTRef fla);
+    ChClause normalizeAuxiliaryVariables(ChClause && clause);
 
 public:
     Normalizer(Logic& logic) : logic(logic), timeMachine(logic), canonicalPredicateRepresentation(logic) {}
