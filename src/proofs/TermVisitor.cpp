@@ -395,7 +395,7 @@ std::shared_ptr<Term> OperateVisitor::visit(Op* term){
         std::vector<std::shared_ptr<Term>> predicates;
 
         for (auto arg : args){
-           assert(arg->getTerminalType() != Term::VAR);
+//           assert(arg->getTerminalType() != Term::VAR);
            if (arg->accept(&visitor) == "false"){
                return std::make_shared<Terminal>("false", Term::BOOL);
            }
