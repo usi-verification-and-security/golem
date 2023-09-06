@@ -230,7 +230,7 @@ std::shared_ptr<Term> ChcInterpreterContext::ASTtoTerm(const ASTNode & node){
         if (name == "true" or name == "false") {
             return std::make_shared<Terminal>(name, Term::BOOL);
         }else{
-            return std::make_shared<Terminal>(name, Term::VAR);;
+            return std::make_shared<Terminal>(name, Term::VAR);
         }
     } else if (t == LQID_T) {
         auto it = node.children->begin();

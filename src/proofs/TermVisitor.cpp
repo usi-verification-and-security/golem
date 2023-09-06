@@ -120,7 +120,13 @@ std::shared_ptr<Term> InstantiateVisitor::visit(Terminal* term){
     if(type != Term::VAR) {return std::make_shared<Terminal>(val, type);}
     for (std::pair<std::string, std::string> pair : instPairs){
         if (val == pair.first){
-           return std::make_shared<Terminal>(pair.second, type);
+           if (pair.second == "true" or pair.second == "false") {
+               return std::make_shared<Terminal>(pair.second, Term::BOOL);
+           } else if (pair.second.find('.') != std::string::npos) {
+               return std::make_shared<Terminal>(pair.second, Term::REAL);
+           } else {
+               return std::make_shared<Terminal>(pair.second, Term::INT);
+           }
         }
     }
     return std::make_shared<Terminal>(val, type);
