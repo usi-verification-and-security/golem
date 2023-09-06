@@ -642,10 +642,10 @@ std::vector<std::pair<std::string, std::string>> StepHandler::getInstPairs(int i
                         redundance = true;
                     }
                 }
+                instPairsAfterNormalization.push_back({equality.normalizedVar, concreteArgs[m]});
                 if (!redundance) {
                     assert(logic.isConstant(concreteArgs[m]));
                     instPairsBeforeNormalization.push_back({equality.originalArg, concreteArgs[m]});
-                    instPairsAfterNormalization.push_back({equality.normalizedVar, concreteArgs[m]});
                 } else {
                     redundance = false;
                 }
