@@ -12,6 +12,7 @@ public:
     enum termType{APP, OP, TERMINAL, QUANT, LET};
     enum terminalType{ VAR, REAL, INT, SORT, BOOL, UNDECLARED};
     virtual termType getTermType() = 0;
+    virtual terminalType getTerminalType() = 0;
     virtual std::shared_ptr<Term> accept(class LogicVisitor*) = 0;
     virtual std::string accept(class StringVisitor*) = 0;
     virtual bool accept(class BooleanVisitor*) = 0;
@@ -26,6 +27,7 @@ public:
     std::string getVal() { return val;}
     terminalType getType() {return type;}
     termType getTermType() override {return TERMINAL;}
+    terminalType getTerminalType() override {return type;}
 
     std::shared_ptr<Term> accept(LogicVisitor*) override;
     std::string accept(StringVisitor*) override;
@@ -41,6 +43,7 @@ public:
     std::string getOp() { return operation;}
     std::vector<std::shared_ptr<Term>> getArgs() {return args;}
     termType getTermType() override {return OP;}
+    terminalType getTerminalType() override {return UNDECLARED;}
 
     std::shared_ptr<Term> accept(LogicVisitor*) override;
     std::string accept(StringVisitor*) override;
@@ -56,6 +59,7 @@ public:
     std::string getFun() {return fun;}
     std::vector<std::shared_ptr<Term>> getArgs() {return args;}
     termType getTermType() override {return APP;}
+    terminalType getTerminalType() override {return UNDECLARED;}
 
     std::shared_ptr<Term> accept(LogicVisitor*) override;
     std::string accept(StringVisitor*) override;
@@ -76,6 +80,7 @@ public:
     std::vector<std::shared_ptr<Term>> getSorts() {return sorts;}
     std::shared_ptr<Term> getCoreTerm() {return coreTerm;}
     termType getTermType() override {return QUANT;}
+    terminalType getTerminalType() override {return UNDECLARED;}
 
     std::shared_ptr<Term> accept(LogicVisitor*) override;
     std::string accept(StringVisitor*) override;
@@ -95,6 +100,7 @@ public:
     std::shared_ptr<Term> getApplication() {return application;}
     std::vector<std::string> getTermNames() {return termNames;}
     termType getTermType() override {return LET;}
+    terminalType getTerminalType() override {return UNDECLARED;}
 
     std::shared_ptr<Term> accept(LogicVisitor*) override;
     std::string accept(StringVisitor*) override;

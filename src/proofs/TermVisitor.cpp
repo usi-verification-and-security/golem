@@ -5,6 +5,7 @@
 #include "Term.h"
 #include <memory>
 #include <string>
+#include <cassert>
 
 std::string PrintVisitor::visit(Terminal* term) {
     return term->getVal();
@@ -343,6 +344,8 @@ std::shared_ptr<Term> OperateVisitor::visit(Op* term){
     FastRational secondTerm;
 
     if (op == "<" or op == "<=" or op == "-" or op == "*" or op == "/" or op == "mod" or op == "div"){
+        assert(args[0]->getTerminalType() != Term::VAR);
+        assert(args[1]->getTerminalType() != Term::VAR);
         firstStr = args[0]->accept(&visitor);
         secondStr = args[1]->accept(&visitor);
         firstStr.erase(remove(firstStr.begin(), firstStr.end(), '('), firstStr.end());
@@ -356,6 +359,8 @@ std::shared_ptr<Term> OperateVisitor::visit(Op* term){
     }
 
     if (op == "="){
+        assert(args[0]->getTerminalType() != Term::VAR);
+        assert(args[1]->getTerminalType() != Term::VAR);
         if(args[0]->accept(&visitor) == args[1]->accept(&visitor)){
            return std::make_shared<Terminal>("true", Term::BOOL);
         }else{
@@ -384,6 +389,7 @@ std::shared_ptr<Term> OperateVisitor::visit(Op* term){
         std::vector<std::shared_ptr<Term>> predicates;
 
         for (auto arg : args){
+           assert(arg->getTerminalType() != Term::VAR);
            if (arg->accept(&visitor) == "false"){
                return std::make_shared<Terminal>("false", Term::BOOL);
            }
@@ -407,27 +413,29 @@ std::shared_ptr<Term> OperateVisitor::visit(Op* term){
         }
     }else if (op == "or"){
         for (auto arg : args){
-           if (arg->accept(&visitor) == "true"){
+            assert(arg->getTerminalType() != Term::VAR);
+            if (arg->accept(&visitor) == "true"){
                return std::make_shared<Terminal>("true", Term::BOOL);
-           }
+            }
         }
         return std::make_shared<Terminal>("false", Term::BOOL);
     }else if (op == "+"){
         FastRational result = 0;
         for (auto arg : args) {
-           std::string str = arg->accept(&visitor);
-           str.erase(remove(str.begin(), str.end(), '('), str.end());
-           str.erase(remove(str.begin(), str.end(), ')'), str.end());
-           str.erase(remove(str.begin(), str.end(), ' '), str.end());
-           const char* ptr = &str[0];
-           FastRational temp(ptr, 10);
-           result += temp;
+            assert(arg->getTerminalType() != Term::VAR);
+            std::string str = arg->accept(&visitor);
+            str.erase(remove(str.begin(), str.end(), '('), str.end());
+            str.erase(remove(str.begin(), str.end(), ')'), str.end());
+            str.erase(remove(str.begin(), str.end(), ' '), str.end());
+            const char* ptr = &str[0];
+            FastRational temp(ptr, 10);
+            result += temp;
         }
         if (result < 0){
-           result*=-1;
-           return std::make_shared<Terminal>("(- " + result.get_str() + ")", Term::INT);
+            result*=-1;
+            return std::make_shared<Terminal>("(- " + result.get_str() + ")", Term::INT);
         } else {
-           return std::make_shared<Terminal>(result.get_str(), Term::INT);
+            return std::make_shared<Terminal>(result.get_str(), Term::INT);
         }
     }else if (op == "-"){
         FastRational result = firstTerm - secondTerm;
@@ -454,12 +462,16 @@ std::shared_ptr<Term> OperateVisitor::visit(Op* term){
            return std::make_shared<Terminal>(result.get_str(), Term::INT);
         }
     }else if (op == "not"){
+        assert(args[0]->getTerminalType() != Term::VAR);
         if(args[0]->accept(&visitor) == "false"){
            return std::make_shared<Terminal>("true", Term::BOOL);
         }else{
            return std::make_shared<Terminal>("false", Term::BOOL);
         }
     } else if (op == "ite"){
+        assert(args[0]->getTerminalType() != Term::VAR);
+        assert(args[1]->getTerminalType() != Term::VAR);
+        assert(args[2]->getTerminalType() != Term::VAR);
         if (args[0]->accept(&visitor) == "true") {
            return args[1]->accept(&fakeInstantiation);
         } else {

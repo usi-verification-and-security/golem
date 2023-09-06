@@ -200,8 +200,15 @@ std::shared_ptr<Term> ChcInterpreterContext::ASTtoTerm(const ASTNode & node){
     ASTType t = node.getType();
     if (t == TERM_T) {
         std::string name = (**(node.children->begin())).getValue();
-        auto term = std::make_shared<Terminal>(name, Term::INT);
-        return term;
+
+        if (name == "true" or name == "false") {
+            return std::make_shared<Terminal>(name, Term::BOOL);
+        }else if (name.find('.') != std::string::npos) {
+            return std::make_shared<Terminal>(name, Term::REAL);
+        } else {
+            return std::make_shared<Terminal>(name, Term::INT);
+        }
+
     } else if (t == FORALL_T) { // Forall has two children: sorted_var_list and term
         auto it = node.children->begin();
         ASTNode & qvars = **it;
