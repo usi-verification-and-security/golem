@@ -677,11 +677,13 @@ std::vector<std::pair<std::string, std::string>> StepHandler::getInstPairs(int i
     for (auto const & varVal : instPairsAfterNormalization) {
         substitutionsMap.insert({varVal.var, varVal.val});
     }
+    auto auxVars = matchingSubTerms(logic, originalConstraint, [&](PTRef term) {
+        return logic.isVar(term) and substitutionsMap.find(term) == substitutionsMap.end();
+    });
 
-    PTRef instantiatedConstraint = utils.varSubstitute(originalConstraint, substitutionsMap);
-    if (instantiatedConstraint != logic.getTerm_true()) {
+    if (auxVars.size() > 0) {
+        PTRef instantiatedConstraint = utils.varSubstitute(originalConstraint, substitutionsMap);
         assert(instantiatedConstraint != logic.getTerm_false());
-        auto auxVars = utils.getVars(instantiatedConstraint);
         // Find values for auxiliary variables
         SMTSolver solver(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
         solver.getCoreSolver().insertFormula(instantiatedConstraint);
