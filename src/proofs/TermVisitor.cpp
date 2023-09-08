@@ -592,6 +592,15 @@ bool IsPrimaryBranchVisitor::visit(Op* term){
     return false;
 }
 
+bool NonLinearVisitor::visit(Terminal* term){
+    if (term->getType() == Term::VAR) {
+        return true;
+    }
+    else {
+        return false;
+    }
+}
+
 bool NonLinearVisitor::visit(Op* term){
 
     auto op = term->getOp();
@@ -602,7 +611,7 @@ bool NonLinearVisitor::visit(Op* term){
         return args[0]->accept(this);
     }
 
-    if (op == "and" or op == "or") {
+    if (op == "and") {
 
         for (auto arg : args) {
            if (arg->accept(this)){

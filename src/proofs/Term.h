@@ -259,7 +259,7 @@ public:
 
 class NonLinearVisitor : public BooleanVisitor{
 public:
-    bool visit(Terminal*) override {return false;};
+    bool visit(Terminal*) override;
     bool visit(Quant*) override {return false;};
     bool visit(Op*) override;
     bool visit(App*) override {return true;};
