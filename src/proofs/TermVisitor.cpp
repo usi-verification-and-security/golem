@@ -80,7 +80,7 @@ std::string SimplifyRuleVisitor::visit(Op* term) {
         return "sum_simplify";
     }else if (op == "-"){
         return "minus_simplify";
-    }else if (op == "/"){
+    }else if (op == "/" or op == "div"){
         return "div_simplify";
     }else if (op == "*"){
         return "prod_simplify";
@@ -90,8 +90,6 @@ std::string SimplifyRuleVisitor::visit(Op* term) {
         return "ite_simplify";
     } else if (op == "mod") {
         return "mod_simplify";
-    } else if (op == "div") {
-        return "intdiv_simplify";
     }
     return "Error";
 }
