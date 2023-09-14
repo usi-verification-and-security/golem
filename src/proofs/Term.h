@@ -151,7 +151,7 @@ public:
 };
 
 class RemoveUnusedVisitor : public LogicVisitor{
-    std::shared_ptr<Term> currVar;
+    std::vector<std::string> varsInUse;
 public:
     std::shared_ptr<Term> visit(Terminal*) override;
     std::shared_ptr<Term> visit(Quant*) override;

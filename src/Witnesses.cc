@@ -41,7 +41,6 @@ void VerificationResult::printWitness_(std::ostream & out, Logic & logic, const 
                                     logic, originalGraph);
 
             stepHandler.buildAletheProof();
-            stepHandler.displayProof();
 
             return;
         }

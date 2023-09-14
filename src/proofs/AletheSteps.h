@@ -34,6 +34,20 @@ public :
     std::string printStepAlethe();
 };
 
+class Observer {
+public:
+    virtual void update(Step step) = 0;
+};
+
+class AlethePrintObserver : public Observer{
+    std::ostream & out;
+public:
+    explicit AlethePrintObserver(std::ostream & out) : out(out){}
+    void update(Step step) override{
+        out << step.printStepAlethe();
+    }
+};
+
 class StepHandler {
 
     InvalidityWitness::Derivation derivation;
@@ -43,7 +57,7 @@ class StepHandler {
     Logic & logic;
     ChcDirectedHyperGraph originalGraph;
 
-    std::vector<Step> proofSteps;
+    std::vector<Observer*> observers;
 
     int currStep = 0;
     int implicationStep;
@@ -85,7 +99,6 @@ public :
     static std::vector<std::shared_ptr<Term>> packClause(const std::shared_ptr<Term>& term);
     static std::vector<std::shared_ptr<Term>> packClause(const std::shared_ptr<Term>& term1, const std::shared_ptr<Term>& term2);
     void buildAletheProof();
-    void displayProof();
 
     void instantiationSteps(int i);
     void assumptionSteps();
@@ -93,7 +106,16 @@ public :
     void notLhsPrimaryBranchSteps();
     void conjuctionSimplification(std::vector<int> requiredMP);
 
+    void notifyObservers(const Step& step){
+
+        for (Observer *observer : observers) { // notify all observers
+            observer->update(step);
+        }
+    }
+
 };
+
+
 
 
 

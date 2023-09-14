@@ -168,17 +168,26 @@ std::shared_ptr<Term> RemoveUnusedVisitor::visit(Quant* term) {
     //one pass colection
     auto vars = term->getVars();
     auto sorts = term->getSorts();
+    auto coreTerm = term->getCoreTerm();
+    bool inUse = false;
+    PrintVisitor printVisitor;
+
+    coreTerm->accept(this);
+
     for (int i = 0; i < vars.size(); i++) {
-
-        currVar = vars[i];
-
-        if (term->getCoreTerm()->accept(this) == nullptr) {
+        auto var = vars[i];
+        for (auto varInUse : varsInUse) {
+           if (var->accept(&printVisitor) == varInUse){
+               inUse = true;
+           }
+        }
+        if (!inUse) {
            vars.erase(vars.begin()+i);
            sorts.erase(sorts.begin()+i);
         }
-
+        inUse = false;
     }
-
+    
     if (vars.empty()) {
         return term->getCoreTerm();
     }
@@ -187,19 +196,19 @@ std::shared_ptr<Term> RemoveUnusedVisitor::visit(Quant* term) {
 
 std::shared_ptr<Term> RemoveUnusedVisitor::visit(Terminal* term) {
     PrintVisitor printVisitor;
-    if (currVar->accept(&printVisitor) == term->accept(&printVisitor)) {
-        return std::make_shared<Terminal>(term->getVal(), term->getType());
-    } else {
-        return nullptr;
+    for (auto var : varsInUse) {
+        if (term->accept(&printVisitor) == var){
+           return nullptr;
+        }
     }
+    varsInUse.push_back(term->accept(&printVisitor));
+    return nullptr;
 }
 
 std::shared_ptr<Term> RemoveUnusedVisitor::visit(Op* term) {
     auto args = term->getArgs();
     for (auto arg : args) {
-        if (arg->accept(this) != nullptr) {
-           return std::make_shared<Op>(term->getOp(), term->getArgs());
-        }
+        arg->accept(this);
     }
     return nullptr;
 }
@@ -207,9 +216,7 @@ std::shared_ptr<Term> RemoveUnusedVisitor::visit(Op* term) {
 std::shared_ptr<Term> RemoveUnusedVisitor::visit(App* term) {
     auto args = term->getArgs();
     for (auto arg : args) {
-        if (arg->accept(this) != nullptr) {
-           return std::make_shared<App>(term->getFun(), term->getArgs());
-        }
+        arg->accept(this);
     }
     return nullptr;
 }

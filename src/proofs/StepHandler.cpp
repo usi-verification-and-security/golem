@@ -68,14 +68,6 @@ std::string Step::printStepAlethe() {
     return ss.str();
 }
 
-void StepHandler::displayProof() {
-
-    for (auto step : proofSteps) {
-        out << step.printStepAlethe();
-    }
-
-}
-
 std::vector<std::shared_ptr<Term>> StepHandler::packClause(const std::shared_ptr<Term>& term) {
     std::vector<std::shared_ptr<Term>> clause;
     clause.push_back(term);
@@ -90,6 +82,9 @@ std::vector<std::shared_ptr<Term>> StepHandler::packClause(const std::shared_ptr
 }
 
 void StepHandler::buildAletheProof() {
+
+    AlethePrintObserver alethePrintObserver(out);
+    observers.push_back(&alethePrintObserver);
 
     //Building assumptions
     assumptionSteps();
@@ -120,9 +115,10 @@ void StepHandler::buildAletheProof() {
             implicationRHS = std::make_shared<Terminal>(logic.printTerm(step.derivedFact), Term::VAR);
 
             //Implication rule
-            proofSteps.emplace_back(currStep, Step::STEP,
-                                    packClause(std::make_shared<Op>("not", packClause(implicationLHS)), implicationRHS),
-                                    "implies", std::vector<int>{currStep-1});
+
+            notifyObservers(Step(currStep, Step::STEP,
+                                 packClause(std::make_shared<Op>("not", packClause(implicationLHS)), implicationRHS),
+                                 "implies", std::vector<int>{currStep-1}));
 
             implicationStep = currStep;
 
@@ -153,8 +149,8 @@ void StepHandler::buildAletheProof() {
                     bool isPrimaryBranch = currTerm->accept(&isPrimaryBranchVisitor);
 
                     //Apply the simplification rule
-                    proofSteps.emplace_back(currStep, Step::STEP,
-                                                    packClause(std::make_shared<Op>("=", packClause(termToSimplify, simplification))), simplificationRule);
+                    notifyObservers(Step(currStep, Step::STEP,
+                                         packClause(std::make_shared<Op>("=", packClause(termToSimplify, simplification))), simplificationRule));
 
                     currStep++;
 
@@ -170,9 +166,9 @@ void StepHandler::buildAletheProof() {
                         if (originalLhsPrimaryBranch != nullptr) {
 
                             //Pass along the information recall the transitivity state one last time
-                            proofSteps.emplace_back(currStep, Step::STEP,
-                                                    packClause(std::make_shared<Op>("=", packClause(originalLhsPrimaryBranch, simplification))),
-                                                    "trans", std::vector<int>{transitivityStep, currStep-1});
+                            notifyObservers(Step(currStep, Step::STEP,
+                                                 packClause(std::make_shared<Op>("=", packClause(originalLhsPrimaryBranch, simplification))),
+                                                 "trans", std::vector<int>{transitivityStep, currStep-1}));
 
                             currStep++;
 
@@ -213,12 +209,12 @@ void StepHandler::buildAletheProof() {
         simplificationSteps.clear();
     }
 
-    proofSteps.emplace_back(currStep, Step::STEP,
-                            packClause(std::make_shared<Terminal>("(not false)", Term::UNDECLARED)), "false");
+    notifyObservers(Step(currStep, Step::STEP,
+                         packClause(std::make_shared<Terminal>("(not false)", Term::UNDECLARED)), "false"));
+
     currStep++;
     //Get empty clause
-    proofSteps.emplace_back(currStep, Step::STEP, "resolution", std::vector<int>{currStep-2, currStep-1});
-
+    notifyObservers(Step(currStep, Step::STEP, "resolution", std::vector<int>{currStep-2, currStep-1}));
 }
 
 void StepHandler::instantiationSteps(int i) {
@@ -234,20 +230,22 @@ void StepHandler::instantiationSteps(int i) {
     InstantiateVisitor instantiateVisitor(instPairs);
 
     if (unusedRem->accept(&printVisitor) != currTerm->accept(&printVisitor)) {
-        proofSteps.emplace_back(currStep, Step::STEP,
-                                packClause(std::make_shared<Op>("=", packClause(currTerm, unusedRem))),
-                                "qnt_rm_unused");
-        currStep++;
 
-        proofSteps.emplace_back(currStep, Step::STEP,
-                                packClause(std::make_shared<Op>("not", packClause(currTerm)), unusedRem),
-                                "equiv1", std::vector<int>{currStep-1});
+        notifyObservers(Step(currStep, Step::STEP,
+                             packClause(std::make_shared<Op>("=", packClause(currTerm, unusedRem))),
+                             "qnt_rm_unused"));
 
         currStep++;
 
-        proofSteps.emplace_back(currStep, Step::STEP,
-                                packClause(unusedRem),
-                                "resolution", std::vector<int>{quantStep, currStep-1});
+        notifyObservers(Step(currStep, Step::STEP,
+                             packClause(std::make_shared<Op>("not", packClause(currTerm)), unusedRem),
+                             "equiv1", std::vector<int>{currStep-1}));
+
+        currStep++;
+
+        notifyObservers(Step(currStep, Step::STEP,
+                             packClause(unusedRem),
+                             "resolution", std::vector<int>{quantStep, currStep-1}));
 
         currStep++;
 
@@ -257,21 +255,24 @@ void StepHandler::instantiationSteps(int i) {
 
     if (not instPairs.empty()) {
 
-        proofSteps.emplace_back(currStep, Step::STEP,
-                                packClause(std::make_shared<Op>("or", packClause(std::make_shared<Op>("not", packClause(currTerm)), currTerm->accept(&instantiateVisitor)))),
-                                "forall_inst", instPairs);
+        notifyObservers(Step(currStep, Step::STEP,
+                             packClause(std::make_shared<Op>("or", packClause(std::make_shared<Op>("not", packClause(currTerm)), currTerm->accept(&instantiateVisitor)))),
+                             "forall_inst", instPairs));
+
         currStep++;
 
-        proofSteps.emplace_back(currStep, Step::STEP,
-                                packClause(std::make_shared<Op>("not", packClause(currTerm)), currTerm->accept(&instantiateVisitor)),
-                                "or", std::vector<int>{currStep-1});
+        notifyObservers(Step(currStep, Step::STEP,
+                             packClause(std::make_shared<Op>("not", packClause(currTerm)), currTerm->accept(&instantiateVisitor)),
+                             "or", std::vector<int>{currStep-1}));
+
         currStep++;
 
         currTerm = currTerm->accept(&instantiateVisitor);
 
-        proofSteps.emplace_back(currStep, Step::STEP,
-                                packClause(currTerm),
-                                "resolution", std::vector<int>{currStep-1, quantStep});
+        notifyObservers(Step(currStep, Step::STEP,
+                             packClause(currTerm),
+                             "resolution", std::vector<int>{currStep-1, quantStep}));
+
         currStep++;
     }
 }
@@ -287,7 +288,7 @@ void StepHandler::assumptionSteps() {
             originalAssertions[i-1] = originalAssertions[i-1]->accept(&simplifyLetTermVisitor);
         }
 
-        proofSteps.emplace_back(currStep, Step::ASSUME, packClause(originalAssertions[i-1]));
+        notifyObservers(Step(currStep, Step::ASSUME, packClause(originalAssertions[i-1])));
 
         currStep++;
     }
@@ -301,8 +302,9 @@ void StepHandler::noCongRequiredSteps(std::vector<int> requiredMP){
         simplificationRule = termToSimplify->accept(&simplifyRuleVisitor);    //Getting rule for simplification
         simplification = termToSimplify->accept(&operateVisitor);
 
-        proofSteps.emplace_back(currStep, Step::STEP,
-                                packClause(std::make_shared<Op>("=", packClause(termToSimplify, simplification))), simplificationRule);
+        notifyObservers(Step(currStep, Step::STEP,
+                             packClause(std::make_shared<Op>("=", packClause(termToSimplify, simplification))), simplificationRule));
+
         transitivityStep = currStep;
 
         currStep++;
@@ -322,8 +324,9 @@ void StepHandler::noCongRequiredSteps(std::vector<int> requiredMP){
                 simplificationRule = termToSimplify->accept(&simplifyRuleVisitor);    //Getting rule for simplification
                 simplification = termToSimplify->accept(&operateVisitor);
 
-                proofSteps.emplace_back(currStep, Step::STEP,
-                                        packClause(std::make_shared<Op>("=", packClause(termToSimplify, simplification))), simplificationRule);
+                notifyObservers(Step(currStep, Step::STEP,
+                                     packClause(std::make_shared<Op>("=", packClause(termToSimplify, simplification))), simplificationRule));
+
                 currStep++;
 
                 localParentBranch = currTerm->accept(&implicationLhsVisitor);
@@ -340,60 +343,66 @@ void StepHandler::noCongRequiredSteps(std::vector<int> requiredMP){
 
                 localParentBranchSimplified = localParentBranch->accept(&simplifyLocalParentBranchVisitor);
 
-                proofSteps.emplace_back(currStep, Step::STEP,
-                                        packClause(std::make_shared<Op>("=", packClause(localParentBranch, localParentBranchSimplified))),
-                                        "cong", std::vector<int>{currStep-1});
+                notifyObservers(Step(currStep, Step::STEP,
+                                     packClause(std::make_shared<Op>("=", packClause(localParentBranch, localParentBranchSimplified))),
+                                     "cong", std::vector<int>{currStep-1}));
 
                 currStep++;
 
-                proofSteps.emplace_back(currStep, Step::STEP,
-                                        packClause(std::make_shared<Op>("=", packClause(implicationLHS, localParentBranchSimplified))),
-                                        "trans", std::vector<int>{transitivityStep, currStep-1});
+                notifyObservers(Step(currStep, Step::STEP,
+                                     packClause(std::make_shared<Op>("=", packClause(implicationLHS, localParentBranchSimplified))),
+                                     "trans", std::vector<int>{transitivityStep, currStep-1}));
 
                 transitivityStep = currStep;
 
                 currStep++;
             }
-            proofSteps.emplace_back(currStep, Step::STEP,
-                                    packClause(std::make_shared<Op>("=", packClause(implicationLHS, simplification))),
-                                    "trans", std::vector<int>{transitivityStep, currStep-1});
+
+            notifyObservers(Step(currStep, Step::STEP,
+                                 packClause(std::make_shared<Op>("=", packClause(implicationLHS, simplification))),
+                                 "trans", std::vector<int>{transitivityStep, currStep-1}));
+
             currStep++;
         }
 
-        proofSteps.emplace_back(currStep, Step::STEP,
-                                packClause(implicationLHS, std::make_shared<Op>("not", packClause(simplification))),
-                                "equiv2", std::vector<int>{currStep-1});
+        notifyObservers(Step(currStep, Step::STEP,
+                             packClause(implicationLHS, std::make_shared<Op>("not", packClause(simplification))),
+                             "equiv2", std::vector<int>{currStep-1}));
+
         currStep++;
 
         if (simplification->accept(&printVisitor) == "true") {
 
-            proofSteps.emplace_back(currStep, Step::STEP,
-                                    packClause(simplification), "true");
+            notifyObservers(Step(currStep, Step::STEP,
+                                 packClause(simplification), "true"));
+
             currStep++;
 
-            proofSteps.emplace_back(currStep, Step::STEP,
-                                    packClause(implicationLHS),
-                                    "resolution", std::vector<int>{currStep-2, currStep-1});
+            notifyObservers(Step(currStep, Step::STEP,
+                                 packClause(implicationLHS),
+                                 "resolution", std::vector<int>{currStep-2, currStep-1}));
+
             currStep++;
 
-            proofSteps.emplace_back(currStep, Step::STEP,
-                                    packClause(implicationRHS),
-                                    "resolution", std::vector<int>{implicationStep, currStep-1});
+            notifyObservers(Step(currStep, Step::STEP,
+                                 packClause(implicationRHS),
+                                 "resolution", std::vector<int>{implicationStep, currStep-1}));
 
             modusPonensSteps.push_back(currStep);
 
             currStep++;
         } else {
 
-            proofSteps.emplace_back(currStep, Step::STEP,
-                                    packClause(std::make_shared<Op>("not", packClause(simplification)), implicationRHS),
-                                    "resolution", std::vector<int>{implicationStep, currStep-1});
+            notifyObservers(Step(currStep, Step::STEP,
+                                 packClause(std::make_shared<Op>("not", packClause(simplification)), implicationRHS),
+                                 "resolution", std::vector<int>{implicationStep, currStep-1}));
+
             currStep++;
 
             requiredMP.push_back(currStep-1);
 
-            proofSteps.emplace_back(currStep, Step::STEP,
-                                    packClause(implicationRHS),"resolution", requiredMP);
+            notifyObservers(Step(currStep, Step::STEP,
+                                 packClause(implicationRHS),"resolution", requiredMP));
 
             modusPonensSteps.push_back(currStep);
 
@@ -407,29 +416,29 @@ void StepHandler::noCongRequiredSteps(std::vector<int> requiredMP){
 
             requiredMP.push_back(currStep-1);
 
-            proofSteps.emplace_back(currStep, Step::STEP,
-                                    packClause(implicationRHS),"resolution", requiredMP);
+            notifyObservers(Step(currStep, Step::STEP,
+                                 packClause(implicationRHS),"resolution", requiredMP));
 
             modusPonensSteps.push_back(currStep);
 
             currStep++;
 
         } else if (implicationLHS->getTermType() == Term::TERMINAL) {
-            proofSteps.emplace_back(currStep, Step::STEP,
-                                    packClause(implicationLHS), "true");
+
+            notifyObservers(Step(currStep, Step::STEP,
+                                 packClause(implicationLHS), "true"));
+
             currStep++;
 
-            proofSteps.emplace_back(currStep, Step::STEP,
-                                    packClause(implicationRHS),
-                                    "resolution", std::vector<int>{implicationStep, currStep-1});
+            notifyObservers(Step(currStep, Step::STEP,
+                                 packClause(implicationRHS),
+                                 "resolution", std::vector<int>{implicationStep, currStep-1}));
 
             modusPonensSteps.push_back(currStep);
 
             currStep++;
         }
     }
-
-
 }
 
 void StepHandler::notLhsPrimaryBranchSteps() {
@@ -448,9 +457,10 @@ void StepHandler::notLhsPrimaryBranchSteps() {
 
     //Loop to start carrying the simplification from the bottom up
     while (true) {
-        proofSteps.emplace_back(currStep, Step::STEP,
-                                packClause(std::make_shared<Op>("=", packClause(localParentBranch->accept(&fakeInstantiation), localParentBranchSimplified))),
-                                "cong", std::vector<int>{currStep-1});
+        notifyObservers(Step(currStep, Step::STEP,
+                             packClause(std::make_shared<Op>("=", packClause(localParentBranch->accept(&fakeInstantiation), localParentBranchSimplified))),
+                             "cong", std::vector<int>{currStep-1}));
+
         currStep++;
 
         GetLocalParentBranchVisitor newGetLocalParentBranchVisitor(localParentBranch);
@@ -475,9 +485,9 @@ void StepHandler::notLhsPrimaryBranchSteps() {
         originalLhsPrimaryBranch = localParentBranch->accept(&fakeInstantiation);
     } else {
         //If there was, create a transitivity step to remember information
-        proofSteps.emplace_back(currStep, Step::STEP,
-                                packClause(std::make_shared<Op>("=", packClause(originalLhsPrimaryBranch, localParentBranchSimplified))),
-                                "trans", std::vector<int>{transitivityStep, currStep-1});
+        notifyObservers(Step(currStep, Step::STEP,
+                             packClause(std::make_shared<Op>("=", packClause(originalLhsPrimaryBranch, localParentBranchSimplified))),
+                             "trans", std::vector<int>{transitivityStep, currStep-1}));
 
         transitivityStep = currStep;
         currStep++;
@@ -486,35 +496,39 @@ void StepHandler::notLhsPrimaryBranchSteps() {
 
 void StepHandler::conjuctionSimplification(std::vector<int> requiredMP) {
 
-    proofSteps.emplace_back(currStep, Step::STEP,
-                            packClause(std::make_shared<Op>("=", packClause(implicationLHS, termToSimplify))),
-                            "cong", simplificationSteps);
+    notifyObservers(Step(currStep, Step::STEP,
+                         packClause(std::make_shared<Op>("=", packClause(implicationLHS, termToSimplify))),
+                         "cong", simplificationSteps));
 
     currStep++;
 
-    proofSteps.emplace_back(currStep, Step::STEP,
-                            packClause(std::make_shared<Op>("=", packClause(termToSimplify, simplification))), simplificationRule);
+    notifyObservers(Step(currStep, Step::STEP,
+                         packClause(std::make_shared<Op>("=", packClause(termToSimplify, simplification))), simplificationRule));
+
     currStep++;
 
-    proofSteps.emplace_back(currStep, Step::STEP,
-                            packClause(std::make_shared<Op>("=", packClause(implicationLHS, simplification))),
-                            "trans", std::vector<int>{currStep-2, currStep-1});
+    notifyObservers(Step(currStep, Step::STEP,
+                         packClause(std::make_shared<Op>("=", packClause(implicationLHS, simplification))),
+                         "trans", std::vector<int>{currStep-2, currStep-1}));
+
     currStep++;
 
-    proofSteps.emplace_back(currStep, Step::STEP,
-                            packClause(implicationLHS, std::make_shared<Op>("not", packClause(simplification))),
-                            "equiv2", std::vector<int>{currStep-1});
+    notifyObservers(Step(currStep, Step::STEP,
+                         packClause(implicationLHS, std::make_shared<Op>("not", packClause(simplification))),
+                         "equiv2", std::vector<int>{currStep-1}));
+
     currStep++;
 
     if (termToSimplify->accept(&nonLinearVisitor)) {
-        proofSteps.emplace_back(currStep, Step::STEP,
-                                packClause(simplification, std::make_shared<Terminal>(simplification->accept(&negatedAndVisitor), Term::UNDECLARED)),
-                                "and_neg");
+        notifyObservers(Step(currStep, Step::STEP,
+                             packClause(simplification, std::make_shared<Terminal>(simplification->accept(&negatedAndVisitor), Term::UNDECLARED)),
+                             "and_neg"));
+
         currStep++;
 
-        proofSteps.emplace_back(currStep, Step::STEP,
-                                packClause(implicationLHS, std::make_shared<Terminal>(simplification->accept(&negatedAndVisitor), Term::UNDECLARED)),
-                                "resolution", std::vector<int>{currStep-2, currStep-1});
+        notifyObservers(Step(currStep, Step::STEP,
+                             packClause(implicationLHS, std::make_shared<Terminal>(simplification->accept(&negatedAndVisitor), Term::UNDECLARED)),
+                             "resolution", std::vector<int>{currStep-2, currStep-1}));
 
         requiredMP.push_back(currStep);
 
@@ -525,24 +539,27 @@ void StepHandler::conjuctionSimplification(std::vector<int> requiredMP) {
 
     if (simplification->accept(&printVisitor) == "true"){
 
-        proofSteps.emplace_back(currStep, Step::STEP,
-                                packClause(simplification), "true");
+        notifyObservers(Step(currStep, Step::STEP,
+                             packClause(simplification), "true"));
+
         currStep++;
 
-        proofSteps.emplace_back(currStep, Step::STEP,
-                                packClause(implicationLHS),
-                                "resolution", std::vector<int>{currStep-2, currStep-1});
+        notifyObservers(Step(currStep, Step::STEP,
+                             packClause(implicationLHS),
+                             "resolution", std::vector<int>{currStep-2, currStep-1}));
+
         currStep++;
 
     } else {
 
-        proofSteps.emplace_back(currStep, Step::STEP,
-                                packClause(implicationLHS),"resolution", requiredMP);
+        notifyObservers(Step(currStep, Step::STEP,
+                             packClause(implicationLHS),"resolution", requiredMP));
+
         currStep++;
     }
 
-    proofSteps.emplace_back(currStep, Step::STEP,
-                            packClause(implicationRHS),"resolution", std::vector<int>{implicationStep, currStep-1});
+    notifyObservers(Step(currStep, Step::STEP,
+                         packClause(implicationRHS),"resolution", std::vector<int>{implicationStep, currStep-1}));
 
     modusPonensSteps.push_back(currStep);
 
