@@ -134,10 +134,10 @@ void StepHandler::buildAletheProof() {
             } else {
                 //If it is, we require additional steps
 
-                termToSimplify = currTerm->accept(&simplifyLocatorVisitor);  //Locating possible simplification
-                simplificationRule = termToSimplify->accept(&simplifyRuleVisitor);    //Getting rule for simplification
+                auto termToSimplify = currTerm->accept(&simplifyLocatorVisitor);  //Locating possible simplification
+                auto simplificationRule = termToSimplify->accept(&simplifyRuleVisitor);    //Getting rule for simplification
                 //Operating simplification
-                simplification = termToSimplify->accept(&operateVisitor);
+                auto simplification = termToSimplify->accept(&operateVisitor);
 
                 //Loop if there are more possible simplifications
                 while (not (termToSimplify->getTermType() == Term::TERMINAL or termToSimplify->getTermType() == Term::APP)) {
@@ -161,7 +161,7 @@ void StepHandler::buildAletheProof() {
                     if (not isPrimaryBranch) {
 
                         //Proof simplification from bottom up
-                        notLhsPrimaryBranchSteps();
+                        notLhsPrimaryBranchSteps(simplification);
                     }else {
                         //If it is a primary branch
 
@@ -190,7 +190,6 @@ void StepHandler::buildAletheProof() {
                         }
                     }
 
-
                     //Simplifying the main LHS tree
                     SimplifyVisitor simplifyVisitor(simplification, currTerm->accept(&helperVisitor));
                     currTerm = currTerm->accept(&simplifyVisitor);
@@ -205,7 +204,7 @@ void StepHandler::buildAletheProof() {
                 }
 
                 //If the last term to simplify is a nonLinear operation, proceed differently
-                conjuctionSimplification(requiredMP);
+                conjuctionSimplification(requiredMP, simplification, termToSimplify, simplificationRule);
             }
         }
         //We don't need the simplification steps of the previous derivation procedure
@@ -301,9 +300,9 @@ void StepHandler::noCongRequiredSteps(std::vector<int> requiredMP){
 
     if (not (implicationLHS->getTermType() == Term::TERMINAL or implicationLHS->getTermType() == Term::APP)) {
 
-        termToSimplify = currTerm->accept(&simplifyLocatorVisitor);  //Locating possible simplification
-        simplificationRule = termToSimplify->accept(&simplifyRuleVisitor);    //Getting rule for simplification
-        simplification = termToSimplify->accept(&operateVisitor);
+        auto termToSimplify = currTerm->accept(&simplifyLocatorVisitor);  //Locating possible simplification
+        auto simplificationRule = termToSimplify->accept(&simplifyRuleVisitor);    //Getting rule for simplification
+        auto simplification = termToSimplify->accept(&operateVisitor);
 
         notifyObservers(Step(currStep, Step::STEP,
                              packClause(std::make_shared<Op>("=", packClause(termToSimplify, simplification))), simplificationRule));
@@ -444,7 +443,7 @@ void StepHandler::noCongRequiredSteps(std::vector<int> requiredMP){
     }
 }
 
-void StepHandler::notLhsPrimaryBranchSteps() {
+void StepHandler::notLhsPrimaryBranchSteps(std::shared_ptr<Term> simplification) {
 
     //Simplifying from bottom up applying congruence to carry information
 
@@ -497,7 +496,7 @@ void StepHandler::notLhsPrimaryBranchSteps() {
     }
 }
 
-void StepHandler::conjuctionSimplification(std::vector<int> requiredMP) {
+void StepHandler::conjuctionSimplification(std::vector<int> requiredMP, std::shared_ptr<Term> simplification, std::shared_ptr<Term> termToSimplify, std::string simplificationRule) {
 
     notifyObservers(Step(currStep, Step::STEP,
                          packClause(std::make_shared<Op>("=", packClause(implicationLHS, termToSimplify))),

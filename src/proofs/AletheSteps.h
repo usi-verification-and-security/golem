@@ -69,9 +69,6 @@ class StepHandler {
     std::vector<int> modusPonensSteps; //Modus Ponens Steps to derive the next node
     std::vector<int> simplificationSteps; //Simplification steps for final resolution of LHS
 
-    std::shared_ptr<Term> termToSimplify;
-    std::string simplificationRule;
-    std::shared_ptr<Term> simplification;
     std::shared_ptr<Term> originalLhsPrimaryBranch;
 
     // Visitors
@@ -102,8 +99,8 @@ public :
     void instantiationSteps(int i);
     void assumptionSteps();
     void noCongRequiredSteps(std::vector<int> requiredMP);
-    void notLhsPrimaryBranchSteps();
-    void conjuctionSimplification(std::vector<int> requiredMP);
+    void notLhsPrimaryBranchSteps(std::shared_ptr<Term> simplification);
+    void conjuctionSimplification(std::vector<int> requiredMP, std::shared_ptr<Term> simplification, std::shared_ptr<Term> termToSimplify, std::string simplificationRule);
 
     void notifyObservers(const Step& step){
 
