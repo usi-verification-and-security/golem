@@ -165,6 +165,7 @@ std::shared_ptr<Term> InstantiateVisitor::visit(Let* term){
 
 std::shared_ptr<Term> RemoveUnusedVisitor::visit(Quant* term) {
 
+    //one pass colection
     auto vars = term->getVars();
     auto sorts = term->getSorts();
     for (int i = 0; i < vars.size(); i++) {

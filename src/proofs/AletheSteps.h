@@ -91,8 +91,7 @@ public :
     void assumptionSteps();
     void noCongRequiredSteps(std::vector<int> requiredMP);
     void notLhsPrimaryBranchSteps();
-    void nonLinearSimplification(std::vector<int> requiredMP);
-    void linearSimplification(std::vector<int> requiredMP);
+    void conjuctionSimplification(std::vector<int> requiredMP);
 
 };
 

@@ -114,7 +114,7 @@ void StepHandler::buildAletheProof() {
             currTerm = originalAssertions[step.clauseId.id];
 
             // Variable instantiation
-            instantiationSteps(i);
+            instantiationSteps(i); //pass the currTerm as an argument
 
             implicationLHS = currTerm->accept(&implicationLhsVisitor);
             implicationRHS = std::make_shared<Terminal>(logic.printTerm(step.derivedFact), Term::VAR);
@@ -206,11 +206,7 @@ void StepHandler::buildAletheProof() {
                 }
 
                 //If the last term to simplify is a nonLinear operation, proceed differently
-                if (termToSimplify->accept(&nonLinearVisitor)) {
-                    nonLinearSimplification(requiredMP);
-                } else {
-                    linearSimplification(requiredMP);
-                }
+                conjuctionSimplification(requiredMP);
             }
         }
         //We don't need the simplification steps of the previous derivation procedure
@@ -488,59 +484,7 @@ void StepHandler::notLhsPrimaryBranchSteps() {
     }
 }
 
-void StepHandler::nonLinearSimplification(std::vector<int> requiredMP) {
-
-    //Assuming the non Linearity appears at the last simplification step
-    //Define this later
-
-    proofSteps.emplace_back(currStep, Step::STEP,
-                            packClause(std::make_shared<Op>("=", packClause(implicationLHS, termToSimplify))),
-                            "cong", simplificationSteps);
-    currStep++;
-
-    proofSteps.emplace_back(currStep, Step::STEP,
-                            packClause(std::make_shared<Op>("=", packClause(termToSimplify, termToSimplify->accept(&operateVisitor)))),
-                            "and_simplify");
-    currStep++;
-
-    termToSimplify = termToSimplify->accept(&operateVisitor);
-
-    proofSteps.emplace_back(currStep, Step::STEP,
-                            packClause(std::make_shared<Op>("=", packClause(implicationLHS, termToSimplify))),
-                            "trans", std::vector<int>{currStep-2, currStep-1});
-    currStep++;
-
-    proofSteps.emplace_back(currStep, Step::STEP,
-                            packClause(implicationLHS, std::make_shared<Op>("not", packClause(termToSimplify))),
-                            "equiv2", std::vector<int>{currStep-1});
-    currStep++;
-
-    proofSteps.emplace_back(currStep, Step::STEP,
-                            packClause(termToSimplify, std::make_shared<Terminal>(termToSimplify->accept(&negatedAndVisitor), Term::UNDECLARED)),
-                            "and_neg");
-    currStep++;
-
-    proofSteps.emplace_back(currStep, Step::STEP,
-                            packClause(implicationLHS, std::make_shared<Terminal>(termToSimplify->accept(&negatedAndVisitor), Term::UNDECLARED)),
-                            "resolution", std::vector<int>{currStep-2, currStep-1});
-
-    requiredMP.push_back(currStep);
-
-    currStep++;
-
-    proofSteps.emplace_back(currStep, Step::STEP,
-                            packClause(implicationLHS),"resolution", requiredMP);
-    currStep++;
-
-    proofSteps.emplace_back(currStep, Step::STEP,
-                            packClause(implicationRHS),"resolution", std::vector<int>{implicationStep, currStep-1});
-
-    modusPonensSteps.push_back(currStep);
-
-    currStep++;
-}
-
-void StepHandler::linearSimplification(std::vector<int> requiredMP) {
+void StepHandler::conjuctionSimplification(std::vector<int> requiredMP) {
 
     proofSteps.emplace_back(currStep, Step::STEP,
                             packClause(std::make_shared<Op>("=", packClause(implicationLHS, termToSimplify))),
@@ -562,6 +506,23 @@ void StepHandler::linearSimplification(std::vector<int> requiredMP) {
                             "equiv2", std::vector<int>{currStep-1});
     currStep++;
 
+    if (termToSimplify->accept(&nonLinearVisitor)) {
+        proofSteps.emplace_back(currStep, Step::STEP,
+                                packClause(simplification, std::make_shared<Terminal>(simplification->accept(&negatedAndVisitor), Term::UNDECLARED)),
+                                "and_neg");
+        currStep++;
+
+        proofSteps.emplace_back(currStep, Step::STEP,
+                                packClause(implicationLHS, std::make_shared<Terminal>(simplification->accept(&negatedAndVisitor), Term::UNDECLARED)),
+                                "resolution", std::vector<int>{currStep-2, currStep-1});
+
+        requiredMP.push_back(currStep);
+
+        currStep++;
+    } else {
+        requiredMP.push_back(currStep-1);
+    }
+
     if (simplification->accept(&printVisitor) == "true"){
 
         proofSteps.emplace_back(currStep, Step::STEP,
@@ -574,8 +535,6 @@ void StepHandler::linearSimplification(std::vector<int> requiredMP) {
         currStep++;
 
     } else {
-
-        requiredMP.push_back(currStep-1);
 
         proofSteps.emplace_back(currStep, Step::STEP,
                                 packClause(implicationLHS),"resolution", requiredMP);
