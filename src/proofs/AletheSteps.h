@@ -75,7 +75,6 @@ class StepHandler {
     PrintVisitor printVisitor;
     SimplifyLocatorVisitor simplifyLocatorVisitor;
     OperateVisitor operateVisitor;
-    SimplifyRuleVisitor simplifyRuleVisitor;
     RequiresCongVisitor requiresCongVisitor;
     SimplifyHelperVisitor helperVisitor;
     NonLinearVisitor nonLinearVisitor;

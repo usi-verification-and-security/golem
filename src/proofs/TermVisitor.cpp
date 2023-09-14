@@ -60,10 +60,9 @@ std::string PrintVisitor::visit(Let* term) {
     return ss.str();
 }
 
-std::string SimplifyRuleVisitor::visit(Op* term) {
-    std::string op = term->getOp();
+std::string Op::simplifyRule() {
+    std::string op = operation;
     PrintVisitor printVisitor;
-    auto args = term->getArgs();
     if (op == "="){
         if ((args[0]->accept(&printVisitor).find_first_not_of("( )-0123456789") == std::string::npos) and (args[0]->accept(&printVisitor).find_first_not_of("( )-0123456789") == std::string::npos)){
            return "eq_simplify";

@@ -44,6 +44,7 @@ public:
     std::vector<std::shared_ptr<Term>> getArgs() {return args;}
     termType getTermType() override {return OP;}
     terminalType getTerminalType() override {return UNDECLARED;}
+    std::string simplifyRule();
 
     std::shared_ptr<Term> accept(LogicVisitor*) override;
     std::string accept(StringVisitor*) override;
@@ -199,15 +200,6 @@ public:
     std::string visit(Op*) override;
     std::string visit(App*) override;
     std::string visit(Let*) override;
-};
-
-class SimplifyRuleVisitor : public StringVisitor {
-public:
-    std::string visit(Terminal*) override {return "Error";};
-    std::string visit(Quant*) override {return "Error";};
-    std::string visit(Op*) override;
-    std::string visit(App*) override {return "Error";};
-    std::string visit(Let*) override {return "let";};
 };
 
 class NegatedAndVisitor : public StringVisitor {

@@ -135,7 +135,7 @@ void StepHandler::buildAletheProof() {
                 //If it is, we require additional steps
 
                 auto termToSimplify = currTerm->accept(&simplifyLocatorVisitor);  //Locating possible simplification
-                auto simplificationRule = termToSimplify->accept(&simplifyRuleVisitor);    //Getting rule for simplification
+                auto simplificationRule = std::dynamic_pointer_cast<Op> (termToSimplify)->simplifyRule();    //Getting rule for simplification
                 //Operating simplification
                 auto simplification = termToSimplify->accept(&operateVisitor);
 
@@ -198,7 +198,7 @@ void StepHandler::buildAletheProof() {
                     //Get new term to simplify and continue looping
 
                     termToSimplify = currTerm->accept(&simplifyLocatorVisitor);  //Locating possible simplification
-                    simplificationRule = termToSimplify->accept(&simplifyRuleVisitor);    //Getting rule for simplification
+                    simplificationRule = std::dynamic_pointer_cast<Op> (termToSimplify)->simplifyRule();    //Getting rule for simplification
                     //Operating simplification
                     simplification = termToSimplify->accept(&operateVisitor);
                 }
@@ -301,7 +301,7 @@ void StepHandler::noCongRequiredSteps(std::vector<int> requiredMP){
     if (not (implicationLHS->getTermType() == Term::TERMINAL or implicationLHS->getTermType() == Term::APP)) {
 
         auto termToSimplify = currTerm->accept(&simplifyLocatorVisitor);  //Locating possible simplification
-        auto simplificationRule = termToSimplify->accept(&simplifyRuleVisitor);    //Getting rule for simplification
+        auto simplificationRule = std::dynamic_pointer_cast<Op> (termToSimplify)->simplifyRule();    //Getting rule for simplification
         auto simplification = termToSimplify->accept(&operateVisitor);
 
         notifyObservers(Step(currStep, Step::STEP,
@@ -323,7 +323,7 @@ void StepHandler::noCongRequiredSteps(std::vector<int> requiredMP){
             while (true) {
 
                 termToSimplify = currTerm->accept(&simplifyLocatorVisitor);  //Locating possible simplification
-                simplificationRule = termToSimplify->accept(&simplifyRuleVisitor);    //Getting rule for simplification
+                simplificationRule = std::dynamic_pointer_cast<Op> (termToSimplify)->simplifyRule();    //Getting rule for simplification
                 simplification = termToSimplify->accept(&operateVisitor);
 
                 notifyObservers(Step(currStep, Step::STEP,
