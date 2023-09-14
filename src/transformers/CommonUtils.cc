@@ -148,7 +148,6 @@ InvalidityWitness::Derivation expandStepWithHyperEdge(
     TermUtils::substitutions_map subst;
     TermUtils utils(logic);
     auto const & replacingEdge = contractionInfo.first;
-    assert(replacingEdge.from.size() == 1);
     assert(summarizedStep.premises.size() == replacingEdge.from.size());
     assert(logic.getSymRef(summarizedStep.derivedFact) == replacingEdge.to);
 
