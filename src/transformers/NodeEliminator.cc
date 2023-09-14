@@ -59,7 +59,7 @@ bool SimpleNodeEliminatorPredicate::operator()(
         auto const & outgoing = ar.getOutgoingEdgesFor(vertex);
         return std::all_of(outgoing.begin(), outgoing.end(), [&](EId edge) {
             auto const & sources = graph.getSources(edge);
-           return std::count(sources.begin(), sources.end(), vertex) == 1;
+           return vertex != graph.getTarget(edge) and std::count(sources.begin(), sources.end(), vertex) == 1;
         });
     }
     return false;

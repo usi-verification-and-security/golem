@@ -343,8 +343,9 @@ DirectedHyperEdge ChcDirectedHyperGraph::mergeEdgePair(EId incoming, EId outgoin
     PTRef renamedLabel = utils.varSubstitute(getEdgeLabel(incoming), substitutionsMap);
 
     PTRef newLabel = logic.mkAnd(renamedLabel, getEdgeLabel(outgoing));
-    PTRef simplifiedLabel = TrivialQuantifierElimination(logic).tryEliminateVarsExcept(
-        utils.predicateArgsInOrder(getStateVersion(source)) + utils.predicateArgsInOrder(getNextStateVersion(target)), newLabel);
+    PTRef simplifiedLabel = TrivialQuantifierElimination(logic).tryEliminateVars(
+        utils.predicateArgsInOrder(getStateVersion(common)), newLabel
+    );
 
     for (auto & v : sources) {
         if (v == common) { v = source; }
