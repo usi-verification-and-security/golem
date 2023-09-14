@@ -82,9 +82,7 @@ public:
     static InvalidityWitness fromTransitionSystem(ChcDirectedGraph const & graph, std::size_t unrollings);
 
     void print(std::ostream & out, Logic & logic) const;
-    void alethePrint(std::ostream & out, Logic & logic, const ChcDirectedHyperGraph& originalGraph,
-                     std::vector<std::shared_ptr<Term>> originalAssertions, std::vector<std::vector<PTRef>> normalizingEqualities) const;
-    std::vector<std::pair<std::string, std::string>> getInstPairs(int it, Logic & logic, const ChcDirectedHyperGraph& originalGraph, std::vector<PTRef> stepNormEq) const;
+    
 };
 
 class ValidityWitness {

@@ -32,6 +32,7 @@ public :
     Step(int stepId, stepType type, std::vector<std::shared_ptr<Term>> clause) : type(type), stepId(stepId), clause(std::move(clause)), rule(" ") {}
     Step(int stepId, stepType type, std::string rule, std::vector<int> premises) : type(type), stepId(stepId), rule(std::move(rule)), premises(std::move(premises)) {}
     std::string printStepAlethe();
+    std::string printStepIntermediate();
 };
 
 class Observer {
@@ -45,6 +46,15 @@ public:
     explicit AlethePrintObserver(std::ostream & out) : out(out){}
     void update(Step step) override{
         out << step.printStepAlethe();
+    }
+};
+
+class IntermediatePrintObserver : public Observer{
+    std::ostream & out;
+public:
+    explicit IntermediatePrintObserver(std::ostream & out) : out(out){}
+    void update(Step step) override{
+        out << step.printStepIntermediate();
     }
 };
 
@@ -94,6 +104,7 @@ public :
     static std::vector<std::shared_ptr<Term>> packClause(const std::shared_ptr<Term>& term);
     static std::vector<std::shared_ptr<Term>> packClause(const std::shared_ptr<Term>& term1, const std::shared_ptr<Term>& term2);
     void buildAletheProof();
+    void buildIntermediateProof();
 
     void instantiationSteps(int i);
     void assumptionSteps();

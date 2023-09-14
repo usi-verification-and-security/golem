@@ -68,6 +68,37 @@ std::string Step::printStepAlethe() {
     return ss.str();
 }
 
+std::string Step::printStepIntermediate() {
+
+    PrintVisitor printVisitor;
+    std::stringstream ss;
+
+    ss << stepId << '\t';
+
+    if (!clause.empty()) {
+        ss << " ";
+        for (int i = 0; i < clause.size(); i++) {
+            ss << clause[i]->accept(&printVisitor);
+            ss << " ";
+        }
+    }
+
+    if (!args.empty()) {
+        ss << " :args (";
+        for (int i = 0; i < args.size(); i++){
+            ss << "(:= " << args[i].first << " " << args[i].second << ")";
+            if (i != args.size()-1) {
+                ss << " ";
+            }
+        }
+        ss << ")";
+    }
+
+    ss << "\n";
+
+    return ss.str();
+}
+
 std::vector<std::shared_ptr<Term>> StepHandler::packClause(const std::shared_ptr<Term>& term) {
     std::vector<std::shared_ptr<Term>> clause;
     clause.push_back(term);
@@ -79,6 +110,61 @@ std::vector<std::shared_ptr<Term>> StepHandler::packClause(const std::shared_ptr
     clause.push_back(term1);
     clause.push_back(term2);
     return clause;
+}
+
+void StepHandler::buildIntermediateProof() {
+
+    IntermediatePrintObserver intermediatePrintObserver(out);
+    observers.push_back(&intermediatePrintObserver);
+
+    auto derivationSize = derivation.size();
+
+    for (std::size_t i = 0; i < derivationSize; ++i) {
+
+        auto const & step = derivation[i];
+
+        if (step.premises.empty()) {
+            continue;
+        }
+
+        auto instPairs = getInstPairs(i, normalizingEqualities[step.clauseId.id]);
+        InstantiateVisitor instantiateVisitor(instPairs);
+        currTerm = originalAssertions[step.clauseId.id];
+
+        if (not instPairs.empty()) {
+
+            notifyObservers(Step(currStep, Step::STEP,
+                                 packClause(currTerm),
+                                 "forall_inst", instPairs));
+            currStep++;
+
+            currTerm = currTerm->accept(&instantiateVisitor);
+
+        }
+
+        notifyObservers(Step(currStep, Step::STEP,
+                             packClause(currTerm)));
+        currStep++;
+
+        std::stringstream premises;
+
+        for (int i = 0; i < step.premises.size(); i++) {
+            premises << logic.printTerm(derivation[step.premises[i]].derivedFact);
+            if (i < step.premises.size()-1) {
+                premises << ' ';
+            }
+        }
+
+        notifyObservers(Step(currStep, Step::STEP,
+                             packClause(std::make_shared<Op>("=>",
+                                                             packClause(std::make_shared<Terminal>(premises.str(), Term::VAR), std::make_shared<Terminal>(logic.printTerm(step.derivedFact), Term::VAR))))));
+        currStep++;
+
+        notifyObservers(Step(currStep, Step::STEP,
+                             packClause(std::make_shared<Terminal>(logic.printTerm(step.derivedFact), Term::VAR))));
+        currStep++;
+    }
+
 }
 
 void StepHandler::buildAletheProof() {
@@ -95,120 +181,123 @@ void StepHandler::buildAletheProof() {
     for (std::size_t i = 0; i < derivationSize; ++i) {
         auto const & step = derivation[i];
 
-        if (not step.premises.empty()) {
-
-            std::vector<int> requiredMP;
-
-            if (!modusPonensSteps.empty()) {
-                //Get the necessary steps for modus ponens
-                for (int i = 0; i < step.premises.size(); i++) {
-                    requiredMP.push_back(modusPonensSteps[(int)step.premises[i]-1]);
-                }
-            }
-
-            currTerm = originalAssertions[step.clauseId.id];
-
-            // Variable instantiation
-            instantiationSteps(i); //pass the currTerm as an argument
-
-            std::shared_ptr<Op> implication = std::dynamic_pointer_cast<Op> (currTerm);
-
-            implicationLHS = implication->getArgs()[0];
-            implicationRHS = std::make_shared<Terminal>(logic.printTerm(step.derivedFact), Term::VAR);
-
-            //Implication rule
-
-            notifyObservers(Step(currStep, Step::STEP,
-                                 packClause(std::make_shared<Op>("not", packClause(implicationLHS)), implicationRHS),
-                                 "implies", std::vector<int>{currStep-1}));
-
-            implicationStep = currStep;
-
-            currStep++;
-
-            //Checking if height of LHS is greater than 1
-            if (not implicationLHS->accept(&requiresCongVisitor)) {
-                //If it is not, the proof is shorter
-                noCongRequiredSteps(requiredMP);
-
-            } else {
-                //If it is, we require additional steps
-
-                auto termToSimplify = currTerm->accept(&simplifyLocatorVisitor);  //Locating possible simplification
-                auto simplificationRule = std::dynamic_pointer_cast<Op> (termToSimplify)->simplifyRule();    //Getting rule for simplification
-                //Operating simplification
-                auto simplification = termToSimplify->accept(&operateVisitor);
-
-                //Loop if there are more possible simplifications
-                while (not (termToSimplify->getTermType() == Term::TERMINAL or termToSimplify->getTermType() == Term::APP)) {
-
-
-                    //If the current term to simplify is at height 0, break the loop to end the proof
-                    if (std::dynamic_pointer_cast<Op> (currTerm)->getArgs()[0]->accept(&printVisitor) == termToSimplify->accept(&printVisitor)) {
-                        break;
-                    }
-
-                    IsPrimaryBranchVisitor isPrimaryBranchVisitor(currTerm->accept(&helperVisitor));  //Checking if the current term is a primary branch / branch of height 1
-                    bool isPrimaryBranch = currTerm->accept(&isPrimaryBranchVisitor);
-
-                    //Apply the simplification rule
-                    notifyObservers(Step(currStep, Step::STEP,
-                                         packClause(std::make_shared<Op>("=", packClause(termToSimplify, simplification))), simplificationRule));
-
-                    currStep++;
-
-                    //If the current term to simplify is not a primary branch we require additional steps
-                    if (not isPrimaryBranch) {
-
-                        //Proof simplification from bottom up
-                        notLhsPrimaryBranchSteps(simplification);
-                    }else {
-                        //If it is a primary branch
-
-                        //Check if the original primary branch has been applied for transitivity before
-                        if (originalLhsPrimaryBranch != nullptr) {
-
-                            //Pass along the information recall the transitivity state one last time
-                            notifyObservers(Step(currStep, Step::STEP,
-                                                 packClause(std::make_shared<Op>("=", packClause(originalLhsPrimaryBranch, simplification))),
-                                                 "trans", std::vector<int>{transitivityStep, currStep-1}));
-
-                            currStep++;
-
-                        }
-
-                        //Because this is the last time we simplify in this primary branch, we can forget it
-                        originalLhsPrimaryBranch = nullptr;
-
-                        //If for some reason, this is a primary branch but we are not done simplifying it yet, we have to remember this step for transitivity later
-                        if (simplification->getTermType() != Term::TERMINAL) {
-                            originalLhsPrimaryBranch = termToSimplify;
-                            transitivityStep = currStep-1;
-                        } else {
-                            //Remember this main simplification step for the final resolution
-                            simplificationSteps.push_back(currStep-1);
-                        }
-                    }
-
-                    //Simplifying the main LHS tree
-                    SimplifyVisitor simplifyVisitor(simplification, currTerm->accept(&helperVisitor));
-                    currTerm = currTerm->accept(&simplifyVisitor);
-
-
-                    //Get new term to simplify and continue looping
-
-                    termToSimplify = currTerm->accept(&simplifyLocatorVisitor);  //Locating possible simplification
-                    simplificationRule = std::dynamic_pointer_cast<Op> (termToSimplify)->simplifyRule();    //Getting rule for simplification
-                    //Operating simplification
-                    simplification = termToSimplify->accept(&operateVisitor);
-                }
-
-                //If the last term to simplify is a nonLinear operation, proceed differently
-                conjuctionSimplification(requiredMP, simplification, termToSimplify, simplificationRule);
-            }
-        }
         //We don't need the simplification steps of the previous derivation procedure
         simplificationSteps.clear();
+
+        if (step.premises.empty()) {
+            continue;
+        }
+
+        std::vector<int> requiredMP;
+
+        if (!modusPonensSteps.empty()) {
+            //Get the necessary steps for modus ponens
+            for (int i = 0; i < step.premises.size(); i++) {
+                requiredMP.push_back(modusPonensSteps[(int)step.premises[i]-1]);
+            }
+        }
+
+        currTerm = originalAssertions[step.clauseId.id];
+
+        // Variable instantiation
+        instantiationSteps(i); //pass the currTerm as an argument
+
+        std::shared_ptr<Op> implication = std::dynamic_pointer_cast<Op> (currTerm);
+
+        implicationLHS = implication->getArgs()[0];
+        implicationRHS = std::make_shared<Terminal>(logic.printTerm(step.derivedFact), Term::VAR);
+
+        //Implication rule
+
+        notifyObservers(Step(currStep, Step::STEP,
+                             packClause(std::make_shared<Op>("not", packClause(implicationLHS)), implicationRHS),
+                             "implies", std::vector<int>{currStep-1}));
+
+        implicationStep = currStep;
+
+        currStep++;
+
+        //Checking if height of LHS is greater than 1
+        if (not implicationLHS->accept(&requiresCongVisitor)) {
+            //If it is not, the proof is shorter
+            noCongRequiredSteps(requiredMP);
+
+        } else {
+            //If it is, we require additional steps
+
+            auto termToSimplify = currTerm->accept(&simplifyLocatorVisitor);  //Locating possible simplification
+            auto simplificationRule = std::dynamic_pointer_cast<Op> (termToSimplify)->simplifyRule();    //Getting rule for simplification
+            //Operating simplification
+            auto simplification = termToSimplify->accept(&operateVisitor);
+
+            //Loop if there are more possible simplifications
+            while (not (termToSimplify->getTermType() == Term::TERMINAL or termToSimplify->getTermType() == Term::APP)) {
+
+
+                //If the current term to simplify is at height 0, break the loop to end the proof
+                if (std::dynamic_pointer_cast<Op> (currTerm)->getArgs()[0]->accept(&printVisitor) == termToSimplify->accept(&printVisitor)) {
+                    break;
+                }
+
+                IsPrimaryBranchVisitor isPrimaryBranchVisitor(currTerm->accept(&helperVisitor));  //Checking if the current term is a primary branch / branch of height 1
+                bool isPrimaryBranch = currTerm->accept(&isPrimaryBranchVisitor);
+
+                //Apply the simplification rule
+                notifyObservers(Step(currStep, Step::STEP,
+                                     packClause(std::make_shared<Op>("=", packClause(termToSimplify, simplification))), simplificationRule));
+
+                currStep++;
+
+                //If the current term to simplify is not a primary branch we require additional steps
+                if (not isPrimaryBranch) {
+
+                    //Proof simplification from bottom up
+                    notLhsPrimaryBranchSteps(simplification);
+                }else {
+                    //If it is a primary branch
+
+                    //Check if the original primary branch has been applied for transitivity before
+                    if (originalLhsPrimaryBranch != nullptr) {
+
+                        //Pass along the information recall the transitivity state one last time
+                        notifyObservers(Step(currStep, Step::STEP,
+                                             packClause(std::make_shared<Op>("=", packClause(originalLhsPrimaryBranch, simplification))),
+                                             "trans", std::vector<int>{transitivityStep, currStep-1}));
+
+                        currStep++;
+
+                    }
+
+                    //Because this is the last time we simplify in this primary branch, we can forget it
+                    originalLhsPrimaryBranch = nullptr;
+
+                    //If for some reason, this is a primary branch but we are not done simplifying it yet, we have to remember this step for transitivity later
+                    if (simplification->getTermType() != Term::TERMINAL) {
+                        originalLhsPrimaryBranch = termToSimplify;
+                        transitivityStep = currStep-1;
+                    } else {
+                        //Remember this main simplification step for the final resolution
+                        simplificationSteps.push_back(currStep-1);
+                    }
+                }
+
+                //Simplifying the main LHS tree
+                SimplifyVisitor simplifyVisitor(simplification, currTerm->accept(&helperVisitor));
+                currTerm = currTerm->accept(&simplifyVisitor);
+
+
+                //Get new term to simplify and continue looping
+
+                termToSimplify = currTerm->accept(&simplifyLocatorVisitor);  //Locating possible simplification
+                simplificationRule = std::dynamic_pointer_cast<Op> (termToSimplify)->simplifyRule();    //Getting rule for simplification
+                //Operating simplification
+                simplification = termToSimplify->accept(&operateVisitor);
+            }
+
+            //If the last term to simplify is a nonLinear operation, proceed differently
+            conjuctionSimplification(requiredMP, simplification, termToSimplify, simplificationRule);
+        }
+
     }
 
     notifyObservers(Step(currStep, Step::STEP,
