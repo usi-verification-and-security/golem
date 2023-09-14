@@ -141,15 +141,6 @@ public:
     std::shared_ptr<Term> visit(Let*) override;
 };
 
-class ImplicationLHSVisitor : public LogicVisitor {
-public:
-    std::shared_ptr<Term> visit(Terminal*) override;
-    std::shared_ptr<Term> visit(Quant*) override;
-    std::shared_ptr<Term> visit(Op*) override;
-    std::shared_ptr<Term> visit(App*) override;
-    std::shared_ptr<Term> visit(Let*) override;
-};
-
 class RemoveUnusedVisitor : public LogicVisitor{
     std::vector<std::string> varsInUse;
 public:

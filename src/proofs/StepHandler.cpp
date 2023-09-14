@@ -111,7 +111,9 @@ void StepHandler::buildAletheProof() {
             // Variable instantiation
             instantiationSteps(i); //pass the currTerm as an argument
 
-            implicationLHS = currTerm->accept(&implicationLhsVisitor);
+            std::shared_ptr<Op> implication = std::dynamic_pointer_cast<Op> (currTerm);
+
+            implicationLHS = implication->getArgs()[0];
             implicationRHS = std::make_shared<Terminal>(logic.printTerm(step.derivedFact), Term::VAR);
 
             //Implication rule
@@ -140,8 +142,9 @@ void StepHandler::buildAletheProof() {
                 //Loop if there are more possible simplifications
                 while (not (termToSimplify->getTermType() == Term::TERMINAL or termToSimplify->getTermType() == Term::APP)) {
 
+
                     //If the current term to simplify is at height 0, break the loop to end the proof
-                    if (currTerm->accept(&implicationLhsVisitor)->accept(&printVisitor) == termToSimplify->accept(&printVisitor)) {
+                    if (std::dynamic_pointer_cast<Op> (currTerm)->getArgs()[0]->accept(&printVisitor) == termToSimplify->accept(&printVisitor)) {
                         break;
                     }
 
@@ -329,13 +332,13 @@ void StepHandler::noCongRequiredSteps(std::vector<int> requiredMP){
 
                 currStep++;
 
-                localParentBranch = currTerm->accept(&implicationLhsVisitor);
+                localParentBranch = std::dynamic_pointer_cast<Op> (currTerm)->getArgs()[0];
 
                 //Simplifying the main LHS tree
                 SimplifyVisitor simplifyVisitor(simplification, currTerm->accept(&helperVisitor));
                 currTerm = currTerm->accept(&simplifyVisitor);
 
-                if (currTerm->accept(&implicationLhsVisitor)->accept(&printVisitor) == simplification->accept(&printVisitor)) {
+                if (std::dynamic_pointer_cast<Op> (currTerm)->getArgs()[0]->accept(&printVisitor) == simplification->accept(&printVisitor)) {
                     break;
                 }
 
@@ -468,7 +471,7 @@ void StepHandler::notLhsPrimaryBranchSteps() {
         //If we reached the top, break the loop
         if (currTerm->accept(&localIsPrimary)) {
             break;
-        } else if (currTerm->accept(&implicationLhsVisitor)->accept(&printVisitor) == currTerm->accept(&newGetLocalParentBranchVisitor)->accept(&printVisitor)) {
+        } else if (std::dynamic_pointer_cast<Op> (currTerm)->getArgs()[0]->accept(&printVisitor) == currTerm->accept(&newGetLocalParentBranchVisitor)->accept(&printVisitor)) {
             break;
         }
 

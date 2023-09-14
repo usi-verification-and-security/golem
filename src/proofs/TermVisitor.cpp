@@ -187,7 +187,7 @@ std::shared_ptr<Term> RemoveUnusedVisitor::visit(Quant* term) {
         }
         inUse = false;
     }
-    
+
     if (vars.empty()) {
         return term->getCoreTerm();
     }
@@ -219,40 +219,6 @@ std::shared_ptr<Term> RemoveUnusedVisitor::visit(App* term) {
         arg->accept(this);
     }
     return nullptr;
-}
-
-std::shared_ptr<Term> ImplicationLHSVisitor::visit(Terminal* term){
-    return std::make_shared<Terminal>(term->getVal(), term->getType());
-}
-
-std::shared_ptr<Term> ImplicationLHSVisitor::visit(Op* term){
-    std::string opcode = term->getOp();
-    if (opcode == "=>"){
-        return term->getArgs()[0]->accept(this);
-    }
-    std::vector<std::shared_ptr<Term>> args;
-    for (std::shared_ptr<Term> arg : term->getArgs()) {
-        args.push_back(arg->accept(this));
-    }
-    return std::make_shared<Op>(opcode, args);
-}
-
-std::shared_ptr<Term> ImplicationLHSVisitor::visit(App* term){
-    std::vector<std::shared_ptr<Term>> args;
-    std::string fun = term->getFun();
-    for (std::shared_ptr<Term> arg : term->getArgs()) {
-        args.push_back(arg->accept(this));
-    }
-    return std::make_shared<App>(fun, args);
-}
-
-std::shared_ptr<Term> ImplicationLHSVisitor::visit(Quant* term){
-    std::shared_ptr<Term> coreTerm = term->getCoreTerm()->accept(this);
-    return coreTerm->accept(this);
-}
-
-std::shared_ptr<Term> ImplicationLHSVisitor::visit(Let* term){
-    return std::make_shared<Let>(term->getTermNames(), term->getDeclarations(), term->getApplication());
 }
 
 std::shared_ptr<Term> SimplifyLocatorVisitor::visit(Terminal* term){
