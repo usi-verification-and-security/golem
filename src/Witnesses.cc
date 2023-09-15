@@ -40,6 +40,10 @@ void VerificationResult::printWitness_(std::ostream & out, Logic & logic, const 
                                     normalizingEqualities, out,
                                     logic, originalGraph);
 
+            AlethePrintObserver alethePrintObserver(out);
+
+            stepHandler.registerObserver(&alethePrintObserver);
+
             stepHandler.buildAletheProof();
 
             return;

@@ -115,9 +115,6 @@ std::vector<std::shared_ptr<Term>> StepHandler::packClause(const std::shared_ptr
 
 void StepHandler::buildIntermediateProof() {
 
-    IntermediatePrintObserver intermediatePrintObserver(out);
-    observers.push_back(&intermediatePrintObserver);
-
     auto derivationSize = derivation.size();
 
     for (std::size_t i = 0; i < derivationSize; ++i) {
@@ -169,9 +166,6 @@ void StepHandler::buildIntermediateProof() {
 }
 
 void StepHandler::buildAletheProof() {
-
-    AlethePrintObserver alethePrintObserver(out);
-    observers.push_back(&alethePrintObserver);
 
     //Building assumptions
     assumptionSteps();

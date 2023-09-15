@@ -112,9 +112,20 @@ public :
     void notLhsPrimaryBranchSteps(const std::shared_ptr<Term>& simplification);
     void conjuctionSimplification(std::vector<int> requiredMP, const std::shared_ptr<Term>& simplification, const std::shared_ptr<Term>& termToSimplify, std::string simplificationRule, int implicationStep);
 
-    void notifyObservers(const Step& step){
+    void registerObserver(Observer* observer) {
+        observers.push_back(observer);
+    }
 
-        for (Observer *observer : observers) { // notify all observers
+    void deRegisterObserver(Observer* observer) {
+        for (int i = 0; i < observers.size(); i++) { // notify all observers
+            if (observer == observers[i]) {
+                observers.erase(observers.begin()+i);
+            }
+        }
+    }
+
+    void notifyObservers(const Step& step){
+        for (Observer* observer : observers) { // notify all observers
             observer->update(const_cast<Step &>(step));
         }
     }
