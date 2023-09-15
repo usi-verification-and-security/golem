@@ -218,7 +218,7 @@ void StepHandler::buildAletheProof() {
         currStep++;
 
         //Checking if height of LHS is greater than 1
-        if (not implicationLHS->accept(&requiresCongVisitor)) {
+        if (not requiresCong()) {
             //If it is not, the proof is shorter
             noCongRequiredSteps(requiredMP);
 
@@ -306,6 +306,20 @@ void StepHandler::buildAletheProof() {
     currStep++;
     //Get empty clause
     notifyObservers(Step(currStep, Step::STEP, "resolution", std::vector<int>{currStep-2, currStep-1}));
+}
+
+bool StepHandler::requiresCong() {
+
+    if (implicationLHS->getTermType() == Term::TERMINAL or implicationLHS->getTermType() == Term::APP) {
+        return false;
+    } else {
+      for(auto arg : std::dynamic_pointer_cast<Op>(implicationLHS)->getArgs()) {
+            if (not (arg->getTermType() == Term::TERMINAL or arg->getTermType() == Term::APP)) {
+                return true;
+            }
+      }
+    }
+    return false;
 }
 
 void StepHandler::instantiationSteps(int i) {

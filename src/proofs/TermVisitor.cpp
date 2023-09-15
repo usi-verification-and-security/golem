@@ -532,16 +532,6 @@ Term* GetLocalParentBranchVisitor::visit(Op* term){
     return nullptr;
 }
 
-bool RequiresCongVisitor::visit(Op* term){
-
-    for (auto arg : term->getArgs()) {
-        if  (not (arg->getTermType() == Term::TERMINAL or arg->getTermType() == Term::APP)) {
-             return true;
-        }
-    }
-    return false;
-}
-
 bool IsPrimaryBranchVisitor::visit(Op* term){
     PrintVisitor printVisitor;
     auto args = term->getArgs();

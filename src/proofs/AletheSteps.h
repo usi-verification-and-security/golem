@@ -85,7 +85,6 @@ class StepHandler {
     PrintVisitor printVisitor;
     SimplifyLocatorVisitor simplifyLocatorVisitor;
     OperateVisitor operateVisitor;
-    RequiresCongVisitor requiresCongVisitor;
     SimplifyHelperVisitor helperVisitor;
     NonLinearVisitor nonLinearVisitor;
     NegatedAndVisitor negatedAndVisitor;
@@ -105,6 +104,8 @@ public :
     static std::vector<std::shared_ptr<Term>> packClause(const std::shared_ptr<Term>& term1, const std::shared_ptr<Term>& term2);
     void buildAletheProof();
     void buildIntermediateProof();
+
+    bool requiresCong();
 
     void instantiationSteps(int i);
     void assumptionSteps();

@@ -220,15 +220,6 @@ public:
     virtual bool visit(Let*) = 0;
 };
 
-class RequiresCongVisitor : public BooleanVisitor {
-public:
-    bool visit(Terminal*) override {return false;};
-    bool visit(Quant*) override {return false;};
-    bool visit(Op*) override;
-    bool visit(App*) override {return false;};
-    bool visit(Let*) override {return true;};
-};
-
 class IsPrimaryBranchVisitor : public BooleanVisitor {
     Term* branch;
 public:
