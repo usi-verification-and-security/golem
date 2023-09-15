@@ -563,6 +563,56 @@ TEST_F(Transformer_New_Test, test_SimpleNodeEliminator_HyperEdgeBooleanConstrain
     EXPECT_EQ(validator.validate(originalGraph, translatedResult), Validator::Result::VALIDATED);
 }
 
+TEST_F(Transformer_New_Test, test_SimpleNodeEliminator_PredicateClash_Unsafe) {
+    Options options;
+    options.addOption(Options::LOGIC, "QF_LIA");
+    options.addOption(Options::COMPUTE_WITNESS, "true");
+    SymRef p1 = mkPredicateSymbol("p1", {intSort(), intSort()});
+    SymRef p2 = mkPredicateSymbol("p2", {intSort()});
+    SymRef p3 = mkPredicateSymbol("p3", {intSort()});
+    PTRef one = instantiatePredicate(p1, {x, y});
+    PTRef two = instantiatePredicate(p2, {x});
+    PTRef three = instantiatePredicate(p3, {y});
+    // x < y => P1(x,y)
+    // P1(x,y) => P2(x)
+    // P1(x,y) => P3(y)
+    // P2(x) and P3(y) and x = y => false
+
+    std::vector<ChClause> clauses{
+        {
+            ChcHead{UninterpretedPredicate{one}},
+            ChcBody{{logic->mkLt(x,y)}, {}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{two}},
+            ChcBody{{logic->getTerm_true()}, {UninterpretedPredicate{one}}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{three}},
+            ChcBody{{logic->getTerm_true()}, {UninterpretedPredicate{one}}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{logic->getTerm_false()}},
+            ChcBody{{logic->mkEq(x,y)}, {UninterpretedPredicate{two}, UninterpretedPredicate{three}}}
+        }};
+
+    for (auto const & clause : clauses) { system.addClause(clause); }
+
+    Logic & logic = *this->logic;
+    auto normalizedSystem = Normalizer(logic).normalize(system);
+    auto hyperGraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
+    auto originalGraph = *hyperGraph;
+    SimpleNodeEliminator transformation;
+    auto [transformedGraph, translator] = transformation.transform(std::move(hyperGraph));
+    Spacer engine(logic, options);
+    auto res = engine.solve(*transformedGraph);
+    ASSERT_EQ(res.getAnswer(), VerificationAnswer::UNSAFE);
+    auto translatedWitness = translator->translate(res.getInvalidityWitness());
+    VerificationResult translatedResult(VerificationAnswer::UNSAFE, translatedWitness);
+    Validator validator(logic);
+    EXPECT_EQ(validator.validate(originalGraph, translatedResult), Validator::Result::VALIDATED);
+}
+
 TEST_F(Transformer_New_Test, test_MultiEdgeMerger_SimpleUnsafe) {
     Options options;
     options.addOption(Options::LOGIC, "QF_LIA");

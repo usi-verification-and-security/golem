@@ -50,16 +50,20 @@ bool SimpleNodeEliminatorPredicate::operator()(
     ChcDirectedHyperGraph const & graph) const {
     if (isSimpleNode(vertex, ar) and isNonLoopNode(vertex, ar, graph)) {
         if (not hasHyperEdge(vertex, ar, graph)) { return true; }
-        // We eliminate the node also if it has outgoing hyperedges,
-        // under the condition that it has only a single incoming edge, which is simple,
-        // and it occurs only once as a source in each outgoing hyperedge
-        // TODO: Relax also this constraint
+        // We eliminate the node also if it has outgoing hyperedges, but only if it has single normal incoming edge
         auto const & incoming = ar.getIncomingEdgesFor(vertex);
         if (not (incoming.size() == 1 and graph.getSources(incoming[0]).size() == 1)) { return false; }
+        // And these additional constraints hold
+        // 1. Candidate vertex must not be the target
+        // 2. Candidate vertex must be present exactly once in the sources.
+        // 3. The source of the incoming edge must not be a source of any outgoing edges
+        auto incomingSource = graph.getSources(incoming[0]).at(0);
         auto const & outgoing = ar.getOutgoingEdgesFor(vertex);
         return std::all_of(outgoing.begin(), outgoing.end(), [&](EId edge) {
             auto const & sources = graph.getSources(edge);
-           return vertex != graph.getTarget(edge) and std::count(sources.begin(), sources.end(), vertex) == 1;
+            return vertex != graph.getTarget(edge)
+                    and std::count(sources.begin(), sources.end(), vertex) == 1
+                    and std::find(sources.begin(), sources.end(), incomingSource) == sources.end();
         });
     }
     return false;
