@@ -667,60 +667,46 @@ void StepHandler::conjuctionSimplification(std::vector<int> requiredMP, const st
 }
 
 
-std::vector<std::pair<std::string, std::string>> StepHandler::getInstPairs(int it, vec<Normalizer::Equality> const & stepNormEq) {
+std::vector<std::pair<std::string, std::string>> StepHandler::getInstPairs(int stepIndex, vec<Normalizer::Equality> const & stepNormEq) {
     struct VarValPair { PTRef var; PTRef val; };
-    std::vector<PTRef> sourceVariables;
+    std::unordered_set<PTRef, PTRefHash> processedOriginalArguments;
     std::vector<VarValPair> instPairsBeforeNormalization;
     std::vector<VarValPair> instPairsAfterNormalization;
 
-    auto const & step = derivation[it];
+    auto const & step = derivation[stepIndex];
 
     TermUtils utils(logic);
 
     auto premises = step.premises;
     premises.erase(std::remove(premises.begin(), premises.end(), 0), premises.end());
 
-    std::vector<std::pair<int, PTRef>> instanceVertexPairs;
-    bool present = false;
+    std::unordered_map<SymRef, std::size_t, SymRefHash> vertexInstance;
 
     for (std::size_t premise : premises) {
         auto concreteArgs = utils.predicateArgsInOrder(derivation[premise].derivedFact);
         auto targetVertex = originalGraph.getEdge(derivation[premise].clauseId).to;
 
-        PTRef clauseBody =  originalGraph.getStateVersion(targetVertex);
+        auto instance = vertexInstance[targetVertex]++;
+        PTRef predicateInstance = originalGraph.getStateVersion(targetVertex, instance);
 
-        //Dealing with repeated predicates
-        unsigned instance;
-        for (auto pair : instanceVertexPairs) {
-            if (clauseBody == pair.second) {
-                present = true;
-                pair.first++;
-                instance = pair.first;
-                break;
-            }
-        }
-        if (not present) {
-            instanceVertexPairs.emplace_back(0, clauseBody);
-        } else {
-            clauseBody =  originalGraph.getStateVersion(targetVertex, instance);
-        }
-
-        auto formalArgs = utils.predicateArgsInOrder(clauseBody);
+        auto formalArgs = utils.predicateArgsInOrder(predicateInstance);
         assert(concreteArgs.size() == formalArgs.size());
         //Building the pairs
         for (int m = 0; m < formalArgs.size(); m++) {
             for (auto const & equality : stepNormEq) {
                 if (equality.normalizedVar == formalArgs[m]) {
-                    sourceVariables.push_back(equality.originalArg);
                     assert(logic.isConstant(concreteArgs[m]));
-                    instPairsBeforeNormalization.push_back({equality.originalArg, concreteArgs[m]});
                     instPairsAfterNormalization.push_back({equality.normalizedVar, concreteArgs[m]});
+                    auto it = processedOriginalArguments.find(equality.originalArg);
+                    if (it == processedOriginalArguments.end()) {
+                        processedOriginalArguments.insert(equality.originalArg);
+                        instPairsBeforeNormalization.push_back({equality.originalArg, concreteArgs[m]});
+                    }
                 }
             }
         }
     }
     //Target variables instantiation
-    bool redundance = false;
     auto concreteArgs = utils.predicateArgsInOrder(step.derivedFact);
     auto targetVertex = originalGraph.getEdge(step.clauseId).to;
     PTRef clauseHead = originalGraph.getNextStateVersion(targetVertex);
@@ -731,17 +717,12 @@ std::vector<std::pair<std::string, std::string>> StepHandler::getInstPairs(int i
     for (int m = 0; m < formalArgs.size(); m++){
         for (auto const & equality : stepNormEq) {
             if (equality.normalizedVar == formalArgs[m]) {
-                for (PTRef variable : sourceVariables){
-                    if (variable == equality.originalArg){
-                        redundance = true;
-                    }
-                }
+                assert(logic.isConstant(concreteArgs[m]));
                 instPairsAfterNormalization.push_back({equality.normalizedVar, concreteArgs[m]});
-                if (!redundance) {
-                    assert(logic.isConstant(concreteArgs[m]));
+                auto it = processedOriginalArguments.find(equality.originalArg);
+                if (it == processedOriginalArguments.end()) {
+                    processedOriginalArguments.insert(equality.originalArg);
                     instPairsBeforeNormalization.push_back({equality.originalArg, concreteArgs[m]});
-                } else {
-                    redundance = false;
                 }
             }
         }
@@ -772,7 +753,10 @@ std::vector<std::pair<std::string, std::string>> StepHandler::getInstPairs(int i
             });
             if (it == stepNormEq.end()) { throw std::logic_error("Auxiliary variable should have been found in normalizing equalities"); }
             PTRef originalVar = it->originalArg;
-            instPairsBeforeNormalization.push_back({originalVar, val});
+            if (processedOriginalArguments.find(originalVar) == processedOriginalArguments.end()) {
+                processedOriginalArguments.insert(originalVar);
+                instPairsBeforeNormalization.push_back({originalVar, val});
+            }
         }
     }
 
@@ -782,6 +766,5 @@ std::vector<std::pair<std::string, std::string>> StepHandler::getInstPairs(int i
         std::string varName = logic.getSymName(varVal.var);
         return std::make_pair(varName, logic.printTerm(varVal.val));
     });
-
     return res;
 }
