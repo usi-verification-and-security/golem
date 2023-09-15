@@ -37,14 +37,14 @@ public :
 
 class Observer {
 public:
-    virtual void update(Step step) = 0;
+    virtual void update(Step & step) = 0;
 };
 
 class AlethePrintObserver : public Observer{
     std::ostream & out;
 public:
     explicit AlethePrintObserver(std::ostream & out) : out(out){}
-    void update(Step step) override{
+    void update(Step & step) override{
         out << step.printStepAlethe();
     }
 };
@@ -53,7 +53,7 @@ class IntermediatePrintObserver : public Observer{
     std::ostream & out;
 public:
     explicit IntermediatePrintObserver(std::ostream & out) : out(out){}
-    void update(Step step) override{
+    void update(Step & step) override{
         out << step.printStepIntermediate();
     }
 };
@@ -70,7 +70,6 @@ class StepHandler {
     std::vector<Observer*> observers;
 
     int currStep = 0;
-    int implicationStep;
     int transitivityStep;
 
     std::shared_ptr<Term> implicationRHS;
@@ -109,14 +108,14 @@ public :
 
     void instantiationSteps(int i);
     void assumptionSteps();
-    void noCongRequiredSteps(std::vector<int> requiredMP);
-    void notLhsPrimaryBranchSteps(std::shared_ptr<Term> simplification);
-    void conjuctionSimplification(std::vector<int> requiredMP, std::shared_ptr<Term> simplification, std::shared_ptr<Term> termToSimplify, std::string simplificationRule);
+    void noCongRequiredSteps(std::vector<int> requiredMP, int implicationStep);
+    void notLhsPrimaryBranchSteps(const std::shared_ptr<Term>& simplification);
+    void conjuctionSimplification(std::vector<int> requiredMP, const std::shared_ptr<Term>& simplification, const std::shared_ptr<Term>& termToSimplify, std::string simplificationRule, int implicationStep);
 
     void notifyObservers(const Step& step){
 
         for (Observer *observer : observers) { // notify all observers
-            observer->update(step);
+            observer->update(const_cast<Step &>(step));
         }
     }
 

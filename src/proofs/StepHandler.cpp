@@ -4,6 +4,7 @@
 #include "AletheSteps.h"
 #include <memory>
 #include <string>
+#include <utility>
 
 std::string Step::printStepAlethe() {
 
@@ -213,14 +214,14 @@ void StepHandler::buildAletheProof() {
                              packClause(std::make_shared<Op>("not", packClause(implicationLHS)), implicationRHS),
                              "implies", std::vector<int>{currStep-1}));
 
-        implicationStep = currStep;
+        int implicationStep = currStep;
 
         currStep++;
 
         //Checking if height of LHS is greater than 1
         if (not requiresCong()) {
             //If it is not, the proof is shorter
-            noCongRequiredSteps(requiredMP);
+            noCongRequiredSteps(requiredMP, implicationStep);
 
         } else {
             //If it is, we require additional steps
@@ -295,7 +296,7 @@ void StepHandler::buildAletheProof() {
             }
 
             //If the last term to simplify is a nonLinear operation, proceed differently
-            conjuctionSimplification(requiredMP, simplification, termToSimplify, simplificationRule);
+            conjuctionSimplification(requiredMP, simplification, termToSimplify, simplificationRule, implicationStep);
         }
 
     }
@@ -399,7 +400,7 @@ void StepHandler::assumptionSteps() {
     }
 }
 
-void StepHandler::noCongRequiredSteps(std::vector<int> requiredMP){
+void StepHandler::noCongRequiredSteps(std::vector<int> requiredMP, int implicationStep){
 
     if (not (implicationLHS->getTermType() == Term::TERMINAL or implicationLHS->getTermType() == Term::APP)) {
 
@@ -546,7 +547,7 @@ void StepHandler::noCongRequiredSteps(std::vector<int> requiredMP){
     }
 }
 
-void StepHandler::notLhsPrimaryBranchSteps(std::shared_ptr<Term> simplification) {
+void StepHandler::notLhsPrimaryBranchSteps(const std::shared_ptr<Term>& simplification) {
 
     //Simplifying from bottom up applying congruence to carry information
 
@@ -599,7 +600,7 @@ void StepHandler::notLhsPrimaryBranchSteps(std::shared_ptr<Term> simplification)
     }
 }
 
-void StepHandler::conjuctionSimplification(std::vector<int> requiredMP, std::shared_ptr<Term> simplification, std::shared_ptr<Term> termToSimplify, std::string simplificationRule) {
+void StepHandler::conjuctionSimplification(std::vector<int> requiredMP, const std::shared_ptr<Term>& simplification, const std::shared_ptr<Term>& termToSimplify, std::string simplificationRule, int implicationStep) {
 
     notifyObservers(Step(currStep, Step::STEP,
                          packClause(std::make_shared<Op>("=", packClause(implicationLHS, termToSimplify))),
@@ -608,7 +609,7 @@ void StepHandler::conjuctionSimplification(std::vector<int> requiredMP, std::sha
     currStep++;
 
     notifyObservers(Step(currStep, Step::STEP,
-                         packClause(std::make_shared<Op>("=", packClause(termToSimplify, simplification))), simplificationRule));
+                         packClause(std::make_shared<Op>("=", packClause(termToSimplify, simplification))), std::move(simplificationRule)));
 
     currStep++;
 
