@@ -95,6 +95,13 @@ std::string Step::printStepIntermediate() {
         ss << ")";
     }
 
+    if (!premises.empty()) {
+        ss << " :premises ";
+        for (auto premise : premises) {
+            ss << premise << " ";
+        }
+    }
+
     ss << "\n";
 
     return ss.str();
@@ -158,8 +165,20 @@ void StepHandler::buildIntermediateProof() {
                                                              packClause(std::make_shared<Terminal>(premises.str(), Term::VAR), std::make_shared<Terminal>(logic.printTerm(step.derivedFact), Term::VAR))))));
         currStep++;
 
+        std::vector<int> requiredMP;
+
+        if (!modusPonensSteps.empty()) {
+            //Get the necessary steps for modus ponens
+            for (int i = 0; i < step.premises.size(); i++) {
+                requiredMP.push_back(modusPonensSteps[(int)step.premises[i]-1]);
+            }
+        }
+
         notifyObservers(Step(currStep, Step::STEP,
-                             packClause(std::make_shared<Terminal>(logic.printTerm(step.derivedFact), Term::VAR))));
+                             packClause(std::make_shared<Terminal>(logic.printTerm(step.derivedFact), Term::VAR)), "resolution",requiredMP));
+
+        modusPonensSteps.push_back(currStep);
+
         currStep++;
     }
 
