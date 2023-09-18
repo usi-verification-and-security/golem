@@ -380,12 +380,12 @@ void StepHandler::assumptionSteps() {
     auto assertionSize = originalAssertions.size();
     for (std::size_t i = 1; i <= assertionSize; ++i) {
         Term* potentialLet = originalAssertions[i-1]->accept(&letLocatorVisitor);
-        if (potentialLet != nullptr) {
+        while (potentialLet != nullptr) {
             auto simplifiedLet = potentialLet->accept(&operateLetTermVisitor);
             SimplifyVisitor simplifyLetTermVisitor(simplifiedLet, potentialLet);
             originalAssertions[i-1] = originalAssertions[i-1]->accept(&simplifyLetTermVisitor);
+            potentialLet = originalAssertions[i-1]->accept(&letLocatorVisitor);
         }
-
         notifyObservers(Step(currStep, Step::ASSUME, packClause(originalAssertions[i-1])));
 
         currStep++;

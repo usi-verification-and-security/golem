@@ -305,8 +305,9 @@ std::shared_ptr<Term> SimplifyVisitor::visit(Let* term){
 
     if (operation == term) {
         return simplification;
+    } else {
+        return std::make_shared<Let>(term->getTermNames(), term->getDeclarations(), term->getApplication()->accept(this));
     }
-    return std::make_shared<Let>(term->getTermNames(), term->getDeclarations(), term->getApplication());
 }
 
 std::shared_ptr<Term> OperateVisitor::visit(Op* term){
@@ -650,7 +651,10 @@ Term* LetLocatorVisitor::visit(Op* term) {
 }
 
 Term* LetLocatorVisitor::visit(Let* term) {
-    return term;
+    if (term->getApplication()->accept(this) == nullptr){
+        return term;
+    }
+    return term->getApplication()->accept(this);
 }
 
 std::string Terminal::accept(StringVisitor* visitor) {
