@@ -1,7 +1,7 @@
 //
 // Created by mambo on 8/29/23.
 //
-#include "AletheSteps.h"
+#include "ProofSteps.h"
 #include <memory>
 #include <string>
 #include <utility>
@@ -284,7 +284,7 @@ void StepHandler::buildAletheProof() {
                     //Because this is the last time we simplify in this primary branch, we can forget it
                     originalLhsPrimaryBranch = nullptr;
 
-                    //If for some reason, this is a primary branch but we are not done simplifying it yet, we have to remember this step for transitivity later
+                    //If for some reason, this is a primary branch, but we are not done simplifying it yet, we have to remember this step for transitivity later
                     if (simplification->getTermType() != Term::TERMINAL) {
                         originalLhsPrimaryBranch = termToSimplify;
                         transitivityStep = currStep-1;
@@ -298,7 +298,6 @@ void StepHandler::buildAletheProof() {
                 SimplifyVisitor simplifyVisitor(simplification, currTerm->accept(&helperVisitor));
                 currTerm = currTerm->accept(&simplifyVisitor);
 
-
                 //Get new term to simplify and continue looping
 
                 termToSimplify = currTerm->accept(&simplifyLocatorVisitor);  //Locating possible simplification
@@ -307,7 +306,7 @@ void StepHandler::buildAletheProof() {
                 simplification = termToSimplify->accept(&operateVisitor);
             }
 
-            //If the last term to simplify is a nonLinear operation, proceed differently
+            //Final parent conjunction simplification
             conjunctionSimplification(requiredMP, simplification, termToSimplify, simplificationRule, implicationStep);
         }
     }
@@ -413,7 +412,7 @@ void StepHandler::assumptionSteps() {
 
 void StepHandler::noCongRequiredSteps(std::vector<int> requiredMP, int implicationStep){
 
-    if (not (implicationLHS->getTermType() == Term::TERMINAL or implicationLHS->getTermType() == Term::APP)) {
+    if (implicationLHS->getTermType() == Term::OP) {
 
         auto termToSimplify = currTerm->accept(&simplifyLocatorVisitor);  //Locating possible simplification
         auto simplificationRule = std::dynamic_pointer_cast<Op> (termToSimplify)->simplifyRule();    //Getting rule for simplification
@@ -435,6 +434,7 @@ void StepHandler::noCongRequiredSteps(std::vector<int> requiredMP, int implicati
         SimplifyVisitor simplifyVisitor(simplification, currTerm->accept(&helperVisitor));
         currTerm = currTerm->accept(&simplifyVisitor);
 
+        //If after we simplified, we get another operation, this is a >= or > case
         if (simplification->getTermType() == Term::OP) {
 
             std::shared_ptr<Term> localParentBranchSimplified;
@@ -588,9 +588,7 @@ void StepHandler::notLhsPrimaryBranchSteps(const std::shared_ptr<Term>& simplifi
         GetLocalParentBranchVisitor newGetLocalParentBranchVisitor(localParentBranch);
 
         //If we reached the top, break the loop
-        if (currTerm->accept(&localIsPrimary)) {
-            break;
-        } else if (std::dynamic_pointer_cast<Op> (currTerm)->getArgs()[0]->accept(&printVisitor) == currTerm->accept(&newGetLocalParentBranchVisitor)->accept(&printVisitor)) {
+        if (currTerm->accept(&localIsPrimary) or (std::dynamic_pointer_cast<Op> (currTerm)->getArgs()[0]->accept(&printVisitor) == currTerm->accept(&newGetLocalParentBranchVisitor)->accept(&printVisitor))) {
             break;
         }
 
@@ -644,6 +642,7 @@ void StepHandler::conjunctionSimplification(std::vector<int> requiredMP, const s
 
     currStep++;
 
+    //Check if we are dealing with a non linear case
     if (termToSimplify->accept(&nonLinearVisitor)) {
         notifyObservers(Step(currStep, Step::STEP,
                              packClause(simplification, std::make_shared<Terminal>(simplification->accept(&negatedAndVisitor), Term::UNDECLARED)),

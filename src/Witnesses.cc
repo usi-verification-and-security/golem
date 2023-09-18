@@ -6,7 +6,7 @@
 
 #include "Witnesses.h"
 #include "TransformationUtils.h"
-#include "proofs/AletheSteps.h"
+#include "proofs/ProofSteps.h"
 #include "utils/SmtSolver.h"
 #include <memory>
 
@@ -40,11 +40,11 @@ void VerificationResult::printWitness_(std::ostream & out, Logic & logic, const 
                                     normalizingEqualities, out,
                                     logic, originalGraph);
 
-            AlethePrintObserver alethePrintObserver(out);
+            IntermediatePrintObserver alethePrintObserver(out);
 
             stepHandler.registerObserver(&alethePrintObserver);
 
-            stepHandler.buildAletheProof();
+            stepHandler.buildIntermediateProof();
 
             return;
         }

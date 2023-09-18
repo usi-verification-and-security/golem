@@ -27,9 +27,9 @@ endif(OpenSMT_FOUND)
 
 add_library(golem_lib OBJECT ""
         proofs/Term.h
-        proofs/TermVisitor.cpp
-        proofs/AletheSteps.h
-        proofs/StepHandler.cpp)
+        proofs/Term.cpp
+        proofs/ProofSteps.h
+        proofs/ProofSteps.cpp)
 
 target_link_libraries(golem_lib PUBLIC OpenSMT::OpenSMT)
 

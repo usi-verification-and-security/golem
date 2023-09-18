@@ -118,7 +118,7 @@ public :
     }
 
     void deRegisterObserver(Observer* observer) {
-        for (int i = 0; i < observers.size(); i++) { // notify all observers
+        for (int i = 0; i < observers.size(); i++) {
             if (observer == observers[i]) {
                 observers.erase(observers.begin()+i);
             }
@@ -132,11 +132,5 @@ public :
     }
 
 };
-
-
-
-
-
-
 
 #endif // GOLEM_ALETHETERMS_H
