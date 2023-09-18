@@ -228,7 +228,6 @@ void StepHandler::buildAletheProof() {
             //Loop if there are more possible simplifications
             while (not (termToSimplify->getTermType() == Term::TERMINAL or termToSimplify->getTermType() == Term::APP)) {
 
-
                 //If the current term to simplify is at height 0, break the loop to end the proof
                 if (std::dynamic_pointer_cast<Op> (currTerm)->getArgs()[0]->accept(&printVisitor) == termToSimplify->accept(&printVisitor)) {
                     break;
@@ -290,9 +289,8 @@ void StepHandler::buildAletheProof() {
             }
 
             //If the last term to simplify is a nonLinear operation, proceed differently
-            conjuctionSimplification(requiredMP, simplification, termToSimplify, simplificationRule, implicationStep);
+            conjunctionSimplification(requiredMP, simplification, termToSimplify, simplificationRule, implicationStep);
         }
-
     }
 
     notifyObservers(Step(currStep, Step::STEP,
@@ -401,6 +399,11 @@ void StepHandler::noCongRequiredSteps(std::vector<int> requiredMP, int implicati
         auto termToSimplify = currTerm->accept(&simplifyLocatorVisitor);  //Locating possible simplification
         auto simplificationRule = std::dynamic_pointer_cast<Op> (termToSimplify)->simplifyRule();    //Getting rule for simplification
         auto simplification = termToSimplify->accept(&operateVisitor);
+
+        if (std::dynamic_pointer_cast<Op>(termToSimplify)->getOp() == "and") {
+            conjunctionSimplification(requiredMP, simplification, termToSimplify, simplificationRule, implicationStep, false);
+            return;
+        }
 
         notifyObservers(Step(currStep, Step::STEP,
                              packClause(std::make_shared<Op>("=", packClause(termToSimplify, simplification))), simplificationRule));
@@ -594,24 +597,27 @@ void StepHandler::notLhsPrimaryBranchSteps(const std::shared_ptr<Term>& simplifi
     }
 }
 
-void StepHandler::conjuctionSimplification(std::vector<int> requiredMP, const std::shared_ptr<Term>& simplification, const std::shared_ptr<Term>& termToSimplify, std::string simplificationRule, int implicationStep) {
+void StepHandler::conjunctionSimplification(std::vector<int> requiredMP, const std::shared_ptr<Term>& simplification, const std::shared_ptr<Term>& termToSimplify, std::string simplificationRule, int implicationStep, bool cong) {
 
-    notifyObservers(Step(currStep, Step::STEP,
-                         packClause(std::make_shared<Op>("=", packClause(implicationLHS, termToSimplify))),
-                         "cong", simplificationSteps));
-
-    currStep++;
+    if (cong) {
+        notifyObservers(Step(currStep, Step::STEP,
+                             packClause(std::make_shared<Op>("=", packClause(implicationLHS, termToSimplify))),
+                             "cong", simplificationSteps));
+        currStep++;
+    }
 
     notifyObservers(Step(currStep, Step::STEP,
                          packClause(std::make_shared<Op>("=", packClause(termToSimplify, simplification))), std::move(simplificationRule)));
 
     currStep++;
 
-    notifyObservers(Step(currStep, Step::STEP,
-                         packClause(std::make_shared<Op>("=", packClause(implicationLHS, simplification))),
-                         "trans", std::vector<int>{currStep-2, currStep-1}));
+    if (cong) {
+        notifyObservers(Step(currStep, Step::STEP,
+                             packClause(std::make_shared<Op>("=", packClause(implicationLHS, simplification))),
+                             "trans", std::vector<int>{currStep-2, currStep-1}));
 
-    currStep++;
+        currStep++;
+    }
 
     notifyObservers(Step(currStep, Step::STEP,
                          packClause(implicationLHS, std::make_shared<Op>("not", packClause(simplification))),

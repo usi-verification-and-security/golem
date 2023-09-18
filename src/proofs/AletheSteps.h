@@ -110,7 +110,8 @@ public :
     void assumptionSteps();
     void noCongRequiredSteps(std::vector<int> requiredMP, int implicationStep);
     void notLhsPrimaryBranchSteps(const std::shared_ptr<Term>& simplification);
-    void conjuctionSimplification(std::vector<int> requiredMP, const std::shared_ptr<Term>& simplification, const std::shared_ptr<Term>& termToSimplify, std::string simplificationRule, int implicationStep);
+    void conjunctionSimplification(std::vector<int> requiredMP, const std::shared_ptr<Term>& simplification,
+                                  const std::shared_ptr<Term>& termToSimplify, std::string simplificationRule, int implicationStep, bool cong = true);
 
     void registerObserver(Observer* observer) {
         observers.push_back(observer);
