@@ -59,7 +59,8 @@ VerificationResult TPAEngine::solve(ChcDirectedHyperGraph const & graph) {
 }
 
 VerificationResult TPAEngine::solve(const ChcDirectedGraph & graph) {
-    if (isTrivial(graph)) { return solveTrivial(graph); }
+    if (isTrivial(graph)) {
+        return solveTrivial(graph); }
     if (isTransitionSystem(graph)) {
         auto ts = toTransitionSystem(graph);
         auto solver = mkSolver();
@@ -81,10 +82,8 @@ VerificationResult TPAEngine::solve(const ChcDirectedGraph & graph) {
         }
     }
     else if (isTransitionSystemDAG(graph)) {
-        return solveTransitionSystemGraph(graph);
-    } else {
-        return VerificationResult(VerificationAnswer::UNKNOWN);
-    }
+//        return solveTransitionSystemGraph(graph);
+
     // Translate CHCGraph into transition system
     SingleLoopTransformation transformation;
     auto [ts, backtranslator] = transformation.transform(graph);
@@ -104,6 +103,9 @@ VerificationResult TPAEngine::solve(const ChcDirectedGraph & graph) {
         default:
             assert(false);
             throw std::logic_error("Unreachable!");
+    }
+    } else {
+        return VerificationResult(VerificationAnswer::UNKNOWN);
     }
 }
 
