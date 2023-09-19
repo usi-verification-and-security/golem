@@ -411,7 +411,7 @@ VerificationResult ChcInterpreterContext::solve(std::string engine_s, ChcDirecte
 }
 
 void ChcInterpreterContext::validate(VerificationResult result, ChcDirectedHyperGraph const & originalGraph,
-                                     bool validateWitness, bool printWitness, WitnessBackTranslator & translator, Normalizer::Equalities const & normalizingEqualities) {
+                                     bool validateWitness, bool printWitness, WitnessBackTranslator & translator, Normalizer::Equalities const & normalizingEqualities, std::string format) {
 
     result = translator.translate(std::move(result));
     if (not result.hasWitness()) {
@@ -420,7 +420,7 @@ void ChcInterpreterContext::validate(VerificationResult result, ChcDirectedHyper
         return;
     }
 
-    if (printWitness) { result.printWitness_(std::cout, logic, originalGraph, originalAssertions, normalizingEqualities); }
+    if (printWitness) { result.printWitness(std::cout, logic, originalGraph, originalAssertions, normalizingEqualities, format); }
     if (validateWitness) {
         auto validationResult = Validator(logic).validate(originalGraph, result);
         switch (validationResult) {
@@ -443,6 +443,8 @@ void ChcInterpreterContext::interpretCheckSat() {
     bool validateWitness = opts.hasOption(Options::VALIDATE_RESULT);
     assert(not validateWitness || opts.getOption(Options::VALIDATE_RESULT) == std::string("true"));
     bool printWitness = opts.hasOption(Options::PRINT_WITNESS);
+    std::string format = "legacy";
+    if (opts.hasOption(Options::PROOF_FORMAT)) {format = opts.getOption(Options::PROOF_FORMAT);}
     assert(not printWitness || opts.getOption(Options::PRINT_WITNESS) == std::string("true"));
 
     Normalizer normalizer(logic);
@@ -481,7 +483,7 @@ void ChcInterpreterContext::interpretCheckSat() {
                 auto result = solve(engines[i], *hypergraph);
                 if (result.getAnswer() == VerificationAnswer::UNKNOWN) { exit(1); }
                 if (validateWitness || printWitness) {
-                    validate(std::move(result), *originalGraph, validateWitness, printWitness, *translator, normalizingEqualities);
+                    validate(std::move(result), *originalGraph, validateWitness, printWitness, *translator, normalizingEqualities, format);
                 }
                 return;
             }
@@ -513,7 +515,7 @@ void ChcInterpreterContext::interpretCheckSat() {
     }
     if (validateWitness || printWitness) {
 
-        validate(std::move(result), *originalGraph, validateWitness, printWitness, *translator, normalizingEqualities);
+        validate(std::move(result), *originalGraph, validateWitness, printWitness, *translator, normalizingEqualities, format);
     }
 }
 

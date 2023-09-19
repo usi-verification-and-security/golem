@@ -271,6 +271,7 @@ class GetLocalParentBranchVisitor : public PointerVisitor {
     Term* operation;
 public:
     explicit GetLocalParentBranchVisitor(Term* o) : operation(o) {}
+    void setOperation(Term* o) {operation = o;}
     Term* visit(Terminal*) override {return nullptr;};
     Term* visit(Quant*) override {return nullptr;};
     Term* visit(Op*) override;

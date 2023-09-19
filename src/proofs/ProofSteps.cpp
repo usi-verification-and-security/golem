@@ -567,11 +567,8 @@ void StepHandler::notLhsPrimaryBranchSteps(const std::shared_ptr<Term>& simplifi
 
     //Simplifying from bottom up applying congruence to carry information
 
-    GetLocalParentBranchVisitor getLocalParentBranchVisitor(currTerm->accept(&helperVisitor));
-    Term* localParentBranch = currTerm->accept(&getLocalParentBranchVisitor);   //Getting the parent branch of the current term for simplification
-
-    SimplifyVisitor simplifyLocalParentBranchVisitor(simplification, localParentBranch->accept(&helperVisitor));
-    std::shared_ptr<Term> localParentBranchSimplified = localParentBranch->accept(&simplifyLocalParentBranchVisitor);   //Simplifying said parent branch
+    Term* localParentBranch = currTerm->accept(&helperVisitor);
+    std::shared_ptr<Term> localParentBranchSimplified;
 
     IsPrimaryBranchVisitor localIsPrimary(localParentBranch);  //Checking if the local parent is also a primary branch
 
@@ -579,28 +576,29 @@ void StepHandler::notLhsPrimaryBranchSteps(const std::shared_ptr<Term>& simplifi
 
     //Loop to start carrying the simplification from the bottom up
     while (true) {
+
+        GetLocalParentBranchVisitor getLocalParentBranchVisitor(localParentBranch);
+        localParentBranch = currTerm->accept(&getLocalParentBranchVisitor);   //Getting the parent branch of the current term for simplification
+
+        SimplifyVisitor simplifyLocalParentBranchVisitor(simplification, localParentBranch->accept(&helperVisitor));
+        localParentBranchSimplified = localParentBranch->accept(&simplifyLocalParentBranchVisitor);   //Simplifying said parent branch
+
         notifyObservers(Step(currStep, Step::STEP,
                              packClause(std::make_shared<Op>("=", packClause(localParentBranch->accept(&fakeInstantiation), localParentBranchSimplified))),
                              "cong", std::vector<int>{currStep-1}));
 
         currStep++;
 
-        GetLocalParentBranchVisitor newGetLocalParentBranchVisitor(localParentBranch);
+        getLocalParentBranchVisitor.setOperation(localParentBranch);
 
         //If we reached the top, break the loop
-        if (currTerm->accept(&localIsPrimary) or (std::dynamic_pointer_cast<Op> (currTerm)->getArgs()[0]->accept(&printVisitor) == currTerm->accept(&newGetLocalParentBranchVisitor)->accept(&printVisitor))) {
+        if (currTerm->accept(&localIsPrimary) or (std::dynamic_pointer_cast<Op> (currTerm)->getArgs()[0]->accept(&printVisitor) == currTerm->accept(&getLocalParentBranchVisitor)->accept(&printVisitor))) {
             break;
         }
-
-        //If not, get new local parent and keep looping
-        localParentBranch = currTerm->accept(&newGetLocalParentBranchVisitor);
-        SimplifyVisitor newSimplifyLocalParentBranchVisitor(simplification, localParentBranch->accept(&helperVisitor));
-        localParentBranchSimplified = localParentBranch->accept(&newSimplifyLocalParentBranchVisitor);
     }
 
     //If there was no primary branch before this, save it as the original
     if (originalLhsPrimaryBranch == nullptr) {
-        std::vector<std::pair<std::string, std::string>> emptypair;
         transitivityStep = currStep-1;
         originalLhsPrimaryBranch = localParentBranch->accept(&fakeInstantiation);
     } else {

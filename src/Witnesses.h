@@ -151,9 +151,8 @@ public:
     ValidityWitness && getValidityWitness() && { assert(answer == VerificationAnswer::SAFE); return std::move(std::get<ValidityWitness>(witness)); }
     InvalidityWitness && getInvalidityWitness() && { assert(answer == VerificationAnswer::UNSAFE); return std::move(std::get<InvalidityWitness>(witness)); }
 
-    void printWitness(std::ostream & out, Logic & logic) const;
-    void printWitness_(std::ostream & out, Logic & logic, ChcDirectedHyperGraph const & originalGraph, std::vector<std::shared_ptr<Term>> originalAssertions,
-                       Normalizer::Equalities const & normalizingEqualities) const;
+    void printWitness(std::ostream & out, Logic & logic, ChcDirectedHyperGraph const & originalGraph, std::vector<std::shared_ptr<Term>> originalAssertions,
+                       Normalizer::Equalities const & normalizingEqualities, const std::string& format) const;
 };
 
 struct TransitionSystemVerificationResult {

@@ -472,6 +472,8 @@ std::shared_ptr<Term> OperateVisitor::visit(Op* term){
            return std::make_shared<Terminal>(result.floor().get_str(), Term::INT);
         }
     }
+
+    return std::make_shared<Terminal>("Error", Term::UNDECLARED);
 }
 
 std::shared_ptr<Term> OperateLetTermVisitor::visit(Terminal* term){
@@ -522,11 +524,11 @@ Term* GetLocalParentBranchVisitor::visit(Op* term){
     for (auto arg : args) {
         if (operation == arg.get()){
             return term;
-        } else if (arg->accept(&printVisitor).find(operation->accept(&printVisitor)) != std::string::npos) {
-             Term* potential = arg->accept(this);
-             if (potential != nullptr) {
+        } else {
+            Term* potential = arg->accept(this);
+            if (potential != nullptr) {
                return potential;
-             }
+            }
         }
     }
 
@@ -620,7 +622,7 @@ Term* SimplifyHelperVisitor::visit(Op* term) {
         }
     }
 
-    std::make_shared<Terminal>("No Possible Simplification", Term::UNDECLARED).get();
+    return std::make_shared<Terminal>("No Possible Simplification", Term::UNDECLARED).get();
 
 }
 

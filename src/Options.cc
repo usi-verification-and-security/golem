@@ -22,6 +22,7 @@ const std::string Options::LRA_ITP_ALG = "lra-itp-algorithm";
 const std::string Options::FORCED_COVERING = "forced-covering";
 const std::string Options::VERBOSE = "verbose";
 const std::string Options::TPA_USE_QE = "tpa.use-qe";
+const std::string Options::PROOF_FORMAT = "proof-format";
 
 namespace{
 
@@ -42,6 +43,10 @@ void printUsage() {
         "                               tpa - Transition Power Abstraction (only transition systems)\n"
         "--validate                 Internally validate computed solution\n"
         "--print-witness            Print computed solution\n"
+        "--proof-format <name>      Proof format to use; supported formats:\n"
+        "                               legacy (default) - golem's original proof format\n"
+        "                               intermediate - intermediate proof format (includes variable instantiation)\n"
+        "                               alethe (verifiable) - alethe proof format\n"
         "-v                         Increase verbosity (can be applied multiple times)\n"
         "-i,--input <file>          Input file (option not required)\n"
         ;
@@ -57,13 +62,13 @@ Options CommandLineParser::parse(int argc, char ** argv) {
 
     Options res;
     int validate = 0;
-    int printWitness = 0;
     int computeWitness = 0;
     int lraItpAlg = 0;
     int forcedCovering = 0;
     int verbose = 0;
     int tpaUseQE = 0;
     int printVersion = 0;
+    int printWitness = 0;
 
     struct option long_options[] =
         {
@@ -76,16 +81,18 @@ Options CommandLineParser::parse(int argc, char ** argv) {
             {Options::VALIDATE_RESULT.c_str(), no_argument, &validate, 1},
             {Options::PRINT_WITNESS.c_str(), no_argument, &printWitness, 1},
             {Options::COMPUTE_WITNESS.c_str(), optional_argument, &computeWitness, 1},
-            {Options::LRA_ITP_ALG.c_str(), required_argument, &lraItpAlg, 0},
+            {Options::LRA_ITP_ALG.c_str(), required_argument, &lraItpAlg, 1},
             {Options::FORCED_COVERING.c_str(), optional_argument, &forcedCovering, 1},
             {Options::VERBOSE.c_str(), optional_argument, &verbose, 1},
             {Options::TPA_USE_QE.c_str(), optional_argument, &tpaUseQE, 1},
+            {Options::PROOF_FORMAT.c_str(), required_argument, nullptr, 'p'},
             {0, 0, 0, 0}
         };
+
     while (true) {
         int option_index = 0;
 
-        int c = getopt_long(argc, argv, "e:l:i:f:vh", long_options, &option_index);
+        int c = getopt_long(argc, argv, "e:l:i:f:vh:p", long_options, &option_index);
         if (c == -1) { break; }
 
         switch (c) {
@@ -127,6 +134,9 @@ Options CommandLineParser::parse(int argc, char ** argv) {
             case 'f':
                 res.addOption(Options::ANALYSIS_FLOW, optarg);
                 break;
+            case 'p':
+                res.addOption(Options::PROOF_FORMAT, optarg);
+                break;
             case 'v':
                 ++verbose;
                 break;
@@ -149,10 +159,7 @@ Options CommandLineParser::parse(int argc, char ** argv) {
     if (validate) {
         res.addOption(Options::VALIDATE_RESULT, "true");
     }
-    if (printWitness) {
-        res.addOption(Options::PRINT_WITNESS, "true");
-    }
-    if (validate || printWitness || computeWitness) {
+    if (validate || computeWitness || printWitness) {
         res.addOption(Options::COMPUTE_WITNESS, "true");
     }
     if (forcedCovering) {
@@ -160,6 +167,9 @@ Options CommandLineParser::parse(int argc, char ** argv) {
     }
     if (tpaUseQE) {
         res.addOption(Options::TPA_USE_QE, "true");
+    }
+    if (printWitness) {
+        res.addOption(Options::PRINT_WITNESS, std::to_string(printWitness));
     }
     res.addOption(Options::LRA_ITP_ALG, std::to_string(lraItpAlg));
     res.addOption(Options::VERBOSE, std::to_string(verbose));

@@ -77,7 +77,6 @@ int main( int argc, char * argv[] ) {
             exit(1);
         }
     };
-
     if (inputFile.empty()) {
         error("No input file provided");
     }
@@ -97,7 +96,7 @@ int main( int argc, char * argv[] ) {
             int rval = smt2newparse(&context);
             if (rval != 0) {
                 fclose(fin);
-                error("Eror when parsing input file");
+                error("Error when parsing input file");
             }
             auto logicStr = options.hasOption(Options::LOGIC) ? options.getOption(Options::LOGIC) : tryDetectLogic(context.getRoot());
             auto logic = logicFromString(logicStr);
@@ -108,6 +107,12 @@ int main( int argc, char * argv[] ) {
         else {
             fclose(fin);
             error(inputFile + " extension not recognized. File must be in smt-lib2 format (extension .smt2)");
+        }
+    }
+    if(options.hasOption(Options::PROOF_FORMAT)) {
+        auto formatStr = options.getOption(Options::PROOF_FORMAT);
+        if (!(formatStr == "alethe" or formatStr == "intermediate" or formatStr == "legacy")) {
+            error("Unsupported proof format");
         }
     }
 }

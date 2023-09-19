@@ -10,24 +10,8 @@
 #include "utils/SmtSolver.h"
 #include <memory>
 
-void VerificationResult::printWitness(std::ostream & out, Logic & logic) const {
-    if (not hasWitness()) { return; }
-    switch (answer) {
-        case VerificationAnswer::SAFE: {
-            getValidityWitness().print(out, logic);
-            return;
-        }
-        case VerificationAnswer::UNSAFE: {
-            getInvalidityWitness().print(out, logic);
-            return;
-        }
-        default:
-            return;
-    }
-}
-
-void VerificationResult::printWitness_(std::ostream & out, Logic & logic, const ChcDirectedHyperGraph & originalGraph,
-                                       std::vector<std::shared_ptr<Term>> originalAssertions, Normalizer::Equalities const & normalizingEqualities) const {
+void VerificationResult::printWitness(std::ostream & out, Logic & logic, const ChcDirectedHyperGraph & originalGraph,
+                                       std::vector<std::shared_ptr<Term>> originalAssertions, Normalizer::Equalities const & normalizingEqualities, const std::string& format) const {
 
     if (not hasWitness()) { return; }
     switch (answer) {
@@ -36,16 +20,22 @@ void VerificationResult::printWitness_(std::ostream & out, Logic & logic, const 
         }
         case VerificationAnswer::UNSAFE: {
 
-            StepHandler stepHandler(getInvalidityWitness().getDerivation(), originalAssertions,
-                                    normalizingEqualities, out,
-                                    logic, originalGraph);
-
-            IntermediatePrintObserver alethePrintObserver(out);
-
-            stepHandler.registerObserver(&alethePrintObserver);
-
-            stepHandler.buildIntermediateProof();
-
+            if (format == "legacy") {
+                getInvalidityWitness().print(out, logic);
+            } else {
+                StepHandler stepHandler(getInvalidityWitness().getDerivation(), originalAssertions,
+                                        normalizingEqualities, out,
+                                        logic, originalGraph);
+                if (format == "alethe") {
+                    AlethePrintObserver alethePrintObserver(out);
+                    stepHandler.registerObserver(&alethePrintObserver);
+                    stepHandler.buildAletheProof();
+                } else if (format == "intermediate") {
+                    IntermediatePrintObserver intermediatePrintObserver(out);
+                    stepHandler.registerObserver(&intermediatePrintObserver);
+                    stepHandler.buildIntermediateProof();
+                }
+            }
             return;
         }
         default:
