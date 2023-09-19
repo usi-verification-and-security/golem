@@ -80,9 +80,11 @@ VerificationResult TPAEngine::solve(const ChcDirectedGraph & graph) {
                 throw std::logic_error("Unreachable!");
         }
     }
-//    else if (isTransitionSystemDAG(graph)) {
-//        return solveTransitionSystemGraph(graph);
-//    }
+    else if (isTransitionSystemDAG(graph)) {
+        return solveTransitionSystemGraph(graph);
+    } else {
+        return VerificationResult(VerificationAnswer::UNKNOWN);
+    }
     // Translate CHCGraph into transition system
     SingleLoopTransformation transformation;
     auto [ts, backtranslator] = transformation.transform(graph);
