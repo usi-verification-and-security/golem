@@ -592,7 +592,7 @@ void StepHandler::notLhsPrimaryBranchSteps(const std::shared_ptr<Term>& simplifi
         getLocalParentBranchVisitor.setOperation(localParentBranch);
 
         //If we reached the top, break the loop
-        if (currTerm->accept(&localIsPrimary) or (std::dynamic_pointer_cast<Op> (currTerm)->getArgs()[0]->accept(&printVisitor) == currTerm->accept(&getLocalParentBranchVisitor)->accept(&printVisitor))) {
+        if (std::dynamic_pointer_cast<Op>(currTerm)->getArgs()[0].get() == currTerm->accept(&getLocalParentBranchVisitor)) {
             break;
         }
     }
