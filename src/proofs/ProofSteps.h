@@ -71,6 +71,8 @@ class StepHandler {
 
     int currStep = 0;
     int transitivityStep;
+    int renamingIndex = 0;
+    bool reNamed = false;
 
     std::vector<int> stepsToReuse = {-1, -1, -1};
 
