@@ -71,6 +71,7 @@ class StepHandler {
 
     int currStep = 0;
     int transitivityStep;
+    int trueRuleStep = 0;
 
     std::shared_ptr<Term> implicationRHS;
     std::shared_ptr<Term> implicationLHS;

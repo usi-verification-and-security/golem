@@ -495,8 +495,24 @@ void StepHandler::noCongRequiredSteps(std::vector<int> requiredMP, int implicati
 
         if (simplification->accept(&printVisitor) == "true") {
 
-            notifyObservers(Step(currStep, Step::STEP,
-                                 packClause(simplification), "true"));
+            if (trueRuleStep == 0) {
+                notifyObservers(Step(currStep, Step::STEP,
+                                     packClause(simplification), "true"));
+
+                trueRuleStep = currStep;
+
+                currStep++;
+
+                notifyObservers(Step(currStep, Step::STEP,
+                                     packClause(implicationLHS),
+                                     "resolution", std::vector<int>{currStep-2, currStep-1}));
+
+
+            } else {
+                notifyObservers(Step(currStep, Step::STEP,
+                                     packClause(implicationLHS),
+                                     "resolution", std::vector<int>{currStep-1, trueRuleStep}));
+            }
 
             currStep++;
 
@@ -661,14 +677,24 @@ void StepHandler::conjunctionSimplification(std::vector<int> requiredMP, const s
 
     if (simplification->accept(&printVisitor) == "true"){
 
-        notifyObservers(Step(currStep, Step::STEP,
-                             packClause(simplification), "true"));
+        if (trueRuleStep == 0) {
+            notifyObservers(Step(currStep, Step::STEP,
+                                 packClause(simplification), "true"));
 
-        currStep++;
+            trueRuleStep = currStep;
 
-        notifyObservers(Step(currStep, Step::STEP,
-                             packClause(implicationLHS),
-                             "resolution", std::vector<int>{currStep-2, currStep-1}));
+            currStep++;
+
+            notifyObservers(Step(currStep, Step::STEP,
+                                 packClause(implicationLHS),
+                                 "resolution", std::vector<int>{currStep-2, currStep-1}));
+
+
+        } else {
+            notifyObservers(Step(currStep, Step::STEP,
+                                 packClause(implicationLHS),
+                                 "resolution", std::vector<int>{currStep-1, trueRuleStep}));
+        }
 
         currStep++;
 
