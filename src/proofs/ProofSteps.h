@@ -71,7 +71,8 @@ class StepHandler {
 
     int currStep = 0;
     int transitivityStep;
-    int trueRuleStep = 0;
+
+    std::vector<int> stepsToReuse = {-1, -1, -1};
 
     std::shared_ptr<Term> implicationRHS;
     std::shared_ptr<Term> implicationLHS;
@@ -113,6 +114,8 @@ public :
     void notLhsPrimaryBranchSteps(const std::shared_ptr<Term>& simplification);
     void conjunctionSimplification(std::vector<int> requiredMP, const std::shared_ptr<Term>& simplification,
                                   const std::shared_ptr<Term>& termToSimplify, std::string simplificationRule, int implicationStep, bool cong = true);
+
+    int stepReusage(std::shared_ptr<Term> term);
 
     void registerObserver(Observer* observer) {
         observers.push_back(observer);

@@ -255,9 +255,11 @@ void StepHandler::buildAletheProof() {
                 IsPrimaryBranchVisitor isPrimaryBranchVisitor(currTerm->accept(&helperVisitor));  //Checking if the current term is a primary branch / branch of height 1
                 bool isPrimaryBranch = currTerm->accept(&isPrimaryBranchVisitor);
 
-                //Apply the simplification rule
-                notifyObservers(Step(currStep, Step::STEP,
-                                     packClause(std::make_shared<Op>("=", packClause(termToSimplify, simplification))), simplificationRule));
+                if (!stepReusage(termToSimplify)) {
+                    //Apply the simplification rule
+                    notifyObservers(Step(currStep, Step::STEP,
+                                         packClause(std::make_shared<Op>("=", packClause(termToSimplify, simplification))), simplificationRule));
+                }
 
                 currStep++;
 
@@ -269,13 +271,22 @@ void StepHandler::buildAletheProof() {
                 }else {
                     //If it is a primary branch
 
+                    int reUse = stepReusage(termToSimplify);
+
                     //Check if the original primary branch has been applied for transitivity before
                     if (originalLhsPrimaryBranch != nullptr) {
 
-                        //Pass along the information recall the transitivity state one last time
-                        notifyObservers(Step(currStep, Step::STEP,
-                                             packClause(std::make_shared<Op>("=", packClause(originalLhsPrimaryBranch, simplification))),
-                                             "trans", std::vector<int>{transitivityStep, currStep-1}));
+                        if (reUse) {
+                            //Pass along the information recall the transitivity state one last time
+                            notifyObservers(Step(currStep, Step::STEP,
+                                                 packClause(std::make_shared<Op>("=", packClause(originalLhsPrimaryBranch, simplification))),
+                                                 "trans", std::vector<int>{transitivityStep, stepsToReuse[reUse-1]}));
+                        } else {
+                            //Pass along the information recall the transitivity state one last time
+                            notifyObservers(Step(currStep, Step::STEP,
+                                                 packClause(std::make_shared<Op>("=", packClause(originalLhsPrimaryBranch, simplification))),
+                                                 "trans", std::vector<int>{transitivityStep, currStep-1}));
+                        }
 
                         currStep++;
 
@@ -495,26 +506,7 @@ void StepHandler::noCongRequiredSteps(std::vector<int> requiredMP, int implicati
 
         if (simplification->accept(&printVisitor) == "true") {
 
-            if (trueRuleStep == 0) {
-                notifyObservers(Step(currStep, Step::STEP,
-                                     packClause(simplification), "true"));
-
-                trueRuleStep = currStep;
-
-                currStep++;
-
-                notifyObservers(Step(currStep, Step::STEP,
-                                     packClause(implicationLHS),
-                                     "resolution", std::vector<int>{currStep-2, currStep-1}));
-
-
-            } else {
-                notifyObservers(Step(currStep, Step::STEP,
-                                     packClause(implicationLHS),
-                                     "resolution", std::vector<int>{currStep-1, trueRuleStep}));
-            }
-
-            currStep++;
+            stepReusage(simplification);
 
             notifyObservers(Step(currStep, Step::STEP,
                                  packClause(implicationLHS),
@@ -590,6 +582,8 @@ void StepHandler::notLhsPrimaryBranchSteps(const std::shared_ptr<Term>& simplifi
 
     InstantiateVisitor fakeInstantiation;
 
+    int reUse = stepReusage(currTerm->accept(&simplifyLocatorVisitor));
+
     //Loop to start carrying the simplification from the bottom up
     while (true) {
 
@@ -599,9 +593,16 @@ void StepHandler::notLhsPrimaryBranchSteps(const std::shared_ptr<Term>& simplifi
         SimplifyVisitor simplifyLocalParentBranchVisitor(simplification, localParentBranch->accept(&helperVisitor));
         localParentBranchSimplified = localParentBranch->accept(&simplifyLocalParentBranchVisitor);   //Simplifying said parent branch
 
-        notifyObservers(Step(currStep, Step::STEP,
-                             packClause(std::make_shared<Op>("=", packClause(localParentBranch->accept(&fakeInstantiation), localParentBranchSimplified))),
-                             "cong", std::vector<int>{currStep-1}));
+        if (reUse) {
+            notifyObservers(Step(currStep, Step::STEP,
+                                 packClause(std::make_shared<Op>("=", packClause(localParentBranch->accept(&fakeInstantiation), localParentBranchSimplified))),
+                                 "cong", std::vector<int>{stepsToReuse[reUse-1]}));
+            reUse = 0;
+        } else {
+            notifyObservers(Step(currStep, Step::STEP,
+                                 packClause(std::make_shared<Op>("=", packClause(localParentBranch->accept(&fakeInstantiation), localParentBranchSimplified))),
+                                 "cong", std::vector<int>{currStep-1}));
+        }
 
         currStep++;
 
@@ -677,26 +678,7 @@ void StepHandler::conjunctionSimplification(std::vector<int> requiredMP, const s
 
     if (simplification->accept(&printVisitor) == "true"){
 
-        if (trueRuleStep == 0) {
-            notifyObservers(Step(currStep, Step::STEP,
-                                 packClause(simplification), "true"));
-
-            trueRuleStep = currStep;
-
-            currStep++;
-
-            notifyObservers(Step(currStep, Step::STEP,
-                                 packClause(implicationLHS),
-                                 "resolution", std::vector<int>{currStep-2, currStep-1}));
-
-
-        } else {
-            notifyObservers(Step(currStep, Step::STEP,
-                                 packClause(implicationLHS),
-                                 "resolution", std::vector<int>{currStep-1, trueRuleStep}));
-        }
-
-        currStep++;
+        stepReusage(simplification);
 
     } else {
 
@@ -815,4 +797,48 @@ std::vector<std::pair<std::string, std::string>> StepHandler::getInstPairs(int s
         return std::make_pair(varName, logic.printTerm(varVal.val));
     });
     return res;
+}
+
+int StepHandler::stepReusage(std::shared_ptr<Term> term) {
+
+    std::string strTerm = term->accept(&printVisitor);
+
+    if (strTerm == "(not true)") {
+        if (stepsToReuse[0] == -1) {
+            stepsToReuse[0] = currStep;
+            return 0;
+        } else {
+            return 1;
+        }
+    } else if (strTerm == "(not false)") {
+        if (stepsToReuse[1] == -1) {
+            stepsToReuse[1] = currStep;
+            return 0;
+        } else {
+            return 2;
+        }
+    } else if (strTerm == "true") {
+        if (stepsToReuse[2] == -1) {
+            notifyObservers(Step(currStep, Step::STEP,
+                                 packClause(term), "true"));
+
+            stepsToReuse[2] = currStep;
+
+            currStep++;
+
+            notifyObservers(Step(currStep, Step::STEP,
+                                 packClause(implicationLHS),
+                                 "resolution", std::vector<int>{currStep-2, currStep-1}));
+
+
+        } else {
+            notifyObservers(Step(currStep, Step::STEP,
+                                 packClause(implicationLHS),
+                                 "resolution", std::vector<int>{currStep-1, stepsToReuse[2]}));
+        }
+
+        currStep++;
+        return 3;
+    }
+    return 0;
 }
