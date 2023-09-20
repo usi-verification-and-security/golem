@@ -593,6 +593,8 @@ void StepHandler::notLhsPrimaryBranchSteps(const std::shared_ptr<Term>& simplifi
 
     IsPrimaryBranchVisitor localIsPrimary(localParentBranch);  //Checking if the local parent is also a primary branch
 
+    bool localAndPrimary = currTerm->accept(&localIsPrimary);
+
     InstantiateVisitor fakeInstantiation;
 
     int reUse = stepReusage(currTerm->accept(&simplifyLocatorVisitor));
@@ -622,7 +624,7 @@ void StepHandler::notLhsPrimaryBranchSteps(const std::shared_ptr<Term>& simplifi
         getLocalParentBranchVisitor.setOperation(localParentBranch);
 
         //If we reached the top, break the loop
-        if (std::dynamic_pointer_cast<Op>(currTerm)->getArgs()[0].get() == currTerm->accept(&getLocalParentBranchVisitor)) {
+        if (localAndPrimary or std::dynamic_pointer_cast<Op>(currTerm)->getArgs()[0].get() == currTerm->accept(&getLocalParentBranchVisitor)) {
             break;
         }
     }
