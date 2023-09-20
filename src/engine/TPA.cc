@@ -59,29 +59,30 @@ VerificationResult TPAEngine::solve(ChcDirectedHyperGraph const & graph) {
 }
 
 VerificationResult TPAEngine::solve(const ChcDirectedGraph & graph) {
-    if (isTrivial(graph)) {
-        return solveTrivial(graph); }
-    if (isTransitionSystem(graph)) {
-        auto ts = toTransitionSystem(graph);
-        auto solver = mkSolver();
-        auto res = solver->solveTransitionSystem(*ts);
-        if (not options.hasOption(Options::COMPUTE_WITNESS)) { return VerificationResult(res); }
-        switch (res) {
-            case VerificationAnswer::UNSAFE:
-                return VerificationResult(res, computeInvalidityWitness(graph, solver->getTransitionStepCount()));
-            case VerificationAnswer::SAFE: {
-                PTRef inductiveInvariant = solver->getInductiveInvariant();
-                if (inductiveInvariant == PTRef_Undef) { return VerificationResult(res); }
-                // std::cout << "TS invariant: " << logic.printTerm(inductiveInvariant) << std::endl;
-                return VerificationResult(res, computeValidityWitness(graph, *ts, inductiveInvariant));
-            }
-            case VerificationAnswer::UNKNOWN:
-            default:
-                assert(false);
-                throw std::logic_error("Unreachable!");
-        }
-    }
-    else if (isTransitionSystemDAG(graph)) {
+//    if (isTrivial(graph)) {
+//        return solveTrivial(graph); }
+//    if (isTransitionSystem(graph)) {
+//        auto ts = toTransitionSystem(graph);
+//        auto solver = mkSolver();
+//        auto res = solver->solveTransitionSystem(*ts);
+//        if (not options.hasOption(Options::COMPUTE_WITNESS)) { return VerificationResult(res); }
+//        switch (res) {
+//            case VerificationAnswer::UNSAFE:
+//                return VerificationResult(res, computeInvalidityWitness(graph, solver->getTransitionStepCount()));
+//            case VerificationAnswer::SAFE: {
+//                PTRef inductiveInvariant = solver->getInductiveInvariant();
+//                if (inductiveInvariant == PTRef_Undef) { return VerificationResult(res); }
+//                // std::cout << "TS invariant: " << logic.printTerm(inductiveInvariant) << std::endl;
+//                return VerificationResult(res, computeValidityWitness(graph, *ts, inductiveInvariant));
+//            }
+//            case VerificationAnswer::UNKNOWN:
+//            default:
+//                assert(false);
+//                throw std::logic_error("Unreachable!");
+//        }
+//    }
+//    else
+        if (isTransitionSystemDAG(graph)) {
 //        return solveTransitionSystemGraph(graph);
 
     // Translate CHCGraph into transition system
