@@ -296,6 +296,7 @@ PTRef ChcInterpreterContext::parseTerm(const ASTNode & termNode) {
         class QuantifierHack {
             std::size_t counter = 0;
             LetRecords & rec;
+
         public:
             QuantifierHack(LetRecords & rec) : rec(rec) {}
             ~QuantifierHack() {

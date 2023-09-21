@@ -24,7 +24,6 @@ else(OpenSMT_FOUND)
     add_library(OpenSMT::OpenSMT ALIAS OpenSMT-static)
 endif(OpenSMT_FOUND)
 
-
 add_library(golem_lib OBJECT ""
         proofs/Term.h
         proofs/Term.cpp
@@ -50,6 +49,10 @@ target_sources(golem_lib
     PRIVATE Validator.cc
     PRIVATE Normalizer.cc
     PRIVATE Witnesses.cc
+    PRIVATE proofs/Term.h
+    PRIVATE proofs/Term.cpp
+    PRIVATE proofs/ProofSteps.h
+    PRIVATE proofs/ProofSteps.cpp
     PRIVATE ModelBasedProjection.cc
     PRIVATE QuantifierElimination.cc
     PRIVATE graph/ChcGraph.cc

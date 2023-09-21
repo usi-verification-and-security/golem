@@ -98,7 +98,7 @@ InvalidityWitness InvalidityWitness::fromErrorPath(ErrorPath const & errorPath, 
     assert(vertexPredicates.size() == edgeIds.size() + 1);
     std::size_t stepCounter = 0;
     // Make the `true` the first step of the derivation
-    derivation.addDerivationStep({.index = stepCounter++, .premises = {},.derivedFact = logic.getTerm_true(), .clauseId = {static_cast<id_t>(-1)}});
+    derivation.addDerivationStep({.index = stepCounter++, .premises = {}, .derivedFact = logic.getTerm_true(), .clauseId = {static_cast<id_t>(-1)}});
     for (std::size_t i = 0; i < edgeIds.size(); ++i) {
         auto id = edgeIds[i];
         DerivationStep step;
@@ -129,7 +129,6 @@ void InvalidityWitness::print(std::ostream & out, Logic & logic) const {
             out << " -> ";
             for (auto index : step.premises) {
                 out << ' ' << index;
-
             }
             out << '\n';
         }

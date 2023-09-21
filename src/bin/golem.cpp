@@ -109,7 +109,7 @@ int main( int argc, char * argv[] ) {
             error(inputFile + " extension not recognized. File must be in smt-lib2 format (extension .smt2)");
         }
     }
-    if(options.hasOption(Options::PROOF_FORMAT)) {
+    if (options.hasOption(Options::PROOF_FORMAT)) {
         auto formatStr = options.getOption(Options::PROOF_FORMAT);
         if (!(formatStr == "alethe" or formatStr == "intermediate" or formatStr == "legacy")) {
             error("Unsupported proof format");

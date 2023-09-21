@@ -1,6 +1,9 @@
-//
-// Created by mambo on 8/15/23.
-//
+/*
+* Copyright (c) 2023, Matias Barandiaran <matias.barandiaran03@gmail.com>
+*
+* SPDX-License-Identifier: MIT
+ */
+
 #include "FastRational.h"
 #include "Term.h"
 #include <memory>

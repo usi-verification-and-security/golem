@@ -62,13 +62,13 @@ Options CommandLineParser::parse(int argc, char ** argv) {
 
     Options res;
     int validate = 0;
+    int printWitness = 0;
     int computeWitness = 0;
     int lraItpAlg = 0;
     int forcedCovering = 0;
     int verbose = 0;
     int tpaUseQE = 0;
     int printVersion = 0;
-    int printWitness = 0;
 
     struct option long_options[] =
         {
@@ -81,7 +81,7 @@ Options CommandLineParser::parse(int argc, char ** argv) {
             {Options::VALIDATE_RESULT.c_str(), no_argument, &validate, 1},
             {Options::PRINT_WITNESS.c_str(), no_argument, &printWitness, 1},
             {Options::COMPUTE_WITNESS.c_str(), optional_argument, &computeWitness, 1},
-            {Options::LRA_ITP_ALG.c_str(), required_argument, &lraItpAlg, 1},
+            {Options::LRA_ITP_ALG.c_str(), required_argument, &lraItpAlg, 0},
             {Options::FORCED_COVERING.c_str(), optional_argument, &forcedCovering, 1},
             {Options::VERBOSE.c_str(), optional_argument, &verbose, 1},
             {Options::TPA_USE_QE.c_str(), optional_argument, &tpaUseQE, 1},
@@ -92,7 +92,7 @@ Options CommandLineParser::parse(int argc, char ** argv) {
     while (true) {
         int option_index = 0;
 
-        int c = getopt_long(argc, argv, "e:l:i:f:vh:p", long_options, &option_index);
+        int c = getopt_long(argc, argv, "e:l:i:f:vhp:", long_options, &option_index);
         if (c == -1) { break; }
 
         switch (c) {
@@ -159,6 +159,9 @@ Options CommandLineParser::parse(int argc, char ** argv) {
     if (validate) {
         res.addOption(Options::VALIDATE_RESULT, "true");
     }
+    if (printWitness) {
+        res.addOption(Options::PRINT_WITNESS, "true");
+    }
     if (validate || computeWitness || printWitness) {
         res.addOption(Options::COMPUTE_WITNESS, "true");
     }
@@ -167,9 +170,6 @@ Options CommandLineParser::parse(int argc, char ** argv) {
     }
     if (tpaUseQE) {
         res.addOption(Options::TPA_USE_QE, "true");
-    }
-    if (printWitness) {
-        res.addOption(Options::PRINT_WITNESS, std::to_string(printWitness));
     }
     res.addOption(Options::LRA_ITP_ALG, std::to_string(lraItpAlg));
     res.addOption(Options::VERBOSE, std::to_string(verbose));

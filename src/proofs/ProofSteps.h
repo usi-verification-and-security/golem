@@ -1,6 +1,8 @@
-//
-// Created by mambo on 8/29/23.
-//
+/*
+* Copyright (c) 2023, Matias Barandiaran <matias.barandiaran03@gmail.com>
+*
+* SPDX-License-Identifier: MIT
+ */
 
 #ifndef GOLEM_ALETHETERMS_H
 #define GOLEM_ALETHETERMS_H

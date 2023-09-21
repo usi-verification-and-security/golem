@@ -1,6 +1,9 @@
-//
-// Created by mambo on 8/14/23.
-//
+/*
+* Copyright (c) 2023, Matias Barandiaran <matias.barandiaran03@gmail.com>
+*
+* SPDX-License-Identifier: MIT
+ */
+
 #ifndef TERM_H  // Replace TERM_H with the actual name of your header file
 #define TERM_H
 #include <utility>
