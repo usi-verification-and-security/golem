@@ -24,11 +24,7 @@ else(OpenSMT_FOUND)
     add_library(OpenSMT::OpenSMT ALIAS OpenSMT-static)
 endif(OpenSMT_FOUND)
 
-add_library(golem_lib OBJECT ""
-        proofs/Term.h
-        proofs/Term.cpp
-        proofs/ProofSteps.h
-        proofs/ProofSteps.cpp)
+add_library(golem_lib OBJECT "")
 
 target_link_libraries(golem_lib PUBLIC OpenSMT::OpenSMT)
 
