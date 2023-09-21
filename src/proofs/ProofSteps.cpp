@@ -364,6 +364,8 @@ void StepHandler::instantiationSteps(int i) {
 
     auto const & step = derivation[i];
 
+    std::shared_ptr<Term> renamedTerm = std::make_shared<Terminal>("@a"+std::to_string(step.clauseId.id), Terminal::UNDECLARED);
+
     std::shared_ptr<Term> unusedRem = currTerm->accept(&removeUnusedVisitor);
 
     int quantStep = static_cast<int>(step.clauseId.id);
@@ -375,13 +377,13 @@ void StepHandler::instantiationSteps(int i) {
     if (unusedRem->accept(&printVisitor) != currTerm->accept(&printVisitor)) {
 
         notifyObservers(Step(currStep, Step::STEP,
-                             packClause(std::make_shared<Op>("=", packClause(currTerm, unusedRem))),
+                             packClause(std::make_shared<Op>("=", packClause(renamedTerm, unusedRem))),
                              "qnt_rm_unused"));
 
         currStep++;
 
         notifyObservers(Step(currStep, Step::STEP,
-                             packClause(std::make_shared<Op>("not", packClause(currTerm)), unusedRem),
+                             packClause(std::make_shared<Op>("not", packClause(renamedTerm)), unusedRem),
                              "equiv1", std::vector<int>{currStep-1}));
 
         currStep++;
@@ -393,19 +395,20 @@ void StepHandler::instantiationSteps(int i) {
         currStep++;
 
         currTerm = unusedRem;
+        renamedTerm = unusedRem;
         quantStep = currStep-1;
     }
 
     if (not instPairs.empty()) {
 
         notifyObservers(Step(currStep, Step::STEP,
-                             packClause(std::make_shared<Op>("or", packClause(std::make_shared<Op>("not", packClause(currTerm)), currTerm->accept(&instantiateVisitor)))),
+                             packClause(std::make_shared<Op>("or", packClause(std::make_shared<Op>("not", packClause(renamedTerm)), currTerm->accept(&instantiateVisitor)))),
                              "forall_inst", instPairs));
 
         currStep++;
 
         notifyObservers(Step(currStep, Step::STEP,
-                             packClause(std::make_shared<Op>("not", packClause(currTerm)), currTerm->accept(&instantiateVisitor)),
+                             packClause(std::make_shared<Op>("not", packClause(renamedTerm)), currTerm->accept(&instantiateVisitor)),
                              "or", std::vector<int>{currStep-1}));
 
         currStep++;
@@ -431,7 +434,7 @@ void StepHandler::assumptionSteps() {
             originalAssertions[i-1] = originalAssertions[i-1]->accept(&simplifyLetTermVisitor);
             potentialLet = originalAssertions[i-1]->accept(&letLocatorVisitor);
         }
-        notifyObservers(Step(currStep, Step::ASSUME, packClause(originalAssertions[i-1])));
+        notifyObservers(Step(currStep, Step::ASSUME, packClause(std::make_shared<Op>("!", packClause(originalAssertions[i-1], std::make_shared<Terminal>(":named @a"+std::to_string(currStep), Terminal::UNDECLARED))))));
 
         currStep++;
     }
