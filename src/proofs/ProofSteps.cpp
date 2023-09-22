@@ -637,12 +637,18 @@ void StepHandler::notLhsPrimaryBranchSteps(std::shared_ptr<Term> const & simplif
         renamingTransIndex++;
     } else {
 
-        auto transLHS = transReNamed ? std::make_shared<Terminal>("@pb" + std::to_string(renamingTransIndex), Terminal::UNDECLARED) : originalLhsPrimaryBranch;
+        std::shared_ptr<Term> transLHS;
+
+        if (transReNamed) {
+            transLHS = std::make_shared<Terminal>("@pb" + std::to_string(renamingTransIndex), Terminal::UNDECLARED);
+        } else {
+            transLHS = std::make_shared<Op>("!", packClause(originalLhsPrimaryBranch, std::make_shared<Terminal>(":named @pb" + std::to_string(renamingTransIndex), Terminal::UNDECLARED)));
+        }
 
         //Pass along the information recall the transitivity state one last time
         notifyObservers(Step(currStep, Step::STEP,
-                             packClause(std::make_shared<Op>("=", packClause(transLHS, simplification))),
-                             "trans", std::vector<int>{transitivityStep, reUse ? stepsToReuse[reUse-1]: currStep-1}));
+                             packClause(std::make_shared<Op>("=", packClause(transLHS, std::make_shared<Terminal>("@cong"+std::to_string(renamingCongIndex-1), Terminal::UNDECLARED)))),
+                             "trans", std::vector<int>{transitivityStep, currStep-1}));
         transReNamed = true;
         transitivityStep = currStep;
         currStep++;
