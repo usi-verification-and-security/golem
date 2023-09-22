@@ -637,6 +637,8 @@ void StepHandler::notLhsPrimaryBranchSteps(std::shared_ptr<Term> const & simplif
             renamingCongIndex++;
         }
 
+        reUse = 0;
+
         currStep++;
 
         if (stop) {
