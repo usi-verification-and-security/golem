@@ -92,7 +92,6 @@ class StepHandler {
     std::shared_ptr<Term> originalLhsPrimaryBranch;
 
     // Visitors
-    PrintVisitor printVisitor;
     SimplifyLocatorVisitor simplifyLocatorVisitor;
     OperateVisitor operateVisitor;
     SimplifyHelperVisitor helperVisitor;

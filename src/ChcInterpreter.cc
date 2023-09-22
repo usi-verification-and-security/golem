@@ -247,7 +247,7 @@ std::shared_ptr<Term> ChcInterpreterContext::ASTtoTerm(const ASTNode & node) {
         if (op == "-" or op == "+") {
             if (args.size() <= 1) {
                 PrintVisitor printVisitor;
-                return std::make_shared<Terminal>("(- " + args[0]->accept(&printVisitor) + ")", Term::INT);
+                return std::make_shared<Terminal>("(- " + args[0]->printTerm() + ")", Term::INT);
             }
         }
         if (isOperator(op)) {

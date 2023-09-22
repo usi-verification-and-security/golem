@@ -10,63 +10,68 @@
 #include <memory>
 #include <string>
 
-std::string PrintVisitor::visit(Terminal * term) {
-    return term->getVal();
+std::string Term::printTerm() {
+    PrintVisitor printVisitor;
+    this->accept(&printVisitor);
+    return printVisitor.getString();
 }
 
-std::string PrintVisitor::visit(Op * term) {
-    std::stringstream ss;
+void PrintVisitor::visit(Terminal * term) {
+    ss << term->getVal();
+}
+
+void PrintVisitor::visit(Op * term) {
     ss << "(" << term->getOp();
     for (const std::shared_ptr<Term> & arg : term->getArgs()) {
-        ss << " " << arg->accept(this);
+        ss << " ";
+        arg->accept(this);
     }
     ss << ")";
-    return ss.str();
 }
 
-std::string PrintVisitor::visit(App * term) {
-    std::stringstream ss;
+void PrintVisitor::visit(App * term) {
     ss << "(" << term->getFun();
     for (const std::shared_ptr<Term> & arg : term->getArgs()) {
-        ss << " " << arg->accept(this);
+        ss << " ";
+        arg->accept(this);
     }
     ss << ")";
-    return ss.str();
 }
 
-std::string PrintVisitor::visit(Quant * term) {
-    std::stringstream ss;
+void PrintVisitor::visit(Quant * term) {
     ss << "(" << term->getQuant() << " (";
     for (int i = 0; i < term->getVars().size(); i++) {
-        ss << "(" << term->getVars()[i]->accept(this) << " " << term->getSorts()[i]->accept(this) << ")";
+        ss << "(";
+        term->getVars()[i]->accept(this);
+        ss <<" ";
+        term->getSorts()[i]->accept(this);
+        ss << ")";
         if (i + 1 != term->getVars().size()) { ss << " "; }
     }
-    ss << ")"
-       << " " << term->getCoreTerm()->accept(this) << ")";
-    return ss.str();
+    ss << ") ";
+    term->getCoreTerm()->accept(this);
+    ss << ")";
 }
 
-std::string PrintVisitor::visit(Let * term) {
-    std::stringstream ss;
+void PrintVisitor::visit(Let * term) {
     auto names = term->getTermNames();
-    ss << "("
-       << "let"
-       << " (";
+    ss << "(let (";
     for (int i = 0; i < names.size(); i++) {
-        ss << "(" << names[i] << " " << term->getDeclarations()[i]->accept(this) << ")";
+        ss << "(" << names[i] << " ";
+        term->getDeclarations()[i]->accept(this);
+        ss << ")";
         if (i + 1 != names.size()) { ss << " "; }
     }
-    ss << ")"
-       << " " << term->getApplication()->accept(this) << ")";
-    return ss.str();
+    ss << ") ";
+    term->getApplication()->accept(this);
+    ss << ")";
 }
 
 std::string Op::simplifyRule() {
     std::string op = operation;
-    PrintVisitor printVisitor;
     if (op == "=") {
-        if ((args[0]->accept(&printVisitor).find_first_not_of("( )-0123456789") == std::string::npos) and
-            (args[0]->accept(&printVisitor).find_first_not_of("( )-0123456789") == std::string::npos)) {
+        if ((args[0]->printTerm().find_first_not_of("( )-0123456789") == std::string::npos) and
+            (args[0]->printTerm().find_first_not_of("( )-0123456789") == std::string::npos)) {
             return "eq_simplify";
         } else {
             return "equiv_simplify";
@@ -97,12 +102,11 @@ std::string Op::simplifyRule() {
 
 std::string NegatedAndVisitor::visit(Op * term) {
     std::stringstream ss;
-    PrintVisitor printVisitor;
     auto op = term->getOp();
     auto args = term->getArgs();
     if (op == "and") {
         for (int i = 0; i < args.size(); i++) {
-            ss << "(not " << args[i]->accept(&printVisitor) << ")";
+            ss << "(not " << args[i]->printTerm() << ")";
             if (i != args.size() - 1) { ss << " "; }
         }
         return ss.str();
@@ -169,14 +173,13 @@ std::shared_ptr<Term> RemoveUnusedVisitor::visit(Quant * term) {
     auto sorts = term->getSorts();
     auto coreTerm = term->getCoreTerm();
     bool inUse = false;
-    PrintVisitor printVisitor;
 
     coreTerm->accept(this);
 
     for (int i = 0; i < vars.size(); i++) {
         auto var = vars[i];
         for (auto varInUse : varsInUse) {
-            if (var->accept(&printVisitor) == varInUse) { inUse = true; }
+            if (var->printTerm() == varInUse) { inUse = true; }
         }
         if (!inUse) {
             vars.erase(vars.begin() + i);
@@ -190,11 +193,10 @@ std::shared_ptr<Term> RemoveUnusedVisitor::visit(Quant * term) {
 }
 
 std::shared_ptr<Term> RemoveUnusedVisitor::visit(Terminal * term) {
-    PrintVisitor printVisitor;
     for (auto var : varsInUse) {
-        if (term->accept(&printVisitor) == var) { return nullptr; }
+        if (term->printTerm() == var) { return nullptr; }
     }
-    varsInUse.push_back(term->accept(&printVisitor));
+    varsInUse.push_back(term->printTerm());
     return nullptr;
 }
 
@@ -307,7 +309,6 @@ std::shared_ptr<Term> OperateVisitor::visit(Op * term) {
     std::string op = term->getOp();
     std::vector<std::shared_ptr<Term>> args = term->getArgs();
     std::vector<std::shared_ptr<Term>> newArgs;
-    PrintVisitor visitor;
     InstantiateVisitor fakeInstantiation;
     std::string firstStr;
     std::string secondStr;
@@ -317,8 +318,8 @@ std::shared_ptr<Term> OperateVisitor::visit(Op * term) {
     if (op == "<" or op == "<=" or op == "-" or op == "*" or op == "/" or op == "mod" or op == "div") {
         assert(args[0]->getTerminalType() != Term::VAR);
         assert(args[1]->getTerminalType() != Term::VAR);
-        firstStr = args[0]->accept(&visitor);
-        secondStr = args[1]->accept(&visitor);
+        firstStr = args[0]->printTerm();
+        secondStr = args[1]->printTerm();
         firstStr.erase(remove(firstStr.begin(), firstStr.end(), '('), firstStr.end());
         firstStr.erase(remove(firstStr.begin(), firstStr.end(), ')'), firstStr.end());
         firstStr.erase(remove(firstStr.begin(), firstStr.end(), ' '), firstStr.end());
@@ -332,7 +333,7 @@ std::shared_ptr<Term> OperateVisitor::visit(Op * term) {
     if (op == "=") {
         assert(args[0]->getTerminalType() != Term::VAR);
         assert(args[1]->getTerminalType() != Term::VAR);
-        if (args[0]->accept(&visitor) == args[1]->accept(&visitor)) {
+        if (args[0]->printTerm() == args[1]->printTerm()) {
             return std::make_shared<Terminal>("true", Term::BOOL);
         } else {
             return std::make_shared<Terminal>("false", Term::BOOL);
@@ -361,9 +362,9 @@ std::shared_ptr<Term> OperateVisitor::visit(Op * term) {
 
         for (auto arg : args) {
             //           assert(arg->getTerminalType() != Term::VAR);
-            if (arg->accept(&visitor) == "false") { return std::make_shared<Terminal>("false", Term::BOOL); }
-            if (arg->accept(&visitor) == "true") { trues++; }
-            if (arg->accept(&visitor) != "true") { predicates.push_back(arg); }
+            if (arg->printTerm() == "false") { return std::make_shared<Terminal>("false", Term::BOOL); }
+            if (arg->printTerm() == "true") { trues++; }
+            if (arg->printTerm() != "true") { predicates.push_back(arg); }
         }
         if (trues == args.size()) { return std::make_shared<Terminal>("true", Term::BOOL); }
         if (predicates.size() == 1) {
@@ -377,14 +378,14 @@ std::shared_ptr<Term> OperateVisitor::visit(Op * term) {
     } else if (op == "or") {
         for (auto arg : args) {
             assert(arg->getTerminalType() != Term::VAR);
-            if (arg->accept(&visitor) == "true") { return std::make_shared<Terminal>("true", Term::BOOL); }
+            if (arg->printTerm() == "true") { return std::make_shared<Terminal>("true", Term::BOOL); }
         }
         return std::make_shared<Terminal>("false", Term::BOOL);
     } else if (op == "+") {
         FastRational result = 0;
         for (auto arg : args) {
             assert(arg->getTerminalType() != Term::VAR);
-            std::string str = arg->accept(&visitor);
+            std::string str = arg->printTerm();
             str.erase(remove(str.begin(), str.end(), '('), str.end());
             str.erase(remove(str.begin(), str.end(), ')'), str.end());
             str.erase(remove(str.begin(), str.end(), ' '), str.end());
@@ -424,7 +425,7 @@ std::shared_ptr<Term> OperateVisitor::visit(Op * term) {
         }
     } else if (op == "not") {
         assert(args[0]->getTerminalType() != Term::VAR);
-        if (args[0]->accept(&visitor) == "false") {
+        if (args[0]->printTerm() == "false") {
             return std::make_shared<Terminal>("true", Term::BOOL);
         } else {
             return std::make_shared<Terminal>("false", Term::BOOL);
@@ -433,7 +434,7 @@ std::shared_ptr<Term> OperateVisitor::visit(Op * term) {
         assert(args[0]->getTerminalType() != Term::VAR);
         assert(args[1]->getTerminalType() != Term::VAR);
         assert(args[2]->getTerminalType() != Term::VAR);
-        if (args[0]->accept(&visitor) == "true") {
+        if (args[0]->printTerm() == "true") {
             return args[1]->accept(&fakeInstantiation);
         } else {
             return args[2]->accept(&fakeInstantiation);
@@ -498,8 +499,6 @@ Term * GetLocalParentBranchVisitor::visit(Op * term) {
 
     if (op == "=>") { return args[0]->accept(this); }
 
-    PrintVisitor printVisitor;
-
     for (auto arg : args) {
         if (operation == arg.get()) {
             return term;
@@ -513,7 +512,6 @@ Term * GetLocalParentBranchVisitor::visit(Op * term) {
 }
 
 bool IsPrimaryBranchVisitor::visit(Op * term) {
-    PrintVisitor printVisitor;
     auto args = term->getArgs();
 
     if (term->getOp() == "=>") {
@@ -570,7 +568,6 @@ Term * SimplifyHelperVisitor::visit(Op * term) {
     bool simplification = true;
     std::vector<std::shared_ptr<Term>> args = term->getArgs();
     std::string op = term->getOp();
-    PrintVisitor printVisitor;
 
     for (std::shared_ptr<Term> arg : args) {
         if (not(arg->getTermType() == Term::TERMINAL or arg->getTermType() == Term::APP)) { simplification = false; }
@@ -680,6 +677,26 @@ bool Quant::accept(BooleanVisitor * visitor) {
 
 bool Let::accept(BooleanVisitor * visitor) {
     return visitor->visit(this);
+}
+
+void Terminal::accept(PrintVisitor * visitor) {
+    visitor->visit(this);
+}
+
+void Op::accept(PrintVisitor * visitor) {
+    visitor->visit(this);
+}
+
+void App::accept(PrintVisitor * visitor) {
+    visitor->visit(this);
+}
+
+void Quant::accept(PrintVisitor * visitor) {
+    visitor->visit(this);
+}
+
+void Let::accept(PrintVisitor * visitor) {
+    visitor->visit(this);
 }
 
 Term * Terminal::accept(PointerVisitor * visitor) {

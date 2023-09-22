@@ -16,10 +16,12 @@ public:
     enum terminalType { VAR, REAL, INT, SORT, BOOL, UNDECLARED };
     virtual termType getTermType() = 0;
     virtual terminalType getTerminalType() = 0;
+    virtual void accept(class PrintVisitor *) = 0;
     virtual std::shared_ptr<Term> accept(class LogicVisitor *) = 0;
     virtual std::string accept(class StringVisitor *) = 0;
     virtual bool accept(class BooleanVisitor *) = 0;
     virtual Term * accept(class PointerVisitor *) = 0;
+    virtual std::string printTerm();
 };
 
 class Terminal : public Term {
@@ -37,6 +39,7 @@ public:
     std::string accept(StringVisitor *) override;
     bool accept(BooleanVisitor *) override;
     Term * accept(PointerVisitor *) override;
+    void accept(PrintVisitor *) override;
 };
 
 class Op : public Term {
@@ -56,6 +59,7 @@ public:
     std::string accept(StringVisitor *) override;
     bool accept(BooleanVisitor *) override;
     Term * accept(PointerVisitor *) override;
+    void accept(PrintVisitor *) override;
 };
 
 class App : public Term {
@@ -73,6 +77,7 @@ public:
     std::string accept(StringVisitor *) override;
     bool accept(BooleanVisitor *) override;
     Term * accept(PointerVisitor *) override;
+    void accept(PrintVisitor *) override;
 };
 
 class Quant : public Term {
@@ -96,6 +101,7 @@ public:
     std::string accept(StringVisitor *) override;
     bool accept(BooleanVisitor *) override;
     Term * accept(PointerVisitor *) override;
+    void accept(PrintVisitor *) override;
 };
 
 class Let : public Term {
@@ -117,6 +123,7 @@ public:
     std::string accept(StringVisitor *) override;
     bool accept(BooleanVisitor *) override;
     Term * accept(PointerVisitor *) override;
+    void accept(PrintVisitor *) override;
 };
 
 // Visitors
@@ -209,13 +216,15 @@ public:
     virtual std::string visit(Let *) = 0;
 };
 
-class PrintVisitor : public StringVisitor {
+class PrintVisitor {
+    std::stringstream ss;
 public:
-    std::string visit(Terminal *) override;
-    std::string visit(Quant *) override;
-    std::string visit(Op *) override;
-    std::string visit(App *) override;
-    std::string visit(Let *) override;
+    void visit(Terminal *);
+    void visit(Quant *);
+    void visit(Op *);
+    void visit(App *);
+    void visit(Let *);
+    std::string getString() {return ss.str();}
 };
 
 class NegatedAndVisitor : public StringVisitor {

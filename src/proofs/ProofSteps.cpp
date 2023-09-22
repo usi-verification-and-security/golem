@@ -28,7 +28,7 @@ std::string Step::printStepAlethe() {
     if (!clause.empty()) {
         ss << " ";
         for (int i = 0; i < clause.size(); i++) {
-            ss << clause[i]->accept(&printVisitor);
+            ss << clause[i]->printTerm();
             if (i != clause.size() - 1) { ss << " "; }
         }
     }
@@ -70,7 +70,7 @@ std::string Step::printStepIntermediate() {
     if (!clause.empty()) {
         ss << " ";
         for (int i = 0; i < clause.size(); i++) {
-            ss << clause[i]->accept(&printVisitor);
+            ss << clause[i]->printTerm();
             ss << " ";
         }
     }
@@ -240,8 +240,8 @@ void StepHandler::buildAletheProof() {
             while (not(termToSimplify->getTermType() == Term::TERMINAL or termToSimplify->getTermType() == Term::APP)) {
 
                 // If the current term to simplify is at height 0, break the loop to end the proof
-                if (std::dynamic_pointer_cast<Op>(currTerm)->getArgs()[0]->accept(&printVisitor) ==
-                    termToSimplify->accept(&printVisitor)) {
+                if (std::dynamic_pointer_cast<Op>(currTerm)->getArgs()[0]->printTerm() ==
+                    termToSimplify->printTerm()) {
                     break;
                 }
 
@@ -358,7 +358,7 @@ void StepHandler::instantiationSteps(int i) {
         getInstPairs(i, normalizingEqualities[step.clauseId.id]);
     InstantiateVisitor instantiateVisitor(instPairs);
 
-    if (unusedRem->accept(&printVisitor) != currTerm->accept(&printVisitor)) {
+    if (unusedRem->printTerm() != currTerm->printTerm()) {
 
         notifyObservers(Step(currStep, Step::STEP,
                              packClause(std::make_shared<Op>("=", packClause(assumptionReNamedTerm, unusedRem))),
@@ -391,7 +391,7 @@ void StepHandler::instantiationSteps(int i) {
                                  std::make_shared<Op>(
                                      "!", packClause(currTerm->accept(&instantiateVisitor),
                                                      std::make_shared<Terminal>(
-                                                         ":named " + instantiationReNamedTerm->accept(&printVisitor),
+                                                         ":named " + instantiationReNamedTerm->printTerm(),
                                                          Terminal::UNDECLARED)))))),
             "forall_inst", instPairs));
 
@@ -487,8 +487,8 @@ void StepHandler::noCongRequiredSteps(std::vector<int> requiredMP, int implicati
                 SimplifyVisitor simplifyVisitor(simplification, currTerm->accept(&helperVisitor));
                 currTerm = currTerm->accept(&simplifyVisitor);
 
-                if (std::dynamic_pointer_cast<Op>(currTerm)->getArgs()[0]->accept(&printVisitor) ==
-                    simplification->accept(&printVisitor)) {
+                if (std::dynamic_pointer_cast<Op>(currTerm)->getArgs()[0]->printTerm() ==
+                    simplification->printTerm()) {
                     break;
                 }
 
@@ -527,7 +527,7 @@ void StepHandler::noCongRequiredSteps(std::vector<int> requiredMP, int implicati
 
         currStep++;
 
-        if (simplification->accept(&printVisitor) == "true") {
+        if (simplification->printTerm() == "true") {
 
             stepReusage(simplification);
 
@@ -740,7 +740,7 @@ void StepHandler::conjunctionSimplification(std::vector<int> requiredMP, std::sh
         requiredMP.push_back(currStep - 1);
     }
 
-    if (simplification->accept(&printVisitor) == "true") {
+    if (simplification->printTerm() == "true") {
 
         stepReusage(simplification);
 
@@ -869,7 +869,7 @@ StepHandler::getInstPairs(int stepIndex, vec<Normalizer::Equality> const & stepN
 
 int StepHandler::stepReusage(std::shared_ptr<Term> term) {
 
-    std::string strTerm = term->accept(&printVisitor);
+    std::string strTerm = term->printTerm();
 
     if (strTerm == "(not true)") {
         if (stepsToReuse[0] == -1) {
