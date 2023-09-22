@@ -230,30 +230,30 @@ void StepHandler::buildAletheProof() {
         } else {
             // If it is, we require additional steps
 
-            auto termToSimplify = currTerm->accept(&simplifyLocatorVisitor); // Locating possible simplification
+            auto termToSimplifyCopy = currTerm->accept(&simplifyLocatorVisitor); // Locating possible simplification
+            auto termToSimplifyRef = currTerm->accept(&helperVisitor);
             auto simplificationRule =
-                std::dynamic_pointer_cast<Op>(termToSimplify)->simplifyRule(); // Getting rule for simplification
+                std::dynamic_pointer_cast<Op>(termToSimplifyCopy)->simplifyRule(); // Getting rule for simplification
             // Operating simplification
-            auto simplification = termToSimplify->accept(&operateVisitor);
+            auto simplification = termToSimplifyCopy->accept(&operateVisitor);
 
             // Loop if there are more possible simplifications
-            while (not(termToSimplify->getTermType() == Term::TERMINAL or termToSimplify->getTermType() == Term::APP)) {
+            while (not(termToSimplifyCopy->getTermType() == Term::TERMINAL or termToSimplifyCopy->getTermType() == Term::APP)) {
 
                 // If the current term to simplify is at height 0, break the loop to end the proof
-                if (std::dynamic_pointer_cast<Op>(currTerm)->getArgs()[0]->printTerm() ==
-                    termToSimplify->printTerm()) {
+                if (std::dynamic_pointer_cast<Op>(currTerm)->getArgs()[0].get() ==
+                    termToSimplifyRef) {
                     break;
                 }
 
-                IsPrimaryBranchVisitor isPrimaryBranchVisitor(currTerm->accept(
-                    &helperVisitor)); // Checking if the current term is a primary branch / branch of height 1
+                IsPrimaryBranchVisitor isPrimaryBranchVisitor(termToSimplifyRef); // Checking if the current term is a primary branch / branch of height 1
                 bool isPrimaryBranch = currTerm->accept(&isPrimaryBranchVisitor);
 
-                if (!stepReusage(termToSimplify)) {
+                if (!stepReusage(termToSimplifyCopy)) {
                     // Apply the simplification rule
                     notifyObservers(
                         Step(currStep, Step::STEP,
-                             packClause(std::make_shared<Op>("=", packClause(termToSimplify, simplification))),
+                             packClause(std::make_shared<Op>("=", packClause(termToSimplifyCopy, simplification))),
                              simplificationRule));
                 }
 
@@ -267,7 +267,7 @@ void StepHandler::buildAletheProof() {
                 } else {
                     // If it is a primary branch
 
-                    int reUse = stepReusage(termToSimplify);
+                    int reUse = stepReusage(termToSimplifyCopy);
 
                     // Check if the original primary branch has been applied for transitivity before
                     if (originalLhsPrimaryBranch != nullptr) {
@@ -293,7 +293,7 @@ void StepHandler::buildAletheProof() {
                     // If for some reason, this is a primary branch, but we are not done simplifying it yet, we have to
                     // remember this step for transitivity later
                     if (simplification->getTermType() != Term::TERMINAL) {
-                        originalLhsPrimaryBranch = termToSimplify;
+                        originalLhsPrimaryBranch = termToSimplifyCopy;
                         transitivityStep = currStep - 1;
                     } else {
                         // Remember this main simplification step for the final resolution
@@ -307,15 +307,16 @@ void StepHandler::buildAletheProof() {
 
                 // Get new term to simplify and continue looping
 
-                termToSimplify = currTerm->accept(&simplifyLocatorVisitor); // Locating possible simplification
+                termToSimplifyCopy = currTerm->accept(&simplifyLocatorVisitor); // Locating possible simplification
+                termToSimplifyRef = currTerm->accept(&helperVisitor);
                 simplificationRule =
-                    std::dynamic_pointer_cast<Op>(termToSimplify)->simplifyRule(); // Getting rule for simplification
+                    std::dynamic_pointer_cast<Op>(termToSimplifyCopy)->simplifyRule(); // Getting rule for simplification
                 // Operating simplification
-                simplification = termToSimplify->accept(&operateVisitor);
+                simplification = termToSimplifyCopy->accept(&operateVisitor);
             }
 
             // Final parent conjunction simplification
-            conjunctionSimplification(requiredMP, simplification, termToSimplify, simplificationRule, implicationStep,
+            conjunctionSimplification(requiredMP, simplification, termToSimplifyCopy, simplificationRule, implicationStep,
                                       renamedImpLHS);
         }
     }
