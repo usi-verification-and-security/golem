@@ -355,6 +355,7 @@ void StepHandler::instantiationSteps(int i) {
     auto const & step = derivation[i];
 
     std::shared_ptr<Term> assumptionReNamedTerm = std::make_shared<Terminal>("@a"+std::to_string(step.clauseId.id), Terminal::UNDECLARED);
+    std::shared_ptr<Term> instantiationReNamedTerm = std::make_shared<Terminal>("@i"+std::to_string(step.clauseId.id), Terminal::UNDECLARED);
 
     std::shared_ptr<Term> unusedRem = currTerm->accept(&removeUnusedVisitor);
 
@@ -392,13 +393,14 @@ void StepHandler::instantiationSteps(int i) {
     if (not instPairs.empty()) {
 
         notifyObservers(Step(currStep, Step::STEP,
-                             packClause(std::make_shared<Op>("or", packClause(std::make_shared<Op>("not", packClause(assumptionReNamedTerm)), currTerm->accept(&instantiateVisitor)))),
+                             packClause(std::make_shared<Op>("or", packClause(std::make_shared<Op>("not", packClause(assumptionReNamedTerm)),
+                                 std::make_shared<Op>("!", packClause(currTerm->accept(&instantiateVisitor), std::make_shared<Terminal>(":named "+instantiationReNamedTerm->accept(&printVisitor), Terminal::UNDECLARED)))))),
                              "forall_inst", instPairs));
 
         currStep++;
 
         notifyObservers(Step(currStep, Step::STEP,
-                             packClause(std::make_shared<Op>("not", packClause(assumptionReNamedTerm)), currTerm->accept(&instantiateVisitor)),
+                             packClause(std::make_shared<Op>("not", packClause(assumptionReNamedTerm)), instantiationReNamedTerm),
                              "or", std::vector<int>{currStep-1}));
 
         currStep++;
@@ -406,7 +408,7 @@ void StepHandler::instantiationSteps(int i) {
         currTerm = currTerm->accept(&instantiateVisitor);
 
         notifyObservers(Step(currStep, Step::STEP,
-                             packClause(currTerm),
+                             packClause(instantiationReNamedTerm),
                              "resolution", std::vector<int>{currStep-1, quantStep}));
 
         currStep++;
