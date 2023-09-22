@@ -85,13 +85,12 @@ public:
     std::unique_ptr<ChcSystem> interpretSystemAst(const ASTNode * root);
     ChcInterpreterContext(Logic & logic, Options const & opts) : logic(logic), opts(opts) {}
 
-    std::vector<std::string> operators = {"+", "-", "/", "*", "and", "or", "=>", "not", "=", ">=", "<=", ">", "<", "ite", "mod", "div"};
+    std::vector<std::string> operators = {"+", "-",  "/",  "*", "and", "or",  "=>",  "not",
+                                          "=", ">=", "<=", ">", "<",   "ite", "mod", "div"};
 
-    bool isOperator (const std::string& val){
-        for (const std::string& op : operators){
-            if (op == val){
-                return true;
-            }
+    bool isOperator(const std::string & val) {
+        for (const std::string & op : operators) {
+            if (op == val) { return true; }
         }
         return false;
     }
@@ -117,7 +116,8 @@ private:
     VerificationResult solve(std::string engine, ChcDirectedHyperGraph const & hyperGraph);
 
     void validate(VerificationResult result, ChcDirectedHyperGraph const & originalGraph, bool validateWitness,
-                  bool printWitness, WitnessBackTranslator & translator, Normalizer::Equalities const & normalizingEqualities, std::string format);
+                  bool printWitness, WitnessBackTranslator & translator,
+                  Normalizer::Equalities const & normalizingEqualities, std::string format);
 
     SRef sortFromASTNode(ASTNode const & node) const;
 

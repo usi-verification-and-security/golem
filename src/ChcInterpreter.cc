@@ -196,7 +196,7 @@ void ChcInterpreterContext::interpretAssert(ASTNode & node) {
     originalAssertions.push_back(ASTtoTerm(termNode));
 }
 
-std::shared_ptr<Term> ChcInterpreterContext::ASTtoTerm(const ASTNode & node){
+std::shared_ptr<Term> ChcInterpreterContext::ASTtoTerm(const ASTNode & node) {
 
     ASTType t = node.getType();
     if (t == TERM_T) {
@@ -230,7 +230,7 @@ std::shared_ptr<Term> ChcInterpreterContext::ASTtoTerm(const ASTNode & node){
         std::string name = (**(node.children->begin())).getValue();
         if (name == "true" or name == "false") {
             return std::make_shared<Terminal>(name, Term::BOOL);
-        }else{
+        } else {
             return std::make_shared<Terminal>(logic.protectName(name, false), Term::VAR);
         }
     } else if (t == LQID_T) {
@@ -244,20 +244,20 @@ std::shared_ptr<Term> ChcInterpreterContext::ASTtoTerm(const ASTNode & node){
         }
         assert(args.size() > 0);
 
-        if (op == "-" or op == "+"){
+        if (op == "-" or op == "+") {
             if (args.size() <= 1) {
                 PrintVisitor printVisitor;
                 return std::make_shared<Terminal>("(- " + args[0]->accept(&printVisitor) + ")", Term::INT);
             }
         }
-        if (isOperator(op)){
+        if (isOperator(op)) {
             auto term = std::make_shared<Op>(op, args);
-            return  term;
-        }else {
+            return term;
+        } else {
             auto term = std::make_shared<App>(logic.protectName(op, false), args);
-            return  term;
+            return term;
         }
-    } else if (t == LET_T){
+    } else if (t == LET_T) {
         auto ch = node.children->begin();
         auto vbl = (**ch).children->begin();
         std::vector<std::shared_ptr<Term>> declarations;
@@ -280,7 +280,6 @@ std::shared_ptr<Term> ChcInterpreterContext::ASTtoTerm(const ASTNode & node){
 
     return std::make_shared<Terminal>("Error", Term::UNDECLARED);
 }
-
 
 PTRef ChcInterpreterContext::parseTerm(const ASTNode & termNode) {
     ASTType t = termNode.getType();
@@ -412,7 +411,8 @@ VerificationResult ChcInterpreterContext::solve(std::string engine_s, ChcDirecte
 }
 
 void ChcInterpreterContext::validate(VerificationResult result, ChcDirectedHyperGraph const & originalGraph,
-                                     bool validateWitness, bool printWitness, WitnessBackTranslator & translator, Normalizer::Equalities const & normalizingEqualities, std::string format) {
+                                     bool validateWitness, bool printWitness, WitnessBackTranslator & translator,
+                                     Normalizer::Equalities const & normalizingEqualities, std::string format) {
 
     result = translator.translate(std::move(result));
     if (not result.hasWitness()) {
@@ -421,7 +421,9 @@ void ChcInterpreterContext::validate(VerificationResult result, ChcDirectedHyper
         return;
     }
 
-    if (printWitness) { result.printWitness(std::cout, logic, originalGraph, originalAssertions, normalizingEqualities, format); }
+    if (printWitness) {
+        result.printWitness(std::cout, logic, originalGraph, originalAssertions, normalizingEqualities, format);
+    }
     if (validateWitness) {
         auto validationResult = Validator(logic).validate(originalGraph, result);
         switch (validationResult) {
@@ -445,7 +447,7 @@ void ChcInterpreterContext::interpretCheckSat() {
     assert(not validateWitness || opts.getOption(Options::VALIDATE_RESULT) == std::string("true"));
     bool printWitness = opts.hasOption(Options::PRINT_WITNESS);
     std::string format = "legacy";
-    if (opts.hasOption(Options::PROOF_FORMAT)) {format = opts.getOption(Options::PROOF_FORMAT);}
+    if (opts.hasOption(Options::PROOF_FORMAT)) { format = opts.getOption(Options::PROOF_FORMAT); }
     assert(not printWitness || opts.getOption(Options::PRINT_WITNESS) == std::string("true"));
 
     Normalizer normalizer(logic);
@@ -484,7 +486,8 @@ void ChcInterpreterContext::interpretCheckSat() {
                 auto result = solve(engines[i], *hypergraph);
                 if (result.getAnswer() == VerificationAnswer::UNKNOWN) { exit(1); }
                 if (validateWitness || printWitness) {
-                    validate(std::move(result), *originalGraph, validateWitness, printWitness, *translator, normalizingEqualities, format);
+                    validate(std::move(result), *originalGraph, validateWitness, printWitness, *translator,
+                             normalizingEqualities, format);
                 }
                 return;
             }
@@ -516,7 +519,8 @@ void ChcInterpreterContext::interpretCheckSat() {
     }
     if (validateWitness || printWitness) {
 
-        validate(std::move(result), *originalGraph, validateWitness, printWitness, *translator, normalizingEqualities, format);
+        validate(std::move(result), *originalGraph, validateWitness, printWitness, *translator, normalizingEqualities,
+                 format);
     }
 }
 
