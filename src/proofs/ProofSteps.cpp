@@ -224,10 +224,12 @@ void StepHandler::buildAletheProof() {
         implicationLHS = implication->getArgs()[0];
         implicationRHS = std::make_shared<Terminal>(logic.printTerm(step.derivedFact), Term::VAR);
 
+        std::shared_ptr<Term> renamedImpLHS = std::make_shared<Terminal>("@impLHS"+std::to_string(i-1), Terminal::UNDECLARED);
+
         //Implication rule
 
         notifyObservers(Step(currStep, Step::STEP,
-                             packClause(std::make_shared<Op>("not", packClause(implicationLHS)), implicationRHS),
+                             packClause(std::make_shared<Op>("not", packClause(std::make_shared<Op>("!", packClause(implicationLHS, std::make_shared<Terminal>(":named @impLHS"+std::to_string(i-1), Terminal::UNDECLARED))))), implicationRHS),
                              "implies", std::vector<int>{currStep-1}));
 
         int implicationStep = currStep;
@@ -237,7 +239,7 @@ void StepHandler::buildAletheProof() {
         //Checking if height of LHS is greater than 1
         if (not requiresCong()) {
             //If it is not, the proof is shorter
-            noCongRequiredSteps(requiredMP, implicationStep);
+            noCongRequiredSteps(requiredMP, implicationStep, renamedImpLHS);
 
         } else {
             //If it is, we require additional steps
@@ -324,7 +326,7 @@ void StepHandler::buildAletheProof() {
             }
 
             //Final parent conjunction simplification
-            conjunctionSimplification(requiredMP, simplification, termToSimplify, simplificationRule, implicationStep);
+            conjunctionSimplification(requiredMP, simplification, termToSimplify, simplificationRule, implicationStep, renamedImpLHS);
         }
     }
 
@@ -355,7 +357,7 @@ void StepHandler::instantiationSteps(int i) {
     auto const & step = derivation[i];
 
     std::shared_ptr<Term> assumptionReNamedTerm = std::make_shared<Terminal>("@a"+std::to_string(step.clauseId.id), Terminal::UNDECLARED);
-    std::shared_ptr<Term> instantiationReNamedTerm = std::make_shared<Terminal>("@i"+std::to_string(step.clauseId.id), Terminal::UNDECLARED);
+    std::shared_ptr<Term> instantiationReNamedTerm = std::make_shared<Terminal>("@i"+std::to_string(i-1), Terminal::UNDECLARED);
 
     std::shared_ptr<Term> unusedRem = currTerm->accept(&removeUnusedVisitor);
 
@@ -432,7 +434,7 @@ void StepHandler::assumptionSteps() {
     }
 }
 
-void StepHandler::noCongRequiredSteps(std::vector<int> requiredMP, int implicationStep){
+void StepHandler::noCongRequiredSteps(std::vector<int> requiredMP, int implicationStep, std::shared_ptr<Term> const & renamedImpLHS){
 
     if (implicationLHS->getTermType() == Term::OP) {
 
@@ -441,7 +443,7 @@ void StepHandler::noCongRequiredSteps(std::vector<int> requiredMP, int implicati
         auto simplification = termToSimplify->accept(&operateVisitor);
 
         if (std::dynamic_pointer_cast<Op>(termToSimplify)->getOp() == "and") {
-            conjunctionSimplification(requiredMP, simplification, termToSimplify, simplificationRule, implicationStep, false);
+            conjunctionSimplification(requiredMP, simplification, termToSimplify, simplificationRule, implicationStep, renamedImpLHS, false);
             return;
         }
 
@@ -494,7 +496,7 @@ void StepHandler::noCongRequiredSteps(std::vector<int> requiredMP, int implicati
                 currStep++;
 
                 notifyObservers(Step(currStep, Step::STEP,
-                                     packClause(std::make_shared<Op>("=", packClause(implicationLHS, localParentBranchSimplified))),
+                                     packClause(std::make_shared<Op>("=", packClause(renamedImpLHS, localParentBranchSimplified))),
                                      "trans", std::vector<int>{transitivityStep, currStep-1}));
 
                 transitivityStep = currStep;
@@ -503,14 +505,14 @@ void StepHandler::noCongRequiredSteps(std::vector<int> requiredMP, int implicati
             }
 
             notifyObservers(Step(currStep, Step::STEP,
-                                 packClause(std::make_shared<Op>("=", packClause(implicationLHS, simplification))),
+                                 packClause(std::make_shared<Op>("=", packClause(renamedImpLHS, simplification))),
                                  "trans", std::vector<int>{transitivityStep, currStep-1}));
 
             currStep++;
         }
 
         notifyObservers(Step(currStep, Step::STEP,
-                             packClause(implicationLHS, std::make_shared<Op>("not", packClause(simplification))),
+                             packClause(renamedImpLHS, std::make_shared<Op>("not", packClause(simplification))),
                              "equiv2", std::vector<int>{currStep-1}));
 
         currStep++;
@@ -520,7 +522,7 @@ void StepHandler::noCongRequiredSteps(std::vector<int> requiredMP, int implicati
             stepReusage(simplification);
 
             notifyObservers(Step(currStep, Step::STEP,
-                                 packClause(implicationLHS),
+                                 packClause(renamedImpLHS),
                                  "resolution", std::vector<int>{currStep-2, currStep-1}));
 
             currStep++;
@@ -567,7 +569,7 @@ void StepHandler::noCongRequiredSteps(std::vector<int> requiredMP, int implicati
         } else if (implicationLHS->getTermType() == Term::TERMINAL) {
 
             notifyObservers(Step(currStep, Step::STEP,
-                                 packClause(implicationLHS), "true"));
+                                 packClause(renamedImpLHS), "true"));
 
             currStep++;
 
@@ -582,7 +584,7 @@ void StepHandler::noCongRequiredSteps(std::vector<int> requiredMP, int implicati
     }
 }
 
-void StepHandler::notLhsPrimaryBranchSteps(const std::shared_ptr<Term>& simplification) {
+void StepHandler::notLhsPrimaryBranchSteps(std::shared_ptr<Term> const & simplification) {
 
     //Simplifying from bottom up applying congruence to carry information
 
@@ -658,7 +660,7 @@ void StepHandler::notLhsPrimaryBranchSteps(const std::shared_ptr<Term>& simplifi
 
             //If there was, create a transitivity step to remember information
             notifyObservers(Step(currStep, Step::STEP,
-                                 packClause(std::make_shared<Op>("=", packClause(std::make_shared<Op>("!", packClause(originalLhsPrimaryBranch, std::make_shared<Terminal>(newName, Terminal::UNDECLARED))) , localParentBranchSimplified))),
+                                 packClause(std::make_shared<Op>("=", packClause(std::make_shared<Op>("!", packClause(originalLhsPrimaryBranch, std::make_shared<Terminal>(newName, Terminal::UNDECLARED))) , std::make_shared<Terminal>("@cong"+std::to_string(renamingCongIndex-1), Terminal::UNDECLARED)))),
                                  "trans", std::vector<int>{transitivityStep, currStep-1}));
 
             transReNamed = true;
@@ -667,7 +669,7 @@ void StepHandler::notLhsPrimaryBranchSteps(const std::shared_ptr<Term>& simplifi
 
             //If there was, create a transitivity step to remember information
             notifyObservers(Step(currStep, Step::STEP,
-                                 packClause(std::make_shared<Op>("=", packClause(std::make_shared<Terminal>(newName, Terminal::UNDECLARED) , localParentBranchSimplified))),
+                                 packClause(std::make_shared<Op>("=", packClause(std::make_shared<Terminal>(newName, Terminal::UNDECLARED) , std::make_shared<Terminal>("@cong"+std::to_string(renamingCongIndex-1), Terminal::UNDECLARED)))),
                                  "trans", std::vector<int>{transitivityStep, currStep-1}));
         }
         transitivityStep = currStep;
@@ -675,11 +677,11 @@ void StepHandler::notLhsPrimaryBranchSteps(const std::shared_ptr<Term>& simplifi
     }
 }
 
-void StepHandler::conjunctionSimplification(std::vector<int> requiredMP, const std::shared_ptr<Term>& simplification, const std::shared_ptr<Term>& termToSimplify, std::string simplificationRule, int implicationStep, bool cong) {
+void StepHandler::conjunctionSimplification(std::vector<int> requiredMP, std::shared_ptr<Term> const & simplification, std::shared_ptr<Term> const & termToSimplify, std::string simplificationRule, int implicationStep, std::shared_ptr<Term> renamedImpLHS, bool cong) {
 
     if (cong) {
         notifyObservers(Step(currStep, Step::STEP,
-                             packClause(std::make_shared<Op>("=", packClause(implicationLHS, termToSimplify))),
+                             packClause(std::make_shared<Op>("=", packClause(renamedImpLHS, termToSimplify))),
                              "cong", simplificationSteps));
         currStep++;
     }
@@ -691,14 +693,14 @@ void StepHandler::conjunctionSimplification(std::vector<int> requiredMP, const s
 
     if (cong) {
         notifyObservers(Step(currStep, Step::STEP,
-                             packClause(std::make_shared<Op>("=", packClause(implicationLHS, simplification))),
+                             packClause(std::make_shared<Op>("=", packClause(renamedImpLHS, simplification))),
                              "trans", std::vector<int>{currStep-2, currStep-1}));
 
         currStep++;
     }
 
     notifyObservers(Step(currStep, Step::STEP,
-                         packClause(implicationLHS, std::make_shared<Op>("not", packClause(simplification))),
+                         packClause(renamedImpLHS, std::make_shared<Op>("not", packClause(simplification))),
                          "equiv2", std::vector<int>{currStep-1}));
 
     currStep++;
@@ -712,7 +714,7 @@ void StepHandler::conjunctionSimplification(std::vector<int> requiredMP, const s
         currStep++;
 
         notifyObservers(Step(currStep, Step::STEP,
-                             packClause(implicationLHS, std::make_shared<Terminal>(simplification->accept(&negatedAndVisitor), Term::UNDECLARED)),
+                             packClause(renamedImpLHS, std::make_shared<Terminal>(simplification->accept(&negatedAndVisitor), Term::UNDECLARED)),
                              "resolution", std::vector<int>{currStep-2, currStep-1}));
 
         requiredMP.push_back(currStep);
@@ -729,7 +731,7 @@ void StepHandler::conjunctionSimplification(std::vector<int> requiredMP, const s
     } else {
 
         notifyObservers(Step(currStep, Step::STEP,
-                             packClause(implicationLHS),"resolution", requiredMP));
+                             packClause(renamedImpLHS),"resolution", requiredMP));
 
         currStep++;
     }

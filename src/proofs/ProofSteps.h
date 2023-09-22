@@ -116,10 +116,10 @@ public :
 
     void instantiationSteps(int i);
     void assumptionSteps();
-    void noCongRequiredSteps(std::vector<int> requiredMP, int implicationStep);
+    void noCongRequiredSteps(std::vector<int> requiredMP, int implicationStep, const std::shared_ptr<Term>& renamedImpLHS);
     void notLhsPrimaryBranchSteps(const std::shared_ptr<Term>& simplification);
     void conjunctionSimplification(std::vector<int> requiredMP, const std::shared_ptr<Term>& simplification,
-                                  const std::shared_ptr<Term>& termToSimplify, std::string simplificationRule, int implicationStep, bool cong = true);
+                                  const std::shared_ptr<Term>& termToSimplify, std::string simplificationRule, int implicationStep, std::shared_ptr<Term> renamedImpLHS, bool cong = true);
 
     int stepReusage(std::shared_ptr<Term> term);
 
