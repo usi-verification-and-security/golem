@@ -622,18 +622,12 @@ void StepHandler::notLhsPrimaryBranchSteps(std::shared_ptr<Term> const & simplif
                                  packClause(std::make_shared<Op>("=", packClause(localParentBranch->accept(&fakeInstantiation), localParentBranchSimplified))),
                                  "cong", std::vector<int>{reUse ? stepsToReuse[reUse-1] : currStep-1}));
         } else {
-            if (!congReNamed) {
-                notifyObservers(Step(currStep, Step::STEP,
-                                     packClause(std::make_shared<Op>("=", packClause(localParentBranch->accept(&fakeInstantiation),
-                                                                                     std::make_shared<Op>("!", packClause(localParentBranchSimplified, std::make_shared<Terminal>(":named @cong"+std::to_string(renamingCongIndex), Terminal::UNDECLARED)))))),
-                                     "cong", std::vector<int>{reUse ? stepsToReuse[reUse-1] : currStep-1}));
-                congReNamed = true;
-            } else {
-                notifyObservers(Step(currStep, Step::STEP,
-                                     packClause(std::make_shared<Op>("=", packClause(std::make_shared<Terminal>("@cong"+std::to_string(renamingCongIndex-1), Terminal::UNDECLARED),
-                                                                                     std::make_shared<Op>("!", packClause(localParentBranchSimplified, std::make_shared<Terminal>(":named @cong"+std::to_string(renamingCongIndex), Terminal::UNDECLARED)))))),
-                                     "cong", std::vector<int>{reUse ? stepsToReuse[reUse-1] : currStep-1}));
-            }
+            auto congruenceLHS = congReNamed ? std::make_shared<Terminal>("@cong"+std::to_string(renamingCongIndex-1), Terminal::UNDECLARED) : localParentBranch->accept(&fakeInstantiation);
+            notifyObservers(Step(currStep, Step::STEP,
+                                 packClause(std::make_shared<Op>("=", packClause(congruenceLHS,
+                                                                                 std::make_shared<Op>("!", packClause(localParentBranchSimplified, std::make_shared<Terminal>(":named @cong"+std::to_string(renamingCongIndex), Terminal::UNDECLARED)))))),
+                                 "cong", std::vector<int>{reUse ? stepsToReuse[reUse-1] : currStep-1}));
+            congReNamed = true;
             renamingCongIndex++;
         }
 
