@@ -73,8 +73,10 @@ class StepHandler {
 
     int currStep = 0;
     int transitivityStep;
-    int renamingIndex = 0;
-    bool reNamed = false;
+    int renamingTransIndex = 0;
+    int renamingCongIndex = 0;
+    bool transReNamed = false;
+    bool congReNamed = false;
 
     std::vector<int> stepsToReuse = {-1, -1, -1};
 

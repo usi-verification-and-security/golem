@@ -279,37 +279,27 @@ void StepHandler::buildAletheProof() {
                     //Check if the original primary branch has been applied for transitivity before
                     if (originalLhsPrimaryBranch != nullptr) {
 
-                        if (reUse) {
-
-                            if (!reNamed) {
-                                //Pass along the information recall the transitivity state one last time
-                                notifyObservers(Step(currStep, Step::STEP,
-                                                     packClause(std::make_shared<Op>("=", packClause(originalLhsPrimaryBranch, simplification))),
-                                                     "trans", std::vector<int>{transitivityStep, stepsToReuse[reUse-1]}));
-                            } else {
-
-                                std::string newName = "@pb" + std::to_string(renamingIndex);
-                                //Pass along the information recall the transitivity state one last time
-                                notifyObservers(Step(currStep, Step::STEP,
-                                                     packClause(std::make_shared<Op>("=", packClause(std::make_shared<Terminal>(newName, Terminal::UNDECLARED), simplification))),
-                                                     "trans", std::vector<int>{transitivityStep, stepsToReuse[reUse-1]}));
-                            }
-
-
-                        } else {
+                        if (!transReNamed) {
                             //Pass along the information recall the transitivity state one last time
                             notifyObservers(Step(currStep, Step::STEP,
                                                  packClause(std::make_shared<Op>("=", packClause(originalLhsPrimaryBranch, simplification))),
-                                                 "trans", std::vector<int>{transitivityStep, currStep-1}));
+                                                 "trans", std::vector<int>{transitivityStep, reUse ? stepsToReuse[reUse-1]: currStep-1}));
+                        } else {
+
+                            std::string newName = "@pb" + std::to_string(renamingTransIndex);
+                            //Pass along the information recall the transitivity state one last time
+                            notifyObservers(Step(currStep, Step::STEP,
+                                                 packClause(std::make_shared<Op>("=", packClause(std::make_shared<Terminal>(newName, Terminal::UNDECLARED), simplification))),
+                                                 "trans", std::vector<int>{transitivityStep, reUse ? stepsToReuse[reUse-1]: currStep-1}));
                         }
 
                         currStep++;
-
                     }
 
                     //Because this is the last time we simplify in this primary branch, we can forget it
                     originalLhsPrimaryBranch = nullptr;
-                    reNamed = false;
+                    transReNamed = false;
+                    congReNamed = false;
 
                     //If for some reason, this is a primary branch, but we are not done simplifying it yet, we have to remember this step for transitivity later
                     if (simplification->getTermType() != Term::TERMINAL) {
@@ -364,7 +354,7 @@ void StepHandler::instantiationSteps(int i) {
 
     auto const & step = derivation[i];
 
-    std::shared_ptr<Term> renamedTerm = std::make_shared<Terminal>("@a"+std::to_string(step.clauseId.id), Terminal::UNDECLARED);
+    std::shared_ptr<Term> assumptionReNamedTerm = std::make_shared<Terminal>("@a"+std::to_string(step.clauseId.id), Terminal::UNDECLARED);
 
     std::shared_ptr<Term> unusedRem = currTerm->accept(&removeUnusedVisitor);
 
@@ -377,13 +367,13 @@ void StepHandler::instantiationSteps(int i) {
     if (unusedRem->accept(&printVisitor) != currTerm->accept(&printVisitor)) {
 
         notifyObservers(Step(currStep, Step::STEP,
-                             packClause(std::make_shared<Op>("=", packClause(renamedTerm, unusedRem))),
+                             packClause(std::make_shared<Op>("=", packClause(assumptionReNamedTerm, unusedRem))),
                              "qnt_rm_unused"));
 
         currStep++;
 
         notifyObservers(Step(currStep, Step::STEP,
-                             packClause(std::make_shared<Op>("not", packClause(renamedTerm)), unusedRem),
+                             packClause(std::make_shared<Op>("not", packClause(assumptionReNamedTerm)), unusedRem),
                              "equiv1", std::vector<int>{currStep-1}));
 
         currStep++;
@@ -395,20 +385,20 @@ void StepHandler::instantiationSteps(int i) {
         currStep++;
 
         currTerm = unusedRem;
-        renamedTerm = unusedRem;
+        assumptionReNamedTerm = unusedRem;
         quantStep = currStep-1;
     }
 
     if (not instPairs.empty()) {
 
         notifyObservers(Step(currStep, Step::STEP,
-                             packClause(std::make_shared<Op>("or", packClause(std::make_shared<Op>("not", packClause(renamedTerm)), currTerm->accept(&instantiateVisitor)))),
+                             packClause(std::make_shared<Op>("or", packClause(std::make_shared<Op>("not", packClause(assumptionReNamedTerm)), currTerm->accept(&instantiateVisitor)))),
                              "forall_inst", instPairs));
 
         currStep++;
 
         notifyObservers(Step(currStep, Step::STEP,
-                             packClause(std::make_shared<Op>("not", packClause(renamedTerm)), currTerm->accept(&instantiateVisitor)),
+                             packClause(std::make_shared<Op>("not", packClause(assumptionReNamedTerm)), currTerm->accept(&instantiateVisitor)),
                              "or", std::vector<int>{currStep-1}));
 
         currStep++;
@@ -603,6 +593,8 @@ void StepHandler::notLhsPrimaryBranchSteps(const std::shared_ptr<Term>& simplifi
 
     InstantiateVisitor fakeInstantiation;
 
+    bool stop = false;
+
     int reUse = stepReusage(currTerm->accept(&simplifyLocatorVisitor));
 
     //Loop to start carrying the simplification from the bottom up
@@ -614,25 +606,39 @@ void StepHandler::notLhsPrimaryBranchSteps(const std::shared_ptr<Term>& simplifi
         SimplifyVisitor simplifyLocalParentBranchVisitor(simplification, localParentBranch->accept(&helperVisitor));
         localParentBranchSimplified = localParentBranch->accept(&simplifyLocalParentBranchVisitor);   //Simplifying said parent branch
 
-        if (reUse) {
-            notifyObservers(Step(currStep, Step::STEP,
-                                 packClause(std::make_shared<Op>("=", packClause(localParentBranch->accept(&fakeInstantiation), localParentBranchSimplified))),
-                                 "cong", std::vector<int>{stepsToReuse[reUse-1]}));
-            reUse = 0;
-        } else {
-            notifyObservers(Step(currStep, Step::STEP,
-                                 packClause(std::make_shared<Op>("=", packClause(localParentBranch->accept(&fakeInstantiation), localParentBranchSimplified))),
-                                 "cong", std::vector<int>{currStep-1}));
-        }
-
-        currStep++;
-
         getLocalParentBranchVisitor.setOperation(localParentBranch);
 
         //If we reached the top, break the loop
         if (localAndPrimary or std::dynamic_pointer_cast<Op>(currTerm)->getArgs()[0].get() == currTerm->accept(&getLocalParentBranchVisitor)) {
+            stop = true;
+        }
+
+        if (!stop) {
+            notifyObservers(Step(currStep, Step::STEP,
+                                 packClause(std::make_shared<Op>("=", packClause(localParentBranch->accept(&fakeInstantiation), localParentBranchSimplified))),
+                                 "cong", std::vector<int>{reUse ? stepsToReuse[reUse-1] : currStep-1}));
+        } else {
+            if (!congReNamed) {
+                notifyObservers(Step(currStep, Step::STEP,
+                                     packClause(std::make_shared<Op>("=", packClause(localParentBranch->accept(&fakeInstantiation),
+                                                                                     std::make_shared<Op>("!", packClause(localParentBranchSimplified, std::make_shared<Terminal>(":named @cong"+std::to_string(renamingCongIndex), Terminal::UNDECLARED)))))),
+                                     "cong", std::vector<int>{reUse ? stepsToReuse[reUse-1] : currStep-1}));
+                congReNamed = true;
+            } else {
+                notifyObservers(Step(currStep, Step::STEP,
+                                     packClause(std::make_shared<Op>("=", packClause(std::make_shared<Terminal>("@cong"+std::to_string(renamingCongIndex-1), Terminal::UNDECLARED),
+                                                                                     std::make_shared<Op>("!", packClause(localParentBranchSimplified, std::make_shared<Terminal>(":named @cong"+std::to_string(renamingCongIndex), Terminal::UNDECLARED)))))),
+                                     "cong", std::vector<int>{reUse ? stepsToReuse[reUse-1] : currStep-1}));
+            }
+            renamingCongIndex++;
+        }
+
+        currStep++;
+
+        if (stop) {
             break;
         }
+
     }
 
     //If there was no primary branch before this, save it as the original
@@ -640,22 +646,22 @@ void StepHandler::notLhsPrimaryBranchSteps(const std::shared_ptr<Term>& simplifi
         transitivityStep = currStep-1;
         originalLhsPrimaryBranch = localParentBranch->accept(&fakeInstantiation);
 
-        renamingIndex++;
+        renamingTransIndex++;
 
     } else {
 
-        if (!reNamed) {
+        if (!transReNamed) {
 
-            std::string newName = ":named @pb" + std::to_string(renamingIndex);
+            std::string newName = ":named @pb" + std::to_string(renamingTransIndex);
 
             //If there was, create a transitivity step to remember information
             notifyObservers(Step(currStep, Step::STEP,
                                  packClause(std::make_shared<Op>("=", packClause(std::make_shared<Op>("!", packClause(originalLhsPrimaryBranch, std::make_shared<Terminal>(newName, Terminal::UNDECLARED))) , localParentBranchSimplified))),
                                  "trans", std::vector<int>{transitivityStep, currStep-1}));
 
-            reNamed = true;
+            transReNamed = true;
         } else {
-            std::string newName = "@pb" + std::to_string(renamingIndex);
+            std::string newName = "@pb" + std::to_string(renamingTransIndex);
 
             //If there was, create a transitivity step to remember information
             notifyObservers(Step(currStep, Step::STEP,
