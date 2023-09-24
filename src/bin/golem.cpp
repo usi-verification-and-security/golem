@@ -111,7 +111,7 @@ int main( int argc, char * argv[] ) {
     }
     if (options.hasOption(Options::PROOF_FORMAT)) {
         auto formatStr = options.getOption(Options::PROOF_FORMAT);
-        if (!(formatStr == "alethe" or formatStr == "intermediate" or formatStr == "legacy")) {
+        if (not (formatStr == "alethe" or formatStr == "intermediate" or formatStr == "legacy")) {
             error("Unsupported proof format");
         }
     }

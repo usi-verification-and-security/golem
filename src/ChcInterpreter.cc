@@ -193,7 +193,9 @@ void ChcInterpreterContext::interpretAssert(ASTNode & node) {
     if (logic.getTerm_true() == term) { return; }
     auto chclause = chclauseFromPTRef(term);
     system->addClause(std::move(chclause));
-    originalAssertions.push_back(ASTtoTerm(termNode));
+    if (opts.hasOption(Options::PRINT_WITNESS)) {
+        originalAssertions.push_back(ASTtoTerm(termNode));
+    }
 }
 
 std::shared_ptr<Term> ChcInterpreterContext::ASTtoTerm(const ASTNode & node) {
@@ -224,8 +226,7 @@ std::shared_ptr<Term> ChcInterpreterContext::ASTtoTerm(const ASTNode & node) {
         }
         assert(vars.size() == sorts.size());
         ASTNode & innerTerm = **(++it);
-        auto term = std::make_shared<Quant>("forall", vars, sorts, ASTtoTerm(innerTerm));
-        return term;
+        return std::make_shared<Quant>("forall", vars, sorts, ASTtoTerm(innerTerm));
     } else if (t == QID_T) {
         std::string name = (**(node.children->begin())).getValue();
         if (name == "true" or name == "false") {
@@ -246,16 +247,13 @@ std::shared_ptr<Term> ChcInterpreterContext::ASTtoTerm(const ASTNode & node) {
 
         if (op == "-" or op == "+") {
             if (args.size() <= 1) {
-                PrintVisitor printVisitor;
                 return std::make_shared<Terminal>("(- " + args[0]->printTerm() + ")", Term::INT);
             }
         }
         if (isOperator(op)) {
-            auto term = std::make_shared<Op>(op, args);
-            return term;
+            return std::make_shared<Op>(op, args);
         } else {
-            auto term = std::make_shared<App>(logic.protectName(op, false), args);
-            return term;
+            return std::make_shared<App>(logic.protectName(op, false), args);
         }
     } else if (t == LET_T) {
         auto ch = node.children->begin();
@@ -278,7 +276,7 @@ std::shared_ptr<Term> ChcInterpreterContext::ASTtoTerm(const ASTNode & node) {
         return std::make_shared<Let>(termNames, declarations, application);
     }
 
-    return std::make_shared<Terminal>("Error", Term::UNDECLARED);
+    throw std::logic_error("Unknown term encountered!");
 }
 
 PTRef ChcInterpreterContext::parseTerm(const ASTNode & termNode) {

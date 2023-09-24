@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: MIT
  */
 
-#ifndef TERM_H // Replace TERM_H with the actual name of your header file
-#define TERM_H
+#ifndef GOLEM_TERM_H
+#define GOLEM_TERM_H
 #include "utils/SmtSolver.h"
 #include <memory>
 #include <utility>
@@ -30,8 +30,8 @@ class Terminal : public Term {
 
 public:
     Terminal(std::string val, terminalType t) : val(std::move(val)), type(t) {}
-    std::string getVal() { return val; }
-    terminalType getType() { return type; }
+    std::string const & getVal() { return val; }
+    terminalType const & getType() { return type; }
     termType getTermType() override { return TERMINAL; }
     terminalType getTerminalType() override { return type; }
 
@@ -49,8 +49,8 @@ class Op : public Term {
 public:
     Op(std::string opcode, std::vector<std::shared_ptr<Term>> args)
         : operation(std::move(opcode)), args(std::move(args)) {}
-    std::string getOp() { return operation; }
-    std::vector<std::shared_ptr<Term>> getArgs() { return args; }
+    std::string const & getOp() { return operation; }
+    std::vector<std::shared_ptr<Term>> const & getArgs() { return args; }
     termType getTermType() override { return OP; }
     terminalType getTerminalType() override { return UNDECLARED; }
     std::string simplifyRule();
@@ -68,8 +68,8 @@ class App : public Term {
 
 public:
     App(std::string fun, std::vector<std::shared_ptr<Term>> args) : fun(std::move(fun)), args(std::move(args)) {}
-    std::string getFun() { return fun; }
-    std::vector<std::shared_ptr<Term>> getArgs() { return args; }
+    std::string const & getFun() { return fun; }
+    std::vector<std::shared_ptr<Term>> const & getArgs() { return args; }
     termType getTermType() override { return APP; }
     terminalType getTerminalType() override { return UNDECLARED; }
 
@@ -90,9 +90,9 @@ public:
     Quant(std::string quant, std::vector<std::shared_ptr<Term>> vars, std::vector<std::shared_ptr<Term>> sorts,
           std::shared_ptr<Term> coreTerm)
         : quant(std::move(quant)), vars(std::move(vars)), sorts(std::move(sorts)), coreTerm(std::move(coreTerm)) {}
-    std::string getQuant() { return quant; }
-    std::vector<std::shared_ptr<Term>> getVars() { return vars; }
-    std::vector<std::shared_ptr<Term>> getSorts() { return sorts; }
+    std::string const & getQuant() { return quant; }
+    std::vector<std::shared_ptr<Term>> const & getVars() { return vars; }
+    std::vector<std::shared_ptr<Term>> const & getSorts() { return sorts; }
     std::shared_ptr<Term> getCoreTerm() { return coreTerm; }
     termType getTermType() override { return QUANT; }
     terminalType getTerminalType() override { return UNDECLARED; }
@@ -113,9 +113,9 @@ public:
     Let(std::vector<std::string> termNames, std::vector<std::shared_ptr<Term>> declarations,
         std::shared_ptr<Term> application)
         : termNames(std::move(termNames)), declarations(std::move(declarations)), application(std::move(application)) {}
-    std::vector<std::shared_ptr<Term>> getDeclarations() { return declarations; }
-    std::shared_ptr<Term> getApplication() { return application; }
-    std::vector<std::string> getTermNames() { return termNames; }
+    std::vector<std::shared_ptr<Term>> const & getDeclarations() { return declarations; }
+    std::shared_ptr<Term> const & getApplication() { return application; }
+    std::vector<std::string> const & getTermNames() { return termNames; }
     termType getTermType() override { return LET; }
     terminalType getTerminalType() override { return UNDECLARED; }
 
@@ -306,4 +306,5 @@ public:
     Term * visit(Let *) override { return nullptr; };
 };
 
-#endif // TERM_H
+#endif //GOLEM_TERM_H
+
