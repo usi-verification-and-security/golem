@@ -22,6 +22,7 @@ public:
     virtual bool accept(class BooleanVisitor *) = 0;
     virtual Term * accept(class PointerVisitor *) = 0;
     virtual std::string printTerm();
+    virtual ~Term() = default;
 };
 
 class Terminal : public Term {
