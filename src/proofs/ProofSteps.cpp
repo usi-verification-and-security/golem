@@ -237,15 +237,14 @@ void StepHandler::buildAletheProof() {
             auto simplification = termToSimplifyCopy->accept(&operateVisitor);
 
             // Loop if there are more possible simplifications
-            while (not(termToSimplifyCopy->getTermType() == Term::TERMINAL or termToSimplifyCopy->getTermType() == Term::APP)) {
+            while (not(termToSimplifyCopy->getTermType() == Term::TERMINAL or
+                       termToSimplifyCopy->getTermType() == Term::APP)) {
 
                 // If the current term to simplify is at height 0, break the loop to end the proof
-                if (std::dynamic_pointer_cast<Op>(currTerm)->getArgs()[0].get() ==
-                    termToSimplifyRef) {
-                    break;
-                }
+                if (std::dynamic_pointer_cast<Op>(currTerm)->getArgs()[0].get() == termToSimplifyRef) { break; }
 
-                IsPrimaryBranchVisitor isPrimaryBranchVisitor(termToSimplifyRef); // Checking if the current term is a primary branch / branch of height 1
+                IsPrimaryBranchVisitor isPrimaryBranchVisitor(
+                    termToSimplifyRef); // Checking if the current term is a primary branch / branch of height 1
                 bool isPrimaryBranch = currTerm->accept(&isPrimaryBranchVisitor);
 
                 if (!stepReusage(termToSimplifyCopy)) {
@@ -308,15 +307,15 @@ void StepHandler::buildAletheProof() {
 
                 termToSimplifyCopy = currTerm->accept(&simplifyLocatorVisitor); // Locating possible simplification
                 termToSimplifyRef = currTerm->accept(&helperVisitor);
-                simplificationRule =
-                    std::dynamic_pointer_cast<Op>(termToSimplifyCopy)->simplifyRule(); // Getting rule for simplification
+                simplificationRule = std::dynamic_pointer_cast<Op>(termToSimplifyCopy)
+                                         ->simplifyRule(); // Getting rule for simplification
                 // Operating simplification
                 simplification = termToSimplifyCopy->accept(&operateVisitor);
             }
 
             // Final parent conjunction simplification
-            conjunctionSimplification(requiredMP, simplification, termToSimplifyCopy, simplificationRule, implicationStep,
-                                      renamedImpLHS);
+            conjunctionSimplification(requiredMP, simplification, termToSimplifyCopy, simplificationRule,
+                                      implicationStep, renamedImpLHS);
         }
     }
 
@@ -387,12 +386,12 @@ void StepHandler::instantiationSteps(int i) {
         notifyObservers(Step(
             currStep, Step::STEP,
             packClause(std::make_shared<Op>(
-                "or", packClause(std::make_shared<Op>("not", packClause(assumptionReNamedTerm)),
-                                 std::make_shared<Op>(
-                                     "!", packClause(currTerm->accept(&instantiateVisitor),
-                                                     std::make_shared<Terminal>(
-                                                         ":named " + instantiationReNamedTerm->printTerm(),
-                                                         Terminal::UNDECLARED)))))),
+                "or",
+                packClause(std::make_shared<Op>("not", packClause(assumptionReNamedTerm)),
+                           std::make_shared<Op>("!", packClause(currTerm->accept(&instantiateVisitor),
+                                                                std::make_shared<Terminal>(
+                                                                    ":named " + instantiationReNamedTerm->printTerm(),
+                                                                    Terminal::UNDECLARED)))))),
             "forall_inst", instPairs));
 
         currStep++;
@@ -423,11 +422,11 @@ void StepHandler::assumptionSteps() {
             assertion = assertion->accept(&simplifyLetTermVisitor);
             potentialLet = assertion->accept(&letLocatorVisitor);
         }
-        notifyObservers(Step(currStep, Step::ASSUME,
-                             packClause(std::make_shared<Op>(
-                                 "!", packClause(assertion,
-                                                 std::make_shared<Terminal>(":named @a" + std::to_string(currStep),
-                                                                            Terminal::UNDECLARED))))));
+        notifyObservers(
+            Step(currStep, Step::ASSUME,
+                 packClause(std::make_shared<Op>(
+                     "!", packClause(assertion, std::make_shared<Terminal>(":named @a" + std::to_string(currStep),
+                                                                           Terminal::UNDECLARED))))));
 
         currStep++;
     }
@@ -486,8 +485,7 @@ void StepHandler::noCongRequiredSteps(std::vector<int> requiredMP, int implicati
                 SimplifyVisitor simplifyVisitor(simplification, currTerm->accept(&helperVisitor));
                 currTerm = currTerm->accept(&simplifyVisitor);
 
-                if (std::dynamic_pointer_cast<Op>(currTerm)->getArgs()[0]->printTerm() ==
-                    simplification->printTerm()) {
+                if (std::dynamic_pointer_cast<Op>(currTerm)->getArgs()[0]->printTerm() == simplification->printTerm()) {
                     break;
                 }
 
@@ -718,18 +716,20 @@ void StepHandler::conjunctionSimplification(std::vector<int> requiredMP, std::sh
 
     // Check if we are dealing with a non linear case
     if (std::dynamic_pointer_cast<Op>(termToSimplify)->nonLinearity()) {
-        notifyObservers(
-            Step(currStep, Step::STEP,
-                 packClause(simplification,
-                            std::make_shared<Terminal>(std::dynamic_pointer_cast<Op>(simplification)->nonLinearSimplification(), Term::UNDECLARED)),
-                 "and_neg"));
+        notifyObservers(Step(
+            currStep, Step::STEP,
+            packClause(simplification,
+                       std::make_shared<Terminal>(
+                           std::dynamic_pointer_cast<Op>(simplification)->nonLinearSimplification(), Term::UNDECLARED)),
+            "and_neg"));
 
         currStep++;
 
         notifyObservers(
             Step(currStep, Step::STEP,
-                 packClause(renamedImpLHS,
-                            std::make_shared<Terminal>(std::dynamic_pointer_cast<Op>(simplification)->nonLinearSimplification(), Term::UNDECLARED)),
+                 packClause(renamedImpLHS, std::make_shared<Terminal>(
+                                               std::dynamic_pointer_cast<Op>(simplification)->nonLinearSimplification(),
+                                               Term::UNDECLARED)),
                  "resolution", std::vector<int>{currStep - 2, currStep - 1}));
 
         requiredMP.push_back(currStep);
@@ -838,8 +838,7 @@ StepHandler::getInstPairs(int stepIndex, vec<Normalizer::Equality> const & stepN
         // Find values for auxiliary variables
         SMTSolver solver(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
         solver.getCoreSolver().insertFormula(instantiatedConstraint);
-        auto res = solver.getCoreSolver().check();
-        assert(res == s_True);
+        assert(solver.getCoreSolver().check() == s_True);
         auto model = solver.getCoreSolver().getModel();
         for (PTRef auxVar : auxVars) {
             PTRef val = model->evaluate(auxVar);

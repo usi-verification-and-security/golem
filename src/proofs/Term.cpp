@@ -35,7 +35,7 @@ std::string Op::nonLinearSimplification() {
         }
         return ss.str();
     } else {
-        throw  std::logic_error("This is not a non-linear case!");
+        throw std::logic_error("This is not a non-linear case!");
     }
 }
 
@@ -72,7 +72,7 @@ void PrintVisitor::visit(Quant * term) {
     for (std::size_t i = 0; i < term->getVars().size(); i++) {
         ss << "(";
         term->getVars()[i]->accept(this);
-        ss <<" ";
+        ss << " ";
         term->getSorts()[i]->accept(this);
         ss << ")";
         if (i + 1 != term->getVars().size()) { ss << " "; }

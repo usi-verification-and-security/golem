@@ -193,9 +193,7 @@ void ChcInterpreterContext::interpretAssert(ASTNode & node) {
     if (logic.getTerm_true() == term) { return; }
     auto chclause = chclauseFromPTRef(term);
     system->addClause(std::move(chclause));
-    if (opts.hasOption(Options::PRINT_WITNESS)) {
-        originalAssertions.push_back(ASTtoTerm(termNode));
-    }
+    if (opts.hasOption(Options::PRINT_WITNESS)) { originalAssertions.push_back(ASTtoTerm(termNode)); }
 }
 
 std::shared_ptr<Term> ChcInterpreterContext::ASTtoTerm(const ASTNode & node) {
@@ -246,9 +244,7 @@ std::shared_ptr<Term> ChcInterpreterContext::ASTtoTerm(const ASTNode & node) {
         assert(args.size() > 0);
 
         if (op == "-" or op == "+") {
-            if (args.size() <= 1) {
-                return std::make_shared<Terminal>("(- " + args[0]->printTerm() + ")", Term::INT);
-            }
+            if (args.size() <= 1) { return std::make_shared<Terminal>("(- " + args[0]->printTerm() + ")", Term::INT); }
         }
         if (isOperator(op)) {
             return std::make_shared<Op>(op, args);

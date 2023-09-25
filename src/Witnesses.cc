@@ -9,6 +9,7 @@
 #include "proofs/ProofSteps.h"
 #include "utils/SmtSolver.h"
 #include <memory>
+#include <utility>
 
 void VerificationResult::printWitness(std::ostream & out, Logic & logic, const ChcDirectedHyperGraph & originalGraph,
                                        std::vector<std::shared_ptr<Term>> originalAssertions, Normalizer::Equalities const & normalizingEqualities, const std::string& format) const {
@@ -23,8 +24,8 @@ void VerificationResult::printWitness(std::ostream & out, Logic & logic, const C
             if (format == "legacy") {
                 getInvalidityWitness().print(out, logic);
             } else {
-                StepHandler stepHandler(getInvalidityWitness().getDerivation(), originalAssertions,
-                                        normalizingEqualities, out,
+                StepHandler stepHandler(getInvalidityWitness().getDerivation(), std::move(originalAssertions),
+                                        normalizingEqualities,
                                         logic, originalGraph);
                 if (format == "alethe") {
                     AlethePrintObserver alethePrintObserver(out);

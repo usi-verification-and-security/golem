@@ -221,13 +221,14 @@ public:
 
 class PrintVisitor {
     std::stringstream ss;
+
 public:
     void visit(Terminal *);
     void visit(Quant *);
     void visit(Op *);
     void visit(App *);
     void visit(Let *);
-    std::string getString() {return ss.str();}
+    std::string getString() { return ss.str(); }
 };
 
 class BooleanVisitor {
@@ -291,5 +292,4 @@ public:
     Term * visit(Let *) override { return nullptr; };
 };
 
-#endif //GOLEM_TERM_H
-
+#endif // GOLEM_TERM_H
