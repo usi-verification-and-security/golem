@@ -28,16 +28,16 @@ private:
 public:
     Step(int stepId, stepType type, std::vector<std::shared_ptr<Term>> clause, std::string rule,
          std::vector<int> premises)
-        : type(type), stepId(stepId), clause(std::move(clause)), rule(std::move(rule)), premises(std::move(premises)) {}
+        : stepId(stepId), type(type), clause(std::move(clause)), rule(std::move(rule)), premises(std::move(premises)) {}
     Step(int stepId, stepType type, std::vector<std::shared_ptr<Term>> clause, std::string rule,
          std::vector<std::pair<std::string, std::string>> args)
-        : type(type), stepId(stepId), clause(std::move(clause)), rule(std::move(rule)), args(std::move(args)) {}
+        : stepId(stepId), type(type), clause(std::move(clause)), rule(std::move(rule)), args(std::move(args)) {}
     Step(int stepId, stepType type, std::vector<std::shared_ptr<Term>> clause, std::string rule)
-        : type(type), stepId(stepId), clause(std::move(clause)), rule(std::move(rule)) {}
+        : stepId(stepId), type(type), clause(std::move(clause)), rule(std::move(rule)) {}
     Step(int stepId, stepType type, std::vector<std::shared_ptr<Term>> clause)
-        : type(type), stepId(stepId), clause(std::move(clause)), rule(" ") {}
+        : stepId(stepId), type(type), clause(std::move(clause)), rule(" ") {}
     Step(int stepId, stepType type, std::string rule, std::vector<int> premises)
-        : type(type), stepId(stepId), rule(std::move(rule)), premises(std::move(premises)) {}
+        : stepId(stepId), type(type), rule(std::move(rule)), premises(std::move(premises)) {}
     std::string printStepAlethe() const;
     std::string printStepIntermediate() const;
 };
@@ -104,8 +104,8 @@ public:
                 Normalizer::Equalities const & normalizingEqualities, std::ostream & out, Logic & logic,
                 ChcDirectedHyperGraph originalGraph)
         : derivation(std::move(derivation)), originalAssertions(std::move(originalAssertions)),
-          normalizingEqualities(normalizingEqualities), originalGraph(std::move(originalGraph)), out(out),
-          logic(logic){}
+          normalizingEqualities(normalizingEqualities), out(out), logic(logic),
+          originalGraph(std::move(originalGraph)){}
 
     std::vector<std::pair<std::string, std::string>> getInstPairs(int it, vec<Normalizer::Equality> const & stepNormEq);
     static std::vector<std::shared_ptr<Term>> packClause(const std::shared_ptr<Term> & term);
@@ -130,7 +130,7 @@ public:
     void registerObserver(Observer * observer) { observers.push_back(observer); }
 
     void deRegisterObserver(Observer * observer) {
-        for (int i = 0; i < observers.size(); i++) {
+        for (int i = 0; i < int(observers.size()); i++) {
             if (observer == observers[i]) { observers.erase(observers.begin() + i); }
         }
     }

@@ -29,9 +29,9 @@ bool Op::nonLinearity() {
 std::string Op::nonLinearSimplification() {
     std::stringstream ss;
     if (operation == "and") {
-        for (int i = 0; i < args.size(); i++) {
+        for (int i = 0; i < int(args.size()); i++) {
             ss << "(not " << args[i]->printTerm() << ")";
-            if (i != args.size() - 1) { ss << " "; }
+            if (i != int(args.size()) - 1) { ss << " "; }
         }
         return ss.str();
     } else {
@@ -69,13 +69,13 @@ void PrintVisitor::visit(App * term) {
 
 void PrintVisitor::visit(Quant * term) {
     ss << "(" << term->getQuant() << " (";
-    for (int i = 0; i < term->getVars().size(); i++) {
+    for (int i = 0; i < int(term->getVars().size()); i++) {
         ss << "(";
         term->getVars()[i]->accept(this);
         ss <<" ";
         term->getSorts()[i]->accept(this);
         ss << ")";
-        if (i + 1 != term->getVars().size()) { ss << " "; }
+        if (i + 1 != int(term->getVars().size())) { ss << " "; }
     }
     ss << ") ";
     term->getCoreTerm()->accept(this);
@@ -85,11 +85,11 @@ void PrintVisitor::visit(Quant * term) {
 void PrintVisitor::visit(Let * term) {
     auto names = term->getTermNames();
     ss << "(let (";
-    for (int i = 0; i < names.size(); i++) {
+    for (int i = 0; i < int(names.size()); i++) {
         ss << "(" << names[i] << " ";
         term->getDeclarations()[i]->accept(this);
         ss << ")";
-        if (i + 1 != names.size()) { ss << " "; }
+        if (i + 1 != int(names.size())) { ss << " "; }
     }
     ss << ") ";
     term->getApplication()->accept(this);
@@ -190,7 +190,7 @@ std::shared_ptr<Term> RemoveUnusedVisitor::visit(Quant * term) {
 
     coreTerm->accept(this);
 
-    for (int i = 0; i < vars.size(); i++) {
+    for (int i = 0; i < int(vars.size()); i++) {
         auto var = vars[i];
         for (auto varInUse : varsInUse) {
             if (var->printTerm() == varInUse) { inUse = true; }
@@ -380,7 +380,7 @@ std::shared_ptr<Term> OperateVisitor::visit(Op * term) {
             if (arg->printTerm() == "true") { trues++; }
             if (arg->printTerm() != "true") { predicates.push_back(arg); }
         }
-        if (trues == args.size()) { return std::make_shared<Terminal>("true", Term::BOOL); }
+        if (trues == int(args.size())) { return std::make_shared<Terminal>("true", Term::BOOL); }
         if (predicates.size() == 1) {
             return predicates[0]->accept(&fakeInstantiation);
         } else {
@@ -476,7 +476,7 @@ std::shared_ptr<Term> OperateVisitor::visit(Op * term) {
 
 std::shared_ptr<Term> OperateLetTermVisitor::visit(Terminal * term) {
 
-    for (int i = 0; i < terms.size(); i++) {
+    for (int i = 0; i < int(terms.size()); i++) {
         if (term->getVal() == terms[i]) { return substitutions[i]; }
     }
     return std::make_shared<Terminal>(term->getVal(), term->getType());
