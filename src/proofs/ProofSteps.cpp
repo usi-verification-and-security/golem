@@ -416,17 +416,17 @@ void StepHandler::instantiationSteps(int i) {
 void StepHandler::assumptionSteps() {
 
     auto assertionSize = originalAssertions.size();
-    for (std::size_t i = 0; i < assertionSize; ++i) {
-        Term * potentialLet = originalAssertions[i]->accept(&letLocatorVisitor);
+    for (auto & assertion : originalAssertions) {
+        Term * potentialLet = assertion->accept(&letLocatorVisitor);
         while (potentialLet != nullptr) {
             auto simplifiedLet = potentialLet->accept(&operateLetTermVisitor);
             SimplifyVisitor simplifyLetTermVisitor(simplifiedLet, potentialLet);
-            originalAssertions[i] = originalAssertions[i]->accept(&simplifyLetTermVisitor);
-            potentialLet = originalAssertions[i]->accept(&letLocatorVisitor);
+            assertion = assertion->accept(&simplifyLetTermVisitor);
+            potentialLet = assertion->accept(&letLocatorVisitor);
         }
         notifyObservers(Step(currStep, Step::ASSUME,
                              packClause(std::make_shared<Op>(
-                                 "!", packClause(originalAssertions[i],
+                                 "!", packClause(assertion,
                                                  std::make_shared<Terminal>(":named @a" + std::to_string(currStep),
                                                                             Terminal::UNDECLARED))))));
 
@@ -718,11 +718,11 @@ void StepHandler::conjunctionSimplification(std::vector<int> requiredMP, std::sh
     currStep++;
 
     // Check if we are dealing with a non linear case
-    if (termToSimplify->accept(&nonLinearVisitor)) {
+    if (std::dynamic_pointer_cast<Op>(termToSimplify)->nonLinearity()) {
         notifyObservers(
             Step(currStep, Step::STEP,
                  packClause(simplification,
-                            std::make_shared<Terminal>(simplification->accept(&negatedAndVisitor), Term::UNDECLARED)),
+                            std::make_shared<Terminal>(std::dynamic_pointer_cast<Op>(simplification)->nonLinearSimplification(), Term::UNDECLARED)),
                  "and_neg"));
 
         currStep++;
@@ -730,7 +730,7 @@ void StepHandler::conjunctionSimplification(std::vector<int> requiredMP, std::sh
         notifyObservers(
             Step(currStep, Step::STEP,
                  packClause(renamedImpLHS,
-                            std::make_shared<Terminal>(simplification->accept(&negatedAndVisitor), Term::UNDECLARED)),
+                            std::make_shared<Terminal>(std::dynamic_pointer_cast<Op>(simplification)->nonLinearSimplification(), Term::UNDECLARED)),
                  "resolution", std::vector<int>{currStep - 2, currStep - 1}));
 
         requiredMP.push_back(currStep);

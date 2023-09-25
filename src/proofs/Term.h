@@ -54,6 +54,8 @@ public:
     termType getTermType() override { return OP; }
     terminalType getTerminalType() override { return UNDECLARED; }
     std::string simplifyRule();
+    bool nonLinearity();
+    std::string nonLinearSimplification();
 
     std::shared_ptr<Term> accept(LogicVisitor *) override;
     std::string accept(StringVisitor *) override;
@@ -227,15 +229,6 @@ public:
     std::string getString() {return ss.str();}
 };
 
-class NegatedAndVisitor : public StringVisitor {
-public:
-    std::string visit(Terminal *) override { return "Error"; };
-    std::string visit(Quant *) override { return "Error"; };
-    std::string visit(Op *) override;
-    std::string visit(App *) override { return "Error"; };
-    std::string visit(Let *) override { return "Error"; };
-};
-
 class BooleanVisitor {
 public:
     virtual bool visit(Terminal *) = 0;
@@ -254,15 +247,6 @@ public:
     bool visit(Quant *) override { return false; };
     bool visit(Op *) override;
     bool visit(App *) override { return false; };
-    bool visit(Let *) override { return false; };
-};
-
-class NonLinearVisitor : public BooleanVisitor {
-public:
-    bool visit(Terminal *) override;
-    bool visit(Quant *) override { return false; };
-    bool visit(Op *) override;
-    bool visit(App *) override { return true; };
     bool visit(Let *) override { return false; };
 };
 

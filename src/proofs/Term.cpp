@@ -10,6 +10,35 @@
 #include <memory>
 #include <string>
 
+bool Op::nonLinearity() {
+    int predicates = 0;
+    if (operation == "and") {
+        for (auto arg : args) {
+            if (arg->getTermType() == Term::APP) { predicates++; }
+        }
+        if (predicates >= 2) {
+            return true;
+        } else {
+            return false;
+        }
+    } else {
+        return false;
+    }
+}
+
+std::string Op::nonLinearSimplification() {
+    std::stringstream ss;
+    if (operation == "and") {
+        for (int i = 0; i < args.size(); i++) {
+            ss << "(not " << args[i]->printTerm() << ")";
+            if (i != args.size() - 1) { ss << " "; }
+        }
+        return ss.str();
+    } else {
+        throw  std::logic_error("This is not a non-linear case!");
+    }
+}
+
 std::string Term::printTerm() {
     PrintVisitor printVisitor;
     this->accept(&printVisitor);
@@ -98,21 +127,6 @@ std::string Op::simplifyRule() {
         return "mod_simplify";
     }
     return "Error";
-}
-
-std::string NegatedAndVisitor::visit(Op * term) {
-    std::stringstream ss;
-    auto op = term->getOp();
-    auto args = term->getArgs();
-    if (op == "and") {
-        for (int i = 0; i < args.size(); i++) {
-            ss << "(not " << args[i]->printTerm() << ")";
-            if (i != args.size() - 1) { ss << " "; }
-        }
-        return ss.str();
-    } else {
-        return "Error";
-    }
 }
 
 std::shared_ptr<Term> InstantiateVisitor::visit(Terminal * term) {
@@ -527,37 +541,6 @@ bool IsPrimaryBranchVisitor::visit(Op * term) {
     }
 
     return false;
-}
-
-bool NonLinearVisitor::visit(Terminal * term) {
-    if (term->getType() == Term::VAR) {
-        return true;
-    } else {
-        return false;
-    }
-}
-
-bool NonLinearVisitor::visit(Op * term) {
-
-    auto op = term->getOp();
-    auto args = term->getArgs();
-    int predicates = 0;
-
-    if (op == "=>") { return args[0]->accept(this); }
-
-    if (op == "and") {
-
-        for (auto arg : args) {
-            if (arg->accept(this)) { predicates++; }
-        }
-        if (predicates >= 2) {
-            return true;
-        } else {
-            return false;
-        }
-    } else {
-        return false;
-    }
 }
 
 Term * SimplifyHelperVisitor::visit(Terminal * term) {

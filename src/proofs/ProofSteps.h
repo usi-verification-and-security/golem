@@ -74,10 +74,10 @@ class StepHandler {
 
     std::vector<Observer *> observers;
 
-    int currStep;
+    int currStep = 0;
     int transitivityStep;
-    int renamingTransIndex;
-    int renamingCongIndex;
+    int renamingTransIndex = 0;
+    int renamingCongIndex = 0;
     bool transReNamed = false;
     bool congReNamed = false;
 
@@ -95,8 +95,6 @@ class StepHandler {
     SimplifyLocatorVisitor simplifyLocatorVisitor;
     OperateVisitor operateVisitor;
     SimplifyHelperVisitor helperVisitor;
-    NonLinearVisitor nonLinearVisitor;
-    NegatedAndVisitor negatedAndVisitor;
     OperateLetTermVisitor operateLetTermVisitor;
     LetLocatorVisitor letLocatorVisitor;
     RemoveUnusedVisitor removeUnusedVisitor;
@@ -107,7 +105,7 @@ public:
                 ChcDirectedHyperGraph originalGraph)
         : derivation(std::move(derivation)), originalAssertions(std::move(originalAssertions)),
           normalizingEqualities(normalizingEqualities), originalGraph(std::move(originalGraph)), out(out),
-          logic(logic), currStep(0), renamingTransIndex(0), renamingCongIndex(0) {}
+          logic(logic){}
 
     std::vector<std::pair<std::string, std::string>> getInstPairs(int it, vec<Normalizer::Equality> const & stepNormEq);
     static std::vector<std::shared_ptr<Term>> packClause(const std::shared_ptr<Term> & term);
