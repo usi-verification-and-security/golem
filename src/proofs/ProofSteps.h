@@ -130,7 +130,7 @@ public:
     void registerObserver(Observer * observer) { observers.push_back(observer); }
 
     void deRegisterObserver(Observer * observer) {
-        for (int i = 0; i < int(observers.size()); i++) {
+        for (std::size_t i = 0; i < observers.size(); i++) {
             if (observer == observers[i]) { observers.erase(observers.begin() + i); }
         }
     }

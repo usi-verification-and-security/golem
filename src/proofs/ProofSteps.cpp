@@ -26,9 +26,9 @@ std::string Step::printStepAlethe() const {
 
     if (not clause.empty()) {
         ss << " ";
-        for (int i = 0; i < int(clause.size()); i++) {
+        for (std::size_t i = 0; i < clause.size(); i++) {
             ss << clause[i]->printTerm();
-            if (i != int(clause.size()) - 1) { ss << " "; }
+            if (i != clause.size() - 1) { ss << " "; }
         }
     }
 
@@ -38,18 +38,18 @@ std::string Step::printStepAlethe() const {
 
     if (not premises.empty()) {
         ss << " :premises (";
-        for (int i = 0; i < int(premises.size()); i++) {
+        for (std::size_t i = 0; i < premises.size(); i++) {
             ss << "t" << premises[i];
-            if (i != int(premises.size()) - 1) { ss << " "; }
+            if (i != premises.size() - 1) { ss << " "; }
         }
         ss << ")";
     }
 
     if (not args.empty()) {
         ss << " :args (";
-        for (int i = 0; i < int(args.size()); i++) {
+        for (std::size_t i = 0; i < args.size(); i++) {
             ss << "(:= " << args[i].first << " " << args[i].second << ")";
-            if (i != int(args.size()) - 1) { ss << " "; }
+            if (i != args.size() - 1) { ss << " "; }
         }
         ss << ")";
     }
@@ -76,9 +76,9 @@ std::string Step::printStepIntermediate() const {
 
     if (not args.empty()) {
         ss << " :args (";
-        for (int i = 0; i < int(args.size()); i++) {
+        for (std::size_t i = 0; i < args.size(); i++) {
             ss << "(:= " << args[i].first << " " << args[i].second << ")";
-            if (i != int(args.size()) - 1) { ss << " "; }
+            if (i != args.size() - 1) { ss << " "; }
         }
         ss << ")";
     }
@@ -136,9 +136,9 @@ void StepHandler::buildIntermediateProof() {
 
         std::stringstream premises;
 
-        for (int i = 0; i < int(step.premises.size()); i++) {
+        for (std::size_t i = 0; i < step.premises.size(); i++) {
             premises << logic.printTerm(derivation[step.premises[i]].derivedFact);
-            if (i < int(step.premises.size()) - 1) { premises << ' '; }
+            if (i < step.premises.size() - 1) { premises << ' '; }
         }
 
         notifyObservers(
@@ -187,7 +187,7 @@ void StepHandler::buildAletheProof() {
 
         if (!modusPonensSteps.empty()) {
             // Get the necessary steps for modus ponens
-            for (int i = 0; i < int(step.premises.size()); i++) {
+            for (std::size_t i = 0; i < step.premises.size(); i++) {
                 requiredMP.push_back(modusPonensSteps[(int)step.premises[i] - 1]);
             }
         }
@@ -787,7 +787,7 @@ StepHandler::getInstPairs(int stepIndex, vec<Normalizer::Equality> const & stepN
         auto formalArgs = utils.predicateArgsInOrder(predicateInstance);
         assert(concreteArgs.size() == formalArgs.size());
         // Building the pairs
-        for (int m = 0; m < int(formalArgs.size()); m++) {
+        for (std::size_t m = 0; m < formalArgs.size(); m++) {
             for (auto const & equality : stepNormEq) {
                 if (equality.normalizedVar == formalArgs[m]) {
                     assert(logic.isConstant(concreteArgs[m]));
@@ -809,7 +809,7 @@ StepHandler::getInstPairs(int stepIndex, vec<Normalizer::Equality> const & stepN
     assert(concreteArgs.size() == formalArgs.size());
 
     // Building the pairs
-    for (int m = 0; m < int(formalArgs.size()); m++) {
+    for (std::size_t m = 0; m < formalArgs.size(); m++) {
         for (auto const & equality : stepNormEq) {
             if (equality.normalizedVar == formalArgs[m]) {
                 assert(logic.isConstant(concreteArgs[m]));
