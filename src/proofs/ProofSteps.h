@@ -103,8 +103,7 @@ public:
                 Normalizer::Equalities const & normalizingEqualities, Logic & logic,
                 ChcDirectedHyperGraph originalGraph)
         : derivation(std::move(derivation)), originalAssertions(std::move(originalAssertions)),
-          normalizingEqualities(normalizingEqualities), logic(logic),
-          originalGraph(std::move(originalGraph)) {}
+          normalizingEqualities(normalizingEqualities), logic(logic), originalGraph(std::move(originalGraph)) {}
 
     std::vector<std::pair<std::string, std::string>> getInstPairs(int it, vec<Normalizer::Equality> const & stepNormEq);
     static std::vector<std::shared_ptr<Term>> packClause(const std::shared_ptr<Term> & term);
