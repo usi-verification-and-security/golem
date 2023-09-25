@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: MIT
  */
 
-#ifndef GOLEM_ALETHETERMS_H
-#define GOLEM_ALETHETERMS_H
+#ifndef GOLEM_PROOFSTEPS_H
+#define GOLEM_PROOFSTEPS_H
 #include "Term.h"
 #include "Witnesses.h"
 #include "graph/ChcGraph.h"
@@ -38,13 +38,13 @@ public:
         : type(type), stepId(stepId), clause(std::move(clause)), rule(" ") {}
     Step(int stepId, stepType type, std::string rule, std::vector<int> premises)
         : type(type), stepId(stepId), rule(std::move(rule)), premises(std::move(premises)) {}
-    std::string printStepAlethe();
-    std::string printStepIntermediate();
+    std::string printStepAlethe() const;
+    std::string printStepIntermediate() const;
 };
 
 class Observer {
 public:
-    virtual void update(Step & step) = 0;
+    virtual void update(Step const & step) = 0;
 };
 
 class AlethePrintObserver : public Observer {
@@ -52,7 +52,7 @@ class AlethePrintObserver : public Observer {
 
 public:
     explicit AlethePrintObserver(std::ostream & out) : out(out) {}
-    void update(Step & step) override { out << step.printStepAlethe(); }
+    void update(Step const & step) override { out << step.printStepAlethe(); }
 };
 
 class IntermediatePrintObserver : public Observer {
@@ -60,7 +60,7 @@ class IntermediatePrintObserver : public Observer {
 
 public:
     explicit IntermediatePrintObserver(std::ostream & out) : out(out) {}
-    void update(Step & step) override { out << step.printStepIntermediate(); }
+    void update(Step const & step) override { out << step.printStepIntermediate(); }
 };
 
 class StepHandler {
@@ -74,10 +74,10 @@ class StepHandler {
 
     std::vector<Observer *> observers;
 
-    int currStep = 0;
+    int currStep;
     int transitivityStep;
-    int renamingTransIndex = 0;
-    int renamingCongIndex = 0;
+    int renamingTransIndex;
+    int renamingCongIndex;
     bool transReNamed = false;
     bool congReNamed = false;
 
@@ -106,8 +106,8 @@ public:
                 Normalizer::Equalities const & normalizingEqualities, std::ostream & out, Logic & logic,
                 ChcDirectedHyperGraph originalGraph)
         : derivation(std::move(derivation)), originalAssertions(std::move(originalAssertions)),
-          normalizingEqualities(std::move(normalizingEqualities)), originalGraph(std::move(originalGraph)), out(out),
-          logic(logic) {}
+          normalizingEqualities(normalizingEqualities), originalGraph(std::move(originalGraph)), out(out),
+          logic(logic), currStep(0), renamingTransIndex(0), renamingCongIndex(0) {}
 
     std::vector<std::pair<std::string, std::string>> getInstPairs(int it, vec<Normalizer::Equality> const & stepNormEq);
     static std::vector<std::shared_ptr<Term>> packClause(const std::shared_ptr<Term> & term);
@@ -137,11 +137,11 @@ public:
         }
     }
 
-    void notifyObservers(const Step & step) {
+    void notifyObservers(Step const & step) {
         for (Observer * observer : observers) { // notify all observers
-            observer->update(const_cast<Step &>(step));
+            observer->update(step);
         }
     }
 };
 
-#endif // GOLEM_ALETHETERMS_H
+#endif // GOLEM_PROOFSETPS_H

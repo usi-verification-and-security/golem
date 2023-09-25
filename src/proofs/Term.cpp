@@ -22,7 +22,7 @@ void PrintVisitor::visit(Terminal * term) {
 
 void PrintVisitor::visit(Op * term) {
     ss << "(" << term->getOp();
-    for (const std::shared_ptr<Term> & arg : term->getArgs()) {
+    for (const auto & arg : term->getArgs()) {
         ss << " ";
         arg->accept(this);
     }
@@ -71,7 +71,7 @@ std::string Op::simplifyRule() {
     std::string op = operation;
     if (op == "=") {
         if ((args[0]->printTerm().find_first_not_of("( )-0123456789") == std::string::npos) and
-            (args[0]->printTerm().find_first_not_of("( )-0123456789") == std::string::npos)) {
+            (args[1]->printTerm().find_first_not_of("( )-0123456789") == std::string::npos)) {
             return "eq_simplify";
         } else {
             return "equiv_simplify";

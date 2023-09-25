@@ -9,9 +9,8 @@
 #include <string>
 #include <utility>
 
-std::string Step::printStepAlethe() {
+std::string Step::printStepAlethe() const {
 
-    PrintVisitor printVisitor;
     std::stringstream ss;
     ss << "(";
 
@@ -25,7 +24,7 @@ std::string Step::printStepAlethe() {
 
     if (type != ASSUME) { ss << " (cl"; }
 
-    if (!clause.empty()) {
+    if (not clause.empty()) {
         ss << " ";
         for (int i = 0; i < clause.size(); i++) {
             ss << clause[i]->printTerm();
@@ -37,7 +36,7 @@ std::string Step::printStepAlethe() {
 
     if (rule != " ") { ss << " :rule " << rule; }
 
-    if (!premises.empty()) {
+    if (not premises.empty()) {
         ss << " :premises (";
         for (int i = 0; i < premises.size(); i++) {
             ss << "t" << premises[i];
@@ -46,7 +45,7 @@ std::string Step::printStepAlethe() {
         ss << ")";
     }
 
-    if (!args.empty()) {
+    if (not args.empty()) {
         ss << " :args (";
         for (int i = 0; i < args.size(); i++) {
             ss << "(:= " << args[i].first << " " << args[i].second << ")";
@@ -60,14 +59,14 @@ std::string Step::printStepAlethe() {
     return ss.str();
 }
 
-std::string Step::printStepIntermediate() {
+std::string Step::printStepIntermediate() const {
 
     PrintVisitor printVisitor;
     std::stringstream ss;
 
     ss << stepId << '\t';
 
-    if (!clause.empty()) {
+    if (not clause.empty()) {
         ss << " ";
         for (int i = 0; i < clause.size(); i++) {
             ss << clause[i]->printTerm();
@@ -75,7 +74,7 @@ std::string Step::printStepIntermediate() {
         }
     }
 
-    if (!args.empty()) {
+    if (not args.empty()) {
         ss << " :args (";
         for (int i = 0; i < args.size(); i++) {
             ss << "(:= " << args[i].first << " " << args[i].second << ")";
@@ -84,7 +83,7 @@ std::string Step::printStepIntermediate() {
         ss << ")";
     }
 
-    if (!premises.empty()) {
+    if (not premises.empty()) {
         ss << " :premises ";
         for (auto premise : premises) {
             ss << premise << " ";
@@ -417,17 +416,17 @@ void StepHandler::instantiationSteps(int i) {
 void StepHandler::assumptionSteps() {
 
     auto assertionSize = originalAssertions.size();
-    for (std::size_t i = 1; i <= assertionSize; ++i) {
-        Term * potentialLet = originalAssertions[i - 1]->accept(&letLocatorVisitor);
+    for (std::size_t i = 0; i < assertionSize; ++i) {
+        Term * potentialLet = originalAssertions[i]->accept(&letLocatorVisitor);
         while (potentialLet != nullptr) {
             auto simplifiedLet = potentialLet->accept(&operateLetTermVisitor);
             SimplifyVisitor simplifyLetTermVisitor(simplifiedLet, potentialLet);
-            originalAssertions[i - 1] = originalAssertions[i - 1]->accept(&simplifyLetTermVisitor);
-            potentialLet = originalAssertions[i - 1]->accept(&letLocatorVisitor);
+            originalAssertions[i] = originalAssertions[i]->accept(&simplifyLetTermVisitor);
+            potentialLet = originalAssertions[i]->accept(&letLocatorVisitor);
         }
         notifyObservers(Step(currStep, Step::ASSUME,
                              packClause(std::make_shared<Op>(
-                                 "!", packClause(originalAssertions[i - 1],
+                                 "!", packClause(originalAssertions[i],
                                                  std::make_shared<Terminal>(":named @a" + std::to_string(currStep),
                                                                             Terminal::UNDECLARED))))));
 
