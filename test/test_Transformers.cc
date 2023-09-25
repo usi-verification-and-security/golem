@@ -8,9 +8,11 @@
 #include "TestTemplate.h"
 
 #include "graph/ChcGraphBuilder.h"
-#include "transformers/SimpleChainSummarizer.h"
-#include "transformers/NodeEliminator.h"
+#include "transformers/ConstraintSimplifier.h"
 #include "transformers/MultiEdgeMerger.h"
+#include "transformers/NodeEliminator.h"
+#include "transformers/SimpleChainSummarizer.h"
+#include "transformers/TransformationPipeline.h"
 #include "Validator.h"
 #include "engine/Spacer.h"
 #include "engine/IMC.h"
@@ -108,7 +110,11 @@ TEST_F(Transformer_test, test_TwoChains_WithLoop) {
     );
     auto hypergraph = systemToGraph(system);
     auto originalGraph = *hypergraph;
-    auto [newGraph, translator] = SimpleChainSummarizer().transform(std::move(hypergraph));
+    TransformationPipeline::pipeline_t pipeline;
+    pipeline.push_back(std::make_unique<ConstraintSimplifier>());
+    pipeline.push_back(std::make_unique<SimpleChainSummarizer>());
+    TransformationPipeline transformations(std::move(pipeline));
+    auto [newGraph, translator] = transformations.transform(std::move(hypergraph));
     VersionManager manager{logic};
     PTRef predicate = manager.sourceFormulaToBase(newGraph->getStateVersion(s2));
     PTRef var = logic.getPterm(predicate)[0];
@@ -146,7 +152,11 @@ TEST_F(Transformer_test, test_OutputFromEngine) {
     );
     auto hypergraph = systemToGraph(system);
     auto originalGraph = *hypergraph;
-    auto [newGraph, translator] = SimpleChainSummarizer().transform(std::move(hypergraph));
+    TransformationPipeline::pipeline_t pipeline;
+    pipeline.push_back(std::make_unique<ConstraintSimplifier>());
+    pipeline.push_back(std::make_unique<SimpleChainSummarizer>());
+    TransformationPipeline transformations(std::move(pipeline));
+    auto [newGraph, translator] = transformations.transform(std::move(hypergraph));
     hypergraph = std::move(newGraph);
     auto res = Spacer(logic, options).solve(*hypergraph);
     ASSERT_EQ(res.getAnswer(), VerificationAnswer::SAFE);

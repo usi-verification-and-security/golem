@@ -38,6 +38,7 @@ PTRef Normalizer::eliminateDistincts(PTRef fla) {
 Transformer::TransformationResult ConstraintSimplifier::transform(std::unique_ptr<ChcDirectedHyperGraph> graph) {
 
     Logic & logic = graph->getLogic();
+    TermUtils utils(logic);
     graph->forEachEdge([&](auto & edge) {
         PTRef constraint = edge.fla.fla;
         helper::Normalizer normalizer(logic);
@@ -45,10 +46,23 @@ Transformer::TransformationResult ConstraintSimplifier::transform(std::unique_pt
         constraint = normalizer.eliminateDivMod(constraint);
         constraint = normalizer.eliminateDistincts(constraint);
 
-        auto auxiliaryVars = matchingSubTerms(logic, constraint, [&](PTRef term) {
-             return logic.isVar(term) and strncmp("aux#", logic.getSymName(term), 4) == 0;
-         });
-        constraint = TrivialQuantifierElimination(logic).tryEliminateVars(auxiliaryVars, constraint);
+        vec<PTRef> stateVars;
+        // TODO: Implement a helper to iterate over source vertices together with instantiation counter
+        std::unordered_map<SymRef, std::size_t, SymRefHash> instanceCounter;
+        for (auto source : edge.from) {
+            PTRef sourcePredicate = graph->getStateVersion(source, instanceCounter[source]++);
+            for (PTRef var : utils.predicateArgsInOrder(sourcePredicate)) {
+                assert(logic.isVar(var));
+                stateVars.push(var);
+            }
+        }
+
+        PTRef targetPredicate = graph->getNextStateVersion(edge.to);
+        for (PTRef var : utils.predicateArgsInOrder(targetPredicate)) {
+            assert(logic.isVar(var));
+            stateVars.push(var);
+        }
+        constraint = TrivialQuantifierElimination(logic).tryEliminateVarsExcept(stateVars, constraint);
         edge.fla.fla = constraint;
     });
     return {std::move(graph), std::make_unique<BackTranslator>()};

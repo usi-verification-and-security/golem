@@ -9,6 +9,7 @@
 
 #include "engine/Engine.h"
 #include "graph/ChcGraphBuilder.h"
+#include "transformers/ConstraintSimplifier.h"
 #include "Validator.h"
 
 #include <gtest/gtest.h>
@@ -39,11 +40,12 @@ protected:
         Logic & logic = *this->logic;
         auto normalizedSystem = Normalizer(logic).normalize(system);
         auto hypergraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
-        auto res = engine.solve(*hypergraph);
+        auto [simplifiedGraph, _] = ConstraintSimplifier{}.transform(std::move(hypergraph));
+        auto res = engine.solve(*simplifiedGraph);
         auto answer = res.getAnswer();
         ASSERT_EQ(answer, expectedAnswer);
         if (validate) {
-            auto validationResult = Validator(logic).validate(*hypergraph, res);
+            auto validationResult = Validator(logic).validate(*simplifiedGraph, res);
             ASSERT_EQ(validationResult, Validator::Result::VALIDATED);
         }
     }
