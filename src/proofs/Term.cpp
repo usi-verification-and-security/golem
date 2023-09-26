@@ -330,55 +330,6 @@ std::shared_ptr<Term> RemoveUnusedVisitor::visit(App * term) {
     return nullptr;
 }
 
-std::shared_ptr<Term> SimplifyLocatorVisitor::visit(Terminal * term) {
-    return std::make_shared<Terminal>(term->getVal(), term->getType());
-}
-
-std::shared_ptr<Term> SimplifyLocatorVisitor::visit(Op * term) {
-    bool simplification = true;
-    std::vector<std::shared_ptr<Term>> args = term->getArgs();
-    std::string op = term->getOp();
-
-    for (std::shared_ptr<Term> arg : args) {
-        if (not(arg->getTermType() == Term::TERMINAL or arg->getTermType() == Term::APP)) { simplification = false; }
-    }
-
-    if (simplification and op != "=>") {
-        std::vector<std::shared_ptr<Term>> newArgs;
-        for (std::shared_ptr<Term> arg : args) {
-            std::shared_ptr<Term> newArg = arg->accept(this);
-            newArgs.push_back(newArg);
-        }
-        return std::make_shared<Op>(term->getOp(), newArgs);
-    }
-
-    for (std::shared_ptr<Term> arg : args) {
-        // check if it is a terminal
-        if (not(arg->getTermType() == Term::TERMINAL or arg->getTermType() == Term::APP)) {
-            // if it is not, call the visit method on it
-            std::shared_ptr<Term> possible = arg->accept(this);
-            // check if it returned another terminal
-            if (not(possible->getTermType() == Term::TERMINAL or possible->getTermType() == Term::APP)) {
-                return possible;
-            }
-        }
-    }
-
-    return std::make_shared<Terminal>("No Possible Simplification", Term::UNDECLARED);
-}
-
-std::shared_ptr<Term> SimplifyLocatorVisitor::visit(App * term) {
-    return std::make_shared<App>(term->getFun(), term->getArgs());
-}
-
-std::shared_ptr<Term> SimplifyLocatorVisitor::visit(Quant * term) {
-    return term->getCoreTerm()->accept(this);
-}
-
-std::shared_ptr<Term> SimplifyLocatorVisitor::visit(Let * term) {
-    return std::make_shared<Let>(term->getTermNames(), term->getDeclarations(), term->getApplication());
-}
-
 std::shared_ptr<Term> SimplifyVisitor::visit(Terminal * term) {
     return std::make_shared<Terminal>(term->getVal(), term->getType());
 }
@@ -604,48 +555,6 @@ std::shared_ptr<Term> OperateLetTermVisitor::visit(Let * term) {
     terms = term->getTermNames();
     substitutions = term->getDeclarations();
     return term->getApplication()->accept(this);
-}
-
-Term * SimplifyHelperVisitor::visit(Terminal * term) {
-    return term;
-}
-
-Term * SimplifyHelperVisitor::visit(Op * term) {
-    bool simplification = true;
-    std::vector<std::shared_ptr<Term>> args = term->getArgs();
-    std::string op = term->getOp();
-
-    for (std::shared_ptr<Term> arg : args) {
-        if (not(arg->getTermType() == Term::TERMINAL or arg->getTermType() == Term::APP)) { simplification = false; }
-    }
-
-    if (simplification and op != "=>") { return term; }
-
-    for (std::shared_ptr<Term> arg : args) {
-        // check if it is a terminal
-        if (not(arg->getTermType() == Term::TERMINAL or arg->getTermType() == Term::APP)) {
-            // if it is not, call the visit method on it
-            Term * possible = arg->accept(this);
-            // check if it returned another terminal
-            if (not(possible->getTermType() == Term::TERMINAL or possible->getTermType() == Term::APP)) {
-                return possible;
-            }
-        }
-    }
-
-    return std::make_shared<Terminal>("No Possible Simplification", Term::UNDECLARED).get();
-}
-
-Term * SimplifyHelperVisitor::visit(Let * term) {
-    return term;
-}
-
-Term * SimplifyHelperVisitor::visit(App * term) {
-    return term;
-}
-
-Term * SimplifyHelperVisitor::visit(Quant * term) {
-    return term;
 }
 
 Term * LetLocatorVisitor::visit(Quant * term) {

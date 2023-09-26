@@ -156,15 +156,6 @@ public:
     std::shared_ptr<Term> visit(Let *) override;
 };
 
-class SimplifyLocatorVisitor : public LogicVisitor {
-public:
-    std::shared_ptr<Term> visit(Terminal *) override;
-    std::shared_ptr<Term> visit(Quant *) override;
-    std::shared_ptr<Term> visit(Op *) override;
-    std::shared_ptr<Term> visit(App *) override;
-    std::shared_ptr<Term> visit(Let *) override;
-};
-
 class RemoveUnusedVisitor : public LogicVisitor {
     std::vector<std::string> varsInUse;
 
@@ -286,15 +277,6 @@ public:
     virtual Term * visit(Op *) = 0;
     virtual Term * visit(App *) = 0;
     virtual Term * visit(Let *) = 0;
-};
-
-class SimplifyHelperVisitor : public PointerVisitor {
-public:
-    Term * visit(Terminal *) override;
-    Term * visit(Quant *) override;
-    Term * visit(Op *) override;
-    Term * visit(App *) override;
-    Term * visit(Let *) override;
 };
 
 class LetLocatorVisitor : public PointerVisitor {
