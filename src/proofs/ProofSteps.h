@@ -86,7 +86,6 @@ class StepHandler {
 
     // Visitors
     InstantiateVisitor copyVisitor;
-    OperateVisitor operateVisitor;
     OperateLetTermVisitor operateLetTermVisitor;
     LetLocatorVisitor letLocatorVisitor;
     RemoveUnusedVisitor removeUnusedVisitor;

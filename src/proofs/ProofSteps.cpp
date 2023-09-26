@@ -363,82 +363,27 @@ void StepHandler::noCongRequiredSteps(std::vector<int> requiredMP, int implicati
 
     if (implicationLHS->getTermType() == Term::OP) {
 
-        auto termToSimplify = implicationLHS;
-        auto simplificationRule =
-            std::dynamic_pointer_cast<Op>(termToSimplify)->simplifyRule(); // Getting rule for simplification
-        auto simplification = termToSimplify->accept(&operateVisitor);
+        CongChainVisitor congChainVisitor(currStep);
 
-        notifyObservers(Step(currStep, Step::STEP,
-                             packClause(std::make_shared<Op>("=", packClause(termToSimplify, simplification))),
-                             simplificationRule));
+        implicationLHS->accept(&congChainVisitor);
 
-        currStep++;
+        for (const auto & simpleStep : congChainVisitor.getSteps()) {
+            notifyObservers(Step(simpleStep.stepId, Step::STEP, packClause(simpleStep.clause), simpleStep.rule,
+                                 simpleStep.premises));
+        }
 
-        if (std::dynamic_pointer_cast<Op>(termToSimplify)->getOp() == "and") {
+        auto lastChainStep = congChainVisitor.getSteps()[congChainVisitor.getSteps().size() - 1];
+        currStep = lastChainStep.stepId + 1;
+        auto lastClause = lastChainStep.clause;
 
-            conjunctionSimplification(requiredMP, std::make_shared<Op>("=", packClause(termToSimplify, simplification)),
+        auto termToSimplify = std::dynamic_pointer_cast<Op>(lastClause)->getArgs()[0];
+        auto simplification = std::dynamic_pointer_cast<Op>(lastClause)->getArgs()[1];
+
+        if (std::dynamic_pointer_cast<Op>(implicationLHS)->getOp() == "and") {
+
+            conjunctionSimplification(requiredMP, std::make_shared<Op>("=", packClause(implicationLHS, simplification)),
                                       implicationStep, renamedImpLHS);
             return;
-        } else if (std::dynamic_pointer_cast<Op>(termToSimplify)->getOp() == ">") {
-
-            // If the term to simplify is a ">" or ">=" operation, we require additional steps
-
-            auto originalSimplificaiton = simplification->accept(&copyVisitor);
-            auto lessOrEq = std::dynamic_pointer_cast<Op>(simplification)->getArgs()[0];
-            auto innerWorking = lessOrEq->accept(&operateVisitor);
-
-            notifyObservers(Step(currStep, Step::STEP,
-                                 packClause(std::make_shared<Op>("=", packClause(lessOrEq, innerWorking))),
-                                 "comp_simplify"));
-
-            currStep++;
-
-            std::dynamic_pointer_cast<Op>(simplification)->setArg(0, innerWorking);
-
-            notifyObservers(Step(currStep, Step::STEP,
-                                 packClause(std::make_shared<Op>(
-                                     "=", std::vector<std::shared_ptr<Term>>{originalSimplificaiton, simplification})),
-                                 "cong", std::vector<int>{currStep - 1}));
-            currStep++;
-
-            auto outerWorking = simplification->accept(&operateVisitor);
-
-            notifyObservers(Step(currStep, Step::STEP,
-                                 packClause(std::make_shared<Op>("=", packClause(simplification, outerWorking))),
-                                 "not_simplify"));
-            currStep++;
-
-            notifyObservers(Step(currStep, Step::STEP,
-                                 packClause(std::make_shared<Op>(
-                                     "=", std::vector<std::shared_ptr<Term>>{originalSimplificaiton, outerWorking})),
-                                 "trans", std::vector<int>{currStep - 2, currStep - 1}));
-            currStep++;
-
-            notifyObservers(Step(
-                currStep, Step::STEP,
-                packClause(std::make_shared<Op>("=", std::vector<std::shared_ptr<Term>>{termToSimplify, outerWorking})),
-                "trans", std::vector<int>{currStep - 5, currStep - 1}));
-            currStep++;
-
-            simplification = outerWorking;
-
-        } else if (std::dynamic_pointer_cast<Op>(termToSimplify)->getOp() == ">=") {
-
-            auto originalSimplificaiton = simplification->accept(&copyVisitor);
-
-            simplification = simplification->accept(&operateVisitor);
-
-            notifyObservers(
-                Step(currStep, Step::STEP,
-                     packClause(std::make_shared<Op>("=", packClause(originalSimplificaiton, simplification))),
-                     "comp_simplify"));
-            currStep++;
-
-            notifyObservers(Step(currStep, Step::STEP,
-                                 packClause(std::make_shared<Op>(
-                                     "=", std::vector<std::shared_ptr<Term>>{termToSimplify, simplification})),
-                                 "trans", std::vector<int>{currStep - 2, currStep - 1}));
-            currStep++;
         }
 
         notifyObservers(Step(currStep, Step::STEP,
