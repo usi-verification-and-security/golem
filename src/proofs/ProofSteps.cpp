@@ -838,7 +838,11 @@ StepHandler::getInstPairs(int stepIndex, vec<Normalizer::Equality> const & stepN
         // Find values for auxiliary variables
         SMTSolver solver(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
         solver.getCoreSolver().insertFormula(instantiatedConstraint);
-        assert(solver.getCoreSolver().check() == s_True);
+        auto res = solver.getCoreSolver().check();
+        if (res != s_True) {
+            assert(false);
+            throw std::logic_error("Formula should have been satisfiable");
+        }
         auto model = solver.getCoreSolver().getModel();
         for (PTRef auxVar : auxVars) {
             PTRef val = model->evaluate(auxVar);
