@@ -123,6 +123,44 @@ std::shared_ptr<Term> CongChainVisitor::visit(Op* term) {
 
         currStep++;
 
+        if (term->getOp() == ">") {
+
+            auto originalSimplificaiton = simplification->accept(&copyVisitor);
+
+            auto lessOrEq = std::dynamic_pointer_cast<Op>(simplification)->getArgs()[0];
+
+            auto innerWorking = lessOrEq->accept(&operateVisitor);
+
+            steps.emplace_back(currStep, std::make_shared<Op>("=",
+                                                              std::vector<std::shared_ptr<Term>>{lessOrEq, innerWorking}), premises, std::dynamic_pointer_cast<Op>(lessOrEq)->simplifyRule());
+
+            currStep++;
+
+            std::dynamic_pointer_cast<Op>(simplification)->setArg(0, innerWorking);
+
+            auto cong = std::make_shared<Op>("=", std::vector<std::shared_ptr<Term>>{originalSimplificaiton, simplification});
+
+            steps.emplace_back(currStep, cong, std::vector<int>{currStep-2, currStep-1}, "cong");
+
+            currStep++;
+
+            auto outerWorking = simplification->accept(&operateVisitor);
+
+            steps.emplace_back(currStep, std::make_shared<Op>("=",
+                                                              std::vector<std::shared_ptr<Term>>{simplification, outerWorking}), premises, std::dynamic_pointer_cast<Op>(simplification)->simplifyRule());
+
+            currStep++;
+
+            simplification = outerWorking;
+
+            auto trans = std::make_shared<Op>("=", std::vector<std::shared_ptr<Term>>{term->accept(&copyVisitor), simplification});
+
+            steps.emplace_back(currStep, trans, std::vector<int>{currStep-1}, "trans");
+
+        } else if (term->getOp() == ">=") {
+
+        }
+
         return simplification;
 
     } else {
@@ -142,7 +180,13 @@ std::shared_ptr<Term> CongChainVisitor::visit(Op* term) {
 
         currStep++;
 
-        return term->accept(&copyVisitor);
+        auto simplification = term->accept(this);
+
+        auto trans = std::make_shared<Op>("=", std::vector<std::shared_ptr<Term>>{originalTerm, simplification});
+
+        steps.emplace_back(currStep, trans, std::vector<int>{currStep-2, currStep-1}, "trans");
+
+        return simplification;
 
     }
 

@@ -187,7 +187,8 @@ void StepHandler::buildAletheProof() {
     currTerm->accept(&congChainVisitor);
 
     for (auto step : congChainVisitor.getSteps()) {
-        std::cout << step.clause->printTerm() << "\n\n";
+        std::cout << step.clause->printTerm() << " :rule " << step.rule <<  "\n\n";
+
     }
 
 
