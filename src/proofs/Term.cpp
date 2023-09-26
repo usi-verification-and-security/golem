@@ -14,7 +14,7 @@ bool Op::nonLinearity() {
     int predicates = 0;
     if (operation == "and") {
         for (auto arg : args) {
-            if (arg->getTermType() == Term::APP) { predicates++; }
+            if (arg->getTermType() == Term::APP or arg->getTerminalType() == Terminal::VAR) { predicates++; }
         }
         if (predicates >= 2) {
             return true;
