@@ -169,6 +169,32 @@ void StepHandler::buildIntermediateProof() {
 
 void StepHandler::buildAletheProof() {
 
+    // Getting the instantiated variable-value pairs
+    std::vector<std::pair<std::string, std::string>> instPairs =
+        getInstPairs(1, normalizingEqualities[0]);
+    InstantiateVisitor instantiateVisitor(instPairs);
+
+    CongChainVisitor congChainVisitor(currStep);
+
+    currTerm = std::dynamic_pointer_cast<Quant>(originalAssertions[0])->getCoreTerm();
+
+    std::cout << currTerm->printTerm() << "\n\n";
+
+    currTerm = currTerm->accept(&instantiateVisitor);
+
+    std::cout << currTerm->printTerm() << "\n\n";
+
+    currTerm->accept(&congChainVisitor);
+
+    for (auto step : congChainVisitor.getSteps()) {
+        std::cout << step.clause->printTerm() << "\n\n";
+    }
+
+
+
+
+
+
     // Building assumptions
     assumptionSteps();
 

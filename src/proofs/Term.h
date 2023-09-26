@@ -16,7 +16,7 @@ public:
     enum terminalType { VAR, REAL, INT, SORT, BOOL, UNDECLARED };
     virtual termType getTermType() = 0;
     virtual terminalType getTerminalType() = 0;
-    virtual void accept(class PrintVisitor *) = 0;
+    virtual void accept(class VoidVisitor *) = 0;
     virtual std::shared_ptr<Term> accept(class LogicVisitor *) = 0;
     virtual std::string accept(class StringVisitor *) = 0;
     virtual bool accept(class BooleanVisitor *) = 0;
@@ -40,7 +40,7 @@ public:
     std::string accept(StringVisitor *) override;
     bool accept(BooleanVisitor *) override;
     Term * accept(PointerVisitor *) override;
-    void accept(PrintVisitor *) override;
+    void accept(VoidVisitor *) override;
 };
 
 class Op : public Term {
@@ -57,12 +57,13 @@ public:
     std::string simplifyRule();
     bool nonLinearity();
     std::string nonLinearSimplification();
+    void setArg(int i, std::shared_ptr<Term> newArg) {args[i] = std::move(newArg);}
 
     std::shared_ptr<Term> accept(LogicVisitor *) override;
     std::string accept(StringVisitor *) override;
     bool accept(BooleanVisitor *) override;
     Term * accept(PointerVisitor *) override;
-    void accept(PrintVisitor *) override;
+    void accept(VoidVisitor *) override;
 };
 
 class App : public Term {
@@ -80,7 +81,7 @@ public:
     std::string accept(StringVisitor *) override;
     bool accept(BooleanVisitor *) override;
     Term * accept(PointerVisitor *) override;
-    void accept(PrintVisitor *) override;
+    void accept(VoidVisitor *) override;
 };
 
 class Quant : public Term {
@@ -104,7 +105,7 @@ public:
     std::string accept(StringVisitor *) override;
     bool accept(BooleanVisitor *) override;
     Term * accept(PointerVisitor *) override;
-    void accept(PrintVisitor *) override;
+    void accept(VoidVisitor *) override;
 };
 
 class Let : public Term {
@@ -126,7 +127,7 @@ public:
     std::string accept(StringVisitor *) override;
     bool accept(BooleanVisitor *) override;
     Term * accept(PointerVisitor *) override;
-    void accept(PrintVisitor *) override;
+    void accept(VoidVisitor *) override;
 };
 
 // Visitors
@@ -219,16 +220,53 @@ public:
     virtual std::string visit(Let *) = 0;
 };
 
-class PrintVisitor {
+class VoidVisitor {
     std::stringstream ss;
 
 public:
-    void visit(Terminal *);
-    void visit(Quant *);
-    void visit(Op *);
-    void visit(App *);
-    void visit(Let *);
+    virtual void visit(Terminal *) = 0;
+    virtual void visit(Quant *) = 0;
+    virtual void visit(Op *) = 0;
+    virtual void visit(App *) = 0;
+    virtual void visit(Let *) = 0;
+};
+
+class PrintVisitor : public VoidVisitor {
+    std::stringstream ss;
+public:
+    void visit(Terminal *) override;
+    void visit(Quant *) override;
+    void visit(Op *) override;
+    void visit(App *) override;
+    void visit(Let *) override;
     std::string getString() { return ss.str(); }
+};
+
+class CongChainVisitor : public LogicVisitor {
+
+    OperateVisitor operateVisitor;
+    InstantiateVisitor copyVisitor;
+    int currStep;
+    class simpleStep {
+    public:
+        int stepId;
+        std::shared_ptr<Term> clause;
+        std::vector<int> premises;
+        std::string rule;
+        simpleStep(int stepId, std::shared_ptr<Term> clause, std::vector<int> premises, std::string rule)
+            : stepId(stepId), clause(std::move(clause)), premises(std::move(premises)), rule(std::move(rule)) {}
+    };
+    std::vector<simpleStep> steps;
+
+public:
+    explicit CongChainVisitor(int currStep) : currStep(currStep) {}
+    std::shared_ptr<Term> visit(Terminal *) override;
+    std::shared_ptr<Term> visit(Quant *) override { throw std::logic_error("This should not have happened!"); };
+    std::shared_ptr<Term> visit(Op *) override;
+    std::shared_ptr<Term> visit(App *) override;
+    std::shared_ptr<Term> visit(Let *) override { throw std::logic_error("This should not have happened!"); };
+
+    std::vector<simpleStep> getSteps() {return steps;};
 };
 
 class BooleanVisitor {

@@ -96,6 +96,62 @@ void PrintVisitor::visit(Let * term) {
     ss << ")";
 }
 
+std::shared_ptr<Term> CongChainVisitor::visit(Terminal* term) {
+    return std::make_shared<Terminal>(term->getVal(), term->getType());
+}
+
+std::shared_ptr<Term> CongChainVisitor::visit(Op* term) {
+
+    auto args = term->getArgs();
+
+    bool canSimplify = true;
+
+    for (auto arg : args) {
+        if (not (arg->getTermType() == Term::TERMINAL or arg->getTermType() == Term::APP)) {
+            canSimplify = false;
+            break;
+        }
+    }
+
+    if (canSimplify) {
+
+        std::vector<int> premises;
+
+        auto simplification = term->accept(&operateVisitor);
+
+        steps.emplace_back(currStep, std::make_shared<Op>("=", std::vector<std::shared_ptr<Term>>{term->accept(&copyVisitor), simplification}), premises, term->simplifyRule());
+
+        currStep++;
+
+        return simplification;
+
+    } else {
+
+        std::vector<int> premises;
+
+        auto originalTerm = term->accept(&copyVisitor);
+
+        for (int i = 0; i < args.size(); i++) {
+            term->setArg(i, args[i]->accept(this));
+            premises.push_back(currStep-(i+1));
+        }
+
+        auto cong = std::make_shared<Op>("=", std::vector<std::shared_ptr<Term>>{originalTerm, term->accept(&copyVisitor)});
+
+        steps.emplace_back(currStep, cong, premises, "cong");
+
+        currStep++;
+
+        return term->accept(&copyVisitor);
+
+    }
+
+}
+
+std::shared_ptr<Term> CongChainVisitor::visit(App* term) {
+    return std::make_shared<App>(term->getFun(), term->getArgs());
+}
+
 std::string Op::simplifyRule() {
     std::string op = operation;
     if (op == "=") {
@@ -662,23 +718,23 @@ bool Let::accept(BooleanVisitor * visitor) {
     return visitor->visit(this);
 }
 
-void Terminal::accept(PrintVisitor * visitor) {
+void Terminal::accept(VoidVisitor * visitor) {
     visitor->visit(this);
 }
 
-void Op::accept(PrintVisitor * visitor) {
+void Op::accept(VoidVisitor * visitor) {
     visitor->visit(this);
 }
 
-void App::accept(PrintVisitor * visitor) {
+void App::accept(VoidVisitor * visitor) {
     visitor->visit(this);
 }
 
-void Quant::accept(PrintVisitor * visitor) {
+void Quant::accept(VoidVisitor * visitor) {
     visitor->visit(this);
 }
 
-void Let::accept(PrintVisitor * visitor) {
+void Let::accept(VoidVisitor * visitor) {
     visitor->visit(this);
 }
 
