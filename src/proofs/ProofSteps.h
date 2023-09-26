@@ -74,26 +74,19 @@ class StepHandler {
     std::vector<Observer *> observers;
 
     int currStep = 0;
-    int transitivityStep;
-    int renamingTransIndex = 0;
-    int renamingCongIndex = 0;
-    bool transReNamed = false;
-    bool congReNamed = false;
 
     std::vector<int> stepsToReuse = {-1, -1, -1};
 
     std::shared_ptr<Term> implicationRHS;
     std::shared_ptr<Term> implicationLHS;
     std::shared_ptr<Term> currTerm;
-    std::vector<int> modusPonensSteps;    // Modus Ponens Steps to derive the next node
-    std::vector<int> simplificationSteps; // Simplification steps for final resolution of LHS
+    std::vector<int> modusPonensSteps; // Modus Ponens Steps to derive the next node
 
     std::shared_ptr<Term> originalLhsPrimaryBranch;
 
     // Visitors
-    SimplifyLocatorVisitor simplifyLocatorVisitor;
+    InstantiateVisitor copyVisitor;
     OperateVisitor operateVisitor;
-    SimplifyHelperVisitor helperVisitor;
     OperateLetTermVisitor operateLetTermVisitor;
     LetLocatorVisitor letLocatorVisitor;
     RemoveUnusedVisitor removeUnusedVisitor;
@@ -118,10 +111,8 @@ public:
     void assumptionSteps();
     void noCongRequiredSteps(std::vector<int> requiredMP, int implicationStep,
                              const std::shared_ptr<Term> & renamedImpLHS);
-    void notLhsPrimaryBranchSteps(const std::shared_ptr<Term> & simplification);
-    void conjunctionSimplification(std::vector<int> requiredMP, const std::shared_ptr<Term> & simplification,
-                                   const std::shared_ptr<Term> & termToSimplify, std::string simplificationRule,
-                                   int implicationStep, std::shared_ptr<Term> renamedImpLHS, bool cong = true);
+    void conjunctionSimplification(std::vector<int> requiredMP, const std::shared_ptr<Term> & finalClause,
+                                   int implicationStep, const std::shared_ptr<Term> & renamedImpLHS);
 
     int stepReusage(std::shared_ptr<Term> term);
 

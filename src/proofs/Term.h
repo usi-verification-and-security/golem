@@ -57,7 +57,7 @@ public:
     std::string simplifyRule();
     bool nonLinearity();
     std::string nonLinearSimplification();
-    void setArg(int i, std::shared_ptr<Term> newArg) {args[i] = std::move(newArg);}
+    void setArg(int i, std::shared_ptr<Term> newArg) { args[i] = std::move(newArg); }
 
     std::shared_ptr<Term> accept(LogicVisitor *) override;
     std::string accept(StringVisitor *) override;
@@ -233,6 +233,7 @@ public:
 
 class PrintVisitor : public VoidVisitor {
     std::stringstream ss;
+
 public:
     void visit(Terminal *) override;
     void visit(Quant *) override;
@@ -243,7 +244,7 @@ public:
 };
 
 class CongChainVisitor : public LogicVisitor {
-
+    int transCase = 0; // 0 for regular case, 1 for trans after ">="
     OperateVisitor operateVisitor;
     InstantiateVisitor copyVisitor;
     int currStep;
@@ -266,7 +267,7 @@ public:
     std::shared_ptr<Term> visit(App *) override;
     std::shared_ptr<Term> visit(Let *) override { throw std::logic_error("This should not have happened!"); };
 
-    std::vector<simpleStep> getSteps() {return steps;};
+    std::vector<simpleStep> getSteps() { return steps; };
 };
 
 class BooleanVisitor {
@@ -276,18 +277,6 @@ public:
     virtual bool visit(Op *) = 0;
     virtual bool visit(App *) = 0;
     virtual bool visit(Let *) = 0;
-};
-
-class IsPrimaryBranchVisitor : public BooleanVisitor {
-    Term * branch;
-
-public:
-    explicit IsPrimaryBranchVisitor(Term * b) : branch(b) {}
-    bool visit(Terminal *) override { return false; };
-    bool visit(Quant *) override { return false; };
-    bool visit(Op *) override;
-    bool visit(App *) override { return false; };
-    bool visit(Let *) override { return false; };
 };
 
 class PointerVisitor {
@@ -315,19 +304,6 @@ public:
     Term * visit(Op *) override;
     Term * visit(App *) override { return nullptr; };
     Term * visit(Let *) override;
-};
-
-class GetLocalParentBranchVisitor : public PointerVisitor {
-    Term * operation;
-
-public:
-    explicit GetLocalParentBranchVisitor(Term * o) : operation(o) {}
-    void setOperation(Term * o) { operation = o; }
-    Term * visit(Terminal *) override { return nullptr; };
-    Term * visit(Quant *) override { return nullptr; };
-    Term * visit(Op *) override;
-    Term * visit(App *) override { return nullptr; };
-    Term * visit(Let *) override { return nullptr; };
 };
 
 #endif // GOLEM_TERM_H
