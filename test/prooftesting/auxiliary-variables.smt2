@@ -10,7 +10,7 @@
     (=>
       (and
         (P x)
-        (> x y)
+        (and (> x y) (> y 0))
       )
       false
     )
