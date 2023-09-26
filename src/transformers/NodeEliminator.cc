@@ -7,6 +7,7 @@
 #include "NodeEliminator.h"
 
 #include "CommonUtils.h"
+#include "utils/SmtSolver.h"
 
 void NodeEliminator::BackTranslator::notifyRemovedVertex(SymRef sym, ContractionResult && contractionResult) {
     assert(nodeInfo.count(sym) == 0);
@@ -47,8 +48,25 @@ bool SimpleNodeEliminatorPredicate::operator()(
     SymRef vertex,
     AdjacencyListsGraphRepresentation const & ar,
     ChcDirectedHyperGraph const & graph) const {
-    // TODO: Remove the constraint about hyperEdge
-    return not hasHyperEdge(vertex, ar, graph) and isSimpleNode(vertex, ar) and isNonLoopNode(vertex, ar, graph);
+    if (isSimpleNode(vertex, ar) and isNonLoopNode(vertex, ar, graph)) {
+        if (not hasHyperEdge(vertex, ar, graph)) { return true; }
+        // We eliminate the node also if it has outgoing hyperedges, but only if it has single normal incoming edge
+        auto const & incoming = ar.getIncomingEdgesFor(vertex);
+        if (not (incoming.size() == 1 and graph.getSources(incoming[0]).size() == 1)) { return false; }
+        // And these additional constraints hold
+        // 1. Candidate vertex must not be the target
+        // 2. Candidate vertex must be present exactly once in the sources.
+        // 3. The source of the incoming edge must not be a source of any outgoing edges
+        auto incomingSource = graph.getSources(incoming[0]).at(0);
+        auto const & outgoing = ar.getOutgoingEdgesFor(vertex);
+        return std::all_of(outgoing.begin(), outgoing.end(), [&](EId edge) {
+            auto const & sources = graph.getSources(edge);
+            return vertex != graph.getTarget(edge)
+                    and std::count(sources.begin(), sources.end(), vertex) == 1
+                    and std::find(sources.begin(), sources.end(), incomingSource) == sources.end();
+        });
+    }
+    return false;
 }
 InvalidityWitness NodeEliminator::BackTranslator::translate(InvalidityWitness witness) {
     if (this->removedNodes.empty()) { return witness; }
@@ -75,11 +93,23 @@ InvalidityWitness NodeEliminator::BackTranslator::translate(InvalidityWitness wi
             auto eid = it->clauseId;
             if (auto possibleContractInfo = findContractionInfo(eid); possibleContractInfo.has_value()) {
                 auto const & contractionInfo = possibleContractInfo.value();
-                std::vector<DirectedHyperEdge> chain = {contractionInfo.second.first, contractionInfo.second.second};
-                auto const & replacingEdge = contractionInfo.first;
-                std::size_t index = it - derivation.begin();
-                auto newDerivation = replaceSummarizingStep(derivation, index, chain, replacingEdge, predicateRepresentation, logic);
-                witness.setDerivation(std::move(newDerivation));
+                // Incoming edge cannot be a hyperedge, but outgoing can!
+                assert(contractionInfo.second.first.from.size() == 1);
+                // TODO: Unify handling of hyperedges with summarized chains
+                if (contractionInfo.second.second.from.size() == 1) {
+                    std::vector<DirectedHyperEdge> chain = {contractionInfo.second.first,
+                                                            contractionInfo.second.second};
+                    auto const & replacingEdge = contractionInfo.first;
+                    std::size_t index = it - derivation.begin();
+                    auto newDerivation =
+                        replaceSummarizingStep(derivation, index, chain, replacingEdge, predicateRepresentation, logic);
+                    witness.setDerivation(std::move(newDerivation));
+                } else { // outgoing is a hyperedge
+                    std::size_t index = it - derivation.begin();
+                    auto newDerivation =
+                        expandStepWithHyperEdge(derivation, index, contractionInfo, predicateRepresentation, logic);
+                    witness.setDerivation(std::move(newDerivation));
+                }
                 stepReplaced = true;
                 break;
             }
@@ -91,6 +121,7 @@ InvalidityWitness NodeEliminator::BackTranslator::translate(InvalidityWitness wi
     return witness;
 }
 
+#define SANITY_CHECK(cond) if (not (cond)) { assert(false); return ValidityWitness{}; }
 ValidityWitness NodeEliminator::BackTranslator::translate(ValidityWitness witness) {
     if (this->removedNodes.empty()) { return witness; }
     auto definitions = witness.getDefinitions();
@@ -113,39 +144,46 @@ ValidityWitness NodeEliminator::BackTranslator::translate(ValidityWitness witnes
         for (auto const & edge : info.incoming) {
             if (edge.from.size() != 1) { throw std::logic_error("NonLoopEliminator should not have processed hyperEdges!"); }
             PTRef sourceDef = definitionFor(edge.from[0]);
-            assert(sourceDef != PTRef_Undef);
-            if (sourceDef == PTRef_Undef) { // Missing definition, cannot backtranslate
-                return ValidityWitness{};
-            }
+            SANITY_CHECK(sourceDef != PTRef_Undef); // Missing definition, cannot backtranslate
             sourceDef = manager.baseFormulaToSource(sourceDef);
             incomingFormulas.push(logic.mkAnd(sourceDef, edge.fla.fla));
         }
         vec<PTRef> outgoingFormulas;
         for (auto const & edge : info.outgoing) {
-            if (edge.from.size() != 1) { throw std::logic_error("NonLoopEliminator should not have processed hyperEdges!"); }
+            vec<PTRef> components;
+            components.push(edge.fla.fla);
             PTRef targetDef = definitionFor(edge.to);
-            assert(targetDef != PTRef_Undef);
-            if (targetDef == PTRef_Undef) { // Missing definition, cannot backtranslate
-                return ValidityWitness{};
-            }
+            SANITY_CHECK(targetDef != PTRef_Undef); // Missing definition, cannot backtranslate
             targetDef = manager.baseFormulaToTarget(targetDef);
-            outgoingFormulas.push(logic.mkAnd(edge.fla.fla, logic.mkNot(targetDef)));
+            components.push(logic.mkNot(targetDef));
+            if (edge.from.size() > 1) { // HyperEdge
+                auto sources = edge.from;
+                auto vertexOccurences = std::count(sources.begin(), sources.end(), vertex);
+                SANITY_CHECK(vertexOccurences == 1);
+                sources.erase(std::remove(sources.begin(), sources.end(), vertex), sources.end());
+                std::unordered_map<SymRef, std::size_t, SymRefHash> instances;
+                for (auto otherSource : sources) {
+                    auto instance = instances[otherSource]++;
+                    PTRef sourceDef = definitionFor(otherSource);
+                    SANITY_CHECK(sourceDef != PTRef_Undef); // Missing definition, cannot backtranslate
+                    sourceDef = manager.baseFormulaToSource(sourceDef, instance);
+                    components.push(sourceDef);
+                }
+            }
+            outgoingFormulas.push(logic.mkAnd(std::move(components)));
         }
         TermUtils::substitutions_map substitutionsMap;
         utils.mapFromPredicate(predicateRepresentation.getSourceTermFor(vertex), predicateRepresentation.getTargetTermFor(vertex), substitutionsMap);
         PTRef incomingPart = logic.mkOr(std::move(incomingFormulas));
         PTRef outgoingPart = logic.mkOr(std::move(outgoingFormulas));
         outgoingPart = utils.varSubstitute(outgoingPart, substitutionsMap);
-        SMTConfig config;
-        const char * msg;
-        config.setOption(SMTConfig::o_produce_models, SMTOption(false), msg);
-        config.setOption(SMTConfig::o_produce_inter, SMTOption(true), msg);
-        MainSolver solver(logic, config, "solver");
+        SMTSolver solverWrapper(logic, SMTSolver::WitnessProduction::ONLY_INTERPOLANTS);
+        auto & solver = solverWrapper.getCoreSolver();
         solver.insertFormula(incomingPart);
         solver.insertFormula(outgoingPart);
         auto res = solver.check();
         if (res != s_False) {
-            throw std::logic_error("Error in backtranslating of nonloops elimination");
+            throw std::logic_error("Error in backtranslating of nonloop elimination");
         }
         auto itpContext = solver.getInterpolationContext();
         vec<PTRef> itps;

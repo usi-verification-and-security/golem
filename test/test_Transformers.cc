@@ -7,15 +7,16 @@
 #include <gtest/gtest.h>
 #include "TestTemplate.h"
 
+#include "Validator.h"
+#include "engine/Common.h"
+#include "engine/IMC.h"
+#include "engine/Spacer.h"
 #include "graph/ChcGraphBuilder.h"
 #include "transformers/ConstraintSimplifier.h"
 #include "transformers/MultiEdgeMerger.h"
 #include "transformers/NodeEliminator.h"
 #include "transformers/SimpleChainSummarizer.h"
 #include "transformers/TransformationPipeline.h"
-#include "Validator.h"
-#include "engine/Spacer.h"
-#include "engine/IMC.h"
 
 class Transformer_New_Test : public LIAEngineTest {
 };
@@ -429,6 +430,197 @@ TEST_F(Transformer_New_Test, test_NodeEliminator_SecondEdgeUsed) {
     auto translatedWitness = translator->translate(res.getInvalidityWitness());
     VerificationResult translatedResult(VerificationAnswer::UNSAFE, translatedWitness);
     EXPECT_EQ(Validator(logic).validate(originalGraph, translatedResult), Validator::Result::VALIDATED);
+}
+
+TEST_F(Transformer_New_Test, test_SimpleNodeEliminator_HyperEdge_Safe) {
+    Options options;
+    options.addOption(Options::LOGIC, "QF_LIA");
+    options.addOption(Options::COMPUTE_WITNESS, "true");
+    SymRef s1 = mkPredicateSymbol("s1", {intSort()});
+    SymRef s2 = mkPredicateSymbol("s2", {intSort()});
+    PTRef currentOne = instantiatePredicate(s1, {x});
+    PTRef currentTwo = instantiatePredicate(s2, {y});
+    // x > 0 => S1(x)
+    // y > 0 => S2(y)
+    // S1(x) and S2(y) and x + y < 0 => false
+
+    std::vector<ChClause> clauses{
+        {
+            ChcHead{UninterpretedPredicate{currentOne}},
+            ChcBody{{logic->mkGt(x, zero)}, {}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{currentTwo}},
+            ChcBody{{logic->mkGt(y, zero)}, {}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{logic->getTerm_false()}},
+            ChcBody{{logic->mkLt(logic->mkPlus(x, y), zero)}, {UninterpretedPredicate{currentOne}, UninterpretedPredicate{currentTwo}}}
+        }};
+
+    for (auto const & clause : clauses) { system.addClause(clause); }
+
+    Logic & logic = *this->logic;
+    auto normalizedSystem = Normalizer(logic).normalize(system);
+    auto hyperGraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
+    auto originalGraph = *hyperGraph;
+    SimpleNodeEliminator transformation;
+    auto [transformedGraph, translator] = transformation.transform(std::move(hyperGraph));
+    ASSERT_EQ(transformedGraph->getEdges().size(), 1);
+    auto edge = transformedGraph->getEdges().at(0);
+    ASSERT_EQ(edge.to, transformedGraph->getExit());
+    ASSERT_EQ(edge.from.size(), 1);
+    ASSERT_EQ(edge.from.at(0), transformedGraph->getEntry());
+    ValidityWitness witness{};
+    auto translatedWitness = translator->translate(witness);
+    VerificationResult translatedResult(VerificationAnswer::SAFE, translatedWitness);
+    Validator validator(logic);
+    EXPECT_EQ(validator.validate(originalGraph, translatedResult), Validator::Result::VALIDATED);
+}
+
+TEST_F(Transformer_New_Test, test_SimpleNodeEliminator_HyperEdge_Unsafe) {
+    Options options;
+    options.addOption(Options::LOGIC, "QF_LIA");
+    options.addOption(Options::COMPUTE_WITNESS, "true");
+    SymRef s1 = mkPredicateSymbol("s1", {intSort()});
+    SymRef s2 = mkPredicateSymbol("s2", {intSort()});
+    PTRef currentOne = instantiatePredicate(s1, {x});
+    PTRef currentTwo = instantiatePredicate(s2, {y});
+    // x > 0 => S1(x)
+    // y > 0 => S2(y)
+    // S1(x) and S2(y) and x + y > 1 => false
+
+    std::vector<ChClause> clauses{
+        {
+            ChcHead{UninterpretedPredicate{currentOne}},
+            ChcBody{{logic->mkGt(x, zero)}, {}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{currentTwo}},
+            ChcBody{{logic->mkGt(y, zero)}, {}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{logic->getTerm_false()}},
+            ChcBody{{logic->mkGt(logic->mkPlus(x, y), one)}, {UninterpretedPredicate{currentOne}, UninterpretedPredicate{currentTwo}}}
+        }};
+
+    for (auto const & clause : clauses) { system.addClause(clause); }
+
+    Logic & logic = *this->logic;
+    auto normalizedSystem = Normalizer(logic).normalize(system);
+    auto hyperGraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
+    auto originalGraph = *hyperGraph;
+    SimpleNodeEliminator transformation;
+    auto [transformedGraph, translator] = transformation.transform(std::move(hyperGraph));
+    ASSERT_EQ(transformedGraph->getEdges().size(), 1);
+    auto edge = transformedGraph->getEdges().at(0);
+    ASSERT_EQ(edge.to, transformedGraph->getExit());
+    ASSERT_EQ(edge.from.size(), 1);
+    ASSERT_EQ(edge.from.at(0), transformedGraph->getEntry());
+    auto normalGraph = transformedGraph->toNormalGraph();
+    auto res = solveTrivial(*normalGraph);
+    ASSERT_EQ(res.getAnswer(), VerificationAnswer::UNSAFE);
+    auto translatedWitness = translator->translate(res.getInvalidityWitness());
+    VerificationResult translatedResult(VerificationAnswer::UNSAFE, translatedWitness);
+    Validator validator(logic);
+    EXPECT_EQ(validator.validate(originalGraph, translatedResult), Validator::Result::VALIDATED);
+}
+
+TEST_F(Transformer_New_Test, test_SimpleNodeEliminator_HyperEdgeBooleanConstraint_Safe) {
+    Options options;
+    options.addOption(Options::LOGIC, "QF_LIA");
+    options.addOption(Options::COMPUTE_WITNESS, "true");
+    SymRef s1 = mkPredicateSymbol("s1", {intSort()});
+    SymRef s2 = mkPredicateSymbol("s2", {boolSort()});
+    PTRef b = mkBoolVar("b");
+    PTRef currentOne = instantiatePredicate(s1, {x});
+    PTRef currentTwo = instantiatePredicate(s2, {b});
+    // x > 0 => S1(x)
+    // b => S2(b)
+    // S1(x) and S2(b) and x = 1 and ~b => false
+
+    std::vector<ChClause> clauses{
+        {
+            ChcHead{UninterpretedPredicate{currentTwo}},
+            ChcBody{{b}, {}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{currentOne}},
+            ChcBody{{logic->mkGt(x, zero)}, {}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{logic->getTerm_false()}},
+            ChcBody{{logic->mkAnd(logic->mkNot(b), logic->mkEq(x, one))}, {UninterpretedPredicate{currentOne}, UninterpretedPredicate{currentTwo}}}
+        }};
+
+    for (auto const & clause : clauses) { system.addClause(clause); }
+
+    Logic & logic = *this->logic;
+    auto normalizedSystem = Normalizer(logic).normalize(system);
+    auto hyperGraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
+    auto originalGraph = *hyperGraph;
+    SimpleNodeEliminator transformation;
+    auto [transformedGraph, translator] = transformation.transform(std::move(hyperGraph));
+    ASSERT_EQ(transformedGraph->getEdges().size(), 1);
+    auto edge = transformedGraph->getEdges().at(0);
+    ASSERT_EQ(edge.to, transformedGraph->getExit());
+    ASSERT_EQ(edge.from.size(), 1);
+    ASSERT_EQ(edge.from.at(0), transformedGraph->getEntry());
+    ValidityWitness witness{};
+    auto translatedWitness = translator->translate(witness);
+    VerificationResult translatedResult(VerificationAnswer::SAFE, translatedWitness);
+    Validator validator(logic);
+    EXPECT_EQ(validator.validate(originalGraph, translatedResult), Validator::Result::VALIDATED);
+}
+
+TEST_F(Transformer_New_Test, test_SimpleNodeEliminator_PredicateClash_Unsafe) {
+    Options options;
+    options.addOption(Options::LOGIC, "QF_LIA");
+    options.addOption(Options::COMPUTE_WITNESS, "true");
+    SymRef p1 = mkPredicateSymbol("p1", {intSort(), intSort()});
+    SymRef p2 = mkPredicateSymbol("p2", {intSort()});
+    SymRef p3 = mkPredicateSymbol("p3", {intSort()});
+    PTRef one = instantiatePredicate(p1, {x, y});
+    PTRef two = instantiatePredicate(p2, {x});
+    PTRef three = instantiatePredicate(p3, {y});
+    // x < y => P1(x,y)
+    // P1(x,y) => P2(x)
+    // P1(x,y) => P3(y)
+    // P2(x) and P3(y) and x = y => false
+
+    std::vector<ChClause> clauses{
+        {
+            ChcHead{UninterpretedPredicate{one}},
+            ChcBody{{logic->mkLt(x,y)}, {}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{two}},
+            ChcBody{{logic->getTerm_true()}, {UninterpretedPredicate{one}}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{three}},
+            ChcBody{{logic->getTerm_true()}, {UninterpretedPredicate{one}}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{logic->getTerm_false()}},
+            ChcBody{{logic->mkEq(x,y)}, {UninterpretedPredicate{two}, UninterpretedPredicate{three}}}
+        }};
+
+    for (auto const & clause : clauses) { system.addClause(clause); }
+
+    Logic & logic = *this->logic;
+    auto normalizedSystem = Normalizer(logic).normalize(system);
+    auto hyperGraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
+    auto originalGraph = *hyperGraph;
+    SimpleNodeEliminator transformation;
+    auto [transformedGraph, translator] = transformation.transform(std::move(hyperGraph));
+    Spacer engine(logic, options);
+    auto res = engine.solve(*transformedGraph);
+    ASSERT_EQ(res.getAnswer(), VerificationAnswer::UNSAFE);
+    auto translatedWitness = translator->translate(res.getInvalidityWitness());
+    VerificationResult translatedResult(VerificationAnswer::UNSAFE, translatedWitness);
+    Validator validator(logic);
+    EXPECT_EQ(validator.validate(originalGraph, translatedResult), Validator::Result::VALIDATED);
 }
 
 TEST_F(Transformer_New_Test, test_MultiEdgeMerger_SimpleUnsafe) {
