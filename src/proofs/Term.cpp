@@ -168,17 +168,18 @@ std::shared_ptr<Term> CongChainVisitor::visit(Op * term) {
     } else {
 
         std::vector<int> premises;
-        auto originalTerm = term->accept(&copyVisitor);
-        for (std::size_t i = 0; i < args.size(); i++) {
-            term->setArg(int(i), args[i]->accept(this));
-            if (args[i]->getTermType() == Term::OP) { premises.push_back(currStep - 1); }
+        auto termCopy = term->accept(&copyVisitor);
+        for (std::size_t i = 0; i < std::dynamic_pointer_cast<Op>(termCopy)->getArgs().size(); i++) {
+            auto arg = std::dynamic_pointer_cast<Op>(termCopy)->getArgs()[i];
+            std::dynamic_pointer_cast<Op>(termCopy)->setArg(int(i), arg->accept(this));
+            if (arg->getTermType() == Term::OP) { premises.push_back(currStep - 1); }
         }
         auto cong =
-            std::make_shared<Op>("=", std::vector<std::shared_ptr<Term>>{originalTerm, term->accept(&copyVisitor)});
+            std::make_shared<Op>("=", std::vector<std::shared_ptr<Term>>{term->accept(&copyVisitor), termCopy});
         steps.emplace_back(currStep, cong, premises, "cong");
         currStep++;
-        auto furtherSimplification = term->accept(this);
-        auto trans = std::make_shared<Op>("=", std::vector<std::shared_ptr<Term>>{originalTerm, furtherSimplification});
+        auto furtherSimplification = termCopy->accept(this);
+        auto trans = std::make_shared<Op>("=", std::vector<std::shared_ptr<Term>>{term->accept(&copyVisitor), furtherSimplification});
         int predecessor;
         if (transCase == 1) {
             predecessor = currStep - 4;
