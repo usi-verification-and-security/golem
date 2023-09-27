@@ -82,8 +82,6 @@ class StepHandler {
     std::shared_ptr<Term> currTerm;
     std::vector<int> modusPonensSteps; // Modus Ponens Steps to derive the next node
 
-    std::shared_ptr<Term> originalLhsPrimaryBranch;
-
     // Visitors
     InstantiateVisitor copyVisitor;
     OperateLetTermVisitor operateLetTermVisitor;
@@ -97,23 +95,21 @@ public:
         : derivation(std::move(derivation)), originalAssertions(std::move(originalAssertions)),
           normalizingEqualities(normalizingEqualities), logic(logic), originalGraph(std::move(originalGraph)) {}
 
-    std::vector<std::pair<std::string, std::string>> getInstPairs(int it, vec<Normalizer::Equality> const & stepNormEq);
+    std::vector<std::pair<std::string, std::string>> getInstPairs(std::size_t it, vec<Normalizer::Equality> const & stepNormEq);
     static std::vector<std::shared_ptr<Term>> packClause(const std::shared_ptr<Term> & term);
     static std::vector<std::shared_ptr<Term>> packClause(const std::shared_ptr<Term> & term1,
                                                          const std::shared_ptr<Term> & term2);
     void buildAletheProof();
     void buildIntermediateProof();
 
-    bool requiresCong();
-
-    void instantiationSteps(int i);
+    void instantiationSteps(std::size_t i);
     void assumptionSteps();
-    void noCongRequiredSteps(std::vector<int> requiredMP, int implicationStep,
+    void directSimplification(std::vector<int> requiredMP, int implicationStep, const std::shared_ptr<Term>& lastClause,
                              const std::shared_ptr<Term> & renamedImpLHS);
     void conjunctionSimplification(std::vector<int> requiredMP, const std::shared_ptr<Term> & finalClause,
                                    int implicationStep, const std::shared_ptr<Term> & renamedImpLHS);
 
-    int stepReusage(std::shared_ptr<Term> term);
+    int stepReusage(const std::shared_ptr<Term>& term);
 
     void registerObserver(Observer * observer) { observers.push_back(observer); }
 

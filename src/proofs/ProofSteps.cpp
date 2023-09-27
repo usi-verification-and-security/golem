@@ -136,9 +136,9 @@ void StepHandler::buildIntermediateProof() {
 
         std::stringstream premises;
 
-        for (std::size_t i = 0; i < step.premises.size(); i++) {
-            premises << logic.printTerm(derivation[step.premises[i]].derivedFact);
-            if (i < step.premises.size() - 1) { premises << ' '; }
+        for (std::size_t j = 0; j < step.premises.size(); j++) {
+            premises << logic.printTerm(derivation[step.premises[j]].derivedFact);
+            if (j < step.premises.size() - 1) { premises << ' '; }
         }
 
         notifyObservers(
@@ -184,8 +184,8 @@ void StepHandler::buildAletheProof() {
 
         if (!modusPonensSteps.empty()) {
             // Get the necessary steps for modus ponens
-            for (std::size_t i = 0; i < step.premises.size(); i++) {
-                requiredMP.push_back(modusPonensSteps[(int)step.premises[i] - 1]);
+            for (unsigned long premise : step.premises) {
+                requiredMP.push_back(modusPonensSteps[(int)premise - 1]);
             }
         }
 
@@ -218,31 +218,37 @@ void StepHandler::buildAletheProof() {
 
         currStep++;
 
-        // Checking if height of LHS is greater than 1
-        if (not requiresCong()) {
-            // If it is not, the proof is shorter
-            noCongRequiredSteps(requiredMP, implicationStep, renamedImpLHS);
+        CongChainVisitor congChainVisitor(currStep);
 
-        } else {
-            // If it is, we require additional steps
+        // Casting imlication to an operation
+        std::dynamic_pointer_cast<Op>(currTerm)->getArgs()[0]->accept(&congChainVisitor);
 
-            CongChainVisitor congChainVisitor(currStep);
-
-            // Casting imlication to an operation
-            std::dynamic_pointer_cast<Op>(currTerm)->getArgs()[0]->accept(&congChainVisitor);
-
-            for (const auto & simpleStep : congChainVisitor.getSteps()) {
+        if (not congChainVisitor.getSteps().empty()) {
+            for (std::size_t j = 0; j < congChainVisitor.getSteps().size()-1; j++) {
+                auto simpleStep = congChainVisitor.getSteps()[j];
                 notifyObservers(Step(simpleStep.stepId, Step::STEP, packClause(simpleStep.clause), simpleStep.rule,
                                      simpleStep.premises));
             }
-
-            auto lastChainStep = congChainVisitor.getSteps()[congChainVisitor.getSteps().size() - 1];
-            currStep = lastChainStep.stepId + 1;
-            auto lastClause = lastChainStep.clause;
-
-            // Final parent conjunction simplification
-            conjunctionSimplification(requiredMP, lastClause, implicationStep, renamedImpLHS);
         }
+
+        std::shared_ptr<Term> lastClause;
+        // Checking if we are dealing with a conjunction
+        if (implicationLHS->getTermType() == Term::OP) {
+            auto lastChainStep = congChainVisitor.getSteps()[congChainVisitor.getSteps().size() - 1];
+            lastClause = lastChainStep.clause;
+            notifyObservers(Step(lastChainStep.stepId, Step::STEP, packClause(std::make_shared<Op>("=", packClause(renamedImpLHS, std::dynamic_pointer_cast<Op>(lastClause)->getArgs()[1]))), lastChainStep.rule,
+                                 lastChainStep.premises));
+            currStep = lastChainStep.stepId + 1;
+            if (std::dynamic_pointer_cast<Op>(implicationLHS)->getOp() == "and") {
+                // Final parent conjunction simplification
+                conjunctionSimplification(requiredMP, lastClause, implicationStep, renamedImpLHS);
+                continue;
+            }
+        } else {
+            lastClause = implicationLHS;
+        }
+        // If it is not, we simplify with a different procedure
+        directSimplification(requiredMP, implicationStep, lastClause, renamedImpLHS);
     }
 
     notifyObservers(
@@ -253,19 +259,7 @@ void StepHandler::buildAletheProof() {
     notifyObservers(Step(currStep, Step::STEP, "resolution", std::vector<int>{currStep - 2, currStep - 1}));
 }
 
-bool StepHandler::requiresCong() {
-
-    if (implicationLHS->getTermType() == Term::TERMINAL or implicationLHS->getTermType() == Term::APP) {
-        return false;
-    } else {
-        for (auto arg : std::dynamic_pointer_cast<Op>(implicationLHS)->getArgs()) {
-            if (not(arg->getTermType() == Term::TERMINAL or arg->getTermType() == Term::APP)) { return true; }
-        }
-    }
-    return false;
-}
-
-void StepHandler::instantiationSteps(int i) {
+void StepHandler::instantiationSteps(std::size_t i) {
 
     auto const & step = derivation[i];
 
@@ -358,33 +352,13 @@ void StepHandler::assumptionSteps() {
     }
 }
 
-void StepHandler::noCongRequiredSteps(std::vector<int> requiredMP, int implicationStep,
+void StepHandler::directSimplification(std::vector<int> requiredMP, int implicationStep, const std::shared_ptr<Term>& lastClause,
                                       std::shared_ptr<Term> const & renamedImpLHS) {
+
 
     if (implicationLHS->getTermType() == Term::OP) {
 
-        CongChainVisitor congChainVisitor(currStep);
-
-        implicationLHS->accept(&congChainVisitor);
-
-        for (const auto & simpleStep : congChainVisitor.getSteps()) {
-            notifyObservers(Step(simpleStep.stepId, Step::STEP, packClause(simpleStep.clause), simpleStep.rule,
-                                 simpleStep.premises));
-        }
-
-        auto lastChainStep = congChainVisitor.getSteps()[congChainVisitor.getSteps().size() - 1];
-        currStep = lastChainStep.stepId + 1;
-        auto lastClause = lastChainStep.clause;
-
-        auto termToSimplify = std::dynamic_pointer_cast<Op>(lastClause)->getArgs()[0];
         auto simplification = std::dynamic_pointer_cast<Op>(lastClause)->getArgs()[1];
-
-        if (std::dynamic_pointer_cast<Op>(implicationLHS)->getOp() == "and") {
-
-            conjunctionSimplification(requiredMP, std::make_shared<Op>("=", packClause(implicationLHS, simplification)),
-                                      implicationStep, renamedImpLHS);
-            return;
-        }
 
         notifyObservers(Step(currStep, Step::STEP,
                              packClause(renamedImpLHS, std::make_shared<Op>("not", packClause(simplification))),
@@ -492,6 +466,10 @@ void StepHandler::conjunctionSimplification(std::vector<int> requiredMP, const s
 
         stepReusage(simplification);
 
+        notifyObservers(Step(currStep, Step::STEP, packClause(renamedImpLHS), "resolution", std::vector<int>{currStep-2, currStep-1}));
+
+        currStep++;
+
     } else {
 
         notifyObservers(Step(currStep, Step::STEP, packClause(renamedImpLHS), "resolution", requiredMP));
@@ -508,7 +486,7 @@ void StepHandler::conjunctionSimplification(std::vector<int> requiredMP, const s
 }
 
 std::vector<std::pair<std::string, std::string>>
-StepHandler::getInstPairs(int stepIndex, vec<Normalizer::Equality> const & stepNormEq) {
+StepHandler::getInstPairs(std::size_t stepIndex, vec<Normalizer::Equality> const & stepNormEq) {
     struct VarValPair {
         PTRef var;
         PTRef val;
@@ -618,7 +596,7 @@ StepHandler::getInstPairs(int stepIndex, vec<Normalizer::Equality> const & stepN
     return res;
 }
 
-int StepHandler::stepReusage(std::shared_ptr<Term> term) {
+int StepHandler::stepReusage(const std::shared_ptr<Term>& term) {
 
     std::string strTerm = term->printTerm();
 
@@ -639,14 +617,7 @@ int StepHandler::stepReusage(std::shared_ptr<Term> term) {
     } else if (strTerm == "true") {
         if (stepsToReuse[2] == -1) {
             notifyObservers(Step(currStep, Step::STEP, packClause(term), "true"));
-
             stepsToReuse[2] = currStep;
-
-            currStep++;
-
-            notifyObservers(Step(currStep, Step::STEP, packClause(implicationLHS), "resolution",
-                                 std::vector<int>{currStep - 2, currStep - 1}));
-
         } else {
             notifyObservers(Step(currStep, Step::STEP, packClause(implicationLHS), "resolution",
                                  std::vector<int>{currStep - 1, stepsToReuse[2]}));
