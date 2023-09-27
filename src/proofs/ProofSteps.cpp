@@ -371,35 +371,16 @@ void StepHandler::directSimplification(std::vector<int> requiredMP, int implicat
 
         currStep++;
 
-        if (simplification->printTerm() == "true") {
-
+        if (simplification->getTerminalType() == Terminal::BOOL) {
+            assert(simplification->printTerm() == "true");
             stepReusage(simplification);
-
             notifyObservers(Step(currStep, Step::STEP, packClause(renamedImpLHS), "resolution",
                                  std::vector<int>{currStep - 2, currStep - 1}));
 
             currStep++;
-
             notifyObservers(Step(currStep, Step::STEP, packClause(implicationRHS), "resolution",
                                  std::vector<int>{implicationStep, currStep - 1}));
-
             modusPonensSteps.push_back(currStep);
-
-            currStep++;
-        } else {
-
-            notifyObservers(Step(currStep, Step::STEP,
-                                 packClause(std::make_shared<Op>("not", packClause(simplification)), implicationRHS),
-                                 "resolution", std::vector<int>{implicationStep, currStep - 1}));
-
-            currStep++;
-
-            requiredMP.push_back(currStep - 1);
-
-            notifyObservers(Step(currStep, Step::STEP, packClause(implicationRHS), "resolution", requiredMP));
-
-            modusPonensSteps.push_back(currStep);
-
             currStep++;
         }
     } else {
