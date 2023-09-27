@@ -18,8 +18,6 @@ public:
     virtual terminalType getTerminalType() = 0;
     virtual void accept(class VoidVisitor *) = 0;
     virtual std::shared_ptr<Term> accept(class LogicVisitor *) = 0;
-    virtual std::string accept(class StringVisitor *) = 0;
-    virtual bool accept(class BooleanVisitor *) = 0;
     virtual Term * accept(class PointerVisitor *) = 0;
     virtual std::string printTerm();
     virtual ~Term() = default;
@@ -37,8 +35,6 @@ public:
     terminalType getTerminalType() override { return type; }
 
     std::shared_ptr<Term> accept(LogicVisitor *) override;
-    std::string accept(StringVisitor *) override;
-    bool accept(BooleanVisitor *) override;
     Term * accept(PointerVisitor *) override;
     void accept(VoidVisitor *) override;
 };
@@ -61,8 +57,6 @@ public:
     std::shared_ptr<Term> operate();
 
     std::shared_ptr<Term> accept(LogicVisitor *) override;
-    std::string accept(StringVisitor *) override;
-    bool accept(BooleanVisitor *) override;
     Term * accept(PointerVisitor *) override;
     void accept(VoidVisitor *) override;
 };
@@ -79,8 +73,6 @@ public:
     terminalType getTerminalType() override { return UNDECLARED; }
 
     std::shared_ptr<Term> accept(LogicVisitor *) override;
-    std::string accept(StringVisitor *) override;
-    bool accept(BooleanVisitor *) override;
     Term * accept(PointerVisitor *) override;
     void accept(VoidVisitor *) override;
 };
@@ -103,8 +95,6 @@ public:
     terminalType getTerminalType() override { return UNDECLARED; }
 
     std::shared_ptr<Term> accept(LogicVisitor *) override;
-    std::string accept(StringVisitor *) override;
-    bool accept(BooleanVisitor *) override;
     Term * accept(PointerVisitor *) override;
     void accept(VoidVisitor *) override;
 };
@@ -125,8 +115,6 @@ public:
     terminalType getTerminalType() override { return UNDECLARED; }
 
     std::shared_ptr<Term> accept(LogicVisitor *) override;
-    std::string accept(StringVisitor *) override;
-    bool accept(BooleanVisitor *) override;
     Term * accept(PointerVisitor *) override;
     void accept(VoidVisitor *) override;
 };
@@ -194,15 +182,6 @@ public:
     std::shared_ptr<Term> visit(Let *) override;
 };
 
-class StringVisitor {
-public:
-    virtual std::string visit(Terminal *) = 0;
-    virtual std::string visit(Quant *) = 0;
-    virtual std::string visit(Op *) = 0;
-    virtual std::string visit(App *) = 0;
-    virtual std::string visit(Let *) = 0;
-};
-
 class VoidVisitor {
     std::stringstream ss;
 
@@ -250,15 +229,6 @@ public:
     std::shared_ptr<Term> visit(Let *) override { throw std::logic_error("This should not have happened!"); };
 
     std::vector<simpleStep> getSteps() { return steps; };
-};
-
-class BooleanVisitor {
-public:
-    virtual bool visit(Terminal *) = 0;
-    virtual bool visit(Quant *) = 0;
-    virtual bool visit(Op *) = 0;
-    virtual bool visit(App *) = 0;
-    virtual bool visit(Let *) = 0;
 };
 
 class PointerVisitor {

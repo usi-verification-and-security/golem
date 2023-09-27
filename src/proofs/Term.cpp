@@ -572,26 +572,6 @@ Term * LetLocatorVisitor::visit(Let * term) {
     return term->getApplication()->accept(this);
 }
 
-std::string Terminal::accept(StringVisitor * visitor) {
-    return visitor->visit(this);
-}
-
-std::string Op::accept(StringVisitor * visitor) {
-    return visitor->visit(this);
-}
-
-std::string App::accept(StringVisitor * visitor) {
-    return visitor->visit(this);
-}
-
-std::string Quant::accept(StringVisitor * visitor) {
-    return visitor->visit(this);
-}
-
-std::string Let::accept(StringVisitor * visitor) {
-    return visitor->visit(this);
-}
-
 std::shared_ptr<Term> Terminal::accept(LogicVisitor * visitor) {
     return visitor->visit(this);
 }
@@ -609,26 +589,6 @@ std::shared_ptr<Term> Quant::accept(LogicVisitor * visitor) {
 }
 
 std::shared_ptr<Term> Let::accept(LogicVisitor * visitor) {
-    return visitor->visit(this);
-}
-
-bool Terminal::accept(BooleanVisitor * visitor) {
-    return visitor->visit(this);
-}
-
-bool Op::accept(BooleanVisitor * visitor) {
-    return visitor->visit(this);
-}
-
-bool App::accept(BooleanVisitor * visitor) {
-    return visitor->visit(this);
-}
-
-bool Quant::accept(BooleanVisitor * visitor) {
-    return visitor->visit(this);
-}
-
-bool Let::accept(BooleanVisitor * visitor) {
     return visitor->visit(this);
 }
 
