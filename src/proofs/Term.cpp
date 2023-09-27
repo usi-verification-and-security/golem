@@ -152,12 +152,12 @@ std::shared_ptr<Term> CongChainVisitor::visit(Op * term) {
             simplification = outerWorking;
         } else if (term->getOp() == ">=") {
             transCase = 1;
-            auto originalSimplificaiton = simplification->accept(&copyVisitor);
+            auto originalSimplification = simplification->accept(&copyVisitor);
             simplification = simplification->accept(&operateVisitor);
             steps.emplace_back(
                 currStep,
-                std::make_shared<Op>("=", std::vector<std::shared_ptr<Term>>{originalSimplificaiton, simplification}),
-                premises, std::dynamic_pointer_cast<Op>(originalSimplificaiton)->simplifyRule());
+                std::make_shared<Op>("=", std::vector<std::shared_ptr<Term>>{originalSimplification, simplification}),
+                premises, std::dynamic_pointer_cast<Op>(originalSimplification)->simplifyRule());
             currStep++;
             auto trans = std::make_shared<Op>(
                 "=", std::vector<std::shared_ptr<Term>>{term->accept(&copyVisitor), simplification});
@@ -169,8 +169,8 @@ std::shared_ptr<Term> CongChainVisitor::visit(Op * term) {
 
         std::vector<int> premises;
         auto originalTerm = term->accept(&copyVisitor);
-        for (int i = 0; i < args.size(); i++) {
-            term->setArg(i, args[i]->accept(this));
+        for (std::size_t i = 0; i < args.size(); i++) {
+            term->setArg(int(i), args[i]->accept(this));
             if (args[i]->getTermType() == Term::OP) { premises.push_back(currStep - 1); }
         }
         auto cong =
