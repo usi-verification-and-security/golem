@@ -122,7 +122,7 @@ std::shared_ptr<Term> CongChainVisitor::visit(Op * term) {
             premises, term->simplifyRule());
         currStep++;
         if (term->getOp() == ">") {
-            auto originalSimplificaiton = simplification->accept(&copyVisitor);
+            auto originalSimplification = simplification->accept(&copyVisitor);
             auto lessOrEq = std::dynamic_pointer_cast<Op>(simplification)->getArgs()[0];
             auto innerWorking = std::dynamic_pointer_cast<Op>(lessOrEq)->operate();
             steps.emplace_back(currStep,
@@ -131,7 +131,7 @@ std::shared_ptr<Term> CongChainVisitor::visit(Op * term) {
             currStep++;
             std::dynamic_pointer_cast<Op>(simplification)->setArg(0, innerWorking);
             auto cong =
-                std::make_shared<Op>("=", std::vector<std::shared_ptr<Term>>{originalSimplificaiton, simplification});
+                std::make_shared<Op>("=", std::vector<std::shared_ptr<Term>>{originalSimplification, simplification});
 
             steps.emplace_back(currStep, cong, std::vector<int>{currStep - 1}, "cong");
             currStep++;
@@ -142,7 +142,7 @@ std::shared_ptr<Term> CongChainVisitor::visit(Op * term) {
 
             currStep++;
             auto trans =
-                std::make_shared<Op>("=", std::vector<std::shared_ptr<Term>>{originalSimplificaiton, outerWorking});
+                std::make_shared<Op>("=", std::vector<std::shared_ptr<Term>>{originalSimplification, outerWorking});
             steps.emplace_back(currStep, trans, std::vector<int>{currStep - 2, currStep - 1}, "trans");
             currStep++;
             trans =
