@@ -95,7 +95,8 @@ public:
         : derivation(std::move(derivation)), originalAssertions(std::move(originalAssertions)),
           normalizingEqualities(normalizingEqualities), logic(logic), originalGraph(std::move(originalGraph)) {}
 
-    std::vector<std::pair<std::string, std::string>> getInstPairs(std::size_t it, vec<Normalizer::Equality> const & stepNormEq);
+    std::vector<std::pair<std::string, std::string>> getInstPairs(std::size_t it,
+                                                                  vec<Normalizer::Equality> const & stepNormEq);
     static std::vector<std::shared_ptr<Term>> packClause(const std::shared_ptr<Term> & term);
     static std::vector<std::shared_ptr<Term>> packClause(const std::shared_ptr<Term> & term1,
                                                          const std::shared_ptr<Term> & term2);
@@ -104,18 +105,18 @@ public:
 
     void instantiationSteps(std::size_t i);
     void assumptionSteps();
-    void directSimplification(std::vector<int> requiredMP, int implicationStep, const std::shared_ptr<Term>& lastClause,
-                             const std::shared_ptr<Term> & renamedImpLHS);
+    void directSimplification(std::vector<int> requiredMP, int implicationStep,
+                              const std::shared_ptr<Term> & lastClause, const std::shared_ptr<Term> & renamedImpLHS);
     void conjunctionSimplification(std::vector<int> requiredMP, const std::shared_ptr<Term> & finalClause,
                                    int implicationStep, const std::shared_ptr<Term> & renamedImpLHS);
 
-    int stepReusage(const std::shared_ptr<Term>& term);
+    int stepReusage(const std::shared_ptr<Term> & term);
 
     void registerObserver(Observer * observer) { observers.push_back(observer); }
 
     void deRegisterObserver(Observer * observer) {
         for (std::size_t i = 0; i < observers.size(); i++) {
-            if (observer == observers[i]) { observers.erase(observers.begin() + i); }
+            if (observer == observers[i]) { observers.erase(observers.begin() + int(i)); }
         }
     }
 
@@ -126,4 +127,4 @@ public:
     }
 };
 
-#endif // GOLEM_PROOFSETPS_H
+#endif // GOLEM_PROOFSTEPS_H
