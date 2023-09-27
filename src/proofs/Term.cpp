@@ -174,12 +174,12 @@ std::shared_ptr<Term> CongChainVisitor::visit(Op * term) {
             std::dynamic_pointer_cast<Op>(termCopy)->setArg(int(i), arg->accept(this));
             if (arg->getTermType() == Term::OP) { premises.push_back(currStep - 1); }
         }
-        auto cong =
-            std::make_shared<Op>("=", std::vector<std::shared_ptr<Term>>{term->accept(&copyVisitor), termCopy});
+        auto cong = std::make_shared<Op>("=", std::vector<std::shared_ptr<Term>>{term->accept(&copyVisitor), termCopy});
         steps.emplace_back(currStep, cong, premises, "cong");
         currStep++;
         auto furtherSimplification = termCopy->accept(this);
-        auto trans = std::make_shared<Op>("=", std::vector<std::shared_ptr<Term>>{term->accept(&copyVisitor), furtherSimplification});
+        auto trans = std::make_shared<Op>(
+            "=", std::vector<std::shared_ptr<Term>>{term->accept(&copyVisitor), furtherSimplification});
         int predecessor;
         if (transCase == 1) {
             predecessor = currStep - 4;
