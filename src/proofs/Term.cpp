@@ -115,16 +115,16 @@ std::shared_ptr<Term> CongChainVisitor::visit(Op * term) {
 
     if (canSimplify) {
         std::vector<int> premises;
-        auto simplification = term->accept(&operateVisitor);
-        steps.emplace_back(currStep,
-                           std::make_shared<Op>("=", std::vector<std::shared_ptr<Term>>{term->accept(&copyVisitor),
-                                                                                        term->accept(&operateVisitor)}),
-                           premises, term->simplifyRule());
+        auto simplification = term->operate();
+        steps.emplace_back(
+            currStep,
+            std::make_shared<Op>("=", std::vector<std::shared_ptr<Term>>{term->accept(&copyVisitor), term->operate()}),
+            premises, term->simplifyRule());
         currStep++;
         if (term->getOp() == ">") {
             auto originalSimplificaiton = simplification->accept(&copyVisitor);
             auto lessOrEq = std::dynamic_pointer_cast<Op>(simplification)->getArgs()[0];
-            auto innerWorking = lessOrEq->accept(&operateVisitor);
+            auto innerWorking = std::dynamic_pointer_cast<Op>(lessOrEq)->operate();
             steps.emplace_back(currStep,
                                std::make_shared<Op>("=", std::vector<std::shared_ptr<Term>>{lessOrEq, innerWorking}),
                                premises, std::dynamic_pointer_cast<Op>(lessOrEq)->simplifyRule());
@@ -135,7 +135,7 @@ std::shared_ptr<Term> CongChainVisitor::visit(Op * term) {
 
             steps.emplace_back(currStep, cong, std::vector<int>{currStep - 1}, "cong");
             currStep++;
-            auto outerWorking = simplification->accept(&operateVisitor);
+            auto outerWorking = std::dynamic_pointer_cast<Op>(simplification)->operate();
             steps.emplace_back(
                 currStep, std::make_shared<Op>("=", std::vector<std::shared_ptr<Term>>{simplification, outerWorking}),
                 premises, std::dynamic_pointer_cast<Op>(simplification)->simplifyRule());
@@ -153,7 +153,7 @@ std::shared_ptr<Term> CongChainVisitor::visit(Op * term) {
         } else if (term->getOp() == ">=") {
             transCase = 1;
             auto originalSimplification = simplification->accept(&copyVisitor);
-            simplification = simplification->accept(&operateVisitor);
+            simplification = std::dynamic_pointer_cast<Op>(simplification)->operate();
             steps.emplace_back(
                 currStep,
                 std::make_shared<Op>("=", std::vector<std::shared_ptr<Term>>{originalSimplification, simplification}),
@@ -369,9 +369,7 @@ std::shared_ptr<Term> SimplifyVisitor::visit(Let * term) {
     }
 }
 
-std::shared_ptr<Term> OperateVisitor::visit(Op * term) {
-    std::string op = term->getOp();
-    std::vector<std::shared_ptr<Term>> args = term->getArgs();
+std::shared_ptr<Term> Op::operate() {
     std::vector<std::shared_ptr<Term>> newArgs;
     InstantiateVisitor copyVisitor;
     std::string firstStr;
@@ -379,7 +377,8 @@ std::shared_ptr<Term> OperateVisitor::visit(Op * term) {
     FastRational firstTerm;
     FastRational secondTerm;
 
-    if (op == "<" or op == "<=" or op == "-" or op == "*" or op == "/" or op == "mod" or op == "div") {
+    if (operation == "<" or operation == "<=" or operation == "-" or operation == "*" or operation == "/" or
+        operation == "mod" or operation == "div") {
         assert(args[0]->getTerminalType() != Term::VAR);
         assert(args[1]->getTerminalType() != Term::VAR);
         firstStr = args[0]->printTerm();
@@ -394,7 +393,7 @@ std::shared_ptr<Term> OperateVisitor::visit(Op * term) {
         secondTerm = FastRational(&secondStr[0], 10);
     }
 
-    if (op == "=") {
+    if (operation == "=") {
         assert(args[0]->getTerminalType() != Term::VAR);
         assert(args[1]->getTerminalType() != Term::VAR);
         if (args[0]->printTerm() == args[1]->printTerm()) {
@@ -402,25 +401,25 @@ std::shared_ptr<Term> OperateVisitor::visit(Op * term) {
         } else {
             return std::make_shared<Terminal>("false", Term::BOOL);
         }
-    } else if (op == ">") {
+    } else if (operation == ">") {
         return std::make_shared<Op>("not", std::vector<std::shared_ptr<Term>>{std::make_shared<Op>("<=", args)});
-    } else if (op == "<") {
+    } else if (operation == "<") {
         if (firstTerm < secondTerm) {
             return std::make_shared<Terminal>("true", Term::BOOL);
         } else {
             return std::make_shared<Terminal>("false", Term::BOOL);
         }
-    } else if (op == "<=") {
+    } else if (operation == "<=") {
         if (firstTerm <= secondTerm) {
             return std::make_shared<Terminal>("true", Term::BOOL);
         } else {
             return std::make_shared<Terminal>("false", Term::BOOL);
         }
-    } else if (op == ">=") {
+    } else if (operation == ">=") {
         newArgs.push_back(args[1]);
         newArgs.push_back(args[0]);
         return std::make_shared<Op>("<=", newArgs);
-    } else if (op == "and") {
+    } else if (operation == "and") {
         int trues = 0;
         std::vector<std::shared_ptr<Term>> predicates;
 
@@ -439,13 +438,13 @@ std::shared_ptr<Term> OperateVisitor::visit(Op * term) {
             }
             return std::make_shared<Op>("and", newArgs);
         }
-    } else if (op == "or") {
+    } else if (operation == "or") {
         for (const auto & arg : args) {
             assert(arg->getTerminalType() != Term::VAR);
             if (arg->printTerm() == "true") { return std::make_shared<Terminal>("true", Term::BOOL); }
         }
         return std::make_shared<Terminal>("false", Term::BOOL);
-    } else if (op == "+") {
+    } else if (operation == "+") {
         FastRational result = 0;
         for (const auto & arg : args) {
             assert(arg->getTerminalType() != Term::VAR);
@@ -463,7 +462,7 @@ std::shared_ptr<Term> OperateVisitor::visit(Op * term) {
         } else {
             return std::make_shared<Terminal>(result.get_str(), Term::INT);
         }
-    } else if (op == "-") {
+    } else if (operation == "-") {
         FastRational result = firstTerm - secondTerm;
         if (result < 0) {
             result *= -1;
@@ -471,7 +470,7 @@ std::shared_ptr<Term> OperateVisitor::visit(Op * term) {
         } else {
             return std::make_shared<Terminal>(result.get_str(), Term::INT);
         }
-    } else if (op == "/") {
+    } else if (operation == "/") {
         FastRational result = firstTerm / secondTerm;
         if (result < 0) {
             result *= -1;
@@ -479,7 +478,7 @@ std::shared_ptr<Term> OperateVisitor::visit(Op * term) {
         } else {
             return std::make_shared<Terminal>(result.get_str(), Term::INT);
         }
-    } else if (op == "*") {
+    } else if (operation == "*") {
         FastRational result = firstTerm * secondTerm;
         if (result < 0) {
             result *= -1;
@@ -487,14 +486,14 @@ std::shared_ptr<Term> OperateVisitor::visit(Op * term) {
         } else {
             return std::make_shared<Terminal>(result.get_str(), Term::INT);
         }
-    } else if (op == "not") {
+    } else if (operation == "not") {
         assert(args[0]->getTerminalType() != Term::VAR);
         if (args[0]->printTerm() == "false") {
             return std::make_shared<Terminal>("true", Term::BOOL);
         } else {
             return std::make_shared<Terminal>("false", Term::BOOL);
         }
-    } else if (op == "ite") {
+    } else if (operation == "ite") {
         assert(args[0]->getTerminalType() != Term::VAR);
         assert(args[1]->getTerminalType() != Term::VAR);
         assert(args[2]->getTerminalType() != Term::VAR);
@@ -503,7 +502,7 @@ std::shared_ptr<Term> OperateVisitor::visit(Op * term) {
         } else {
             return args[2]->accept(&copyVisitor);
         }
-    } else if (op == "mod") {
+    } else if (operation == "mod") {
         FastRational result = firstTerm % secondTerm;
         if (result < 0) {
             result *= -1;
@@ -511,7 +510,7 @@ std::shared_ptr<Term> OperateVisitor::visit(Op * term) {
         } else {
             return std::make_shared<Terminal>(result.get_str(), Term::INT);
         }
-    } else if (op == "div") {
+    } else if (operation == "div") {
         FastRational result = firstTerm / secondTerm;
         if (result < 0) {
             result *= -1;

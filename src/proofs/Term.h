@@ -58,6 +58,7 @@ public:
     bool nonLinearity();
     std::string nonLinearSimplification();
     void setArg(int i, std::shared_ptr<Term> newArg) { args[i] = std::move(newArg); }
+    std::shared_ptr<Term> operate();
 
     std::shared_ptr<Term> accept(LogicVisitor *) override;
     std::string accept(StringVisitor *) override;
@@ -167,15 +168,6 @@ public:
     std::shared_ptr<Term> visit(Let *) override { return nullptr; }; // because we have already got rid of the let terms
 };
 
-class OperateVisitor : public LogicVisitor {
-public:
-    std::shared_ptr<Term> visit(Terminal *) override { return std::make_shared<Terminal>("Error", Term::UNDECLARED); };
-    std::shared_ptr<Term> visit(Quant *) override { return std::make_shared<Terminal>("Error", Term::UNDECLARED); };
-    std::shared_ptr<Term> visit(Op *) override;
-    std::shared_ptr<Term> visit(App *) override { return std::make_shared<Terminal>("Error", Term::UNDECLARED); };
-    std::shared_ptr<Term> visit(Let *) override { return std::make_shared<Terminal>("Error", Term::UNDECLARED); };
-};
-
 class OperateLetTermVisitor : public LogicVisitor {
     std::vector<std::string> terms;
     std::vector<std::shared_ptr<Term>> substitutions;
@@ -236,7 +228,6 @@ public:
 
 class CongChainVisitor : public LogicVisitor {
     int transCase = 0; // 0 for regular case, 1 for trans after ">="
-    OperateVisitor operateVisitor;
     InstantiateVisitor copyVisitor;
     int currStep;
     class simpleStep {
