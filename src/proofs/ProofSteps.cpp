@@ -148,12 +148,12 @@ void StepHandler::buildIntermediateProof() {
                                       std::make_shared<Terminal>(logic.printTerm(step.derivedFact), Term::VAR))))));
         currStep++;
 
-        std::vector<int> requiredMP;
+        std::vector<std::size_t> requiredMP;
 
         if (!modusPonensSteps.empty()) {
             // Get the necessary steps for modus ponens
-            for (unsigned long premise : step.premises) {
-                requiredMP.push_back(modusPonensSteps[(int)premise - 1]);
+            for (std::size_t premise : step.premises) {
+                requiredMP.push_back(modusPonensSteps[premise - 1]);
             }
         }
 
@@ -180,12 +180,12 @@ void StepHandler::buildAletheProof() {
 
         if (step.premises.empty()) { continue; }
 
-        std::vector<int> requiredMP;
+        std::vector<std::size_t> requiredMP;
 
         if (!modusPonensSteps.empty()) {
             // Get the necessary steps for modus ponens
-            for (unsigned long premise : step.premises) {
-                requiredMP.push_back(modusPonensSteps[(int)premise - 1]);
+            for (std::size_t premise : step.premises) {
+                requiredMP.push_back(modusPonensSteps[premise - 1]);
             }
         }
 
@@ -212,9 +212,9 @@ void StepHandler::buildAletheProof() {
                                                                                ":named @impLHS" + std::to_string(i - 1),
                                                                                Terminal::UNDECLARED))))),
                             implicationRHS),
-                 "implies", std::vector<int>{currStep - 1}));
+                 "implies", std::vector<std::size_t>{currStep - 1}));
 
-        int implicationStep = currStep;
+        std::size_t implicationStep = currStep;
 
         currStep++;
 
@@ -261,7 +261,7 @@ void StepHandler::buildAletheProof() {
 
     currStep++;
     // Get empty clause
-    notifyObservers(Step(currStep, Step::STEP, "resolution", std::vector<int>{currStep - 2, currStep - 1}));
+    notifyObservers(Step(currStep, Step::STEP, "resolution", std::vector<std::size_t>{currStep - 2, currStep - 1}));
 }
 
 void StepHandler::instantiationSteps(std::size_t i) {
@@ -275,7 +275,7 @@ void StepHandler::instantiationSteps(std::size_t i) {
 
     std::shared_ptr<Term> unusedRem = currTerm->accept(&removeUnusedVisitor);
 
-    int quantStep = static_cast<int>(step.clauseId.id);
+    std::size_t quantStep = step.clauseId.id;
 
     // Getting the instantiated variable-value pairs
     std::vector<std::pair<std::string, std::string>> instPairs =
@@ -292,12 +292,12 @@ void StepHandler::instantiationSteps(std::size_t i) {
 
         notifyObservers(Step(currStep, Step::STEP,
                              packClause(std::make_shared<Op>("not", packClause(assumptionReNamedTerm)), unusedRem),
-                             "equiv1", std::vector<int>{currStep - 1}));
+                             "equiv1", std::vector<std::size_t>{currStep - 1}));
 
         currStep++;
 
         notifyObservers(
-            Step(currStep, Step::STEP, packClause(unusedRem), "resolution", std::vector<int>{quantStep, currStep - 1}));
+            Step(currStep, Step::STEP, packClause(unusedRem), "resolution", std::vector<std::size_t>{quantStep, currStep - 1}));
 
         currStep++;
 
@@ -324,14 +324,14 @@ void StepHandler::instantiationSteps(std::size_t i) {
         notifyObservers(
             Step(currStep, Step::STEP,
                  packClause(std::make_shared<Op>("not", packClause(assumptionReNamedTerm)), instantiationReNamedTerm),
-                 "or", std::vector<int>{currStep - 1}));
+                 "or", std::vector<std::size_t>{currStep - 1}));
 
         currStep++;
 
         currTerm = currTerm->accept(&instantiateVisitor);
 
         notifyObservers(Step(currStep, Step::STEP, packClause(instantiationReNamedTerm), "resolution",
-                             std::vector<int>{currStep - 1, quantStep}));
+                             std::vector<std::size_t>{currStep - 1, quantStep}));
 
         currStep++;
     }
@@ -357,7 +357,7 @@ void StepHandler::assumptionSteps() {
     }
 }
 
-void StepHandler::directSimplification(std::vector<int> requiredMP, int implicationStep,
+void StepHandler::directSimplification(std::vector<std::size_t> requiredMP, std::size_t implicationStep,
                                        std::shared_ptr<Term> const & lastClause,
                                        std::shared_ptr<Term> const & renamedImpLHS) {
 
@@ -367,7 +367,7 @@ void StepHandler::directSimplification(std::vector<int> requiredMP, int implicat
 
         notifyObservers(Step(currStep, Step::STEP,
                              packClause(renamedImpLHS, std::make_shared<Op>("not", packClause(simplification))),
-                             "equiv2", std::vector<int>{currStep - 1}));
+                             "equiv2", std::vector<std::size_t>{currStep - 1}));
 
         currStep++;
 
@@ -375,11 +375,11 @@ void StepHandler::directSimplification(std::vector<int> requiredMP, int implicat
             assert(simplification->printTerm() == "true");
             stepReusage(simplification);
             notifyObservers(Step(currStep, Step::STEP, packClause(renamedImpLHS), "resolution",
-                                 std::vector<int>{currStep - 2, currStep - 1}));
+                                 std::vector<std::size_t>{currStep - 2, currStep - 1}));
 
             currStep++;
             notifyObservers(Step(currStep, Step::STEP, packClause(implicationRHS), "resolution",
-                                 std::vector<int>{implicationStep, currStep - 1}));
+                                 std::vector<std::size_t>{implicationStep, currStep - 1}));
             modusPonensSteps.push_back(currStep);
             currStep++;
         }
@@ -402,7 +402,7 @@ void StepHandler::directSimplification(std::vector<int> requiredMP, int implicat
             currStep++;
 
             notifyObservers(Step(currStep, Step::STEP, packClause(implicationRHS), "resolution",
-                                 std::vector<int>{implicationStep, currStep - 1}));
+                                 std::vector<std::size_t>{implicationStep, currStep - 1}));
 
             modusPonensSteps.push_back(currStep);
 
@@ -411,15 +411,15 @@ void StepHandler::directSimplification(std::vector<int> requiredMP, int implicat
     }
 }
 
-void StepHandler::conjunctionSimplification(std::vector<int> requiredMP, std::shared_ptr<Term> const & lastClause,
-                                            int implicationStep, std::shared_ptr<Term> const & renamedImpLHS) {
+void StepHandler::conjunctionSimplification(std::vector<std::size_t> requiredMP, std::shared_ptr<Term> const & lastClause,
+                                            std::size_t implicationStep, std::shared_ptr<Term> const & renamedImpLHS) {
 
     auto termToSimplify = std::dynamic_pointer_cast<Op>(lastClause)->getArgs()[0];
     auto simplification = std::dynamic_pointer_cast<Op>(lastClause)->getArgs()[1];
 
     notifyObservers(Step(currStep, Step::STEP,
                          packClause(renamedImpLHS, std::make_shared<Op>("not", packClause(simplification))), "equiv2",
-                         std::vector<int>{currStep - 1}));
+                         std::vector<std::size_t>{currStep - 1}));
 
     currStep++;
 
@@ -439,7 +439,7 @@ void StepHandler::conjunctionSimplification(std::vector<int> requiredMP, std::sh
                  packClause(renamedImpLHS, std::make_shared<Terminal>(
                                                std::dynamic_pointer_cast<Op>(simplification)->nonLinearSimplification(),
                                                Term::UNDECLARED)),
-                 "resolution", std::vector<int>{currStep - 2, currStep - 1}));
+                 "resolution", std::vector<std::size_t>{currStep - 2, currStep - 1}));
 
         requiredMP.push_back(currStep);
 
@@ -453,7 +453,7 @@ void StepHandler::conjunctionSimplification(std::vector<int> requiredMP, std::sh
         stepReusage(simplification);
 
         notifyObservers(Step(currStep, Step::STEP, packClause(renamedImpLHS), "resolution",
-                             std::vector<int>{currStep - 2, currStep - 1}));
+                             std::vector<std::size_t>{currStep - 2, currStep - 1}));
 
         currStep++;
 
@@ -465,7 +465,7 @@ void StepHandler::conjunctionSimplification(std::vector<int> requiredMP, std::sh
     }
 
     notifyObservers(Step(currStep, Step::STEP, packClause(implicationRHS), "resolution",
-                         std::vector<int>{implicationStep, currStep - 1}));
+                         std::vector<std::size_t>{implicationStep, currStep - 1}));
 
     modusPonensSteps.push_back(currStep);
 
@@ -583,35 +583,15 @@ StepHandler::getInstPairs(std::size_t stepIndex, vec<Normalizer::Equality> const
     return res;
 }
 
-int StepHandler::stepReusage(std::shared_ptr<Term> const & term) {
-
+void StepHandler::stepReusage(std::shared_ptr<Term> const & term) {
     std::string strTerm = term->printTerm();
-
-    if (strTerm == "(not true)") {
-        if (stepsToReuse[0] == -1) {
-            stepsToReuse[0] = currStep;
-            return 0;
-        } else {
-            return 1;
-        }
-    } else if (strTerm == "(not false)") {
-        if (stepsToReuse[1] == -1) {
-            stepsToReuse[1] = currStep;
-            return 0;
-        } else {
-            return 2;
-        }
-    } else if (strTerm == "true") {
-        if (stepsToReuse[2] == -1) {
-            notifyObservers(Step(currStep, Step::STEP, packClause(term), "true"));
-            stepsToReuse[2] = currStep;
-        } else {
-            notifyObservers(Step(currStep, Step::STEP, packClause(implicationLHS), "resolution",
-                                 std::vector<int>{currStep - 1, stepsToReuse[2]}));
-        }
-
-        currStep++;
-        return 3;
+    assert(strTerm == "true");
+    if (trueRuleStep == 0) {
+        notifyObservers(Step(currStep, Step::STEP, packClause(term), "true"));
+        trueRuleStep = currStep;
+    } else {
+        notifyObservers(Step(currStep, Step::STEP, packClause(implicationLHS), "resolution",
+                             std::vector<std::size_t>{currStep - 1, trueRuleStep}));
     }
-    return 0;
+    currStep++;
 }

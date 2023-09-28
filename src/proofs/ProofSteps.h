@@ -18,25 +18,25 @@ public:
     enum stepType { ASSUME, STEP, ANCHOR };
 
 private:
-    int stepId;
+    std::size_t stepId;
     stepType type;
     std::vector<std::shared_ptr<Term>> clause;
     std::string rule;
-    std::vector<int> premises;
+    std::vector<std::size_t> premises;
     std::vector<std::pair<std::string, std::string>> args;
 
 public:
-    Step(int stepId, stepType type, std::vector<std::shared_ptr<Term>> clause, std::string rule,
-         std::vector<int> premises)
+    Step(std::size_t stepId, stepType type, std::vector<std::shared_ptr<Term>> clause, std::string rule,
+         std::vector<std::size_t> premises)
         : stepId(stepId), type(type), clause(std::move(clause)), rule(std::move(rule)), premises(std::move(premises)) {}
-    Step(int stepId, stepType type, std::vector<std::shared_ptr<Term>> clause, std::string rule,
+    Step(std::size_t stepId, stepType type, std::vector<std::shared_ptr<Term>> clause, std::string rule,
          std::vector<std::pair<std::string, std::string>> args)
         : stepId(stepId), type(type), clause(std::move(clause)), rule(std::move(rule)), args(std::move(args)) {}
-    Step(int stepId, stepType type, std::vector<std::shared_ptr<Term>> clause, std::string rule)
+    Step(std::size_t stepId, stepType type, std::vector<std::shared_ptr<Term>> clause, std::string rule)
         : stepId(stepId), type(type), clause(std::move(clause)), rule(std::move(rule)) {}
-    Step(int stepId, stepType type, std::vector<std::shared_ptr<Term>> clause)
+    Step(std::size_t stepId, stepType type, std::vector<std::shared_ptr<Term>> clause)
         : stepId(stepId), type(type), clause(std::move(clause)), rule(" ") {}
-    Step(int stepId, stepType type, std::string rule, std::vector<int> premises)
+    Step(std::size_t stepId, stepType type, std::string rule, std::vector<std::size_t> premises)
         : stepId(stepId), type(type), rule(std::move(rule)), premises(std::move(premises)) {}
     std::string printStepAlethe() const;
     std::string printStepIntermediate() const;
@@ -73,14 +73,13 @@ class StepHandler {
 
     std::vector<Observer *> observers;
 
-    int currStep = 0;
-
-    std::vector<int> stepsToReuse = {-1, -1, -1};
+    std::size_t currStep = 0;
+    std::size_t trueRuleStep = 0;
 
     std::shared_ptr<Term> implicationRHS;
     std::shared_ptr<Term> implicationLHS;
     std::shared_ptr<Term> currTerm;
-    std::vector<int> modusPonensSteps; // Modus Ponens Steps to derive the next node
+    std::vector<std::size_t> modusPonensSteps; // Modus Ponens Steps to derive the next node
 
     // Visitors
     InstantiateVisitor copyVisitor;
@@ -105,12 +104,12 @@ public:
 
     void instantiationSteps(std::size_t i);
     void assumptionSteps();
-    void directSimplification(std::vector<int> requiredMP, int implicationStep,
+    void directSimplification(std::vector<std::size_t> requiredMP, std::size_t implicationStep,
                               std::shared_ptr<Term> const & lastClause, std::shared_ptr<Term> const & renamedImpLHS);
-    void conjunctionSimplification(std::vector<int> requiredMP, std::shared_ptr<Term> const & finalClause,
-                                   int implicationStep, std::shared_ptr<Term> const & renamedImpLHS);
+    void conjunctionSimplification(std::vector<std::size_t> requiredMP, std::shared_ptr<Term> const & finalClause,
+                                   std::size_t implicationStep, std::shared_ptr<Term> const & renamedImpLHS);
 
-    int stepReusage(std::shared_ptr<Term> const & term);
+    void stepReusage(std::shared_ptr<Term> const & term);
 
     void registerObserver(Observer * observer) { observers.push_back(observer); }
 

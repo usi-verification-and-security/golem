@@ -114,7 +114,7 @@ std::shared_ptr<Term> CongChainVisitor::visit(Op * term) {
     }
 
     if (canSimplify) {
-        std::vector<int> premises;
+        std::vector<std::size_t> premises;
         auto simplification = term->operate();
         steps.emplace_back(
             currStep,
@@ -133,7 +133,7 @@ std::shared_ptr<Term> CongChainVisitor::visit(Op * term) {
             auto cong =
                 std::make_shared<Op>("=", std::vector<std::shared_ptr<Term>>{originalSimplification, simplification});
 
-            steps.emplace_back(currStep, cong, std::vector<int>{currStep - 1}, "cong");
+            steps.emplace_back(currStep, cong, std::vector<std::size_t>{currStep - 1}, "cong");
             currStep++;
             auto outerWorking = std::dynamic_pointer_cast<Op>(simplification)->operate();
             steps.emplace_back(
@@ -143,11 +143,11 @@ std::shared_ptr<Term> CongChainVisitor::visit(Op * term) {
             currStep++;
             auto trans =
                 std::make_shared<Op>("=", std::vector<std::shared_ptr<Term>>{originalSimplification, outerWorking});
-            steps.emplace_back(currStep, trans, std::vector<int>{currStep - 2, currStep - 1}, "trans");
+            steps.emplace_back(currStep, trans, std::vector<std::size_t>{currStep - 2, currStep - 1}, "trans");
             currStep++;
             trans =
                 std::make_shared<Op>("=", std::vector<std::shared_ptr<Term>>{term->accept(&copyVisitor), outerWorking});
-            steps.emplace_back(currStep, trans, std::vector<int>{currStep - 5, currStep - 1}, "trans");
+            steps.emplace_back(currStep, trans, std::vector<std::size_t>{currStep - 5, currStep - 1}, "trans");
             currStep++;
             simplification = outerWorking;
         } else if (term->getOp() == ">=") {
@@ -161,13 +161,13 @@ std::shared_ptr<Term> CongChainVisitor::visit(Op * term) {
             currStep++;
             auto trans = std::make_shared<Op>(
                 "=", std::vector<std::shared_ptr<Term>>{term->accept(&copyVisitor), simplification});
-            steps.emplace_back(currStep, trans, std::vector<int>{currStep - 2, currStep - 1}, "trans");
+            steps.emplace_back(currStep, trans, std::vector<std::size_t>{currStep - 2, currStep - 1}, "trans");
             currStep++;
         }
         return simplification;
     } else {
 
-        std::vector<int> premises;
+        std::vector<std::size_t> premises;
         auto termCopy = term->accept(&copyVisitor);
         for (std::size_t i = 0; i < std::dynamic_pointer_cast<Op>(termCopy)->getArgs().size(); i++) {
             auto arg = std::dynamic_pointer_cast<Op>(termCopy)->getArgs()[i];
@@ -180,14 +180,14 @@ std::shared_ptr<Term> CongChainVisitor::visit(Op * term) {
         auto furtherSimplification = termCopy->accept(this);
         auto trans = std::make_shared<Op>(
             "=", std::vector<std::shared_ptr<Term>>{term->accept(&copyVisitor), furtherSimplification});
-        int predecessor;
+        std::size_t predecessor;
         if (transCase == 1) {
             predecessor = currStep - 4;
             transCase = 0;
         } else {
             predecessor = currStep - 2;
         }
-        steps.emplace_back(currStep, trans, std::vector<int>{predecessor, currStep - 1}, "trans");
+        steps.emplace_back(currStep, trans, std::vector<std::size_t>{predecessor, currStep - 1}, "trans");
         currStep++;
         return furtherSimplification;
     }

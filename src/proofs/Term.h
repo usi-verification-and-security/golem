@@ -208,20 +208,20 @@ public:
 class CongChainVisitor : public LogicVisitor {
     int transCase = 0; // 0 for regular case, 1 for trans after ">="
     InstantiateVisitor copyVisitor;
-    int currStep;
+    std::size_t currStep;
     class simpleStep {
     public:
-        int stepId;
+        std::size_t stepId;
         std::shared_ptr<Term> clause;
-        std::vector<int> premises;
+        std::vector<std::size_t> premises;
         std::string rule;
-        simpleStep(int stepId, std::shared_ptr<Term> clause, std::vector<int> premises, std::string rule)
+        simpleStep(std::size_t stepId, std::shared_ptr<Term> clause, std::vector<std::size_t> premises, std::string rule)
             : stepId(stepId), clause(std::move(clause)), premises(std::move(premises)), rule(std::move(rule)) {}
     };
     std::vector<simpleStep> steps;
 
 public:
-    explicit CongChainVisitor(int currStep) : currStep(currStep) {}
+    explicit CongChainVisitor(std::size_t currStep) : currStep(currStep) {}
     std::shared_ptr<Term> visit(Terminal *) override;
     std::shared_ptr<Term> visit(Quant *) override { throw std::logic_error("This should not have happened!"); };
     std::shared_ptr<Term> visit(Op *) override;
