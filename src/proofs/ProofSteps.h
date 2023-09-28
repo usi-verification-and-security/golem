@@ -97,20 +97,20 @@ public:
 
     std::vector<std::pair<std::string, std::string>> getInstPairs(std::size_t it,
                                                                   vec<Normalizer::Equality> const & stepNormEq);
-    static std::vector<std::shared_ptr<Term>> packClause(const std::shared_ptr<Term> & term);
-    static std::vector<std::shared_ptr<Term>> packClause(const std::shared_ptr<Term> & term1,
-                                                         const std::shared_ptr<Term> & term2);
+    static std::vector<std::shared_ptr<Term>> packClause(std::shared_ptr<Term> const & term);
+    static std::vector<std::shared_ptr<Term>> packClause(std::shared_ptr<Term> const & term1,
+                                                         std::shared_ptr<Term> const & term2);
     void buildAletheProof();
     void buildIntermediateProof();
 
     void instantiationSteps(std::size_t i);
     void assumptionSteps();
     void directSimplification(std::vector<int> requiredMP, int implicationStep,
-                              const std::shared_ptr<Term> & lastClause, const std::shared_ptr<Term> & renamedImpLHS);
-    void conjunctionSimplification(std::vector<int> requiredMP, const std::shared_ptr<Term> & finalClause,
-                                   int implicationStep, const std::shared_ptr<Term> & renamedImpLHS);
+                              std::shared_ptr<Term> const & lastClause, std::shared_ptr<Term> const & renamedImpLHS);
+    void conjunctionSimplification(std::vector<int> requiredMP, std::shared_ptr<Term> const & finalClause,
+                                   int implicationStep, std::shared_ptr<Term> const & renamedImpLHS);
 
-    int stepReusage(const std::shared_ptr<Term> & term);
+    int stepReusage(std::shared_ptr<Term> const & term);
 
     void registerObserver(Observer * observer) { observers.push_back(observer); }
 

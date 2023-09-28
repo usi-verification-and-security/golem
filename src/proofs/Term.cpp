@@ -51,7 +51,7 @@ void PrintVisitor::visit(Terminal * term) {
 
 void PrintVisitor::visit(Op * term) {
     ss << "(" << term->getOp();
-    for (const auto & arg : term->getArgs()) {
+    for (auto const & arg : term->getArgs()) {
         ss << " ";
         arg->accept(this);
     }
@@ -60,7 +60,7 @@ void PrintVisitor::visit(Op * term) {
 
 void PrintVisitor::visit(App * term) {
     ss << "(" << term->getFun();
-    for (const std::shared_ptr<Term> & arg : term->getArgs()) {
+    for (std::shared_ptr<Term> const & arg : term->getArgs()) {
         ss << " ";
         arg->accept(this);
     }
@@ -106,7 +106,7 @@ std::shared_ptr<Term> CongChainVisitor::visit(Op * term) {
     auto args = term->getArgs();
     bool canSimplify = true;
 
-    for (const auto & arg : args) {
+    for (auto const & arg : args) {
         if (not(arg->getTermType() == Term::TERMINAL or arg->getTermType() == Term::APP)) {
             canSimplify = false;
             break;
@@ -234,7 +234,7 @@ std::shared_ptr<Term> InstantiateVisitor::visit(Terminal * term) {
     auto val = term->getVal();
     auto type = term->getType();
     if (type != Term::VAR) { return std::make_shared<Terminal>(val, type); }
-    for (const std::pair<std::string, std::string> & pair : instPairs) {
+    for (std::pair<std::string, std::string> const & pair : instPairs) {
         if (val == pair.first) {
             if (pair.second == "true" or pair.second == "false") {
                 return std::make_shared<Terminal>(pair.second, Term::BOOL);
@@ -251,7 +251,7 @@ std::shared_ptr<Term> InstantiateVisitor::visit(Terminal * term) {
 std::shared_ptr<Term> InstantiateVisitor::visit(Op * term) {
     std::vector<std::shared_ptr<Term>> args;
     std::string opcode = term->getOp();
-    for (const std::shared_ptr<Term> & arg : term->getArgs()) {
+    for (std::shared_ptr<Term> const & arg : term->getArgs()) {
         args.push_back(arg->accept(this));
     }
     return std::make_shared<Op>(opcode, args);
@@ -260,7 +260,7 @@ std::shared_ptr<Term> InstantiateVisitor::visit(Op * term) {
 std::shared_ptr<Term> InstantiateVisitor::visit(App * term) {
     std::vector<std::shared_ptr<Term>> args;
     std::string fun = term->getFun();
-    for (const std::shared_ptr<Term> & arg : term->getArgs()) {
+    for (std::shared_ptr<Term> const & arg : term->getArgs()) {
         args.push_back(arg->accept(this));
     }
     return std::make_shared<App>(fun, args);
@@ -274,7 +274,7 @@ std::shared_ptr<Term> InstantiateVisitor::visit(Quant * term) {
 std::shared_ptr<Term> InstantiateVisitor::visit(Let * term) {
     std::vector<std::shared_ptr<Term>> declarations;
     auto application = term->getApplication();
-    for (const std::shared_ptr<Term> & dec : term->getDeclarations()) {
+    for (std::shared_ptr<Term> const & dec : term->getDeclarations()) {
         declarations.push_back(dec->accept(this));
     }
     application->accept(this);
@@ -292,7 +292,7 @@ std::shared_ptr<Term> RemoveUnusedVisitor::visit(Quant * term) {
 
     for (std::size_t i = 0; i < vars.size(); i++) {
         auto var = vars[i];
-        for (const auto & varInUse : varsInUse) {
+        for (auto const & varInUse : varsInUse) {
             if (var->printTerm() == varInUse) { inUse = true; }
         }
         if (!inUse) {
@@ -307,7 +307,7 @@ std::shared_ptr<Term> RemoveUnusedVisitor::visit(Quant * term) {
 }
 
 std::shared_ptr<Term> RemoveUnusedVisitor::visit(Terminal * term) {
-    for (const auto & var : varsInUse) {
+    for (auto const & var : varsInUse) {
         if (term->printTerm() == var) { return nullptr; }
     }
     varsInUse.push_back(term->printTerm());
@@ -316,7 +316,7 @@ std::shared_ptr<Term> RemoveUnusedVisitor::visit(Terminal * term) {
 
 std::shared_ptr<Term> RemoveUnusedVisitor::visit(Op * term) {
     auto args = term->getArgs();
-    for (const auto & arg : args) {
+    for (auto const & arg : args) {
         arg->accept(this);
     }
     return nullptr;
@@ -324,7 +324,7 @@ std::shared_ptr<Term> RemoveUnusedVisitor::visit(Op * term) {
 
 std::shared_ptr<Term> RemoveUnusedVisitor::visit(App * term) {
     auto args = term->getArgs();
-    for (const auto & arg : args) {
+    for (auto const & arg : args) {
         arg->accept(this);
     }
     return nullptr;
@@ -343,7 +343,7 @@ std::shared_ptr<Term> SimplifyVisitor::visit(Op * term) {
     if (operation == term) {
         return simplification;
     } else {
-        for (const auto & arg : args) {
+        for (auto const & arg : args) {
             newArgs.push_back(arg->accept(this));
         }
         return std::make_shared<Op>(op, newArgs);
@@ -424,7 +424,7 @@ std::shared_ptr<Term> Op::operate() {
         int trues = 0;
         std::vector<std::shared_ptr<Term>> predicates;
 
-        for (const auto & arg : args) {
+        for (auto const & arg : args) {
             //           assert(arg->getTerminalType() != Term::VAR);
             if (arg->printTerm() == "false") { return std::make_shared<Terminal>("false", Term::BOOL); }
             if (arg->printTerm() == "true") { trues++; }
@@ -434,26 +434,26 @@ std::shared_ptr<Term> Op::operate() {
         if (predicates.size() == 1) {
             return predicates[0]->accept(&copyVisitor);
         } else {
-            for (const auto & predicate : predicates) {
+            for (auto const & predicate : predicates) {
                 newArgs.push_back(predicate->accept(&copyVisitor));
             }
             return std::make_shared<Op>("and", newArgs);
         }
     } else if (operation == "or") {
-        for (const auto & arg : args) {
+        for (auto const & arg : args) {
             assert(arg->getTerminalType() != Term::VAR);
             if (arg->printTerm() == "true") { return std::make_shared<Terminal>("true", Term::BOOL); }
         }
         return std::make_shared<Terminal>("false", Term::BOOL);
     } else if (operation == "+") {
         FastRational result = 0;
-        for (const auto & arg : args) {
+        for (auto const & arg : args) {
             assert(arg->getTerminalType() != Term::VAR);
             std::string str = arg->printTerm();
             str.erase(remove(str.begin(), str.end(), '('), str.end());
             str.erase(remove(str.begin(), str.end(), ')'), str.end());
             str.erase(remove(str.begin(), str.end(), ' '), str.end());
-            const char * ptr = &str[0];
+            char * const ptr = &str[0];
             FastRational temp(ptr, 10);
             result += temp;
         }
@@ -535,7 +535,7 @@ std::shared_ptr<Term> OperateLetTermVisitor::visit(Terminal * term) {
 std::shared_ptr<Term> OperateLetTermVisitor::visit(Op * term) {
     std::vector<std::shared_ptr<Term>> args;
     std::string opcode = term->getOp();
-    for (const std::shared_ptr<Term> & arg : term->getArgs()) {
+    for (std::shared_ptr<Term> const & arg : term->getArgs()) {
         args.push_back(arg->accept(this));
     }
     return std::make_shared<Op>(opcode, args);
@@ -544,7 +544,7 @@ std::shared_ptr<Term> OperateLetTermVisitor::visit(Op * term) {
 std::shared_ptr<Term> OperateLetTermVisitor::visit(App * term) {
     std::vector<std::shared_ptr<Term>> args;
     std::string fun = term->getFun();
-    for (const std::shared_ptr<Term> & arg : term->getArgs()) {
+    for (std::shared_ptr<Term> const & arg : term->getArgs()) {
         args.push_back(arg->accept(this));
     }
     return std::make_shared<App>(fun, args);
@@ -562,7 +562,7 @@ Term * LetLocatorVisitor::visit(Quant * term) {
 
 Term * LetLocatorVisitor::visit(Op * term) {
     auto args = term->getArgs();
-    for (const auto & arg : args) {
+    for (auto const & arg : args) {
         if (arg->accept(this) != nullptr) { return arg->accept(this); }
     }
     return nullptr;

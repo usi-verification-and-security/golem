@@ -68,7 +68,7 @@ std::string Step::printStepIntermediate() const {
 
     if (not clause.empty()) {
         ss << " ";
-        for (const auto & arg : clause) {
+        for (auto const & arg : clause) {
             ss << arg->printTerm();
             ss << " ";
         }
@@ -95,14 +95,14 @@ std::string Step::printStepIntermediate() const {
     return ss.str();
 }
 
-std::vector<std::shared_ptr<Term>> StepHandler::packClause(const std::shared_ptr<Term> & term) {
+std::vector<std::shared_ptr<Term>> StepHandler::packClause(std::shared_ptr<Term> const & term) {
     std::vector<std::shared_ptr<Term>> clause;
     clause.push_back(term);
     return clause;
 }
 
-std::vector<std::shared_ptr<Term>> StepHandler::packClause(const std::shared_ptr<Term> & term1,
-                                                           const std::shared_ptr<Term> & term2) {
+std::vector<std::shared_ptr<Term>> StepHandler::packClause(std::shared_ptr<Term> const & term1,
+                                                           std::shared_ptr<Term> const & term2) {
     std::vector<std::shared_ptr<Term>> clause;
     clause.push_back(term1);
     clause.push_back(term2);
@@ -358,7 +358,7 @@ void StepHandler::assumptionSteps() {
 }
 
 void StepHandler::directSimplification(std::vector<int> requiredMP, int implicationStep,
-                                       const std::shared_ptr<Term> & lastClause,
+                                       std::shared_ptr<Term> const & lastClause,
                                        std::shared_ptr<Term> const & renamedImpLHS) {
 
     if (implicationLHS->getTermType() == Term::OP) {
@@ -411,8 +411,8 @@ void StepHandler::directSimplification(std::vector<int> requiredMP, int implicat
     }
 }
 
-void StepHandler::conjunctionSimplification(std::vector<int> requiredMP, const std::shared_ptr<Term> & lastClause,
-                                            int implicationStep, const std::shared_ptr<Term> & renamedImpLHS) {
+void StepHandler::conjunctionSimplification(std::vector<int> requiredMP, std::shared_ptr<Term> const & lastClause,
+                                            int implicationStep, std::shared_ptr<Term> const & renamedImpLHS) {
 
     auto termToSimplify = std::dynamic_pointer_cast<Op>(lastClause)->getArgs()[0];
     auto simplification = std::dynamic_pointer_cast<Op>(lastClause)->getArgs()[1];
@@ -583,7 +583,7 @@ StepHandler::getInstPairs(std::size_t stepIndex, vec<Normalizer::Equality> const
     return res;
 }
 
-int StepHandler::stepReusage(const std::shared_ptr<Term> & term) {
+int StepHandler::stepReusage(std::shared_ptr<Term> const & term) {
 
     std::string strTerm = term->printTerm();
 
