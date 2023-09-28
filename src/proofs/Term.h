@@ -215,7 +215,8 @@ class CongChainVisitor : public LogicVisitor {
         std::shared_ptr<Term> clause;
         std::vector<std::size_t> premises;
         std::string rule;
-        SimpleStep(std::size_t stepId, std::shared_ptr<Term> clause, std::vector<std::size_t> premises, std::string rule)
+        SimpleStep(std::size_t stepId, std::shared_ptr<Term> clause, std::vector<std::size_t> premises,
+                   std::string rule)
             : stepId(stepId), clause(std::move(clause)), premises(std::move(premises)), rule(std::move(rule)) {}
     };
     std::vector<SimpleStep> steps;

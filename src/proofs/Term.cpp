@@ -137,8 +137,9 @@ std::shared_ptr<Term> CongChainVisitor::visit(Op * term) {
             currentStep++;
             auto outerWorking = std::dynamic_pointer_cast<Op>(simplification)->operate();
             steps.emplace_back(
-                currentStep, std::make_shared<Op>("=", std::vector<std::shared_ptr<Term>>{simplification, outerWorking}),
-                premises, std::dynamic_pointer_cast<Op>(simplification)->simplifyRule());
+                currentStep,
+                std::make_shared<Op>("=", std::vector<std::shared_ptr<Term>>{simplification, outerWorking}), premises,
+                std::dynamic_pointer_cast<Op>(simplification)->simplifyRule());
 
             currentStep++;
             auto trans =

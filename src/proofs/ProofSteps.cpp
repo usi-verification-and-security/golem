@@ -256,12 +256,13 @@ void StepHandler::buildAletheProof() {
         directSimplification(requiredMP, implicationStep, lastClause, renamedImpLHS);
     }
 
-    notifyObservers(
-        Step(currentStep, Step::STEP, packClause(std::make_shared<Terminal>("(not false)", Term::UNDECLARED)), "false"));
+    notifyObservers(Step(currentStep, Step::STEP,
+                         packClause(std::make_shared<Terminal>("(not false)", Term::UNDECLARED)), "false"));
 
     currentStep++;
     // Get empty clause
-    notifyObservers(Step(currentStep, Step::STEP, "resolution", std::vector<std::size_t>{currentStep - 2, currentStep - 1}));
+    notifyObservers(
+        Step(currentStep, Step::STEP, "resolution", std::vector<std::size_t>{currentStep - 2, currentStep - 1}));
 }
 
 void StepHandler::instantiationSteps(std::size_t i) {
@@ -296,8 +297,8 @@ void StepHandler::instantiationSteps(std::size_t i) {
 
         currentStep++;
 
-        notifyObservers(
-            Step(currentStep, Step::STEP, packClause(unusedRem), "resolution", std::vector<std::size_t>{quantStep, currentStep - 1}));
+        notifyObservers(Step(currentStep, Step::STEP, packClause(unusedRem), "resolution",
+                             std::vector<std::size_t>{quantStep, currentStep - 1}));
 
         currentStep++;
 
@@ -411,8 +412,9 @@ void StepHandler::directSimplification(std::vector<std::size_t> requiredMP, std:
     }
 }
 
-void StepHandler::conjunctionSimplification(std::vector<std::size_t> requiredMP, std::shared_ptr<Term> const & lastClause,
-                                            std::size_t implicationStep, std::shared_ptr<Term> const & renamedImpLHS) {
+void StepHandler::conjunctionSimplification(std::vector<std::size_t> requiredMP,
+                                            std::shared_ptr<Term> const & lastClause, std::size_t implicationStep,
+                                            std::shared_ptr<Term> const & renamedImpLHS) {
 
     auto termToSimplify = std::dynamic_pointer_cast<Op>(lastClause)->getArgs()[0];
     auto simplification = std::dynamic_pointer_cast<Op>(lastClause)->getArgs()[1];
