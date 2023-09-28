@@ -285,26 +285,24 @@ std::shared_ptr<Term> InstantiateVisitor::visit(Let * term) {
 std::shared_ptr<Term> RemoveUnusedVisitor::visit(Quant * term) {
 
     auto vars = term->getVars();
+    std::vector<std::shared_ptr<Term>> newVars;
     auto sorts = term->getSorts();
+    std::vector<std::shared_ptr<Term>> newSorts;
     auto coreTerm = term->getCoreTerm();
-    bool inUse = false;
 
     coreTerm->accept(this);
 
     for (std::size_t i = 0; i < vars.size(); i++) {
-        auto var = vars[i];
         for (auto const & varInUse : varsInUse) {
-            if (var->printTerm() == varInUse) { inUse = true; }
+            if (vars[i]->printTerm() == varInUse) {
+                newVars.push_back(vars[i]);
+                newSorts.push_back(sorts[i]);
+            }
         }
-        if (!inUse) {
-            vars.erase(vars.begin() + int(i));
-            sorts.erase(sorts.begin() + int(i));
-        }
-        inUse = false;
     }
 
-    if (vars.empty()) { return term->getCoreTerm(); }
-    return std::make_shared<Quant>(term->getQuant(), vars, sorts, term->getCoreTerm());
+    if (newVars.empty()) { return term->getCoreTerm(); }
+    return std::make_shared<Quant>(term->getQuant(), newVars, newSorts, term->getCoreTerm());
 }
 
 std::shared_ptr<Term> RemoveUnusedVisitor::visit(Terminal * term) {
