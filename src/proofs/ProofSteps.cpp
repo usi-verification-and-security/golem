@@ -125,14 +125,14 @@ void StepHandler::buildIntermediateProof() {
 
         if (not instPairs.empty()) {
 
-            notifyObservers(Step(currStep, Step::STEP, packClause(currTerm), "forall_inst", instPairs));
-            currStep++;
+            notifyObservers(Step(currentStep, Step::STEP, packClause(currTerm), "forall_inst", instPairs));
+            currentStep++;
 
             currTerm = currTerm->accept(&instantiateVisitor);
         }
 
-        notifyObservers(Step(currStep, Step::STEP, packClause(currTerm)));
-        currStep++;
+        notifyObservers(Step(currentStep, Step::STEP, packClause(currTerm)));
+        currentStep++;
 
         std::stringstream premises;
 
@@ -142,11 +142,11 @@ void StepHandler::buildIntermediateProof() {
         }
 
         notifyObservers(
-            Step(currStep, Step::STEP,
+            Step(currentStep, Step::STEP,
                  packClause(std::make_shared<Op>(
                      "=>", packClause(std::make_shared<Terminal>(premises.str(), Term::VAR),
                                       std::make_shared<Terminal>(logic.printTerm(step.derivedFact), Term::VAR))))));
-        currStep++;
+        currentStep++;
 
         std::vector<std::size_t> requiredMP;
 
@@ -157,13 +157,13 @@ void StepHandler::buildIntermediateProof() {
             }
         }
 
-        notifyObservers(Step(currStep, Step::STEP,
+        notifyObservers(Step(currentStep, Step::STEP,
                              packClause(std::make_shared<Terminal>(logic.printTerm(step.derivedFact), Term::VAR)),
                              "resolution", requiredMP));
 
-        modusPonensSteps.push_back(currStep);
+        modusPonensSteps.push_back(currentStep);
 
-        currStep++;
+        currentStep++;
     }
 }
 
@@ -184,7 +184,7 @@ void StepHandler::buildAletheProof() {
 
         if (!modusPonensSteps.empty()) {
             // Get the necessary steps for modus ponens
-            for (std::size_t premise : step.premises) {
+            for (auto premise : step.premises) {
                 requiredMP.push_back(modusPonensSteps[premise - 1]);
             }
         }
@@ -196,7 +196,7 @@ void StepHandler::buildAletheProof() {
 
         std::shared_ptr<Op> implication = std::dynamic_pointer_cast<Op>(currTerm);
 
-        implicationLHS = implication->getArgs()[0]->accept(&copyVisitor);
+        implicationLHS = implication->getArgs()[0];
         implicationRHS = std::make_shared<Terminal>(logic.printTerm(step.derivedFact), Term::VAR);
 
         std::shared_ptr<Term> renamedImpLHS =
@@ -205,20 +205,20 @@ void StepHandler::buildAletheProof() {
         // Implication rule
 
         notifyObservers(
-            Step(currStep, Step::STEP,
+            Step(currentStep, Step::STEP,
                  packClause(std::make_shared<Op>(
                                 "not", packClause(std::make_shared<Op>(
                                            "!", packClause(implicationLHS, std::make_shared<Terminal>(
                                                                                ":named @impLHS" + std::to_string(i - 1),
                                                                                Terminal::UNDECLARED))))),
                             implicationRHS),
-                 "implies", std::vector<std::size_t>{currStep - 1}));
+                 "implies", std::vector<std::size_t>{currentStep - 1}));
 
-        std::size_t implicationStep = currStep;
+        std::size_t implicationStep = currentStep;
 
-        currStep++;
+        currentStep++;
 
-        CongChainVisitor congChainVisitor(currStep);
+        CongChainVisitor congChainVisitor(currentStep);
 
         // Casting implication to an operation, getting the LHS and calling the simplification visitor
         std::dynamic_pointer_cast<Op>(currTerm)->getArgs()[0]->accept(&congChainVisitor);
@@ -243,7 +243,7 @@ void StepHandler::buildAletheProof() {
                      packClause(std::make_shared<Op>(
                          "=", packClause(renamedImpLHS, std::dynamic_pointer_cast<Op>(lastClause)->getArgs()[1]))),
                      lastChainStep.rule, lastChainStep.premises));
-            currStep = lastChainStep.stepId + 1;
+            currentStep = lastChainStep.stepId + 1;
             if (std::dynamic_pointer_cast<Op>(implicationLHS)->getOp() == "and") {
                 // Final parent conjunction simplification
                 conjunctionSimplification(requiredMP, lastClause, implicationStep, renamedImpLHS);
@@ -257,11 +257,11 @@ void StepHandler::buildAletheProof() {
     }
 
     notifyObservers(
-        Step(currStep, Step::STEP, packClause(std::make_shared<Terminal>("(not false)", Term::UNDECLARED)), "false"));
+        Step(currentStep, Step::STEP, packClause(std::make_shared<Terminal>("(not false)", Term::UNDECLARED)), "false"));
 
-    currStep++;
+    currentStep++;
     // Get empty clause
-    notifyObservers(Step(currStep, Step::STEP, "resolution", std::vector<std::size_t>{currStep - 2, currStep - 1}));
+    notifyObservers(Step(currentStep, Step::STEP, "resolution", std::vector<std::size_t>{currentStep - 2, currentStep - 1}));
 }
 
 void StepHandler::instantiationSteps(std::size_t i) {
@@ -284,32 +284,32 @@ void StepHandler::instantiationSteps(std::size_t i) {
 
     if (unusedRem->printTerm() != currTerm->printTerm()) {
 
-        notifyObservers(Step(currStep, Step::STEP,
+        notifyObservers(Step(currentStep, Step::STEP,
                              packClause(std::make_shared<Op>("=", packClause(assumptionReNamedTerm, unusedRem))),
                              "qnt_rm_unused"));
 
-        currStep++;
+        currentStep++;
 
-        notifyObservers(Step(currStep, Step::STEP,
+        notifyObservers(Step(currentStep, Step::STEP,
                              packClause(std::make_shared<Op>("not", packClause(assumptionReNamedTerm)), unusedRem),
-                             "equiv1", std::vector<std::size_t>{currStep - 1}));
+                             "equiv1", std::vector<std::size_t>{currentStep - 1}));
 
-        currStep++;
+        currentStep++;
 
         notifyObservers(
-            Step(currStep, Step::STEP, packClause(unusedRem), "resolution", std::vector<std::size_t>{quantStep, currStep - 1}));
+            Step(currentStep, Step::STEP, packClause(unusedRem), "resolution", std::vector<std::size_t>{quantStep, currentStep - 1}));
 
-        currStep++;
+        currentStep++;
 
         currTerm = unusedRem;
         assumptionReNamedTerm = unusedRem;
-        quantStep = currStep - 1;
+        quantStep = currentStep - 1;
     }
 
     if (not instPairs.empty()) {
 
         notifyObservers(Step(
-            currStep, Step::STEP,
+            currentStep, Step::STEP,
             packClause(std::make_shared<Op>(
                 "or",
                 packClause(std::make_shared<Op>("not", packClause(assumptionReNamedTerm)),
@@ -319,21 +319,21 @@ void StepHandler::instantiationSteps(std::size_t i) {
                                                                     Terminal::UNDECLARED)))))),
             "forall_inst", instPairs));
 
-        currStep++;
+        currentStep++;
 
         notifyObservers(
-            Step(currStep, Step::STEP,
+            Step(currentStep, Step::STEP,
                  packClause(std::make_shared<Op>("not", packClause(assumptionReNamedTerm)), instantiationReNamedTerm),
-                 "or", std::vector<std::size_t>{currStep - 1}));
+                 "or", std::vector<std::size_t>{currentStep - 1}));
 
-        currStep++;
+        currentStep++;
 
         currTerm = currTerm->accept(&instantiateVisitor);
 
-        notifyObservers(Step(currStep, Step::STEP, packClause(instantiationReNamedTerm), "resolution",
-                             std::vector<std::size_t>{currStep - 1, quantStep}));
+        notifyObservers(Step(currentStep, Step::STEP, packClause(instantiationReNamedTerm), "resolution",
+                             std::vector<std::size_t>{currentStep - 1, quantStep}));
 
-        currStep++;
+        currentStep++;
     }
 }
 
@@ -348,12 +348,12 @@ void StepHandler::assumptionSteps() {
             potentialLet = assertion->accept(&letLocatorVisitor);
         }
         notifyObservers(
-            Step(currStep, Step::ASSUME,
+            Step(currentStep, Step::ASSUME,
                  packClause(std::make_shared<Op>(
-                     "!", packClause(assertion, std::make_shared<Terminal>(":named @a" + std::to_string(currStep),
+                     "!", packClause(assertion, std::make_shared<Terminal>(":named @a" + std::to_string(currentStep),
                                                                            Terminal::UNDECLARED))))));
 
-        currStep++;
+        currentStep++;
     }
 }
 
@@ -365,48 +365,48 @@ void StepHandler::directSimplification(std::vector<std::size_t> requiredMP, std:
 
         auto simplification = std::dynamic_pointer_cast<Op>(lastClause)->getArgs()[1];
 
-        notifyObservers(Step(currStep, Step::STEP,
+        notifyObservers(Step(currentStep, Step::STEP,
                              packClause(renamedImpLHS, std::make_shared<Op>("not", packClause(simplification))),
-                             "equiv2", std::vector<std::size_t>{currStep - 1}));
+                             "equiv2", std::vector<std::size_t>{currentStep - 1}));
 
-        currStep++;
+        currentStep++;
 
         if (simplification->getTerminalType() == Terminal::BOOL) {
             assert(simplification->printTerm() == "true");
             stepReusage(simplification);
-            notifyObservers(Step(currStep, Step::STEP, packClause(renamedImpLHS), "resolution",
-                                 std::vector<std::size_t>{currStep - 2, currStep - 1}));
+            notifyObservers(Step(currentStep, Step::STEP, packClause(renamedImpLHS), "resolution",
+                                 std::vector<std::size_t>{currentStep - 2, currentStep - 1}));
 
-            currStep++;
-            notifyObservers(Step(currStep, Step::STEP, packClause(implicationRHS), "resolution",
-                                 std::vector<std::size_t>{implicationStep, currStep - 1}));
-            modusPonensSteps.push_back(currStep);
-            currStep++;
+            currentStep++;
+            notifyObservers(Step(currentStep, Step::STEP, packClause(implicationRHS), "resolution",
+                                 std::vector<std::size_t>{implicationStep, currentStep - 1}));
+            modusPonensSteps.push_back(currentStep);
+            currentStep++;
         }
     } else {
 
         if (implicationLHS->getTermType() == Term::APP) {
 
-            requiredMP.push_back(currStep - 1);
+            requiredMP.push_back(currentStep - 1);
 
-            notifyObservers(Step(currStep, Step::STEP, packClause(implicationRHS), "resolution", requiredMP));
+            notifyObservers(Step(currentStep, Step::STEP, packClause(implicationRHS), "resolution", requiredMP));
 
-            modusPonensSteps.push_back(currStep);
+            modusPonensSteps.push_back(currentStep);
 
-            currStep++;
+            currentStep++;
 
         } else if (implicationLHS->getTermType() == Term::TERMINAL) {
 
-            notifyObservers(Step(currStep, Step::STEP, packClause(renamedImpLHS), "true"));
+            notifyObservers(Step(currentStep, Step::STEP, packClause(renamedImpLHS), "true"));
 
-            currStep++;
+            currentStep++;
 
-            notifyObservers(Step(currStep, Step::STEP, packClause(implicationRHS), "resolution",
-                                 std::vector<std::size_t>{implicationStep, currStep - 1}));
+            notifyObservers(Step(currentStep, Step::STEP, packClause(implicationRHS), "resolution",
+                                 std::vector<std::size_t>{implicationStep, currentStep - 1}));
 
-            modusPonensSteps.push_back(currStep);
+            modusPonensSteps.push_back(currentStep);
 
-            currStep++;
+            currentStep++;
         }
     }
 }
@@ -417,59 +417,59 @@ void StepHandler::conjunctionSimplification(std::vector<std::size_t> requiredMP,
     auto termToSimplify = std::dynamic_pointer_cast<Op>(lastClause)->getArgs()[0];
     auto simplification = std::dynamic_pointer_cast<Op>(lastClause)->getArgs()[1];
 
-    notifyObservers(Step(currStep, Step::STEP,
+    notifyObservers(Step(currentStep, Step::STEP,
                          packClause(renamedImpLHS, std::make_shared<Op>("not", packClause(simplification))), "equiv2",
-                         std::vector<std::size_t>{currStep - 1}));
+                         std::vector<std::size_t>{currentStep - 1}));
 
-    currStep++;
+    currentStep++;
 
     // Check if we are dealing with a non linear case
     if (std::dynamic_pointer_cast<Op>(termToSimplify)->nonLinearity()) {
         notifyObservers(Step(
-            currStep, Step::STEP,
+            currentStep, Step::STEP,
             packClause(simplification,
                        std::make_shared<Terminal>(
                            std::dynamic_pointer_cast<Op>(simplification)->nonLinearSimplification(), Term::UNDECLARED)),
             "and_neg"));
 
-        currStep++;
+        currentStep++;
 
         notifyObservers(
-            Step(currStep, Step::STEP,
+            Step(currentStep, Step::STEP,
                  packClause(renamedImpLHS, std::make_shared<Terminal>(
                                                std::dynamic_pointer_cast<Op>(simplification)->nonLinearSimplification(),
                                                Term::UNDECLARED)),
-                 "resolution", std::vector<std::size_t>{currStep - 2, currStep - 1}));
+                 "resolution", std::vector<std::size_t>{currentStep - 2, currentStep - 1}));
 
-        requiredMP.push_back(currStep);
+        requiredMP.push_back(currentStep);
 
-        currStep++;
+        currentStep++;
     } else {
-        requiredMP.push_back(currStep - 1);
+        requiredMP.push_back(currentStep - 1);
     }
 
     if (simplification->printTerm() == "true") {
 
         stepReusage(simplification);
 
-        notifyObservers(Step(currStep, Step::STEP, packClause(renamedImpLHS), "resolution",
-                             std::vector<std::size_t>{currStep - 2, currStep - 1}));
+        notifyObservers(Step(currentStep, Step::STEP, packClause(renamedImpLHS), "resolution",
+                             std::vector<std::size_t>{currentStep - 2, currentStep - 1}));
 
-        currStep++;
+        currentStep++;
 
     } else {
 
-        notifyObservers(Step(currStep, Step::STEP, packClause(renamedImpLHS), "resolution", requiredMP));
+        notifyObservers(Step(currentStep, Step::STEP, packClause(renamedImpLHS), "resolution", requiredMP));
 
-        currStep++;
+        currentStep++;
     }
 
-    notifyObservers(Step(currStep, Step::STEP, packClause(implicationRHS), "resolution",
-                         std::vector<std::size_t>{implicationStep, currStep - 1}));
+    notifyObservers(Step(currentStep, Step::STEP, packClause(implicationRHS), "resolution",
+                         std::vector<std::size_t>{implicationStep, currentStep - 1}));
 
-    modusPonensSteps.push_back(currStep);
+    modusPonensSteps.push_back(currentStep);
 
-    currStep++;
+    currentStep++;
 }
 
 std::vector<std::pair<std::string, std::string>>
@@ -587,11 +587,11 @@ void StepHandler::stepReusage(std::shared_ptr<Term> const & term) {
     std::string strTerm = term->printTerm();
     assert(strTerm == "true");
     if (trueRuleStep == 0) {
-        notifyObservers(Step(currStep, Step::STEP, packClause(term), "true"));
-        trueRuleStep = currStep;
+        notifyObservers(Step(currentStep, Step::STEP, packClause(term), "true"));
+        trueRuleStep = currentStep;
     } else {
-        notifyObservers(Step(currStep, Step::STEP, packClause(implicationLHS), "resolution",
-                             std::vector<std::size_t>{currStep - 1, trueRuleStep}));
+        notifyObservers(Step(currentStep, Step::STEP, packClause(implicationLHS), "resolution",
+                             std::vector<std::size_t>{currentStep - 1, trueRuleStep}));
     }
-    currStep++;
+    currentStep++;
 }

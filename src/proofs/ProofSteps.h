@@ -73,7 +73,7 @@ class StepHandler {
 
     std::vector<Observer *> observers;
 
-    std::size_t currStep = 0;
+    std::size_t currentStep = 0;
     std::size_t trueRuleStep = 0;
 
     std::shared_ptr<Term> implicationRHS;

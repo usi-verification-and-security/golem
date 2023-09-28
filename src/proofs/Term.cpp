@@ -117,52 +117,52 @@ std::shared_ptr<Term> CongChainVisitor::visit(Op * term) {
         std::vector<std::size_t> premises;
         auto simplification = term->operate();
         steps.emplace_back(
-            currStep,
+            currentStep,
             std::make_shared<Op>("=", std::vector<std::shared_ptr<Term>>{term->accept(&copyVisitor), term->operate()}),
             premises, term->simplifyRule());
-        currStep++;
+        currentStep++;
         if (term->getOp() == ">") {
             auto originalSimplification = simplification->accept(&copyVisitor);
             auto lessOrEq = std::dynamic_pointer_cast<Op>(simplification)->getArgs()[0];
             auto innerWorking = std::dynamic_pointer_cast<Op>(lessOrEq)->operate();
-            steps.emplace_back(currStep,
+            steps.emplace_back(currentStep,
                                std::make_shared<Op>("=", std::vector<std::shared_ptr<Term>>{lessOrEq, innerWorking}),
                                premises, std::dynamic_pointer_cast<Op>(lessOrEq)->simplifyRule());
-            currStep++;
+            currentStep++;
             std::dynamic_pointer_cast<Op>(simplification)->setArg(0, innerWorking);
             auto cong =
                 std::make_shared<Op>("=", std::vector<std::shared_ptr<Term>>{originalSimplification, simplification});
 
-            steps.emplace_back(currStep, cong, std::vector<std::size_t>{currStep - 1}, "cong");
-            currStep++;
+            steps.emplace_back(currentStep, cong, std::vector<std::size_t>{currentStep - 1}, "cong");
+            currentStep++;
             auto outerWorking = std::dynamic_pointer_cast<Op>(simplification)->operate();
             steps.emplace_back(
-                currStep, std::make_shared<Op>("=", std::vector<std::shared_ptr<Term>>{simplification, outerWorking}),
+                currentStep, std::make_shared<Op>("=", std::vector<std::shared_ptr<Term>>{simplification, outerWorking}),
                 premises, std::dynamic_pointer_cast<Op>(simplification)->simplifyRule());
 
-            currStep++;
+            currentStep++;
             auto trans =
                 std::make_shared<Op>("=", std::vector<std::shared_ptr<Term>>{originalSimplification, outerWorking});
-            steps.emplace_back(currStep, trans, std::vector<std::size_t>{currStep - 2, currStep - 1}, "trans");
-            currStep++;
+            steps.emplace_back(currentStep, trans, std::vector<std::size_t>{currentStep - 2, currentStep - 1}, "trans");
+            currentStep++;
             trans =
                 std::make_shared<Op>("=", std::vector<std::shared_ptr<Term>>{term->accept(&copyVisitor), outerWorking});
-            steps.emplace_back(currStep, trans, std::vector<std::size_t>{currStep - 5, currStep - 1}, "trans");
-            currStep++;
+            steps.emplace_back(currentStep, trans, std::vector<std::size_t>{currentStep - 5, currentStep - 1}, "trans");
+            currentStep++;
             simplification = outerWorking;
         } else if (term->getOp() == ">=") {
             transCase = 1;
             auto originalSimplification = simplification->accept(&copyVisitor);
             simplification = std::dynamic_pointer_cast<Op>(simplification)->operate();
             steps.emplace_back(
-                currStep,
+                currentStep,
                 std::make_shared<Op>("=", std::vector<std::shared_ptr<Term>>{originalSimplification, simplification}),
                 premises, std::dynamic_pointer_cast<Op>(originalSimplification)->simplifyRule());
-            currStep++;
+            currentStep++;
             auto trans = std::make_shared<Op>(
                 "=", std::vector<std::shared_ptr<Term>>{term->accept(&copyVisitor), simplification});
-            steps.emplace_back(currStep, trans, std::vector<std::size_t>{currStep - 2, currStep - 1}, "trans");
-            currStep++;
+            steps.emplace_back(currentStep, trans, std::vector<std::size_t>{currentStep - 2, currentStep - 1}, "trans");
+            currentStep++;
         }
         return simplification;
     } else {
@@ -172,23 +172,23 @@ std::shared_ptr<Term> CongChainVisitor::visit(Op * term) {
         for (std::size_t i = 0; i < std::dynamic_pointer_cast<Op>(termCopy)->getArgs().size(); i++) {
             auto arg = std::dynamic_pointer_cast<Op>(termCopy)->getArgs()[i];
             std::dynamic_pointer_cast<Op>(termCopy)->setArg(int(i), arg->accept(this));
-            if (arg->getTermType() == Term::OP) { premises.push_back(currStep - 1); }
+            if (arg->getTermType() == Term::OP) { premises.push_back(currentStep - 1); }
         }
         auto cong = std::make_shared<Op>("=", std::vector<std::shared_ptr<Term>>{term->accept(&copyVisitor), termCopy});
-        steps.emplace_back(currStep, cong, premises, "cong");
-        currStep++;
+        steps.emplace_back(currentStep, cong, premises, "cong");
+        currentStep++;
         auto furtherSimplification = termCopy->accept(this);
         auto trans = std::make_shared<Op>(
             "=", std::vector<std::shared_ptr<Term>>{term->accept(&copyVisitor), furtherSimplification});
         std::size_t predecessor;
         if (transCase == 1) {
-            predecessor = currStep - 4;
+            predecessor = currentStep - 4;
             transCase = 0;
         } else {
-            predecessor = currStep - 2;
+            predecessor = currentStep - 2;
         }
-        steps.emplace_back(currStep, trans, std::vector<std::size_t>{predecessor, currStep - 1}, "trans");
-        currStep++;
+        steps.emplace_back(currentStep, trans, std::vector<std::size_t>{predecessor, currentStep - 1}, "trans");
+        currentStep++;
         return furtherSimplification;
     }
 }

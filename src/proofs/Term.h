@@ -208,27 +208,27 @@ public:
 class CongChainVisitor : public LogicVisitor {
     int transCase = 0; // 0 for regular case, 1 for trans after ">="
     InstantiateVisitor copyVisitor;
-    std::size_t currStep;
-    class simpleStep {
+    std::size_t currentStep;
+    class SimpleStep {
     public:
         std::size_t stepId;
         std::shared_ptr<Term> clause;
         std::vector<std::size_t> premises;
         std::string rule;
-        simpleStep(std::size_t stepId, std::shared_ptr<Term> clause, std::vector<std::size_t> premises, std::string rule)
+        SimpleStep(std::size_t stepId, std::shared_ptr<Term> clause, std::vector<std::size_t> premises, std::string rule)
             : stepId(stepId), clause(std::move(clause)), premises(std::move(premises)), rule(std::move(rule)) {}
     };
-    std::vector<simpleStep> steps;
+    std::vector<SimpleStep> steps;
 
 public:
-    explicit CongChainVisitor(std::size_t currStep) : currStep(currStep) {}
+    explicit CongChainVisitor(std::size_t currStep) : currentStep(currStep) {}
     std::shared_ptr<Term> visit(Terminal *) override;
     std::shared_ptr<Term> visit(Quant *) override { throw std::logic_error("This should not have happened!"); };
     std::shared_ptr<Term> visit(Op *) override;
     std::shared_ptr<Term> visit(App *) override;
     std::shared_ptr<Term> visit(Let *) override { throw std::logic_error("This should not have happened!"); };
 
-    std::vector<simpleStep> getSteps() { return steps; };
+    std::vector<SimpleStep> getSteps() { return steps; };
 };
 
 class PointerVisitor {
