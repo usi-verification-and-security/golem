@@ -11,19 +11,13 @@
 #include <string>
 
 bool Op::nonLinearity() {
-    int predicates = 0;
     if (operation == "and") {
-        for (auto const & arg : args) {
-            if (arg->getTermType() == Term::APP or arg->getTerminalType() == Terminal::VAR) { predicates++; }
-        }
-        if (predicates >= 2) {
-            return true;
-        } else {
-            return false;
-        }
-    } else {
-        return false;
+        auto predicates = std::count_if(args.begin(), args.end(), [](auto const & arg) {
+            return arg->getTermType() == Term::APP or arg->getTerminalType() == Terminal::VAR;
+        });
+        return predicates >= 2;
     }
+    return false;
 }
 
 std::string Op::nonLinearSimplification() {
@@ -167,7 +161,6 @@ std::shared_ptr<Term> CongChainVisitor::visit(Op * term) {
         }
         return simplification;
     } else {
-
         std::vector<std::size_t> premises;
         auto termCopy = term->accept(&copyVisitor);
         for (std::size_t i = 0; i < std::dynamic_pointer_cast<Op>(termCopy)->getArgs().size(); i++) {
@@ -228,7 +221,7 @@ std::string Op::simplifyRule() {
     } else if (op == "mod") {
         return "mod_simplify";
     }
-    return "Error";
+    throw std::logic_error("Unhandled case in Op::simplifyRule");
 }
 
 std::shared_ptr<Term> InstantiateVisitor::visit(Terminal * term) {
@@ -335,17 +328,14 @@ std::shared_ptr<Term> SimplifyVisitor::visit(Terminal * term) {
 
 std::shared_ptr<Term> SimplifyVisitor::visit(Op * term) {
 
-    auto args = term->getArgs();
-    std::vector<std::shared_ptr<Term>> newArgs;
-    auto op = term->getOp();
-
     if (operation == term) {
         return simplification;
     } else {
-        for (auto const & arg : args) {
+        std::vector<std::shared_ptr<Term>> newArgs;
+        for (auto const & arg : term->getArgs()) {
             newArgs.push_back(arg->accept(this));
         }
-        return std::make_shared<Op>(op, newArgs);
+        return std::make_shared<Op>(term->getOp(), newArgs);
     }
 }
 
@@ -519,8 +509,7 @@ std::shared_ptr<Term> Op::operate() {
             return std::make_shared<Terminal>(result.floor().get_str(), Term::INT);
         }
     }
-
-    return std::make_shared<Terminal>("Error", Term::UNDECLARED);
+    throw std::logic_error("Unhandled case in Op::operate()");
 }
 
 std::shared_ptr<Term> OperateLetTermVisitor::visit(Terminal * term) {
@@ -562,14 +551,16 @@ Term * LetLocatorVisitor::visit(Quant * term) {
 Term * LetLocatorVisitor::visit(Op * term) {
     auto args = term->getArgs();
     for (auto const & arg : args) {
-        if (arg->accept(this) != nullptr) { return arg->accept(this); }
+        auto locatedTerm = arg->accept(this);
+        if (locatedTerm != nullptr) { return locatedTerm; }
     }
     return nullptr;
 }
 
 Term * LetLocatorVisitor::visit(Let * term) {
-    if (term->getApplication()->accept(this) == nullptr) { return term; }
-    return term->getApplication()->accept(this);
+    auto locatedTerm = term->getApplication()->accept(this);
+    if (locatedTerm == nullptr) { return term; }
+    return locatedTerm;
 }
 
 std::shared_ptr<Term> Terminal::accept(LogicVisitor * visitor) {
