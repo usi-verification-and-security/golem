@@ -8,9 +8,9 @@ src/engine/TPA.h
 src/engine/Common.cc
 src/engine/Common.h
 
-src/proofs/ProofSteps.cpp
+src/proofs/ProofSteps.cc
 src/proofs/ProofSteps.h
-src/proofs/Term.cpp
+src/proofs/Term.cc
 src/proofs/Term.h
 
 src/transformers/MultiEdgeMerger.cc

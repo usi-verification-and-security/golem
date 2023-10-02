@@ -46,9 +46,9 @@ target_sources(golem_lib
     PRIVATE Normalizer.cc
     PRIVATE Witnesses.cc
     PRIVATE proofs/Term.h
-    PRIVATE proofs/Term.cpp
+    PRIVATE proofs/Term.cc
     PRIVATE proofs/ProofSteps.h
-    PRIVATE proofs/ProofSteps.cpp
+    PRIVATE proofs/ProofSteps.cc
     PRIVATE ModelBasedProjection.cc
     PRIVATE QuantifierElimination.cc
     PRIVATE graph/ChcGraph.cc
