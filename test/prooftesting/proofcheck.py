@@ -22,22 +22,8 @@ for smt_file in os.listdir(directory):
     with open(proof_file,'w') as f:
         f.writelines(data[1:])
 
-    with open(smt_file,'r') as f:
-        data = f.read()
-        data = data.replace("HORN", "UFLIA")
-
-    with open(smt_file,'w') as f:
-        f.write(data)
-
     ret_code = call(["carcara", "check", proof_file, "--expand-let-bindings"])
 
-    with open(smt_file,'r') as f:
-        data = f.read()
-        data = data.replace("UFLIA", "HORN")
-
-    with open(smt_file,'w') as f:
-        f.write(data)
-    
     os.remove(proof_file)
 
     if ret_code != 0:
