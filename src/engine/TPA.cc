@@ -354,6 +354,13 @@ void TPABase::updateQueryStates(PTRef fla) {
     resetExplanation();
 }
 
+void TPABase::setQueryStates(PTRef fla) {
+    assert(isPureStateFormula(fla));
+    this->query = fla;
+    queryCache.clear();
+    resetExplanation();
+}
+
 PTRef TPASplit::getExactPower(unsigned short power) const {
     assert(power < exactPowers.size());
     return exactPowers[power];
@@ -423,6 +430,7 @@ VerificationAnswer TPABase::solve() {
                 return res;
             case VerificationAnswer::UNKNOWN:
                 ++power;
+                printf("Power: %d\n", power);
         }
     }
 }
@@ -1455,9 +1463,10 @@ private:
         std::unique_ptr<TPABase> solver{nullptr};
         PTRef trulyReached{PTRef_Undef};
         PTRef trulySafe{PTRef_Undef};
-        PTRef accumulatedRestrictions;
+        vec<PTRef> accumulatedRestrictions;
         vec<EId> children;
         int blocked_children;
+        int really_blocked_children;
         vec<EId> parents;
     };
 
@@ -1515,19 +1524,19 @@ private:
 
     InvalidityWitness computeInvalidityWitness() const;
 
-    void addRestrictions(SymRef node, PTRef fla);
+    void addRestrictions(SymRef node, PTRef fla, uint child);
 
     void updateRestrictions(SymRef node);
 };
 
-void TransitionSystemNetworkManager::addRestrictions(SymRef node, PTRef fla) {
-    getNode(node).accumulatedRestrictions = logic.mkAnd(fla, getNode(node).accumulatedRestrictions);
+void TransitionSystemNetworkManager::addRestrictions(SymRef node, PTRef fla, uint child) {
+    getNode(node).accumulatedRestrictions[child] = logic.mkAnd(fla, getNode(node).accumulatedRestrictions[child]);
 }
 
-void TransitionSystemNetworkManager::updateRestrictions(SymRef node) {
-    getNode(node).solver->updateQueryStates(getNode(node).accumulatedRestrictions);
-    getNode(node).accumulatedRestrictions = logic.getTerm_true();
-}
+//void TransitionSystemNetworkManager::updateRestrictions(SymRef node, uint child) {
+//    getNode(node).solver->updateQueryStates(getNode(node).accumulatedRestrictions[child]);
+//    getNode(node).accumulatedRestrictions = logic.getTerm_true();
+//}
 
 VerificationResult TPAEngine::solveTransitionSystemGraph(const ChcDirectedGraph & graph) {
     return TransitionSystemNetworkManager(*this, graph).solve();
@@ -1544,6 +1553,7 @@ void TransitionSystemNetworkManager::initNetwork() {
         auto & node = networkMap.at(vid);
         node.solver = mkSolver();
         node.blocked_children = 0;
+        node.really_blocked_children = 0;
         TransitionSystem ts = constructTransitionSystemFor(vid);
         node.solver->resetTransitionSystem(ts);
         node.trulySafe = logic.getTerm_false();
@@ -1577,6 +1587,7 @@ void TransitionSystemNetworkManager::initNetwork() {
                 incomingEdges.end());
             for (auto edge : incomingEdges) {
                 getNode(graph.getSource(edge)).children.push(edge);
+                getNode(graph.getSource(edge)).accumulatedRestrictions.push(logic.getTerm_true());
             }
         }
     }
@@ -1594,7 +1605,7 @@ VerificationResult TransitionSystemNetworkManager::solve() && {
             }
             getNode(current).trulyReached = PTRef_Undef;
             getNode(current).blocked_children = 0;
-            updateRestrictions(current);
+//            updateRestrictions(current);
         }
         if (current == graph.getEntry()) {
             getNode(current).trulyReached = logic.getTerm_true();
@@ -1617,55 +1628,75 @@ VerificationResult TransitionSystemNetworkManager::solve() && {
                     break; // Information has been propagated to the next node, switch to the new node
 
                 } else { // Edge cannot propagate forward
-                    addRestrictions(current, logic.mkNot(edgeExplanation));
+                    addRestrictions(current, logic.mkNot(edgeExplanation), getNode(current).blocked_children - 1);
                     continue; // Repeat the query for the same TS with stronger query
                 }
             }
             continue;
         }
-        auto [res, explanation] = queryTransitionSystem(networkMap.at(current));
-        if (reachable(res)) {
-            getNode(current).trulyReached = explanation;
-            while (getNode(current).blocked_children < getNode(current).children.size()) {
-                EId nextEdge = getOutgoingEdge(current, getNode(current).blocked_children);
-                PTRef nextConditions = logic.getTerm_true();
-                if (graph.getTarget(nextEdge) != graph.getExit()) {
-                    nextConditions = logic.mkNot(getNode(graph.getTarget(nextEdge)).trulySafe);
-                }
-                auto [edgeRes, edgeExplanation] = queryEdge(nextEdge, explanation, nextConditions);
-                getNode(current).blocked_children++;
-                if (reachable(edgeRes)) { // Edge propagates forward
-                    if (graph.getTarget(nextEdge) == graph.getExit()) {
-                        return {VerificationAnswer::UNSAFE, computeInvalidityWitness()};
-                    }
-                    auto next = graph.getTarget(nextEdge);
-                    networkMap.at(next).solver->resetInitialStates(edgeExplanation);
-                    activePath.push(nextEdge);
-                    current = next;
-                    break; // Information has been propagated to the next node, switch to the new node
+        PTRef origQuery = getNode(current).solver->getQuery();
 
-                } else { // Edge cannot propagate forward
-                    addRestrictions(current, logic.mkNot(edgeExplanation));
-                    continue; // Repeat the query for the same TS with stronger query
+        while (getNode(current).blocked_children < getNode(current).children.size()) {
+            getNode(current).really_blocked_children=0;
+            printf("Orig q: %s\n", (logic.pp(origQuery).c_str()));
+            printf("Constraints q: %s\n", (logic.pp(getNode(current).accumulatedRestrictions[getNode(current).blocked_children]).c_str()));
+            getNode(current).solver->updateQueryStates(getNode(current).accumulatedRestrictions[getNode(current).blocked_children]);
+            printf("Updated q: %s\n", (logic.pp(getNode(current).solver->getQuery()).c_str()));
+            auto [res, explanation] = queryTransitionSystem(networkMap.at(current));
+            getNode(current).solver->setQueryStates(origQuery);
+            if (reachable(res)) {
+                getNode(current).trulyReached = explanation;
+                    EId nextEdge = getOutgoingEdge(current, getNode(current).blocked_children);
+                    PTRef nextConditions = logic.getTerm_true();
+                    if (graph.getTarget(nextEdge) != graph.getExit()) {
+                        nextConditions = logic.mkNot(getNode(graph.getTarget(nextEdge)).trulySafe);
+                    }
+                    printf("Init %s\n", (logic.pp(explanation).c_str()));
+                    printf("Edge label %s\n", (logic.pp(graph.getEdgeLabel(nextEdge)).c_str()));
+                    printf("Next Edge %s\n", (logic.pp(nextConditions).c_str()));
+                    printf("Checking edge %s\n", (logic.pp(logic.mkAnd({ explanation, graph.getEdgeLabel(nextEdge), nextConditions})).c_str()));
+                    auto [edgeRes, edgeExplanation] = queryEdge(nextEdge, explanation, nextConditions);
+                    printf("Explanation %s\n", (logic.pp(edgeExplanation).c_str()));
+                    getNode(current).blocked_children++;
+                    if (reachable(edgeRes)) { // Edge propagates forward
+                        if (graph.getTarget(nextEdge) == graph.getExit()) {
+                            return {VerificationAnswer::UNSAFE, computeInvalidityWitness()};
+                        }
+                        auto next = graph.getTarget(nextEdge);
+                        networkMap.at(next).solver->resetInitialStates(edgeExplanation);
+                        activePath.push(nextEdge);
+                        current = next;
+                        break; // Information has been propagated to the next node, switch to the new node
+
+                    } else { // Edge cannot propagate forward
+                        addRestrictions(current, logic.mkNot(edgeExplanation), getNode(current).blocked_children - 1);
+                        continue; // Repeat the query for the same TS with stronger query
+                    }
+            } else { // TS cannot propagate forward
+                // TODO: No duplication of value
+                getNode(current).really_blocked_children++;
+                getNode(current).blocked_children++;
+                if(getNode(current).really_blocked_children == getNode(current).children.size()) {
+                    getNode(current).really_blocked_children = 0;
+                    assert(getNode(current).trulySafe != PTRef_Undef);
+                    getNode(current).trulySafe = logic.mkOr(getNode(current).trulySafe, explanation);
+                    auto previousEdge = activePath.last();
+                    auto & previousNode = getNode(graph.getSource(previousEdge));
+                    assert(previousNode.trulyReached != PTRef_Undef);
+                    PTRef updatedConditions = logic.mkNot(getNode(current).trulySafe);
+                    auto [edgeRes, edgeExplanation] = queryEdge(previousEdge, previousNode.trulyReached, updatedConditions);
+                    if (reachable(edgeRes)) { // New reached, not refuted yet, states
+                        getNode(current).solver->resetInitialStates(edgeExplanation);
+                        continue; // Repeat the query for the same TS with new initial states
+                    } else {      // Cannot continue from currently computed truly reached states
+                        previousNode.trulyReached = PTRef_Undef;
+                        addRestrictions(graph.getSource(previousEdge), logic.mkNot(edgeExplanation),
+                                        getNode(graph.getSource(previousEdge)).blocked_children - 1);
+                        activePath.pop();
+                        current = graph.getSource(previousEdge);
+                        continue; // Blocked states have been propagated to the previous node, repeat the query there.
+                    }
                 }
-            }
-        } else { // TS cannot propagate forward
-            assert(getNode(current).trulySafe != PTRef_Undef);
-            getNode(current).trulySafe = logic.mkOr(getNode(current).trulySafe, explanation);
-            auto previousEdge = activePath.last();
-            auto & previousNode = getNode(graph.getSource(previousEdge));
-            assert(previousNode.trulyReached != PTRef_Undef);
-            PTRef updatedConditions = logic.mkNot(getNode(current).trulySafe);
-            auto [edgeRes, edgeExplanation] = queryEdge(previousEdge, previousNode.trulyReached, updatedConditions);
-            if (reachable(edgeRes)) { // New reached, not refuted yet, states
-                getNode(current).solver->resetInitialStates(edgeExplanation);
-                continue; // Repeat the query for the same TS with new initial states
-            } else {      // Cannot continue from currently computed truly reached states
-                previousNode.trulyReached = PTRef_Undef;
-                addRestrictions(graph.getSource(previousEdge), logic.mkNot(edgeExplanation));
-                activePath.pop();
-                current = graph.getSource(previousEdge);
-                continue; // Blocked states have been propagated to the previous node, repeat the query there.
             }
         }
     }

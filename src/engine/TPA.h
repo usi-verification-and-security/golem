@@ -112,6 +112,8 @@ public:
 
     void updateQueryStates(PTRef);
 
+    void setQueryStates(PTRef);
+
     PTRef getInit() const;
     PTRef getTransitionRelation() const;
     PTRef getQuery() const;
