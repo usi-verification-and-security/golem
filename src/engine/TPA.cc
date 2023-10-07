@@ -1626,9 +1626,8 @@ VerificationResult TransitionSystemNetworkManager::solve() && {
             continue;
         }
         PTRef origQuery = getNode(current).solver->getQuery();
-
+        getNode(current).blocked_children = 0;
         while (getNode(current).checked_children < getNode(current).children.size()) {
-            getNode(current).blocked_children = 0;
             getNode(current).solver->updateQueryStates(
                 getNode(current).accumulatedRestrictions[getNode(current).checked_children]);
             auto [res, explanation] = queryTransitionSystem(networkMap.at(current));
@@ -1662,6 +1661,7 @@ VerificationResult TransitionSystemNetworkManager::solve() && {
                 getNode(current).checked_children++;
                 if (getNode(current).blocked_children == getNode(current).children.size()) {
                     getNode(current).blocked_children = 0;
+
                     assert(getNode(current).trulySafe != PTRef_Undef);
                     getNode(current).trulySafe = logic.mkOr(getNode(current).trulySafe, explanation);
                     auto previousEdge = activePath.last();
