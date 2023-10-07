@@ -683,40 +683,54 @@ TEST_F(TPATest, test_TPA_BeyondTransitionSystemDAG_Branching_Unsafe)
     options.addOption(Options::ENGINE, TPAEngine::SPLIT_TPA);
     SymRef s1 = mkPredicateSymbol("s1", {intSort(), intSort()});
     SymRef s2 = mkPredicateSymbol("s2", {intSort(), intSort()});
+    SymRef s3 = mkPredicateSymbol("s3", {intSort(), intSort()});
+    SymRef s4 = mkPredicateSymbol("s4", {intSort(), intSort()});
     PTRef current1 = instantiatePredicate(s1, {x,y});
     PTRef next1 = instantiatePredicate(s1, {xp,yp});
     PTRef current2 = instantiatePredicate(s2, {x,y});
     PTRef next2 = instantiatePredicate(s2, {xp,yp});
-    // x = 0 and y = 0 => S1(x,y)
-    // S1(x,y) and x' = x + 1 => S1(x',y)
-    // S1(x,y) and x > 5 and y > 10 => S2(x,y)
-    // S2(x,y) and y' = y + 1 => S2(x,y')
-    // S2(x,y) and y > 5 => S1(x,y)
-    // S1(x,y) and x > 100 => false
+    PTRef current3 = instantiatePredicate(s3, {x,y});
+    PTRef current4 = instantiatePredicate(s4, {x,y});
+    // x = 1 and y = 2 => S1(x,y)
+    // S1(x,y) and x' = x + 1 and y' = y + 4 => S1(x',y')
+    // S1(x,y) and  y > 10 => S4(x,y)
+    // S4(x,y) and  x > 5 => S2(x,y)
+    // S4(x,y) and  x <= 5 => S3(x,y)
+    // S2(x,y) and x > y and x' = x - 1 => S2(x,y')
+    // S2(x,y) and y >= x => S3(x,y)
+    // S3(x,y) and x < y+20 => false
     std::vector<ChClause> clauses{
         {
             ChcHead{UninterpretedPredicate{next1}},
-            ChcBody{{logic->mkAnd(logic->mkEq(xp, zero), logic->mkEq(yp, zero))}, {}}
+            ChcBody{{logic->mkAnd(logic->mkEq(xp, one), logic->mkEq(yp, logic->mkIntConst(2)))}, {}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{current4}},
+            ChcBody{{logic->mkGeq(y,logic->mkIntConst(10))}, {UninterpretedPredicate{current1}}}
         },
         {
             ChcHead{UninterpretedPredicate{next1}},
-            ChcBody{{logic->mkAnd(logic->mkEq(xp, logic->mkPlus(x, one)), logic->mkEq(yp, y))}, {UninterpretedPredicate{current1}}}
+            ChcBody{{logic->mkAnd({logic->mkLt(y,logic->mkIntConst(10)),logic->mkEq(xp, logic->mkPlus(x, one)), logic->mkEq(yp, logic->mkPlus(y,logic->mkIntConst(4)))})}, {UninterpretedPredicate{current1}}}
         },
         {
             ChcHead{UninterpretedPredicate{current2}},
-            ChcBody{{logic->mkAnd(logic->mkGt(x, logic->mkIntConst(5)), logic->mkGt(y,logic->mkIntConst(10)))}, {UninterpretedPredicate{current1}}}
+            ChcBody{{logic->mkGt(x,logic->mkIntConst(5))}, {UninterpretedPredicate{current4}}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{current3}},
+            ChcBody{{logic->mkLeq(x,logic->mkIntConst(5))}, {UninterpretedPredicate{current4}}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{current3}},
+            ChcBody{{logic->mkLeq(x,y)}, {UninterpretedPredicate{current2}}}
         },
         {
             ChcHead{UninterpretedPredicate{next2}},
-            ChcBody{{logic->mkAnd(logic->mkEq(yp, logic->mkPlus(y, one)), logic->mkEq(xp, x))}, {UninterpretedPredicate{current2}}}
-        },
-        {
-            ChcHead{UninterpretedPredicate{current1}},
-            ChcBody{{logic->mkGt(y, logic->mkIntConst(2))}, {UninterpretedPredicate{current2}}}
+            ChcBody{{logic->mkAnd({logic->mkGt(x,y),logic->mkEq(xp, logic->mkMinus(x, one)), logic->mkEq(yp, y)})}, {UninterpretedPredicate{current2}}}
         },
         {
             ChcHead{UninterpretedPredicate{logic->getTerm_false()}},
-            ChcBody{{logic->mkGt(x, logic->mkIntConst(100))}, {UninterpretedPredicate{current1}}}
+            ChcBody{{logic->mkLt(x, logic->mkIntConst(5))}, {UninterpretedPredicate{current3}}}
         }};
     TPAEngine engine(*logic, options);
     solveSystem(clauses, engine, VerificationAnswer::UNSAFE, true);
