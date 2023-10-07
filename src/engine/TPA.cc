@@ -430,7 +430,6 @@ VerificationAnswer TPABase::solve() {
                 return res;
             case VerificationAnswer::UNKNOWN:
                 ++power;
-                printf("Power: %d\n", power);
         }
     }
 }
@@ -1526,17 +1525,11 @@ private:
 
     void addRestrictions(SymRef node, PTRef fla, uint child);
 
-    void updateRestrictions(SymRef node);
 };
 
 void TransitionSystemNetworkManager::addRestrictions(SymRef node, PTRef fla, uint child) {
     getNode(node).accumulatedRestrictions[child] = logic.mkAnd(fla, getNode(node).accumulatedRestrictions[child]);
 }
-
-//void TransitionSystemNetworkManager::updateRestrictions(SymRef node, uint child) {
-//    getNode(node).solver->updateQueryStates(getNode(node).accumulatedRestrictions[child]);
-//    getNode(node).accumulatedRestrictions = logic.getTerm_true();
-//}
 
 VerificationResult TPAEngine::solveTransitionSystemGraph(const ChcDirectedGraph & graph) {
     return TransitionSystemNetworkManager(*this, graph).solve();
@@ -1605,7 +1598,6 @@ VerificationResult TransitionSystemNetworkManager::solve() && {
             }
             getNode(current).trulyReached = PTRef_Undef;
             getNode(current).checked_children = 0;
-//            updateRestrictions(current);
         }
         if (current == graph.getEntry()) {
             getNode(current).trulyReached = logic.getTerm_true();
