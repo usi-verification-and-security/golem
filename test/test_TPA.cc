@@ -673,3 +673,154 @@ TEST_F(TPATest, test_TPA_BeyondTransitionSystemDAG_Safe)
     // TODO: Enable validation once we deal with alien variables in vertex invariants properly
     solveSystem(clauses, engine, VerificationAnswer::SAFE, false);
 }
+
+TEST_F(TPATest, test_TPA_BeyondTransitionSystemDAG_Branching_Unsafe)
+{
+    Options options;
+    options.addOption(Options::LOGIC, "QF_LIA");
+    options.addOption(Options::COMPUTE_WITNESS, "true");
+    options.addOption(Options::ENGINE, TPAEngine::SPLIT_TPA);
+    SymRef s1 = mkPredicateSymbol("s1", {intSort(), intSort()});
+    SymRef s2 = mkPredicateSymbol("s2", {intSort(), intSort()});
+    SymRef s3 = mkPredicateSymbol("s3", {intSort(), intSort()});
+    SymRef s4 = mkPredicateSymbol("s4", {intSort(), intSort()});
+    PTRef current1 = instantiatePredicate(s1, {x,y});
+    PTRef next1 = instantiatePredicate(s1, {xp,yp});
+    PTRef current2 = instantiatePredicate(s2, {x,y});
+    PTRef next2 = instantiatePredicate(s2, {xp,yp});
+    PTRef current3 = instantiatePredicate(s3, {x,y});
+    PTRef current4 = instantiatePredicate(s4, {x,y});
+    // x = 1 and y = 2 => S1(x,y)
+    // S1(x,y) and x' = x + 1 and y' = y + 4 => S1(x',y')
+    // S1(x,y) and  y > 10 => S4(x,y)
+    // S4(x,y) and  x > 5 => S2(x,y)
+    // S4(x,y) and  x <= 5 => S3(x,y)
+    // S2(x,y) and x > y and x' = x - 1 => S2(x,y')
+    // S2(x,y) and y >= x => S3(x,y)
+    // S3(x,y) and x < y+20 => false
+    std::vector<ChClause> clauses{
+        {
+            ChcHead{UninterpretedPredicate{next1}},
+            ChcBody{{logic->mkAnd(logic->mkEq(xp, one), logic->mkEq(yp, logic->mkIntConst(2)))}, {}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{current4}},
+            ChcBody{{logic->mkGeq(y,logic->mkIntConst(10))}, {UninterpretedPredicate{current1}}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{next1}},
+            ChcBody{{logic->mkAnd({logic->mkLt(y,logic->mkIntConst(10)),logic->mkEq(xp, logic->mkPlus(x, one)), logic->mkEq(yp, logic->mkPlus(y,logic->mkIntConst(4)))})}, {UninterpretedPredicate{current1}}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{current2}},
+            ChcBody{{logic->mkGt(x,logic->mkIntConst(5))}, {UninterpretedPredicate{current4}}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{current3}},
+            ChcBody{{logic->mkLeq(x,logic->mkIntConst(5))}, {UninterpretedPredicate{current4}}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{current3}},
+            ChcBody{{logic->mkLeq(x,y)}, {UninterpretedPredicate{current2}}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{next2}},
+            ChcBody{{logic->mkAnd({logic->mkGt(x,y),logic->mkEq(xp, logic->mkMinus(x, one)), logic->mkEq(yp, y)})}, {UninterpretedPredicate{current2}}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{logic->getTerm_false()}},
+            ChcBody{{logic->mkLt(x, logic->mkIntConst(5))}, {UninterpretedPredicate{current3}}}
+        }};
+    TPAEngine engine(*logic, options);
+    solveSystem(clauses, engine, VerificationAnswer::UNSAFE, true);
+}
+
+TEST_F(TPATest, test_TPA_BeyondTransitionSystemDAG_Branching_Unsafe2)
+{
+    Options options;
+    options.addOption(Options::LOGIC, "QF_LIA");
+    options.addOption(Options::COMPUTE_WITNESS, "true");
+    options.addOption(Options::ENGINE, TPAEngine::SPLIT_TPA);
+    SymRef h1 = mkPredicateSymbol("h1", {intSort()});
+    SymRef h2 = mkPredicateSymbol("h2", {intSort()});
+    SymRef s1 = mkPredicateSymbol("s1", {intSort(), intSort()});
+    SymRef s2 = mkPredicateSymbol("s2", {intSort()});
+    SymRef s3 = mkPredicateSymbol("s3", {intSort()});
+    PTRef currentH1 = instantiatePredicate(h1, {y});
+    PTRef nextH1 = instantiatePredicate(h1, {yp});
+    PTRef currentH2 = instantiatePredicate(h2, {y});
+    PTRef nextH2 = instantiatePredicate(h2, {yp});
+    PTRef current1 = instantiatePredicate(s1, {x, y});
+    PTRef next1 = instantiatePredicate(s1, {xp, y});
+    PTRef current2 = instantiatePredicate(s2, {x});
+    PTRef current3 = instantiatePredicate(s3, {x});
+    PTRef next3 = instantiatePredicate(s3, {xp});
+    // y > 0 => H2(y)
+    // y < 0 => H1(y)
+    // H1(y) and yp = y - 1 => H1(yp)
+    // H2(y) and yp = y + 1 => H2(yp)
+    // H1(y) and x = 0 => S1(x,y)
+    // H2(y) and x = 0 => S1(x,y)
+    // S1(x, y) and x' = x + 1 => S1(x', y)
+    // S1(x,y) => S3(x)
+    // S3(x) and x' = x + 1 => S3(x')
+    // S1(x, y) and y > 0 => S2(x)
+    // S2(x) => S2(x)
+    // S2(x) and x > 0 => false
+    // S3(x) and x < 0 => false
+    std::vector<ChClause> clauses{
+        {
+            ChcHead{UninterpretedPredicate{currentH2}},
+            ChcBody{{logic->mkGt(y, zero)}, {}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{currentH1}},
+            ChcBody{{logic->mkLt(y, zero)}, {}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{nextH1}},
+            ChcBody{{logic->mkEq(yp, logic->mkMinus(y, one))}, {UninterpretedPredicate{currentH1}}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{nextH2}},
+            ChcBody{{logic->mkEq(yp, logic->mkPlus(y, one))}, {UninterpretedPredicate{currentH2}}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{current1}},
+            ChcBody{{logic->mkEq(x, zero)}, {UninterpretedPredicate{currentH1}}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{current1}},
+            ChcBody{{logic->mkEq(x, zero)}, {UninterpretedPredicate{currentH2}}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{next1}},
+            ChcBody{{logic->mkEq(xp, logic->mkPlus(x, one))}, {UninterpretedPredicate{current1}}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{current3}},
+            ChcBody{{logic->getTerm_true()}, {UninterpretedPredicate{current1}}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{next3}},
+            ChcBody{{logic->mkEq(xp, logic->mkPlus(x, one))}, {UninterpretedPredicate{current3}}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{current2}},
+            ChcBody{{logic->mkGt(y, zero)}, {UninterpretedPredicate{current1}}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{current2}},
+            ChcBody{{logic->getTerm_true()}, {UninterpretedPredicate{current2}}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{logic->getTerm_false()}},
+            ChcBody{{logic->mkGt(x, zero)}, {UninterpretedPredicate{current2}}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{logic->getTerm_false()}},
+            ChcBody{{logic->mkLt(x, zero)}, {UninterpretedPredicate{current3}}}
+        }};
+    TPAEngine engine(*logic, options);
+    solveSystem(clauses, engine, VerificationAnswer::UNSAFE, true);
+}

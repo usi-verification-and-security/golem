@@ -1521,12 +1521,12 @@ private:
 };
 
 void TransitionSystemNetworkManager::addRestrictions(SymRef node, PTRef fla) {
-    getNode(node).accumulatedRestrictions = logic.mkAnd(fla, getNode(node).accumulatedRestrictions);
+    getNode(node).accumulatedRestrictions = logic.mkOr(fla, getNode(node).accumulatedRestrictions);
 }
 
 void TransitionSystemNetworkManager::updateRestrictions(SymRef node) {
     getNode(node).solver->updateQueryStates(getNode(node).accumulatedRestrictions);
-    getNode(node).accumulatedRestrictions = logic.getTerm_true();
+    getNode(node).accumulatedRestrictions = logic.getTerm_false();
 }
 
 VerificationResult TPAEngine::solveTransitionSystemGraph(const ChcDirectedGraph & graph) {
