@@ -121,7 +121,7 @@ public:
     [[nodiscard]] std::string_view getReason() const { return reason; }
 };
 
-enum class VerificationAnswer : char {SAFE, UNSAFE, UNKNOWN};
+enum class VerificationAnswer : char {SAFE, UNSAFE, UNKNOWN, TIMEOUT};
 
 class VerificationResult {
     VerificationAnswer answer;
