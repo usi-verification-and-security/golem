@@ -63,6 +63,22 @@ Transformer::TransformationResult ConstraintSimplifier::transform(std::unique_pt
             stateVars.push(var);
         }
         constraint = TrivialQuantifierElimination(logic).tryEliminateVarsExcept(stateVars, constraint);
+        // Elimination of DIV/MOD and ITE might have introduced new auxiliary variables, we need to version them
+        TimeMachine timeMachine(logic);
+        VersionManager versionManager(logic);
+        auto isVarToNormalize = [&](PTRef var) {
+            return logic.isVar(var) and not versionManager.isTagged(var) and not timeMachine.isVersioned(var);
+        };
+        auto localVars = matchingSubTerms(logic, constraint, isVarToNormalize);
+        if (localVars.size() > 0) {
+            TermUtils::substitutions_map subst;
+            for (PTRef localVar : localVars) {
+                // FIXME: This is not ideal, we can get a clash if the same DIV/MOD/ITE term occurs in different clauses
+                //        But we should anyway find a better way to handle these variables. Ideally unify this again with normalizer.
+                subst.insert({localVar, timeMachine.getVarVersionZero(localVar)});
+            }
+            constraint = utils.varSubstitute(constraint, subst);
+        }
         edge.fla.fla = constraint;
     });
     return {std::move(graph), std::make_unique<BackTranslator>()};
