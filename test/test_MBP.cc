@@ -546,3 +546,18 @@ TEST_F(MBP_IntTest, test_ResolvesToTrue) {
     EXPECT_EQ(res, logic.mkEq(zero, logic.mkMod(logic.mkMinus(x, one), five)));
 }
 
+TEST_F(MBP_IntTest, test_ExtendedModelForDivisibilityInThePresenceOfDisequality) {
+    PTRef ten = logic.mkIntConst(10);
+    PTRef neq = logic.mkNot(logic.mkEq(x, one));
+    PTRef lb = logic.mkLeq(one, y);
+    PTRef lb2 = logic.mkLeq(z, y);
+    PTRef ub = logic.mkLeq(y, ten);
+    PTRef withMod = logic.mkEq(logic.mkMod(logic.mkMinus(logic.mkPlus(vec<PTRef>{x, y, z}), one), ten), zero);
+    PTRef fla = logic.mkAnd({neq, lb, lb2, ub, withMod});
+    auto model = getModel({{x, zero}, {y, one}, {z, logic.mkIntConst(-10)}});
+    PTRef res = mbp.project(fla, {x, y, z}, *model);
+    std::cout << logic.pp(res) << std::endl;
+    // Just check that it went through. Originally, this was crashing on assertion violation in MBP.
+    ASSERT_EQ(res, logic.getTerm_true());
+}
+

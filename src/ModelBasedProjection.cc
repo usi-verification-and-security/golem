@@ -572,14 +572,17 @@ FastRational mbp_fastrat_fdiv_r(FastRational const & n, FastRational const & d) 
 
 std::unique_ptr<Model> extendModel(Model & model, ModelBasedProjection::implicant_t const & implicant,
                                    std::pair<PTRef, PTRef> varValPair, Logic & logic) {
-    vec<PTRef> args; args.capacity(implicant.size());
-    for (PtAsgn lit : implicant) {
-        args.push(lit.tr);
-    }
-    vec<PTRef> relevantVars = TermUtils(logic).getVars(logic.mkAnd(args));
     ModelBuilder builder(logic);
-    for (PTRef var : relevantVars) {
-        builder.addVarValue(var, model.evaluate(var));
+    std::unordered_set<PTRef, PTRefHash> processedVars;
+    // TODO: Expose from OpenSMT API method to run a given hook on each encountered variable
+    for (PtAsgn lit : implicant) {
+        vec<PTRef> relevantVars = TermUtils(logic).getVars(lit.tr);
+        for (PTRef var : relevantVars) {
+            if (processedVars.find(var) == processedVars.end()) {
+                builder.addVarValue(var, model.evaluate(var));
+                processedVars.insert(var);
+            }
+        }
     }
     builder.addVarValue(varValPair.first, varValPair.second);
     return builder.build();
@@ -640,6 +643,7 @@ void ModelBasedProjection::processDivConstraints(PTRef var, div_constraints_t & 
         // Now we can substitute
         // TODO: only for those that contain the variable?
         std::for_each(implicant.begin(), implicant.end(), [&](PtAsgn & lit){
+            assert(model.evaluate(lit.tr) == extendedModel->evaluate(lit.tr));
             lit.tr = tutils.varSubstitute(lit.tr, subst);
         });
         // Important: before proceeding with eliminating the temporary variable, we need to make the model aware of its true value
