@@ -68,8 +68,9 @@ Transformer::TransformationResult RemoveUnreachableNodes::transform(std::unique_
 ValidityWitness RemoveUnreachableNodes::BackTranslator::translate(ValidityWitness witness) {
     if (this->removedNodes.empty()) { return witness; }
     auto definitions = witness.getDefinitions();
+    VersionManager versionManager(logic);
     for (auto node : removedNodes) {
-        PTRef predicate = predicateRepresentation.getSourceTermFor(node);
+        PTRef predicate = versionManager.sourceFormulaToBase(predicateRepresentation.getSourceTermFor(node));
         assert(definitions.find(predicate) == definitions.end());
         definitions.insert({predicate, logic.getTerm_true()});
     }

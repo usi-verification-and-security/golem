@@ -17,6 +17,7 @@
 #include "transformers/NodeEliminator.h"
 #include "transformers/SimpleChainSummarizer.h"
 #include "transformers/TransformationPipeline.h"
+#include "transformers/RemoveUnreachableNodes.h"
 
 class Transformer_New_Test : public LIAEngineTest {
 };
@@ -719,6 +720,86 @@ TEST_F(Transformer_New_Test, test_MultiEdgeMerger_UnsafeWithAuxVars) {
     ASSERT_EQ(answer, VerificationAnswer::UNSAFE);
     auto translatedWitness = translator->translate(res.getInvalidityWitness());
     VerificationResult translatedResult(VerificationAnswer::UNSAFE, translatedWitness);
+    Validator validator(logic);
+    EXPECT_EQ(validator.validate(originalGraph, translatedResult), Validator::Result::VALIDATED);
+}
+
+TEST_F(Transformer_New_Test, test_SummarizerAndUnreachable_WitnessBacktranslation) {
+    Options options;
+    options.addOption(Options::LOGIC, "QF_LIA");
+    options.addOption(Options::COMPUTE_WITNESS, "true");
+    SymRef s1 = mkPredicateSymbol("s1", {intSort()});
+    SymRef s2 = mkPredicateSymbol("s2", {intSort()});
+    SymRef s3 = mkPredicateSymbol("s3", {intSort()});
+    SymRef s4 = mkPredicateSymbol("s4", {intSort()});
+    SymRef s5 = mkPredicateSymbol("s5", {intSort()});
+    PTRef current1 = instantiatePredicate(s1, {x});
+    PTRef next1 = instantiatePredicate(s1, {xp});
+    PTRef current2 = instantiatePredicate(s2, {x});
+    PTRef next2 = instantiatePredicate(s2, {xp});
+    PTRef current3 = instantiatePredicate(s3, {x});
+    PTRef current4 = instantiatePredicate(s4, {x});
+    PTRef current5 = instantiatePredicate(s5, {x});
+    // x = 0 => S1(x)
+    // x = 0 => S2(x)
+    // S1(x) => S3(x)
+    // S2(x) => S3(x)
+    // S3(x) => S4(x)
+    // S4(x) => S5(x)
+    // S1(x) and x > 0 => false
+    // S2(x) and x > 0 => false
+
+    std::vector<ChClause> clauses{
+        {
+            ChcHead{UninterpretedPredicate{next1}},
+            ChcBody{{logic->mkEq(xp, zero)}, {}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{next2}},
+            ChcBody{{logic->mkEq(xp, zero)}, {}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{current3}},
+            ChcBody{{logic->getTerm_true()}, {UninterpretedPredicate{current1}}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{current3}},
+            ChcBody{{logic->getTerm_true()}, {UninterpretedPredicate{current2}}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{current4}},
+            ChcBody{{logic->getTerm_true()}, {UninterpretedPredicate{current3}}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{current5}},
+            ChcBody{{logic->getTerm_true()}, {UninterpretedPredicate{current4}}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{logic->getTerm_false()}},
+            ChcBody{{logic->mkGt(x, zero)}, {UninterpretedPredicate{current1}}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{logic->getTerm_false()}},
+            ChcBody{{logic->mkGt(x, zero)}, {UninterpretedPredicate{current2}}}
+        }};
+
+    for (auto const & clause : clauses) { system.addClause(clause); }
+
+    Logic & logic = *this->logic;
+    auto normalizedSystem = Normalizer(logic).normalize(system);
+    auto hyperGraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
+    auto originalGraph = *hyperGraph;
+    TransformationPipeline::pipeline_t pipeline;
+    pipeline.push_back(std::make_unique<SimpleChainSummarizer>());
+    pipeline.push_back(std::make_unique<RemoveUnreachableNodes>());
+    TransformationPipeline transformations(std::move(pipeline));
+
+    auto [transformedGraph, translator] = transformations.transform(std::move(hyperGraph));
+    auto res = Spacer(logic, options).solve(*transformedGraph);
+    auto answer = res.getAnswer();
+    ASSERT_EQ(answer, VerificationAnswer::SAFE);
+    auto translatedWitness = translator->translate(res.getValidityWitness());
+    VerificationResult translatedResult(VerificationAnswer::SAFE, translatedWitness);
     Validator validator(logic);
     EXPECT_EQ(validator.validate(originalGraph, translatedResult), Validator::Result::VALIDATED);
 }
