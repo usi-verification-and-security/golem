@@ -17,6 +17,7 @@ void VerificationResult::printWitness(std::ostream & out, Logic & logic, const C
     if (not hasWitness()) { return; }
     switch (answer) {
         case VerificationAnswer::SAFE: {
+            getValidityWitness().print(out, logic);
             return;
         }
         case VerificationAnswer::UNSAFE: {
