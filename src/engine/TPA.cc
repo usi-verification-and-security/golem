@@ -79,7 +79,7 @@ VerificationResult TPAEngine::solve(const ChcDirectedGraph & graph) {
                 assert(false);
                 throw std::logic_error("Unreachable!");
         }
-    } else if (isTransitionSystemDAG(graph)) {
+    } else if (isTransitionSystemDAG(graph) && not options.hasOption(Options::NO_DAG)) {
         return solveTransitionSystemGraph(graph);
     }
     // Translate CHCGraph into transition system

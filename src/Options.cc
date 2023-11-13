@@ -22,6 +22,7 @@ const std::string Options::LRA_ITP_ALG = "lra-itp-algorithm";
 const std::string Options::FORCED_COVERING = "forced-covering";
 const std::string Options::VERBOSE = "verbose";
 const std::string Options::TPA_USE_QE = "tpa.use-qe";
+const std::string Options::NO_DAG = "no-dag";
 const std::string Options::PROOF_FORMAT = "proof-format";
 
 namespace{
@@ -49,6 +50,7 @@ void printUsage() {
         "                               alethe (verifiable) - alethe proof format\n"
         "-v                         Increase verbosity (can be applied multiple times)\n"
         "-i,--input <file>          Input file (option not required)\n"
+        "--no-dag                   Turns off DAG-based CHC-solving algorithms\n"
         ;
     std::cout << std::flush;
 }
@@ -69,6 +71,7 @@ Options CommandLineParser::parse(int argc, char ** argv) {
     int verbose = 0;
     int tpaUseQE = 0;
     int printVersion = 0;
+    int noDAG = 0;
 
     struct option long_options[] =
         {
@@ -86,6 +89,7 @@ Options CommandLineParser::parse(int argc, char ** argv) {
             {Options::VERBOSE.c_str(), optional_argument, &verbose, 1},
             {Options::TPA_USE_QE.c_str(), optional_argument, &tpaUseQE, 1},
             {Options::PROOF_FORMAT.c_str(), required_argument, nullptr, 'p'},
+            {Options::NO_DAG.c_str(), no_argument, &noDAG, 1},
             {0, 0, 0, 0}
         };
 
@@ -120,6 +124,8 @@ Options CommandLineParser::parse(int argc, char ** argv) {
                 else if (long_options[option_index].flag == &verbose) {
                     assert(optarg);
                     verbose = std::atoi(optarg);
+                } else if (long_options[option_index].flag == &noDAG) {
+                    noDAG = 1;
                 }
                 break;
             case 'e':
@@ -170,6 +176,9 @@ Options CommandLineParser::parse(int argc, char ** argv) {
     }
     if (tpaUseQE) {
         res.addOption(Options::TPA_USE_QE, "true");
+    }
+    if (noDAG) {
+        res.addOption(Options::NO_DAG, "true");
     }
     res.addOption(Options::LRA_ITP_ALG, std::to_string(lraItpAlg));
     res.addOption(Options::VERBOSE, std::to_string(verbose));

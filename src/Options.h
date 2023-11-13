@@ -39,6 +39,7 @@ public:
     static const std::string FORCED_COVERING;
     static const std::string VERBOSE;
     static const std::string TPA_USE_QE;
+    static const std::string NO_DAG;
 };
 
 class CommandLineParser {
