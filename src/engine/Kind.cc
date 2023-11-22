@@ -39,7 +39,7 @@ VerificationResult Kind::solve(ChcDirectedGraph const & graph) {
 VerificationResult Kind::solveTransitionSystem(ChcDirectedGraph const & graph) {
     auto ts = toTransitionSystem(graph);
     auto res = solveTransitionSystemInternal(*ts);
-    return translateTransitionSystemResult(res, graph, *ts);
+    return computeWitness ? translateTransitionSystemResult(res, graph, *ts) : VerificationResult(res.answer);
 }
 
 TransitionSystemVerificationResult Kind::solveTransitionSystemInternal(TransitionSystem const & system) {
