@@ -12,6 +12,7 @@
 #include "TermUtils.h"
 #include "TransformationUtils.h"
 #include "TransitionSystem.h"
+#include "Witnesses.h"
 #include "transformers/BasicTransformationPipelines.h"
 #include "transformers/SingleLoopTransformation.h"
 #include "utils/SmtSolver.h"
@@ -23,6 +24,10 @@
 
 const std::string TPAEngine::TPA = "tpa";
 const std::string TPAEngine::SPLIT_TPA = "split-tpa";
+
+bool TPAEngine::shouldComputeWitness() const {
+    return options.hasOption(Options::COMPUTE_WITNESS);
+}
 
 std::unique_ptr<TPABase> TPAEngine::mkSolver() {
     assert(options.hasOption(Options::ENGINE));
@@ -1515,6 +1520,8 @@ private:
 
     InvalidityWitness computeInvalidityWitness() const;
 
+    std::variant<NoWitness, ValidityWitness> computeValidityWitness();
+
     void addRestrictions(SymRef node, PTRef fla);
 
     void updateRestrictions(SymRef node);
@@ -1589,8 +1596,17 @@ VerificationResult TransitionSystemNetworkManager::solve() && {
     while (true) {
         if (getNode(current).blocked_children == getNode(current).children.size()) {
             if (current == graph.getEntry()) {
-                // TODO: Compute witness
-                return {VerificationAnswer::SAFE, NoWitness{"Unable to compute witness from TPA for DAG of TSs yet"}};
+                if (this->owner.shouldComputeWitness()) {
+                    auto witness = computeValidityWitness();
+                    if (std::holds_alternative<ValidityWitness>(witness)) {
+                        return {VerificationAnswer::SAFE, std::get<ValidityWitness>(witness)};
+                    } else {
+                        return {VerificationAnswer::SAFE,
+                                NoWitness("Unexpected situation occurred during witness computation in TPA engine")};
+                    }
+                } else {
+                    return {VerificationAnswer::SAFE, NoWitness()};
+                }
             }
             getNode(current).trulyReached = PTRef_Undef;
             getNode(current).blocked_children = 0;
@@ -1689,6 +1705,40 @@ InvalidityWitness TransitionSystemNetworkManager::computeInvalidityWitness() con
     InvalidityWitness witness;
     ErrorPath path(std::move(errorPath));
     return InvalidityWitness::fromErrorPath(path, graph);
+}
+
+std::variant<NoWitness, ValidityWitness> TransitionSystemNetworkManager::computeValidityWitness() {
+    assert(isTransitionSystemDAG(graph));
+    auto vertices = graph.getVertices();
+    TermUtils utils(logic);
+    TimeMachine timeMachine(logic);
+    TermUtils::substitutions_map subs;
+    ValidityWitness::definitions_t definitions;
+
+    for (auto vertex : vertices) {
+        if (vertex == graph.getEntry() || vertex == graph.getExit()) continue;
+
+        auto graphVars = utils.predicateArgsInOrder(graph.getStateVersion(vertex));
+        vec<PTRef> unversionedVars;
+        auto systemVars = networkMap.at(vertex).solver->getStateVars(0);
+
+        for (std::size_t i = 0; i < graphVars.size(); ++i) {
+            unversionedVars.push(timeMachine.getUnversioned(graphVars[i]));
+            subs.insert({systemVars[i], unversionedVars.last()});
+        }
+        getNode(vertex).solver->resetInitialStates(getNode(vertex).trulySafe);
+        // It uses the query which was set during solving of DAG
+        auto [res, explanation] = queryTransitionSystem(networkMap.at(vertex));
+        assert(res == ReachabilityResult::UNREACHABLE);
+        if (res == ReachabilityResult::UNREACHABLE) {
+            PTRef graphInvariant = utils.varSubstitute(getNode(vertex).solver->getInductiveInvariant(), subs);
+            PTRef unversionedPredicate = logic.mkUninterpFun(vertex, std::move(unversionedVars));
+            definitions[unversionedPredicate] = graphInvariant;
+        } else {
+            return NoWitness();
+        }
+    }
+    return ValidityWitness(std::move(definitions));
 }
 
 TransitionSystem TransitionSystemNetworkManager::constructTransitionSystemFor(SymRef vid) const {
@@ -1804,7 +1854,7 @@ PTRef TPABase::getInductiveInvariant() const {
                 //  TODO: Think about properties combination, can we use left and right invariants together?
             case SafetyExplanation::FixedPointType::LEFT:
                 return logic.mkNot(QuantifierElimination(logic).keepOnly(
-                    logic.mkAnd({transitionInvariant, getNextVersion(query)}), getStateVars(0)));
+                    logic.mkAnd(transitionInvariant, getNextVersion(query)), getStateVars(0)));
             case SafetyExplanation::FixedPointType::RIGHT:
                 return getNextVersion(
                     QuantifierElimination(logic).keepOnly(logic.mkAnd(init, transitionInvariant), getStateVars(1)), -1);

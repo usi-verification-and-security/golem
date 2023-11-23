@@ -40,6 +40,8 @@ public:
     static const std::string TPA;
     static const std::string SPLIT_TPA;
 
+    bool shouldComputeWitness() const;
+
 private:
     VerificationResult solve(const ChcDirectedGraph & system);
 
@@ -125,6 +127,7 @@ public:
     PTRef getReachedStates() const;
     unsigned getTransitionStepCount() const;
     PTRef getInductiveInvariant() const;
+    vec<PTRef> getStateVars(int version) const;
 
 protected:
     virtual VerificationAnswer checkPower(unsigned short power) = 0;
@@ -157,8 +160,6 @@ protected:
 
     PTRef getNextVersion(PTRef currentVersion, int) const;
     PTRef getNextVersion(PTRef currentVersion) const { return getNextVersion(currentVersion, 1); };
-
-    vec<PTRef> getStateVars(int version) const;
 
     /* Shifts only next-next vars to next vars */
     PTRef cleanInterpolant(PTRef itp);

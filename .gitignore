@@ -1,9 +1,7 @@
 build
 
-cmake-build-release
-
 ## idea
-cmake-build-debug
+cmake-build-*
 .idea
 *.log
 run_benchmark.sh
