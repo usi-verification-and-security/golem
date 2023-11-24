@@ -231,6 +231,10 @@ void ChcDirectedGraph::deleteNode(SymRef sym) {
 AdjacencyListsGraphRepresentation AdjacencyListsGraphRepresentation::from(const ChcDirectedGraph & graph) {
     AdjacencyList incoming;
     AdjacencyList outgoing;
+    incoming.insert({graph.getEntry(), {}});
+    incoming.insert({graph.getExit(), {}});
+    outgoing.insert({graph.getEntry(), {}});
+    outgoing.insert({graph.getExit(), {}});
     graph.forEachEdge([&](DirectedEdge const & edge) {
         incoming[edge.to].push_back(edge.id);
         outgoing[edge.from].push_back(edge.id);
@@ -244,6 +248,10 @@ AdjacencyListsGraphRepresentation AdjacencyListsGraphRepresentation::from(const 
 AdjacencyListsGraphRepresentation AdjacencyListsGraphRepresentation::from(const ChcDirectedHyperGraph & graph) {
     AdjacencyList incoming;
     AdjacencyList outgoing;
+    incoming.insert({graph.getEntry(), {}});
+    incoming.insert({graph.getExit(), {}});
+    outgoing.insert({graph.getEntry(), {}});
+    outgoing.insert({graph.getExit(), {}});
     graph.forEachEdge([&](DirectedHyperEdge const & edge) {
         // TODO: figure out a better way to ensure that all vertices are present in both lists
         incoming[edge.to].push_back(edge.id);
