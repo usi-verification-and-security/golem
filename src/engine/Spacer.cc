@@ -174,6 +174,10 @@ class SpacerContext {
         over.insert(vid, bound, summary);
     }
 
+    void addMustSummary(SymRef vid, std::size_t bound, PTRef summary) {
+        under.insert(vid, bound, summary);
+    }
+
     PTRef getMustSummary(SymRef vid, std::size_t bound) const {
         return logic.mkOr(under.getComponents(vid, bound));
     }
@@ -245,7 +249,7 @@ SpacerContext::SpacerContext(Logic & logic, ChcDirectedHyperGraph const & graph,
     for (auto vid : vertices) {
         PTRef toInsert = vid == graph.getEntry() ? logic.getTerm_true() : logic.getTerm_false();
         addMaySummary(vid, 0, toInsert);
-        under.insert(vid, 0, toInsert);
+        addMustSummary(vid, 0, toInsert);
     }
     database.newDerivation({.fact = logic.getTerm_true(), .node = graph.getEntry()}, {static_cast<std::size_t>(-1)}, {});
 }
@@ -254,7 +258,7 @@ VerificationResult SpacerContext::run() {
     std::size_t currentBound = 1;
     while(true) {
         addMaySummary(graph.getEntry(), currentBound, logic.getTerm_true());
-        under.insert(graph.getEntry(), currentBound, logic.getTerm_true());
+        addMustSummary(graph.getEntry(), currentBound, logic.getTerm_true());
         TRACE(1, "Checking bound safety for " << currentBound)
         auto boundedResult = boundSafety(currentBound);
         switch (boundedResult) {
@@ -445,7 +449,7 @@ bool SpacerContext::checkMustReachability(std::vector<EId> const & edges, ProofO
                 PTRef newMustSummary = projectFormula(summary, predicateVars, *implCheckRes.model);
                 assert(newMustSummary != PTRef_Undef);
                 PTRef definitelyReachable = VersionManager(logic).targetFormulaToBase(newMustSummary);
-                under.insert(pob.vertex, pob.bound, definitelyReachable);
+                addMustSummary(pob.vertex, pob.bound, definitelyReachable);
                 if (logProof) {
                     logNewFactIntoDatabase(definitelyReachable, pob.vertex, pob.bound - 1, edges[counter], *implCheckRes.model);
                 }
