@@ -427,8 +427,10 @@ std::vector<SymRef> ChcDirectedHyperGraph::getVertices() const {
     std::unordered_set<SymRef, SymRefHash> vertices;
     forEachEdge([&](DirectedHyperEdge const & edge){
         vertices.insert(edge.to);
+        for (auto source : edge.from) { vertices.insert(source); }
     });
     vertices.insert(getEntry());
+    vertices.insert(getExit());
     return std::vector<SymRef>(vertices.begin(), vertices.end());
 }
 
