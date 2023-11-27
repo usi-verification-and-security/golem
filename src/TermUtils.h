@@ -260,6 +260,15 @@ public:
         return logic.mkVar(sort, varName.c_str());
     }
 
+    std::string getUnversionedName(PTRef var) {
+        assert(logic.isVar(var));
+        assert(isVersioned(var));
+        std::string varName = logic.getSymName(var);
+        auto pos = varName.rfind(versionSeparator);
+        varName.erase(pos);
+        return varName;
+    }
+
     int getVersionNumber(PTRef var) {
         assert(logic.isVar(var));
         assert(isVersioned(var));
