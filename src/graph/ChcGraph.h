@@ -312,7 +312,7 @@ private:
         }
     }
 
-    DirectedHyperEdge mergeEdgePair(EId first, EId second);
+    DirectedHyperEdge mergeEdgePair(EId first, EId second, bool requiresRenamingAuxiliaryVars = false);
     DirectedHyperEdge mergeEdges(std::vector<EId> const & chain);
     PTRef mergeLabels(std::vector<EId> const & chain);
 };

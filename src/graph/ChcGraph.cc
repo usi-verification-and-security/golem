@@ -334,9 +334,46 @@ void ChcDirectedHyperGraph::deleteNode(SymRef sym) {
     });
 }
 
-DirectedHyperEdge ChcDirectedHyperGraph::mergeEdgePair(EId incoming, EId outgoing) {
+namespace {
+std::vector<PTRef> getAuxiliaryVariablesFromEdge(ChcDirectedHyperGraph const & graph, EId eid) {
+    Logic & logic = graph.getLogic();
+    TermUtils utils(logic);
+    PTRef label = graph.getEdgeLabel(eid);
+    auto allVars = TermUtils(logic).getVars(label);
+    std::vector<PTRef> auxVars;
+    for (PTRef var : allVars) {
+        std::string name = logic.getSymName(var);
+        // FIXME: This is hackish
+        if (name.rfind("aux", 0) == 0) {
+            auxVars.push_back(var);
+        }
+    }
+    return auxVars;
+}
+
+PTRef renameAuxiliaries(ChcDirectedHyperGraph const & graph, EId incoming) {
+    PTRef incomingLabel = graph.getEdgeLabel(incoming);
+    auto incomingAuxVars = getAuxiliaryVariablesFromEdge(graph, incoming);
+    if (incomingAuxVars.empty()) { return incomingLabel; }
+    static std::size_t counter = 0;
+    Logic & logic = graph.getLogic();
+    TermUtils::substitutions_map substitutionsMap;
+    TimeMachine tm(logic);
+    for (PTRef var : incomingAuxVars) {
+        std::string newName = tm.getUnversionedName(var);
+        newName += "#" + std::to_string(counter++);
+        PTRef newVar = tm.getVarVersionZero(newName, logic.getSortRef(var));
+        substitutionsMap.insert({var, newVar});
+    }
+    PTRef newLabel = TermUtils(logic).varSubstitute(incomingLabel, substitutionsMap);
+    return newLabel;
+}
+}
+
+DirectedHyperEdge ChcDirectedHyperGraph::mergeEdgePair(EId incoming, EId outgoing, bool requiresRenamingAuxiliaryVars) {
     assert(getSources(incoming).size() == 1); // Incoming must be a simple edge
     if (getSources(outgoing).size() == 1) { // Outgoing is a simple edge
+        assert(not requiresRenamingAuxiliaryVars);
         return mergeEdges({incoming, outgoing});
     }
     TermUtils utils(logic);
@@ -346,9 +383,11 @@ DirectedHyperEdge ChcDirectedHyperGraph::mergeEdgePair(EId incoming, EId outgoin
     // Special handling of outgoing hyperedge
     auto sources = getSources(outgoing);
     assert(std::count(sources.begin(), sources.end(), common) == 1);
+
+    PTRef incomingLabel = requiresRenamingAuxiliaryVars ? renameAuxiliaries(*this, incoming) : getEdgeLabel(incoming);
     TermUtils::substitutions_map substitutionsMap;
     utils.mapFromPredicate(getNextStateVersion(common), getStateVersion(common, 0), substitutionsMap);
-    PTRef renamedLabel = utils.varSubstitute(getEdgeLabel(incoming), substitutionsMap);
+    PTRef renamedLabel = utils.varSubstitute(incomingLabel, substitutionsMap);
 
     PTRef newLabel = logic.mkAnd(renamedLabel, getEdgeLabel(outgoing));
     PTRef simplifiedLabel = TrivialQuantifierElimination(logic).tryEliminateVars(
@@ -456,11 +495,14 @@ ChcDirectedHyperGraph::VertexContractionResult ChcDirectedHyperGraph::contractVe
     for (std::size_t incomingIndex = 0; incomingIndex < incomingEdges.size(); ++incomingIndex) {
         EId incomingId = incomingEdges[incomingIndex];
         if (getSources(incomingId).size() > 1) { throw std::logic_error("Unable to contract vertex with incoming hyperedge!"); }
+        auto incomingSource = getSources(incomingId)[0];
 
         for (std::size_t outgoingIndex = 0; outgoingIndex < outgoingEdges.size(); ++outgoingIndex) {
             EId outgoingId = outgoingEdges[outgoingIndex];
             if (getSources(outgoingId).size() > 1 and incomingEdges.size() > 1) { throw std::logic_error("Unable to contract vertex with outgoing hyperedge!"); }
-            auto replacingEdge = mergeEdgePair(incomingId, outgoingId);
+            bool requiresRenamingAuxiliaryVars =  incomingSource == getEntry() and outgoingEdges.size() > 1
+                                                 and getSources(outgoingId).size() > 1;
+            auto replacingEdge = mergeEdgePair(incomingId, outgoingId, requiresRenamingAuxiliaryVars);
             result.replacing.emplace_back(std::move(replacingEdge), std::make_pair(incomingIndex, outgoingIndex));
         }
     }
