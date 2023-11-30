@@ -112,7 +112,7 @@ std::shared_ptr<Term> CongChainVisitor::visit(Op * term) {
         auto simplification = term->operate();
         steps.emplace_back(
             currentStep,
-            std::make_shared<Op>("=", std::vector<std::shared_ptr<Term>>{term->accept(&copyVisitor), term->operate()}),
+            std::make_shared<Op>("=", std::vector<std::shared_ptr<Term>>{term->asSharedPtr(), term->operate()}),
             premises, term->simplifyRule());
         currentStep++;
         if (term->getOp() == ">") {
@@ -123,6 +123,7 @@ std::shared_ptr<Term> CongChainVisitor::visit(Op * term) {
                                std::make_shared<Op>("=", std::vector<std::shared_ptr<Term>>{lessOrEq, innerWorking}),
                                premises, std::dynamic_pointer_cast<Op>(lessOrEq)->simplifyRule());
             currentStep++;
+            // FIXME: Remove setArg
             std::dynamic_pointer_cast<Op>(simplification)->setArg(0, innerWorking);
             auto cong =
                 std::make_shared<Op>("=", std::vector<std::shared_ptr<Term>>{originalSimplification, simplification});
@@ -141,39 +142,39 @@ std::shared_ptr<Term> CongChainVisitor::visit(Op * term) {
             steps.emplace_back(currentStep, trans, std::vector<std::size_t>{currentStep - 2, currentStep - 1}, "trans");
             currentStep++;
             trans =
-                std::make_shared<Op>("=", std::vector<std::shared_ptr<Term>>{term->accept(&copyVisitor), outerWorking});
+                std::make_shared<Op>("=", std::vector<std::shared_ptr<Term>>{term->asSharedPtr(), outerWorking});
             steps.emplace_back(currentStep, trans, std::vector<std::size_t>{currentStep - 5, currentStep - 1}, "trans");
             currentStep++;
-            simplification = outerWorking;
+            return outerWorking;
         } else if (term->getOp() == ">=") {
             transCase = 1;
-            auto originalSimplification = simplification->accept(&copyVisitor);
-            simplification = std::dynamic_pointer_cast<Op>(simplification)->operate();
+            auto simplified = std::dynamic_pointer_cast<Op>(simplification)->operate();
             steps.emplace_back(
                 currentStep,
-                std::make_shared<Op>("=", std::vector<std::shared_ptr<Term>>{originalSimplification, simplification}),
-                premises, std::dynamic_pointer_cast<Op>(originalSimplification)->simplifyRule());
+                std::make_shared<Op>("=", std::vector<std::shared_ptr<Term>>{simplification, simplified}),
+                premises, std::dynamic_pointer_cast<Op>(simplification)->simplifyRule());
             currentStep++;
             auto trans = std::make_shared<Op>(
-                "=", std::vector<std::shared_ptr<Term>>{term->accept(&copyVisitor), simplification});
+                "=", std::vector<std::shared_ptr<Term>>{term->asSharedPtr(), simplified});
             steps.emplace_back(currentStep, trans, std::vector<std::size_t>{currentStep - 2, currentStep - 1}, "trans");
             currentStep++;
+            return simplified;
         }
         return simplification;
     } else {
         std::vector<std::size_t> premises;
-        auto termCopy = term->accept(&copyVisitor);
-        for (std::size_t i = 0; i < std::dynamic_pointer_cast<Op>(termCopy)->getArgs().size(); i++) {
-            auto arg = std::dynamic_pointer_cast<Op>(termCopy)->getArgs()[i];
-            std::dynamic_pointer_cast<Op>(termCopy)->setArg(int(i), arg->accept(this));
+        std::vector<std::shared_ptr<Term>> newArgs;
+        for (auto const & arg : term->getArgs()) {
+            newArgs.push_back(arg->accept(this));
             if (arg->getTermType() == Term::OP) { premises.push_back(currentStep - 1); }
         }
-        auto cong = std::make_shared<Op>("=", std::vector<std::shared_ptr<Term>>{term->accept(&copyVisitor), termCopy});
+        auto modifiedTerm = std::make_shared<Op>(term->getOp(), std::move(newArgs));
+        auto cong = std::make_shared<Op>("=", std::vector<std::shared_ptr<Term>>{term->asSharedPtr(), modifiedTerm});
         steps.emplace_back(currentStep, cong, premises, "cong");
         currentStep++;
-        auto furtherSimplification = termCopy->accept(this);
+        auto furtherSimplification = modifiedTerm->accept(this);
         auto trans = std::make_shared<Op>(
-            "=", std::vector<std::shared_ptr<Term>>{term->accept(&copyVisitor), furtherSimplification});
+            "=", std::vector<std::shared_ptr<Term>>{term->asSharedPtr(), furtherSimplification});
         std::size_t predecessor;
         if (transCase == 1) {
             predecessor = currentStep - 4;
@@ -359,7 +360,7 @@ std::shared_ptr<Term> SimplifyVisitor::visit(Let * term) {
     }
 }
 
-std::shared_ptr<Term> Op::operate() {
+std::shared_ptr<Term> Op::operate() const {
     std::vector<std::shared_ptr<Term>> newArgs;
     InstantiateVisitor copyVisitor;
     std::string firstStr;
@@ -421,10 +422,10 @@ std::shared_ptr<Term> Op::operate() {
         }
         if (trues == int(args.size())) { return std::make_shared<Terminal>("true", Term::BOOL); }
         if (predicates.size() == 1) {
-            return predicates[0]->accept(&copyVisitor);
+            return predicates[0];
         } else {
             for (auto const & predicate : predicates) {
-                newArgs.push_back(predicate->accept(&copyVisitor));
+                newArgs.push_back(predicate);
             }
             return std::make_shared<Op>("and", newArgs);
         }
@@ -442,8 +443,7 @@ std::shared_ptr<Term> Op::operate() {
             str.erase(remove(str.begin(), str.end(), '('), str.end());
             str.erase(remove(str.begin(), str.end(), ')'), str.end());
             str.erase(remove(str.begin(), str.end(), ' '), str.end());
-            char * const ptr = &str[0];
-            FastRational temp(ptr, 10);
+            FastRational temp(str.c_str(), 10);
             result += temp;
         }
         if (result < 0) {
@@ -488,9 +488,9 @@ std::shared_ptr<Term> Op::operate() {
         assert(args[1]->getTerminalType() != Term::VAR);
         assert(args[2]->getTerminalType() != Term::VAR);
         if (args[0]->printTerm() == "true") {
-            return args[1]->accept(&copyVisitor);
+            return args[1];
         } else {
-            return args[2]->accept(&copyVisitor);
+            return args[2];
         }
     } else if (operation == "mod") {
         FastRational result = firstTerm % secondTerm;
