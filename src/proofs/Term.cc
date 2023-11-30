@@ -10,7 +10,7 @@
 #include <memory>
 #include <string>
 
-bool Op::nonLinearity() {
+bool Op::nonLinearity() const {
     if (operation == "and") {
         auto predicates = std::count_if(args.begin(), args.end(), [](auto const & arg) {
             return arg->getTermType() == Term::APP or arg->getTerminalType() == Terminal::VAR;
@@ -20,7 +20,7 @@ bool Op::nonLinearity() {
     return false;
 }
 
-std::string Op::nonLinearSimplification() {
+std::string Op::nonLinearSimplification() const {
     std::stringstream ss;
     if (operation == "and") {
         for (std::size_t i = 0; i < args.size(); i++) {
@@ -192,7 +192,7 @@ std::shared_ptr<Term> CongChainVisitor::visit(App * term) {
     return std::make_shared<App>(term->getFun(), term->getArgs());
 }
 
-std::string Op::simplifyRule() {
+std::string Op::simplifyRule() const {
     std::string op = operation;
     if (op == "=") {
         if ((args[0]->printTerm().find_first_not_of("( )-0123456789") == std::string::npos) and

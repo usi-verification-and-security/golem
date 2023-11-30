@@ -14,8 +14,8 @@ class Term : public std::enable_shared_from_this<Term> {
 public:
     enum termType { APP, OP, TERMINAL, QUANT, LET };
     enum terminalType { VAR, REAL, INT, SORT, BOOL, UNDECLARED };
-    virtual termType getTermType() = 0;
-    virtual terminalType getTerminalType() = 0;
+    virtual termType getTermType() const  = 0;
+    virtual terminalType getTerminalType() const = 0;
     virtual void accept(class VoidVisitor *) = 0;
     virtual std::shared_ptr<Term> accept(class LogicVisitor *) = 0;
     virtual Term * accept(class PointerVisitor *) = 0;
@@ -32,8 +32,8 @@ public:
     Terminal(std::string val, terminalType t) : val(std::move(val)), type(t) {}
     std::string const & getVal() { return val; }
     terminalType const & getType() { return type; }
-    termType getTermType() override { return TERMINAL; }
-    terminalType getTerminalType() override { return type; }
+    termType getTermType() const override { return TERMINAL; }
+    terminalType getTerminalType() const override { return type; }
 
     std::shared_ptr<Term> accept(LogicVisitor *) override;
     Term * accept(PointerVisitor *) override;
@@ -47,13 +47,13 @@ class Op : public Term {
 public:
     Op(std::string opcode, std::vector<std::shared_ptr<Term>> args)
         : operation(std::move(opcode)), args(std::move(args)) {}
-    std::string const & getOp() { return operation; }
-    std::vector<std::shared_ptr<Term>> const & getArgs() { return args; }
-    termType getTermType() override { return OP; }
-    terminalType getTerminalType() override { return UNDECLARED; }
-    std::string simplifyRule();
-    bool nonLinearity();
-    std::string nonLinearSimplification();
+    std::string const & getOp() const { return operation; }
+    std::vector<std::shared_ptr<Term>> const & getArgs() const { return args; }
+    termType getTermType() const override { return OP; }
+    terminalType getTerminalType() const override { return UNDECLARED; }
+    std::string simplifyRule() const;
+    bool nonLinearity() const;
+    std::string nonLinearSimplification() const;
     void setArg(int i, std::shared_ptr<Term> newArg) { args[i] = std::move(newArg); }
     std::shared_ptr<Term> operate() const;
 
@@ -70,8 +70,8 @@ public:
     App(std::string fun, std::vector<std::shared_ptr<Term>> args) : fun(std::move(fun)), args(std::move(args)) {}
     std::string const & getFun() { return fun; }
     std::vector<std::shared_ptr<Term>> const & getArgs() { return args; }
-    termType getTermType() override { return APP; }
-    terminalType getTerminalType() override { return UNDECLARED; }
+    termType getTermType() const override { return APP; }
+    terminalType getTerminalType() const override { return UNDECLARED; }
 
     std::shared_ptr<Term> accept(LogicVisitor *) override;
     Term * accept(PointerVisitor *) override;
@@ -92,8 +92,8 @@ public:
     std::vector<std::shared_ptr<Term>> const & getVars() { return vars; }
     std::vector<std::shared_ptr<Term>> const & getSorts() { return sorts; }
     std::shared_ptr<Term> getCoreTerm() { return coreTerm; }
-    termType getTermType() override { return QUANT; }
-    terminalType getTerminalType() override { return UNDECLARED; }
+    termType getTermType() const override { return QUANT; }
+    terminalType getTerminalType() const override { return UNDECLARED; }
 
     std::shared_ptr<Term> accept(LogicVisitor *) override;
     Term * accept(PointerVisitor *) override;
@@ -112,8 +112,8 @@ public:
     std::vector<std::shared_ptr<Term>> const & getDeclarations() { return declarations; }
     std::shared_ptr<Term> const & getApplication() { return application; }
     std::vector<std::string> const & getTermNames() { return termNames; }
-    termType getTermType() override { return LET; }
-    terminalType getTerminalType() override { return UNDECLARED; }
+    termType getTermType() const override { return LET; }
+    terminalType getTerminalType() const override { return UNDECLARED; }
 
     std::shared_ptr<Term> accept(LogicVisitor *) override;
     Term * accept(PointerVisitor *) override;
