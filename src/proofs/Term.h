@@ -146,7 +146,7 @@ public:
 };
 
 class RemoveUnusedVisitor : public LogicVisitor {
-    std::vector<std::string> varsInUse;
+    std::unordered_set<std::string> varsInUse;
 
 public:
     std::shared_ptr<Term> visit(Terminal *) override;

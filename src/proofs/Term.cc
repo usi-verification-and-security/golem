@@ -277,47 +277,42 @@ std::shared_ptr<Term> InstantiateVisitor::visit(Let * term) {
 }
 
 std::shared_ptr<Term> RemoveUnusedVisitor::visit(Quant * term) {
-
-    auto vars = term->getVars();
-    std::vector<std::shared_ptr<Term>> newVars;
-    auto sorts = term->getSorts();
-    std::vector<std::shared_ptr<Term>> newSorts;
     auto coreTerm = term->getCoreTerm();
-
     coreTerm->accept(this);
 
-    for (std::size_t i = 0; i < vars.size(); i++) {
-        for (auto const & varInUse : varsInUse) {
-            if (vars[i]->printTerm() == varInUse) {
-                newVars.push_back(vars[i]);
-                newSorts.push_back(sorts[i]);
-            }
+    std::vector<std::shared_ptr<Term>> newVars;
+    std::vector<std::shared_ptr<Term>> newSorts;
+    auto const & vars = term->getVars();
+    auto const & sorts = term->getSorts();
+    for (std::size_t i = 0; i < vars.size(); ++i) {
+        auto varStr = vars[i]->printTerm();
+        auto it = varsInUse.find(varStr);
+        if (it != varsInUse.end()) {
+            newVars.push_back(vars[i]);
+            newSorts.push_back(sorts[i]);
         }
     }
-
     if (newVars.empty()) { return term->getCoreTerm(); }
-    return std::make_shared<Quant>(term->getQuant(), newVars, newSorts, term->getCoreTerm());
+    return std::make_shared<Quant>(term->getQuant(), std::move(newVars), std::move(newSorts), term->getCoreTerm());
 }
 
 std::shared_ptr<Term> RemoveUnusedVisitor::visit(Terminal * term) {
-    for (auto const & var : varsInUse) {
-        if (term->printTerm() == var) { return nullptr; }
+    if (term->getTerminalType() == Term::VAR) {
+        auto termStr = term->printTerm();
+        varsInUse.insert(termStr);
     }
-    varsInUse.push_back(term->printTerm());
     return nullptr;
 }
 
 std::shared_ptr<Term> RemoveUnusedVisitor::visit(Op * term) {
-    auto args = term->getArgs();
-    for (auto const & arg : args) {
+    for (auto const & arg : term->getArgs()) {
         arg->accept(this);
     }
     return nullptr;
 }
 
 std::shared_ptr<Term> RemoveUnusedVisitor::visit(App * term) {
-    auto args = term->getArgs();
-    for (auto const & arg : args) {
+    for (auto const & arg : term->getArgs()) {
         arg->accept(this);
     }
     return nullptr;
