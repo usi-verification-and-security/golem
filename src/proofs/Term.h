@@ -54,7 +54,6 @@ public:
     std::string simplifyRule() const;
     bool nonLinearity() const;
     std::string nonLinearSimplification() const;
-    void setArg(int i, std::shared_ptr<Term> newArg) { args[i] = std::move(newArg); }
     std::shared_ptr<Term> operate() const;
 
     std::shared_ptr<Term> accept(LogicVisitor *) override;
