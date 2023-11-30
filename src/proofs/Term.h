@@ -10,7 +10,7 @@
 #include <memory>
 #include <utility>
 
-class Term {
+class Term : public std::enable_shared_from_this<Term> {
 public:
     enum termType { APP, OP, TERMINAL, QUANT, LET };
     enum terminalType { VAR, REAL, INT, SORT, BOOL, UNDECLARED };
@@ -20,6 +20,7 @@ public:
     virtual std::shared_ptr<Term> accept(class LogicVisitor *) = 0;
     virtual Term * accept(class PointerVisitor *) = 0;
     virtual std::string printTerm();
+    std::shared_ptr<Term> asSharedPtr() { return shared_from_this(); }
     virtual ~Term() = default;
 };
 
