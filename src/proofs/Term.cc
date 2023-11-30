@@ -97,10 +97,9 @@ std::shared_ptr<Term> CongChainVisitor::visit(Terminal * term) {
 std::shared_ptr<Term> CongChainVisitor::visit(Op * term) {
 
     transCase = 0;
-    auto args = term->getArgs();
     bool canSimplify = true;
 
-    for (auto const & arg : args) {
+    for (auto const & arg : term->getArgs()) {
         if (not(arg->getTermType() == Term::TERMINAL or arg->getTermType() == Term::APP)) {
             canSimplify = false;
             break;
