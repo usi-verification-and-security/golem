@@ -362,7 +362,6 @@ std::shared_ptr<Term> SimplifyVisitor::visit(Let * term) {
 
 std::shared_ptr<Term> Op::operate() const {
     std::vector<std::shared_ptr<Term>> newArgs;
-    InstantiateVisitor copyVisitor;
     std::string firstStr;
     std::string secondStr;
     FastRational firstTerm;

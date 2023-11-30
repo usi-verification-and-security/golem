@@ -207,7 +207,6 @@ public:
 
 class CongChainVisitor : public LogicVisitor {
     int transCase = 0; // 0 for regular case, 1 for trans after ">="
-    InstantiateVisitor copyVisitor;
     std::size_t currentStep;
     class SimpleStep {
     public:

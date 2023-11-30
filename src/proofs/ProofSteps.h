@@ -82,7 +82,6 @@ class StepHandler {
     std::vector<std::size_t> modusPonensSteps; // Modus Ponens Steps to derive the next node
 
     // Visitors
-    InstantiateVisitor copyVisitor;
     OperateLetTermVisitor operateLetTermVisitor;
     LetLocatorVisitor letLocatorVisitor;
     RemoveUnusedVisitor removeUnusedVisitor;
