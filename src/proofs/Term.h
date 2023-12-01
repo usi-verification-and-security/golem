@@ -228,7 +228,7 @@ public:
     std::shared_ptr<Term> visit(App *) override;
     std::shared_ptr<Term> visit(Let *) override { throw std::logic_error("This should not have happened!"); };
 
-    std::vector<SimpleStep> getSteps() { return steps; };
+    std::vector<SimpleStep> const & getSteps() { return steps; };
 };
 
 class PointerVisitor {

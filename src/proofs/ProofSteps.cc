@@ -222,11 +222,11 @@ void StepHandler::buildAletheProof() {
 
         // Casting implication to an operation, getting the LHS and calling the simplification visitor
         std::dynamic_pointer_cast<Op>(currTerm)->getArgs()[0]->accept(&congChainVisitor);
-
         // If it is empty, it means that the LHS was either a terminal or an application
-        if (not congChainVisitor.getSteps().empty()) {
-            for (std::size_t j = 0; j < congChainVisitor.getSteps().size() - 1; j++) {
-                auto simpleStep = congChainVisitor.getSteps()[j];
+        auto const & congruenceChainSteps = congChainVisitor.getSteps();
+        if (not congruenceChainSteps.empty()) {
+            for (std::size_t j = 0; j < congruenceChainSteps.size() - 1; j++) {
+                auto const & simpleStep = congruenceChainSteps[j];
                 notifyObservers(Step(simpleStep.stepId, Step::STEP, packClause(simpleStep.clause), simpleStep.rule,
                                      simpleStep.premises));
             }
@@ -236,7 +236,8 @@ void StepHandler::buildAletheProof() {
         // Checking if we are dealing with a conjunction
         if (implicationLHS->getTermType() == Term::OP) {
             // renaming LHS for last chain step
-            auto lastChainStep = congChainVisitor.getSteps()[congChainVisitor.getSteps().size() - 1];
+            assert(not congruenceChainSteps.empty());
+            auto const & lastChainStep = congruenceChainSteps.back();
             lastClause = lastChainStep.clause;
             notifyObservers(
                 Step(lastChainStep.stepId, Step::STEP,
