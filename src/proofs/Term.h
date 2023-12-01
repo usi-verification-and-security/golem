@@ -6,9 +6,13 @@
 
 #ifndef GOLEM_TERM_H
 #define GOLEM_TERM_H
-#include "utils/SmtSolver.h"
+
 #include <memory>
+#include <sstream>
+#include <string>
+#include <unordered_set>
 #include <utility>
+#include <vector>
 
 class Term : public std::enable_shared_from_this<Term> {
 public:
@@ -183,8 +187,6 @@ public:
 };
 
 class VoidVisitor {
-    std::stringstream ss;
-
 public:
     virtual void visit(Terminal *) = 0;
     virtual void visit(Quant *) = 0;
