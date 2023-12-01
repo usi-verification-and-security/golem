@@ -55,6 +55,15 @@ public:
     void update(Step const & step) override { out << step.printStepAlethe(); }
 };
 
+class [[maybe_unused]] CountingObserver : public Observer {
+    std::size_t count = 0;
+
+public:
+    CountingObserver() = default;
+    ~CountingObserver() { std::cout << count << std::endl; }
+    void update(Step const &) override { ++count; }
+};
+
 class IntermediatePrintObserver : public Observer {
     std::ostream & out;
 

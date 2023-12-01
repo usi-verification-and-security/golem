@@ -29,8 +29,8 @@ void VerificationResult::printWitness(std::ostream & out, Logic & logic, const C
                                         normalizingEqualities,
                                         logic, originalGraph);
                 if (format == "alethe") {
-                    AlethePrintObserver alethePrintObserver(out);
-                    stepHandler.registerObserver(&alethePrintObserver);
+                    AlethePrintObserver observer(out);
+                    stepHandler.registerObserver(&observer);
                     stepHandler.buildAletheProof();
                 } else if (format == "intermediate") {
                     IntermediatePrintObserver intermediatePrintObserver(out);
