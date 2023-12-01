@@ -18,7 +18,7 @@ class Term : public std::enable_shared_from_this<Term> {
 public:
     enum termType { APP, OP, TERMINAL, QUANT, LET };
     enum terminalType { VAR, REAL, INT, SORT, BOOL, UNDECLARED };
-    virtual termType getTermType() const  = 0;
+    virtual termType getTermType() const = 0;
     virtual terminalType getTerminalType() const = 0;
     virtual void accept(class VoidVisitor *) = 0;
     virtual std::shared_ptr<Term> accept(class LogicVisitor *) = 0;
