@@ -484,13 +484,24 @@ std::shared_ptr<Term> Op::operate() const {
             return args[2];
         }
     } else if (operation == "mod") {
-        FastRational result = firstTerm % secondTerm;
-        if (result < 0) {
-            result *= -1;
-            return std::make_shared<Terminal>("(- " + result.get_str() + ")", Term::INT);
-        } else {
-            return std::make_shared<Terminal>(result.get_str(), Term::INT);
-        }
+        // NOTE: The semantics of modulo operation in OpenSMT's FastRationals is different from the semantics defined by
+        // SMT-LIB. We must use the computation of the remainder according to SMT-LIB.
+        // See notes in // https://smtlib.cs.uiowa.edu/theories-Ints.shtml
+
+        // "Regardless of sign of m,
+        //  when n is positive, (div m n) is the floor of the rational number m/n;
+        //  when n is negative, (div m n) is the ceiling of m/n."
+
+        // Remainder is then always a positive number r such that m = n * q + r, r < abs(n)
+        auto smtlib_modulo = [](auto const & m, auto const & n) -> FastRational {
+            auto ratio = m / n;
+            auto q = n > 0 ? ratio.floor() : ratio.ceil();
+            auto r = m - n * q;
+            assert(r.isInteger() and r.sign() >= 0 and r < abs(n));
+            return r;
+        };
+        FastRational result = smtlib_modulo(firstTerm, secondTerm);
+        return std::make_shared<Terminal>(result.get_str(), Term::INT);
     } else if (operation == "div") {
         FastRational result = firstTerm / secondTerm;
         if (result < 0) {
