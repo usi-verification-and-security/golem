@@ -102,26 +102,28 @@ PTRef LATermUtils::expressZeroTermFor(PTRef zeroTerm, PTRef var) {
 }
 
 void TermUtils::printTermWithLets(std::ostream & out, PTRef root) {
+    // true means parent and we should put it in the order; false means child and we should process it
+    struct Entry{ PTRef node; bool treatAsParent; };
     // collect mapping of id to let expressions
     auto toLetId = [](PTRef x) -> std::string { return "l" + std::to_string(x.x); };
     std::vector<PTRef> dfsOrder;
-    std::vector<std::pair<bool, PTRef>> queue; // true means parent and we should put it in the order; false means child and we should process it
+    std::vector<Entry> queue;
     std::unordered_set<PTRef, PTRefHash> visited;
-    queue.push_back({false, root});
+    queue.push_back({root, false});
     while (not queue.empty()) {
         auto current = queue.back();
         queue.pop_back();
-        if (current.first) {
-            dfsOrder.push_back(current.second);
+        if (current.treatAsParent) {
+            dfsOrder.push_back(current.node);
             continue;
         }
-        PTRef ref = current.second;
+        PTRef ref = current.node;
         visited.insert(ref);
-        queue.push_back({true, ref});
+        queue.push_back({ref, true});
         Pterm const & pterm = logic.getPterm(ref);
-        for (int i = 0; i < pterm.size(); ++i) {
-            if (visited.find(pterm[i]) == visited.end()) {
-                queue.push_back({false, pterm[i]});
+        for (PTRef child : pterm) {
+            if (visited.find(child) == visited.end()) {
+                queue.push_back({child, false});
             }
         }
     }
@@ -136,8 +138,8 @@ void TermUtils::printTermWithLets(std::ostream & out, PTRef root) {
         }
         std::stringstream ss;
         ss << '(' << symbol << ' ';
-        for (int i = 0; i < pterm.size(); ++i) {
-            ss << strRepr.at(pterm[i]) << ' ';
+        for (PTRef child : pterm) {
+            ss << strRepr.at(child) << ' ';
         }
         ss << ')';
         return ss.str();
@@ -146,8 +148,7 @@ void TermUtils::printTermWithLets(std::ostream & out, PTRef root) {
     int letCount = 0;
     for (PTRef ref : dfsOrder) {
         auto actualRepr = toStr(ref);
-        bool introduceLet = false;
-        if (logic.isAnd(ref) or logic.isOr(ref)) { introduceLet = true; }
+        bool introduceLet = logic.isAnd(ref) or logic.isOr(ref);
         if (introduceLet) {
             out << "(let " << '(' << '(' << toLetId(ref) << ' ' << actualRepr << ')' << ')';
             strRepr.insert({ref, toLetId(ref)});
@@ -156,7 +157,6 @@ void TermUtils::printTermWithLets(std::ostream & out, PTRef root) {
             strRepr.insert({ref, std::move(actualRepr)});
         }
     }
-
     out << strRepr.at(root) << std::string(letCount, ')');
 }
 
