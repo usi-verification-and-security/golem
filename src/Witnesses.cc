@@ -150,7 +150,9 @@ void ValidityWitness::print(std::ostream & out, Logic & logic) const {
         }
         assert(logic.getSortRef(predicate) == logic.getSort_bool());
         out << ")" << " " << logic.printSort(logic.getSortRef(predicate)) << "\n";
-        out << "    " << logic.printTerm(definition) << ")\n";
+        out << "    ";
+        TermUtils(logic).printTermWithLets(out, definition);
+        out << ")\n";
     }
 }
 
