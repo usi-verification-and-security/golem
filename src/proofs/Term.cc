@@ -352,6 +352,29 @@ std::shared_ptr<Term> SimplifyVisitor::visit(Let * term) {
     }
 }
 
+namespace {
+// NOTE: The semantics of div and modulo operation in OpenSMT's FastRationals is different from the semantics defined by
+// SMT-LIB. We must use the computation according to SMT-LIB.
+// See notes in // https://smtlib.cs.uiowa.edu/theories-Ints.shtml
+
+// "Regardless of sign of m,
+//  when n is positive, (div m n) is the floor of the rational number m/n;
+//  when n is negative, (div m n) is the ceiling of m/n."
+//  Remainder is then always a positive number r such that m = n * q + r, r < abs(n)
+
+struct DivModPair {
+    FastRational div;
+    FastRational mod;
+};
+auto smtlib_divmod(FastRational const & m, FastRational const & n) -> DivModPair {
+    auto ratio = m / n;
+    auto q = n > 0 ? ratio.floor() : ratio.ceil();
+    auto r = m - n * q;
+    assert(r.isInteger() and r.sign() >= 0 and r < abs(n));
+    return {q, r};
+}
+} // namespace
+
 std::shared_ptr<Term> Op::operate() const {
     std::vector<std::shared_ptr<Term>> newArgs;
     std::string firstStr;
@@ -484,31 +507,15 @@ std::shared_ptr<Term> Op::operate() const {
             return args[2];
         }
     } else if (operation == "mod") {
-        // NOTE: The semantics of modulo operation in OpenSMT's FastRationals is different from the semantics defined by
-        // SMT-LIB. We must use the computation of the remainder according to SMT-LIB.
-        // See notes in // https://smtlib.cs.uiowa.edu/theories-Ints.shtml
-
-        // "Regardless of sign of m,
-        //  when n is positive, (div m n) is the floor of the rational number m/n;
-        //  when n is negative, (div m n) is the ceiling of m/n."
-
-        // Remainder is then always a positive number r such that m = n * q + r, r < abs(n)
-        auto smtlib_modulo = [](auto const & m, auto const & n) -> FastRational {
-            auto ratio = m / n;
-            auto q = n > 0 ? ratio.floor() : ratio.ceil();
-            auto r = m - n * q;
-            assert(r.isInteger() and r.sign() >= 0 and r < abs(n));
-            return r;
-        };
-        FastRational result = smtlib_modulo(firstTerm, secondTerm);
+        FastRational result = smtlib_divmod(firstTerm, secondTerm).mod;
         return std::make_shared<Terminal>(result.get_str(), Term::INT);
     } else if (operation == "div") {
-        FastRational result = firstTerm / secondTerm;
+        FastRational result = smtlib_divmod(firstTerm, secondTerm).div;
         if (result < 0) {
-            result *= -1;
-            return std::make_shared<Terminal>("(- " + result.ceil().get_str() + ")", Term::INT);
+            result.negate();
+            return std::make_shared<Terminal>("(- " + result.get_str() + ")", Term::INT);
         } else {
-            return std::make_shared<Terminal>(result.floor().get_str(), Term::INT);
+            return std::make_shared<Terminal>(result.get_str(), Term::INT);
         }
     }
     throw std::logic_error("Unhandled case in Op::operate()");
