@@ -122,20 +122,14 @@ public:
 };
 
 enum class VerificationAnswer : char {SAFE, UNSAFE, UNKNOWN};
+using witness_t = std::variant<NoWitness, ValidityWitness, InvalidityWitness>;
 
 class VerificationResult {
     VerificationAnswer answer;
-    std::variant<NoWitness, ValidityWitness, InvalidityWitness> witness;
+    witness_t witness;
 
 public:
-    VerificationResult(VerificationAnswer answer, ValidityWitness validityWitness)
-        : answer(answer), witness(std::move(validityWitness)) {}
-
-    VerificationResult(VerificationAnswer answer, InvalidityWitness invalidityWitness)
-        : answer(answer), witness(std::move(invalidityWitness)) {}
-
-    VerificationResult(VerificationAnswer answer, NoWitness noWitness)
-        : answer(answer), witness(std::move(noWitness)) {}
+    VerificationResult(VerificationAnswer answer, witness_t witness) : answer(answer), witness(std::move(witness)) {}
 
     explicit VerificationResult(VerificationAnswer answer) : answer(answer), witness(NoWitness()) {}
 

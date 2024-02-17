@@ -1520,7 +1520,7 @@ private:
 
     InvalidityWitness computeInvalidityWitness() const;
 
-    std::variant<NoWitness, ValidityWitness> computeValidityWitness();
+    witness_t computeValidityWitness();
 
     void addRestrictions(SymRef node, PTRef fla);
 
@@ -1596,17 +1596,8 @@ VerificationResult TransitionSystemNetworkManager::solve() && {
     while (true) {
         if (getNode(current).blocked_children == getNode(current).children.size()) {
             if (current == graph.getEntry()) {
-                if (this->owner.shouldComputeWitness()) {
-                    auto witness = computeValidityWitness();
-                    if (std::holds_alternative<ValidityWitness>(witness)) {
-                        return {VerificationAnswer::SAFE, std::get<ValidityWitness>(witness)};
-                    } else {
-                        return {VerificationAnswer::SAFE,
-                                NoWitness("Unexpected situation occurred during witness computation in TPA engine")};
-                    }
-                } else {
-                    return {VerificationAnswer::SAFE, NoWitness()};
-                }
+                witness_t witness = owner.shouldComputeWitness() ? computeValidityWitness() : NoWitness{};
+                return {VerificationAnswer::SAFE, std::move(witness)};
             }
             getNode(current).trulyReached = PTRef_Undef;
             getNode(current).blocked_children = 0;
@@ -1707,7 +1698,7 @@ InvalidityWitness TransitionSystemNetworkManager::computeInvalidityWitness() con
     return InvalidityWitness::fromErrorPath(path, graph);
 }
 
-std::variant<NoWitness, ValidityWitness> TransitionSystemNetworkManager::computeValidityWitness() {
+witness_t TransitionSystemNetworkManager::computeValidityWitness() {
     assert(isTransitionSystemDAG(graph));
     auto vertices = graph.getVertices();
     TermUtils utils(logic);
@@ -1735,7 +1726,7 @@ std::variant<NoWitness, ValidityWitness> TransitionSystemNetworkManager::compute
             PTRef unversionedPredicate = logic.mkUninterpFun(vertex, std::move(unversionedVars));
             definitions[unversionedPredicate] = graphInvariant;
         } else {
-            return NoWitness();
+            return NoWitness("Unexpected situation occurred during witness computation in TPA engine");
         }
     }
     return ValidityWitness(std::move(definitions));
