@@ -40,7 +40,7 @@ public:
     static const std::string TPA;
     static const std::string SPLIT_TPA;
 
-    bool shouldComputeWitness() const;
+    [[nodiscard]] bool shouldComputeWitness() const;
 
 private:
     VerificationResult solve(const ChcDirectedGraph & system);

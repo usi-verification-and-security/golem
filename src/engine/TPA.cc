@@ -26,7 +26,7 @@ const std::string TPAEngine::TPA = "tpa";
 const std::string TPAEngine::SPLIT_TPA = "split-tpa";
 
 bool TPAEngine::shouldComputeWitness() const {
-    return options.hasOption(Options::COMPUTE_WITNESS);
+    return options.hasOption(Options::COMPUTE_WITNESS) and options.getOption(Options::COMPUTE_WITNESS) == "true";
 }
 
 std::unique_ptr<TPABase> TPAEngine::mkSolver() {
@@ -58,7 +58,7 @@ VerificationResult TPAEngine::solve(ChcDirectedHyperGraph const & graph) {
     if (transformedGraph->isNormalGraph()) {
         auto normalGraph = transformedGraph->toNormalGraph();
         auto res = solve(*normalGraph);
-        return options.hasOption(Options::COMPUTE_WITNESS) ? translator->translate(std::move(res)) : std::move(res);
+        return shouldComputeWitness() ? translator->translate(std::move(res)) : std::move(res);
     }
     return VerificationResult(VerificationAnswer::UNKNOWN);
 }
@@ -69,7 +69,7 @@ VerificationResult TPAEngine::solve(const ChcDirectedGraph & graph) {
         auto ts = toTransitionSystem(graph);
         auto solver = mkSolver();
         auto res = solver->solveTransitionSystem(*ts);
-        if (not options.hasOption(Options::COMPUTE_WITNESS)) { return VerificationResult(res); }
+        if (not shouldComputeWitness()) { return VerificationResult(res); }
         switch (res) {
             case VerificationAnswer::UNSAFE:
                 return VerificationResult(res, computeInvalidityWitness(graph, solver->getTransitionStepCount()));
@@ -93,7 +93,7 @@ VerificationResult TPAEngine::solve(const ChcDirectedGraph & graph) {
     assert(ts);
     auto solver = mkSolver();
     auto res = solver->solveTransitionSystem(*ts);
-    if (not options.hasOption(Options::COMPUTE_WITNESS)) { return VerificationResult(res); }
+    if (not shouldComputeWitness()) { return VerificationResult(res); }
     switch (res) {
         case VerificationAnswer::UNSAFE:
             return backtranslator->translate({res, solver->getTransitionStepCount()});
