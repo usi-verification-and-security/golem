@@ -294,7 +294,7 @@ TEST_F(TPATest, test_TPA_chain_of_two_safe) {
             ChcBody{{logic->mkLt(x, zero)}, {UninterpretedPredicate{predS2Current}}}
         }};
     TPAEngine engine(*logic, options);
-    solveSystem(clauses, engine, VerificationAnswer::SAFE, false);
+    solveSystem(clauses, engine, VerificationAnswer::SAFE, true);
 }
 
 TEST_F(TPATest, test_TPA_chain_regression) {
@@ -341,7 +341,7 @@ TEST_F(TPATest, test_TPA_chain_regression) {
                 {UninterpretedPredicate{predS2Current}}}
         }};
     TPAEngine engine(*logic, options);
-    solveSystem(clauses, engine, VerificationAnswer::SAFE, false);
+    solveSystem(clauses, engine, VerificationAnswer::SAFE, true);
 }
 
 TEST_F(TPATest, test_TPA_chain_regression_2) {
@@ -432,7 +432,7 @@ TEST_F(TPATest, test_TPA_chain_unsatisfiable_transition) {
                 {UninterpretedPredicate{predS2Current}}}
         }};
     TPAEngine engine(*logic, options);
-    solveSystem(clauses, engine, VerificationAnswer::SAFE, false);
+    solveSystem(clauses, engine, VerificationAnswer::SAFE, true);
 }
 
 TEST_F(TPATest, test_transformContractVertex_safe) {
