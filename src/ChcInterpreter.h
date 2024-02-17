@@ -10,9 +10,11 @@
 #include "ChcSystem.h"
 #include "Normalizer.h"
 #include "Options.h"
+#include "osmt_parser.h"
 #include "proofs/Term.h"
 #include "transformers/Transformer.h"
 #include <engine/Engine.h> // TODO: remove this and create an engine factory
+
 #include <memory>
 
 class LetBinder {

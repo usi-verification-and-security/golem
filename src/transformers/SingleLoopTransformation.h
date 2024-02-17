@@ -76,7 +76,7 @@ public:
 
         ErrorOr<ValidityWitness> translateInvariant(PTRef inductiveInvariant);
 
-        std::set<PTRef> getVarsForVertex(SymRef vertex) const;
+        std::unordered_set<PTRef, PTRefHash> getVarsForVertex(SymRef vertex) const;
     };
 
     // Main method

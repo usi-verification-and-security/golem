@@ -9,6 +9,8 @@
 
 #include "Engine.h"
 
+#include "osmt_solver.h"
+
 class TransitionSystem;
 
 enum class ReachabilityResult { REACHABLE, UNREACHABLE };

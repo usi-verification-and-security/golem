@@ -9,7 +9,6 @@
 
 #include "TransitionSystem.h"
 #include "graph/ChcGraph.h"
-#include "osmt_solver.h"
 #include "proofs/Term.h"
 #include "Normalizer.h"
 #include <memory>

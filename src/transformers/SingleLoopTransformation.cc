@@ -271,8 +271,9 @@ SingleLoopTransformation::WitnessBackTranslator::translateInvariant(PTRef induct
     return ValidityWitness(std::move(vertexInvariants));
 }
 
-std::set<PTRef> SingleLoopTransformation::WitnessBackTranslator::getVarsForVertex(SymRef vertex) const {
-    std::set<PTRef> vars;
+std::unordered_set<PTRef, PTRefHash>
+SingleLoopTransformation::WitnessBackTranslator::getVarsForVertex(SymRef vertex) const {
+    std::unordered_set<PTRef, PTRefHash> vars;
     for (auto const & entry : positionVarMap) {
         if (entry.first.vertex == vertex) { vars.insert(entry.second); }
     }

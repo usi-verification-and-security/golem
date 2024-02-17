@@ -10,6 +10,7 @@
 
 #include "Engine.h"
 #include "TransitionSystem.h"
+#include "osmt_solver.h"
 
 class IMC : public Engine {
     Logic & logic;
