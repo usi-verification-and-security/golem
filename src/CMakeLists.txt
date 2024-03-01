@@ -38,6 +38,7 @@ target_sources(golem_lib
     PRIVATE engine/Spacer.cc
     PRIVATE engine/TPA.cc
     PRIVATE engine/IMC.cc
+    PRIVATE engine/ArgBasedEngine.cc
     PRIVATE TransitionSystem.cc
     PRIVATE Options.cc
     PRIVATE TermUtils.cc
