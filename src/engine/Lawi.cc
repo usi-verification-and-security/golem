@@ -418,8 +418,9 @@ VerificationResult LawiContext::unwind() {
     // computed interpretations
     std::unordered_map<PTRef, PTRef, PTRefHash> solution;
     for (auto vid : graph.getVertices()) {
-        PTRef predicate = graph.getStateVersion(vid);
-        if (logic.isTrue(predicate) || logic.isFalse(predicate)) { continue; }
+        PTRef statePredicate = graph.getStateVersion(vid);
+        if (logic.isTrue(statePredicate) or logic.isFalse(statePredicate)) { continue; }
+        PTRef predicate = logic.getPterm(statePredicate).size() > 0 ? TimeMachine(logic).versionZeroToUnversioned(statePredicate) : statePredicate;
         auto it = finalLabels.find(vid);
         const PTRef definition = [&]() {
             if (it == finalLabels.end()) {
@@ -429,7 +430,7 @@ VerificationResult LawiContext::unwind() {
             if (logic.isOr(definition) or logic.isAnd(definition)) {
                 definition = simplifyUnderAssignment_Aggressive(definition, logic);
             }
-            return definition;
+            return TimeMachine(logic).versionZeroToUnversioned(definition);
         }();
         auto insertRes = solution.insert(std::make_pair(predicate, definition));
         assert(insertRes.second);
