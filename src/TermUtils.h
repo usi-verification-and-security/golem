@@ -216,9 +216,9 @@ class TimeMachine {
     VersioningConfig config;
 
 public:
-    TimeMachine(Logic & logic) : logic(logic), config(*this, logic) {}
+    explicit TimeMachine(Logic & logic) : logic(logic), config(*this, logic) {}
     // Returns version of var 'steps' steps in the future (if positive) or in the past (if negative)
-    PTRef sendVarThroughTime(PTRef var, int steps) const {
+    [[nodiscard]] PTRef sendVarThroughTime(PTRef var, int steps) const {
         assert(logic.isVar(var));
         assert(isVersioned(var));
         std::string varName = logic.getSymName(var);
@@ -232,7 +232,7 @@ public:
     }
 
     // Given a variable with no version, compute the zero version representing current state
-    PTRef getVarVersionZero(PTRef var) {
+    [[nodiscard]] PTRef getVarVersionZero(PTRef var) const {
         assert(logic.isVar(var));
         assert(not isVersioned(var));
         SRef sort = logic.getSortRef(var);
@@ -242,7 +242,7 @@ public:
         return logic.mkVar(sort, newName.c_str());
     }
 
-    PTRef getVarVersionZero(std::string const & name, SRef sort) {
+    [[nodiscard]] PTRef getVarVersionZero(std::string const & name, SRef sort) const {
         assert(not isVersionedName(name));
         std::stringstream ss;
         ss << name << versionSeparator << 0;
@@ -250,7 +250,7 @@ public:
         return logic.mkVar(sort, newName.c_str());
     }
 
-    PTRef getUnversioned(PTRef var) {
+    [[nodiscard]] PTRef getUnversioned(PTRef var) const {
         assert(logic.isVar(var));
         assert(isVersioned(var));
         SRef sort = logic.getSortRef(var);
@@ -260,7 +260,7 @@ public:
         return logic.mkVar(sort, varName.c_str());
     }
 
-    std::string getUnversionedName(PTRef var) {
+    [[nodiscard]] std::string getUnversionedName(PTRef var) const {
         assert(logic.isVar(var));
         assert(isVersioned(var));
         std::string varName = logic.getSymName(var);
@@ -269,7 +269,7 @@ public:
         return varName;
     }
 
-    int getVersionNumber(PTRef var) {
+    [[nodiscard]] int getVersionNumber(PTRef var) const {
         assert(logic.isVar(var));
         assert(isVersioned(var));
         std::string varName = logic.getSymName(var);
@@ -287,16 +287,18 @@ public:
         return rewriter.rewrite(fla);
     }
 
-    bool isVersionedName(std::string const & name) const {
+    [[nodiscard]] bool isVersionedName(std::string const & name) const {
         auto pos = name.rfind(versionSeparator);
         return pos != std::string::npos;
     }
 
-    bool isVersioned(PTRef var) const {
+    [[nodiscard]] bool isVersioned(PTRef var) const {
         assert(logic.isVar(var));
         std::string varName = logic.getSymName(var);
         return isVersionedName(varName);
     }
+
+    PTRef versionZeroToUnversioned(PTRef fla) const;
 };
 
 class VersionManager {

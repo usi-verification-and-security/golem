@@ -488,6 +488,28 @@ void LATermUtils::simplifyConjunction(std::vector<PtAsgn> & conjuncts) {
     simplifyJunction<Conjunction>(conjuncts, logic);
 }
 
+PTRef TimeMachine::versionZeroToUnversioned(PTRef fla) const {
+    class Config : public DefaultRewriterConfig {
+        Logic const & logic;
+        TimeMachine const& tm;
+
+    public:
+        Config(Logic const & logic, TimeMachine const & tm) : logic(logic), tm(tm) {}
+
+        PTRef rewrite(PTRef term) override {
+            if (logic.isVar(term)) {
+                if (tm.isVersioned(term)) {
+                    assert(tm.getVersionNumber(term) == 0);
+                    return tm.getUnversioned(term);
+                }
+            }
+            return term;
+        }
+    };
+    Config config(logic, *this);
+    Rewriter<Config> rewriter(logic, config);
+    return rewriter.rewrite(fla);
+}
 
 //********** CANONICAL PREDICATE REPRESENTATION ********************/
 void NonlinearCanonicalPredicateRepresentation::addRepresentation(SymRef sym, std::vector<PTRef> vars) {
