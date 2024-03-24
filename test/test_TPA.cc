@@ -670,8 +670,7 @@ TEST_F(TPATest, test_TPA_BeyondTransitionSystemDAG_Safe)
             ChcBody{{logic->mkOr(logic->mkLt(y, zero), logic->mkLt(x, zero))}, {UninterpretedPredicate{current1}}}
         }};
     TPAEngine engine(*logic, options);
-    // TODO: Enable validation once we deal with alien variables in vertex invariants properly
-    solveSystem(clauses, engine, VerificationAnswer::SAFE, false);
+    solveSystem(clauses, engine, VerificationAnswer::SAFE, true);
 }
 
 TEST_F(TPATest, test_TPA_BeyondTransitionSystemDAG_Branching_Unsafe)

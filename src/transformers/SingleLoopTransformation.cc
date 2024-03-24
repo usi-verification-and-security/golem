@@ -6,6 +6,7 @@
 
 #include "SingleLoopTransformation.h"
 
+#include "QuantifierElimination.h"
 #include "TransformationUtils.h"
 #include "utils/SmtSolver.h"
 
@@ -217,7 +218,7 @@ SingleLoopTransformation::WitnessBackTranslator::translateErrorPath(std::size_t 
 SingleLoopTransformation::WitnessBackTranslator::ErrorOr<ValidityWitness>
 SingleLoopTransformation::WitnessBackTranslator::translateInvariant(PTRef inductiveInvariant) {
     Logic & logic = graph.getLogic();
-    //    std::cout << "Invariant is " << logic.pp(invariant) << std::endl;
+    //    std::cout << "Invariant is " << logic.pp(inductiveInvariant) << std::endl;
     auto vertices = graph.getVertices();
     TermUtils utils(logic);
     TermUtils::substitutions_map substitutions;
@@ -241,7 +242,7 @@ SingleLoopTransformation::WitnessBackTranslator::translateInvariant(PTRef induct
             // Repeat until fixpoint.
             // TODO: Improve the rewriting in OpenSMT. If child simplifies to atom, it can be used to simplify the
             // remaining children
-            while (logic.isBooleanOperator(vertexInvariant)) {
+            while (logic.isAnd(vertexInvariant) or logic.isOr(vertexInvariant)) {
                 PTRef before = vertexInvariant;
                 vertexInvariant = ::simplifyUnderAssignment_Aggressive(vertexInvariant, logic);
                 if (before == vertexInvariant) { break; }
@@ -253,19 +254,25 @@ SingleLoopTransformation::WitnessBackTranslator::translateInvariant(PTRef induct
         bool hasAlienVariable = std::any_of(allVars.begin(), allVars.end(),
                                             [&](PTRef var) { return vertexVars.find(var) == vertexVars.end(); });
         if (hasAlienVariable) {
-            return NoWitness{"Could not backtranslate validity witness in single-loop transformation: Predicate "
-                             "interpretation contains alien variable"};
-        } // TODO: Figure out a way to deal with this situation properly
+            vec<PTRef> variablesToKeep;
+            for (PTRef var : vertexVars) {
+                variablesToKeep.push(var);
+            }
+            // Universally quantify all alien variables. QE eliminates existential quantifiers, so use double negation
+            PTRef negatedInvariant = logic.mkNot(vertexInvariant);
+            PTRef cleanNegatedInvariant = QuantifierElimination(logic).keepOnly(negatedInvariant, variablesToKeep);
+            vertexInvariant = logic.mkNot(cleanNegatedInvariant);
+        }
         // No alien variable, we can translate the invariant using predicate's variables
         TermUtils::substitutions_map varSubstitutions;
-        PTRef statePredicate = graph.getStateVersion(vertex);
-        auto argsNum = logic.getPterm(statePredicate).nargs();
+        PTRef basePredicate = TimeMachine(logic).versionZeroToUnversioned(graph.getStateVersion(vertex));
+        auto argsNum = logic.getPterm(basePredicate).nargs();
         for (auto i = 0u; i < argsNum; ++i) {
             PTRef positionVar = positionVarMap.at(VarPosition{vertex, i});
-            varSubstitutions.insert({positionVar, logic.getPterm(statePredicate)[i]});
+            varSubstitutions.insert({positionVar, logic.getPterm(basePredicate)[i]});
         }
         vertexInvariant = utils.varSubstitute(vertexInvariant, varSubstitutions);
-        vertexInvariants.insert({statePredicate, vertexInvariant});
+        vertexInvariants.insert({basePredicate, vertexInvariant});
         // std::cout << logic.printSym(vertex) << " -> " << logic.pp(vertexInvariant) << std::endl;
     }
     return ValidityWitness(std::move(vertexInvariants));
