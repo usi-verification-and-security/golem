@@ -69,44 +69,44 @@ TransitionSystemVerificationResult IMC::finiteRun(TransitionSystem const & ts, u
     SMTSolver solverWrapper(logic, SMTSolver::WitnessProduction::ONLY_INTERPOLANTS);
     solverWrapper.getConfig().setSimplifyInterpolant(4);
     TimeMachine tm{logic};
+    PTRef suffix = [&]() {
+        int lookahead = static_cast<int>(k);
+        vec<PTRef> suffixTransitions;
+        for (auto i = 1; i < lookahead; ++i) {
+            suffixTransitions.push(tm.sendFlaThroughTime(ts.getTransition(), i));
+        }
+        suffixTransitions.push(tm.sendFlaThroughTime(ts.getQuery(), lookahead));
+        return logic.mkAnd(std::move(suffixTransitions));
+    }();
+    solverWrapper.getCoreSolver().insertFormula(suffix);
     PTRef movingInit = ts.getInit();
     unsigned iter = 0;
-    // while true
     while (true) {
         auto & solver = solverWrapper.getCoreSolver();
-        //A = CNF(PREF1(M'), U1)
-        PTRef A = logic.mkAnd(movingInit, tm.sendFlaThroughTime(ts.getTransition(), iter));
-        solver.insertFormula(A);
-        //B = CNF(SUFFk(M'), U2)
-        PTRef B = tm.sendFlaThroughTime(ts.getQuery(), iter + k);
-        for (unsigned i = iter + 1; i < iter + k; ++i) {
-            B = logic.mkAnd(B, tm.sendFlaThroughTime(ts.getTransition(), i));
-        }
-        solver.insertFormula(B);
-        // Run SAT on A U B.
+        solver.push();
+        PTRef prefix = logic.mkAnd(movingInit, ts.getTransition());
+        solver.insertFormula(prefix);
         auto res = solver.check();
-        // if A U B is satisfiable
+        // if prefix + suffix is satisfiable
         if (res == s_True) {
             if (movingInit == ts.getInit()) {
-                // if R=I return True
+                // Real counterexample
                 return {VerificationAnswer::UNSAFE, iter + k};
             } else {
-                // else Abort
+                // Possibly spurious counterexample => Abort and continue with larger k
                 return {VerificationAnswer::UNKNOWN, PTRef_Undef};
             }
-            // else if A U B is unsat
-        } else {
+        } else { // if prefix + suffix is unsatisfiable
             ipartitions_t mask = 0;
-            opensmt::setbit(mask, 0);
-            //opensmt::setbit(mask, 1);
+            opensmt::setbit(mask, iter + 1);
             //let P = Itp(P, A, B)
             //let R' = P<W/W0>
             PTRef itp = lastIterationInterpolant(solver, mask);
-            movingInit = tm.sendFlaThroughTime(movingInit, 1);
+            itp = tm.sendFlaThroughTime(itp, -1);
             //if R' => R return False(if R' /\ not R returns True)
-            if (checkItp(itp, movingInit) == s_False) {
+            if (implies(itp, movingInit)) {
                 if (not computeWitness) { return {VerificationAnswer::SAFE, PTRef_Undef}; }
-                PTRef inductiveInvariant = tm.sendFlaThroughTime(movingInit, -iter - 1);
+                PTRef inductiveInvariant = movingInit;
                 PTRef finalInductiveInvariant = computeFinalInductiveInvariant(inductiveInvariant, k, ts);
                 return {VerificationAnswer::SAFE, finalInductiveInvariant};
             }
@@ -114,15 +114,16 @@ TransitionSystemVerificationResult IMC::finiteRun(TransitionSystem const & ts, u
             movingInit = logic.mkOr(movingInit, itp);
         }
         iter++;
-        solverWrapper.resetSolver();
+        solver.pop();
     }
 }
 
-sstat IMC::checkItp(PTRef itp, PTRef itpsOld) {
+bool IMC::implies(PTRef antecedent, PTRef consequent) const {
     SMTSolver solverWrapper(logic, SMTSolver::WitnessProduction::NONE);
-    PTRef cmp = logic.mkAnd(itp, logic.mkNot(itpsOld));
-    solverWrapper.getCoreSolver().insertFormula(cmp);
-    return solverWrapper.getCoreSolver().check();
+    PTRef negated = logic.mkAnd(antecedent, logic.mkNot(consequent));
+    solverWrapper.getCoreSolver().insertFormula(negated);
+    auto res = solverWrapper.getCoreSolver().check();
+    return res == s_False;
 }
 
 /**

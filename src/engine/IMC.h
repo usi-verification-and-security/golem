@@ -46,7 +46,7 @@ private:
 
     PTRef computeFinalInductiveInvariant(PTRef inductiveInvariant, unsigned k, TransitionSystem const & ts);
 
-    sstat checkItp(PTRef itp, PTRef itpsOld);
+    bool implies(PTRef antecedent, PTRef consequent) const;
 };
 
 #endif //GOLEM_IMC_H
