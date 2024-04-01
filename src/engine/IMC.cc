@@ -14,14 +14,10 @@
 #include "utils/SmtSolver.h"
 
 VerificationResult IMC::solve(ChcDirectedGraph const & graph) {
-    if (isTrivial(graph)) {
-        return solveTrivial(graph);
-    }
-    if (isTransitionSystem(graph)) {
-        return solveTransitionSystem(graph);
-    }
+    if (isTrivial(graph)) { return solveTrivial(graph); }
+    if (isTransitionSystem(graph)) { return solveTransitionSystem(graph); }
     SingleLoopTransformation transformation;
-    auto[ts, backtranslator] = transformation.transform(graph);
+    auto [ts, backtranslator] = transformation.transform(graph);
     assert(ts);
     auto res = solveTransitionSystemInternal(*ts);
     return computeWitness ? backtranslator->translate(res) : VerificationResult(res.answer);
@@ -42,10 +38,8 @@ TransitionSystemVerificationResult IMC::solveTransitionSystemInternal(Transition
     TimeMachine tm{logic};
     solver.insertFormula(system.getInit());
     solver.insertFormula(system.getQuery());
-    //if I /\ F is Satisfiable, return true
-    if (solver.check() == s_True) {
-        return TransitionSystemVerificationResult{VerificationAnswer::UNSAFE, 0u};
-    }
+    // if I /\ F is Satisfiable, return true
+    if (solver.check() == s_True) { return TransitionSystemVerificationResult{VerificationAnswer::UNSAFE, 0u}; }
     for (uint32_t k = 1; k < maxLoopUnrollings; ++k) {
         auto res = finiteRun(system, k);
         if (res.answer != VerificationAnswer::UNKNOWN) { return res; }
@@ -63,7 +57,7 @@ PTRef lastIterationInterpolant(MainSolver & solver, ipartitions_t const & mask) 
 }
 } // namespace
 
-//procedure FiniteRun(M=(I,T,F), k>0)
+// procedure FiniteRun(M=(I,T,F), k>0)
 TransitionSystemVerificationResult IMC::finiteRun(TransitionSystem const & ts, unsigned k) {
     assert(k > 0);
     SMTSolver solverWrapper(logic, SMTSolver::WitnessProduction::ONLY_INTERPOLANTS);
@@ -99,11 +93,11 @@ TransitionSystemVerificationResult IMC::finiteRun(TransitionSystem const & ts, u
         } else { // if prefix + suffix is unsatisfiable
             ipartitions_t mask = 0;
             opensmt::setbit(mask, iter + 1);
-            //let P = Itp(P, A, B)
-            //let R' = P<W/W0>
+            // let P = Itp(P, A, B)
+            // let R' = P<W/W0>
             PTRef itp = lastIterationInterpolant(solver, mask);
             itp = tm.sendFlaThroughTime(itp, -1);
-            //if R' => R return False(if R' /\ not R returns True)
+            // if R' => R return False(if R' /\ not R returns True)
             if (implies(itp, movingInit)) {
                 if (not computeWitness) { return {VerificationAnswer::SAFE, PTRef_Undef}; }
                 PTRef inductiveInvariant = movingInit;

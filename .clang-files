@@ -3,6 +3,8 @@ src/TransformationUtils.h
 src/ChcInterpreter.cc
 src/ChcInterpreter.h
 
+src/engine/IMC.cc
+src/engine/IMC.h
 src/engine/TPA.cc
 src/engine/TPA.h
 src/engine/Common.cc

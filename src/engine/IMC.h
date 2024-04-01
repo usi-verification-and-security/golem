@@ -14,15 +14,13 @@
 
 class IMC : public Engine {
     Logic & logic;
-//    Options const & options;
+    // Options const & options;
     int verbosity = 0;
     bool computeWitness = false;
 
 public:
     IMC(Logic & logic, Options const & options) : logic(logic) {
-        if (options.hasOption(Options::VERBOSE)) {
-            verbosity = std::stoi(options.getOption(Options::VERBOSE));
-        }
+        if (options.hasOption(Options::VERBOSE)) { verbosity = std::stoi(options.getOption(Options::VERBOSE)); }
         if (options.hasOption(Options::COMPUTE_WITNESS)) {
             computeWitness = options.getOption(Options::COMPUTE_WITNESS) == "true";
         }
@@ -49,4 +47,4 @@ private:
     bool implies(PTRef antecedent, PTRef consequent) const;
 };
 
-#endif //GOLEM_IMC_H
+#endif // GOLEM_IMC_H
