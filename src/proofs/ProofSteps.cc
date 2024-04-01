@@ -120,11 +120,10 @@ void StepHandler::buildIntermediateProof() {
         if (step.premises.empty()) { continue; }
 
         auto instPairs = getInstPairs(i, normalizingEqualities[step.clauseId.id]);
-        InstantiateVisitor instantiateVisitor(instPairs);
         currTerm = originalAssertions[step.clauseId.id];
 
         if (not instPairs.empty()) {
-
+            InstantiateVisitor instantiateVisitor(instPairs);
             notifyObservers(Step(currentStep, Step::STEP, packClause(currTerm), "forall_inst", instPairs));
             currentStep++;
 
@@ -279,11 +278,6 @@ void StepHandler::instantiationSteps(std::size_t i) {
 
     std::size_t quantStep = step.clauseId.id;
 
-    // Getting the instantiated variable-value pairs
-    std::vector<std::pair<std::string, std::string>> instPairs =
-        getInstPairs(i, normalizingEqualities[step.clauseId.id]);
-    InstantiateVisitor instantiateVisitor(instPairs);
-
     if (unusedRem->printTerm() != currTerm->printTerm()) {
 
         notifyObservers(Step(currentStep, Step::STEP,
@@ -308,7 +302,12 @@ void StepHandler::instantiationSteps(std::size_t i) {
         quantStep = currentStep - 1;
     }
 
+    // Getting the instantiated variable-value pairs
+    std::vector<std::pair<std::string, std::string>> instPairs =
+        getInstPairs(i, normalizingEqualities[step.clauseId.id]);
+
     if (not instPairs.empty()) {
+        InstantiateVisitor instantiateVisitor(instPairs);
 
         notifyObservers(Step(
             currentStep, Step::STEP,
@@ -494,16 +493,8 @@ StepHandler::getInstPairs(std::size_t stepIndex, vec<Normalizer::Equality> const
 
     std::unordered_map<SymRef, std::size_t, SymRefHash> vertexInstance;
 
-    for (std::size_t premise : premises) {
-        auto concreteArgs = utils.predicateArgsInOrder(derivation[premise].derivedFact);
-        auto targetVertex = originalGraph.getEdge(derivation[premise].clauseId).to;
-
-        auto instance = vertexInstance[targetVertex]++;
-        PTRef predicateInstance = originalGraph.getStateVersion(targetVertex, instance);
-
-        auto formalArgs = utils.predicateArgsInOrder(predicateInstance);
+    auto processFormalArgumentsWithValues = [&](std::vector<PTRef> const & formalArgs, std::vector<PTRef> const & concreteArgs) {
         assert(concreteArgs.size() == formalArgs.size());
-        // Building the pairs
         for (std::size_t m = 0; m < formalArgs.size(); m++) {
             for (auto const & equality : stepNormEq) {
                 if (equality.normalizedVar == formalArgs[m]) {
@@ -517,28 +508,25 @@ StepHandler::getInstPairs(std::size_t stepIndex, vec<Normalizer::Equality> const
                 }
             }
         }
+    };
+
+    for (std::size_t premise : premises) {
+        auto concreteArgs = utils.predicateArgsInOrder(derivation[premise].derivedFact);
+        auto targetVertex = originalGraph.getEdge(derivation[premise].clauseId).to;
+
+        auto instance = vertexInstance[targetVertex]++;
+        PTRef predicateInstance = originalGraph.getStateVersion(targetVertex, instance);
+
+        auto formalArgs = utils.predicateArgsInOrder(predicateInstance);
+        processFormalArgumentsWithValues(formalArgs, concreteArgs);
     }
     // Target variables instantiation
     auto concreteArgs = utils.predicateArgsInOrder(step.derivedFact);
     auto targetVertex = originalGraph.getEdge(step.clauseId).to;
     PTRef clauseHead = originalGraph.getNextStateVersion(targetVertex);
     auto formalArgs = utils.predicateArgsInOrder(clauseHead);
-    assert(concreteArgs.size() == formalArgs.size());
+    processFormalArgumentsWithValues(formalArgs, concreteArgs);
 
-    // Building the pairs
-    for (std::size_t m = 0; m < formalArgs.size(); m++) {
-        for (auto const & equality : stepNormEq) {
-            if (equality.normalizedVar == formalArgs[m]) {
-                assert(logic.isConstant(concreteArgs[m]));
-                instPairsAfterNormalization.push_back({equality.normalizedVar, concreteArgs[m]});
-                auto it = processedOriginalArguments.find(equality.originalArg);
-                if (it == processedOriginalArguments.end()) {
-                    processedOriginalArguments.insert(equality.originalArg);
-                    instPairsBeforeNormalization.push_back({equality.originalArg, concreteArgs[m]});
-                }
-            }
-        }
-    }
     // Compute values for possible auxiliary variables
     PTRef originalConstraint = originalGraph.getEdgeLabel(step.clauseId);
     TermUtils::substitutions_map substitutionsMap;
