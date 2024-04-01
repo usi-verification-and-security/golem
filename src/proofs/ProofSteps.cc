@@ -564,13 +564,17 @@ StepHandler::getInstPairs(std::size_t stepIndex, vec<Normalizer::Equality> const
         }
     }
 
+    // Arguments before normalization can be arbitrary terms
+    // For now we assume we have all the variables as arguments of some predicate in the original system.
+    // Thus, we can ignore non-variable terms.
+    // NOTE: This approach does not work in all cases, but should work in all reasonable cases
     std::vector<std::pair<std::string, std::string>> res;
-    std::transform(instPairsBeforeNormalization.begin(), instPairsBeforeNormalization.end(), std::back_inserter(res),
-                   [&](auto const & varVal) {
-                       assert(logic.isVar(varVal.var));
-                       std::string varName = logic.getSymName(varVal.var);
-                       return std::make_pair(varName, logic.printTerm(varVal.val));
-                   });
+    res.reserve(instPairsBeforeNormalization.size());
+    for (auto && [var, val] : instPairsBeforeNormalization) {
+        if (logic.isVar(var)) {
+            res.emplace_back(logic.getSymName(var), logic.printTerm(val));
+        }
+    }
     return res;
 }
 
