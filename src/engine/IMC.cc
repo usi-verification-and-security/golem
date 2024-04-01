@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2022, Konstantin Britikov <britikovki@gmail.com>
- * Copyright (c) 2023, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2023-2024, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
