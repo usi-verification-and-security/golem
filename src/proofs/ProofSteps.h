@@ -85,8 +85,6 @@ class StepHandler {
     std::size_t currentStep = 0;
     std::size_t trueRuleStep = 0;
 
-    std::shared_ptr<Term> implicationRHS;
-    std::shared_ptr<Term> implicationLHS;
     std::shared_ptr<Term> currTerm;
     std::vector<std::size_t> modusPonensSteps; // Modus Ponens Steps to derive the next node
 
@@ -104,20 +102,8 @@ public:
 
     std::vector<std::pair<std::string, std::string>> getInstPairs(std::size_t it,
                                                                   vec<Normalizer::Equality> const & stepNormEq);
-    static std::vector<std::shared_ptr<Term>> packClause(std::shared_ptr<Term> const & term);
-    static std::vector<std::shared_ptr<Term>> packClause(std::shared_ptr<Term> const & term1,
-                                                         std::shared_ptr<Term> const & term2);
     void buildAletheProof();
     void buildIntermediateProof();
-
-    void instantiationSteps(std::size_t i);
-    void assumptionSteps();
-    void directSimplification(std::vector<std::size_t> requiredMP, std::size_t implicationStep,
-                              std::shared_ptr<Term> const & lastClause, std::shared_ptr<Term> const & renamedImpLHS);
-    void conjunctionSimplification(std::vector<std::size_t> requiredMP, std::shared_ptr<Term> const & finalClause,
-                                   std::size_t implicationStep, std::shared_ptr<Term> const & renamedImpLHS);
-
-    void stepReusage(std::shared_ptr<Term> const & term);
 
     void registerObserver(Observer * observer) { observers.push_back(observer); }
 
@@ -126,6 +112,14 @@ public:
             if (observer == observers[i]) { observers.erase(observers.begin() + int(i)); }
         }
     }
+
+private:
+    void instantiationSteps(std::size_t i);
+    void assumptionSteps();
+    std::size_t deriveLHSWithoutConstraint(std::shared_ptr<Term> simplifiedLHS,
+                                           std::vector<std::size_t> predicatePremises);
+
+    std::size_t getOrCreateTrueStep();
 
     void notifyObservers(Step const & step) {
         for (Observer * observer : observers) { // notify all observers
