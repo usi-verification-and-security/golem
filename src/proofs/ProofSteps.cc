@@ -259,11 +259,32 @@ void StepHandler::buildAletheProof() {
         }
 
         // derive RHS
+        auto RHSderivationStep = currentStep;
         notifyObservers(Step(currentStep, Step::STEP, packClause(implicationRHS), "resolution",
                              std::vector<std::size_t>{implicationStep, LHSderivationStep}));
         ++currentStep;
-        // TODO: We may need to simplify arguments of RHS
-        // implicationRHS = std::make_shared<Terminal>(logic.printTerm(step.derivedFact), Term::VAR);
+        CongChainVisitor rhsVisitor(currentStep);
+        implicationRHS->accept(&rhsVisitor);
+        auto const & simplificationStepsRHS = rhsVisitor.getSteps();
+        if (not simplificationStepsRHS.empty()) {
+            for (auto const & simpleStep : simplificationStepsRHS) {
+                notifyObservers(Step(simpleStep.stepId, Step::STEP, packClause(simpleStep.clause), simpleStep.rule,
+                                     simpleStep.premises));
+                currentStep++;
+            }
+            auto equivalence = std::dynamic_pointer_cast<Op>(simplificationStepsRHS.back().clause);
+            assert(equivalence->getArgs().size() == 2);
+            auto simplifiedRHS = equivalence->getArgs()[1];
+            assert(simplifiedRHS->printTerm() == logic.printTerm(step.derivedFact));
+            // The last step is that RHS is equivalent to the simplified RHS. From that we can derive the simplified RHS
+            notifyObservers(Step(currentStep, Step::STEP,
+                                 packClause(negate(equivalence), negate(implicationRHS), simplifiedRHS), "equiv_pos2"));
+            ++currentStep;
+            notifyObservers(Step(currentStep, Step::STEP, packClause(simplifiedRHS), "resolution",
+                                 std::vector<std::size_t>{currentStep - 1, currentStep - 2, RHSderivationStep}));
+            ++currentStep;
+        }
+
         modusPonensSteps.push_back(currentStep - 1);
     }
 

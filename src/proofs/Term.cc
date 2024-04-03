@@ -186,7 +186,22 @@ std::shared_ptr<Term> CongChainVisitor::visit(Op * term) {
 }
 
 std::shared_ptr<Term> CongChainVisitor::visit(App * term) {
-    return std::make_shared<App>(term->getFun(), term->getArgs());
+    std::vector<std::shared_ptr<Term>> newArgs;
+    std::vector<std::size_t> premises;
+    bool changed = false;
+    for (auto const & arg : term->getArgs()) {
+        newArgs.push_back(arg->accept(this));
+        if (arg->getTermType() == Term::OP) {
+            premises.push_back(currentStep - 1);
+            changed = true;
+        }
+    }
+    if (not changed) { return term->asSharedPtr(); }
+    auto modifiedTerm = std::make_shared<App>(term->getFun(), std::move(newArgs));
+    auto cong = std::make_shared<Op>("=", std::vector<std::shared_ptr<Term>>{term->asSharedPtr(), modifiedTerm});
+    steps.emplace_back(currentStep, cong, premises, "cong");
+    currentStep++;
+    return modifiedTerm;
 }
 
 std::string Op::simplifyRule() const {
