@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2023, Matias Barandiaran <matias.barandiaran03@gmail.com>
+ * Copyright (c) 2024, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
@@ -391,7 +392,7 @@ void StepHandler::assumptionSteps() {
 }
 
 // Returns the step id that derived the unit clause containing simplifiedLHS
-std::size_t StepHandler::deriveLHSWithoutConstraint(std::shared_ptr<Term> simplifiedLHS,
+std::size_t StepHandler::deriveLHSWithoutConstraint(std::shared_ptr<Term> const & simplifiedLHS,
                                                     std::vector<std::size_t> predicatePremises) {
     if (simplifiedLHS->getTermType() == Term::OP) { // conjunction of predicates
         auto predicateConjunction = std::dynamic_pointer_cast<Op>(simplifiedLHS);

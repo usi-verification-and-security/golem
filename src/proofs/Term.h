@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2023, Matias Barandiaran <matias.barandiaran03@gmail.com>
+ * Copyright (c) 2024, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
@@ -56,8 +57,6 @@ public:
     termType getTermType() const override { return OP; }
     terminalType getTerminalType() const override { return UNDECLARED; }
     std::string simplifyRule() const;
-    bool nonLinearity() const;
-    std::string nonLinearSimplification() const;
     std::shared_ptr<Term> operate() const;
 
     std::shared_ptr<Term> accept(LogicVisitor *) override;

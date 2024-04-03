@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2023, Matias Barandiaran <matias.barandiaran03@gmail.com>
+ * Copyright (c) 2024, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
@@ -38,8 +39,9 @@ public:
         : stepId(stepId), type(type), clause(std::move(clause)), rule(" ") {}
     Step(std::size_t stepId, stepType type, std::string rule, std::vector<std::size_t> premises)
         : stepId(stepId), type(type), rule(std::move(rule)), premises(std::move(premises)) {}
-    std::string printStepAlethe() const;
-    std::string printStepIntermediate() const;
+
+    [[nodiscard]] std::string printStepAlethe() const;
+    [[nodiscard]] std::string printStepIntermediate() const;
 };
 
 class Observer {
@@ -116,7 +118,7 @@ public:
 private:
     void instantiationSteps(std::size_t i);
     void assumptionSteps();
-    std::size_t deriveLHSWithoutConstraint(std::shared_ptr<Term> simplifiedLHS,
+    std::size_t deriveLHSWithoutConstraint(std::shared_ptr<Term> const & simplifiedLHS,
                                            std::vector<std::size_t> predicatePremises);
 
     std::size_t getOrCreateTrueStep();

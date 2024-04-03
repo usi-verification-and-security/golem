@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2023, Matias Barandiaran <matias.barandiaran03@gmail.com>
+ * Copyright (c) 2024, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
@@ -9,29 +10,6 @@
 #include <cassert>
 #include <memory>
 #include <string>
-
-bool Op::nonLinearity() const {
-    if (operation == "and") {
-        auto predicates = std::count_if(args.begin(), args.end(), [](auto const & arg) {
-            return arg->getTermType() == Term::APP or arg->getTerminalType() == Terminal::VAR;
-        });
-        return predicates >= 2;
-    }
-    return false;
-}
-
-std::string Op::nonLinearSimplification() const {
-    std::stringstream ss;
-    if (operation == "and") {
-        for (std::size_t i = 0; i < args.size(); i++) {
-            ss << "(not " << args[i]->printTerm() << ")";
-            if (i != args.size() - 1) { ss << " "; }
-        }
-        return ss.str();
-    } else {
-        throw std::logic_error("This is not a non-linear case!");
-    }
-}
 
 std::string Term::printTerm() {
     PrintVisitor printVisitor;
