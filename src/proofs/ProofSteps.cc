@@ -246,12 +246,11 @@ void StepHandler::buildAletheProof() {
             auto simplifiedLHSderivationStep = deriveLHSWithoutConstraint(simplifiedLHS, std::move(requiredMP));
             // Now we have that LHS = simplifiedLHS and we have derived simplified LHS, from these we can derive the
             // original LHS
-            notifyObservers(Step(currentStep, Step::STEP,
-                                 packClause(negate(originalSimplifiedEquality), renamedImpLHS, negate(simplifiedLHS)),
-                                 "equiv_pos1"));
+            notifyObservers(Step(currentStep, Step::STEP, packClause(renamedImpLHS, negate(simplifiedLHS)), "equiv2",
+                                 std::vector<std::size_t>{equalityStep}));
             ++currentStep;
             notifyObservers(Step(currentStep, Step::STEP, packClause(renamedImpLHS), "resolution",
-                                 std::vector<std::size_t>{currentStep - 1, equalityStep, simplifiedLHSderivationStep}));
+                                 std::vector<std::size_t>{simplifiedLHSderivationStep, currentStep - 1}));
             ++currentStep;
             LHSderivationStep = currentStep - 1;
 
@@ -278,11 +277,11 @@ void StepHandler::buildAletheProof() {
             auto simplifiedRHS = equivalence->getArgs()[1];
             assert(simplifiedRHS->printTerm() == logic.printTerm(step.derivedFact));
             // The last step is that RHS is equivalent to the simplified RHS. From that we can derive the simplified RHS
-            notifyObservers(Step(currentStep, Step::STEP,
-                                 packClause(negate(equivalence), negate(implicationRHS), simplifiedRHS), "equiv_pos2"));
+            notifyObservers(Step(currentStep, Step::STEP, packClause(negate(implicationRHS), simplifiedRHS), "equiv1",
+                                 std::vector<std::size_t>{currentStep - 1}));
             ++currentStep;
             notifyObservers(Step(currentStep, Step::STEP, packClause(simplifiedRHS), "resolution",
-                                 std::vector<std::size_t>{currentStep - 1, currentStep - 2, RHSderivationStep}));
+                                 std::vector<std::size_t>{currentStep - 1, RHSderivationStep}));
             ++currentStep;
         }
 
