@@ -410,10 +410,13 @@ std::size_t StepHandler::deriveLHSWithoutConstraint(std::shared_ptr<Term> const 
         notifyObservers(
             Step(currentStep, Step::STEP, packClause(simplifiedLHS), "resolution", std::move(predicatePremises)));
         return currentStep++;
-    } else if (simplifiedLHS->getTermType() == Term::APP) { // single predicate
+    } else if (simplifiedLHS->getTermType() == Term::APP or
+               (simplifiedLHS->getTermType() == Term::TERMINAL and simplifiedLHS->getTerminalType() == Term::VAR)) {
+        // single predicate, including 0-ary predicate as a special case
         assert(predicatePremises.size() == 1);
         return predicatePremises[0];
-    } else if (simplifiedLHS->getTermType() == Term::TERMINAL) { // no predicate => constant true
+    } else if (simplifiedLHS->getTermType() == Term::TERMINAL and simplifiedLHS->getTerminalType() == Term::BOOL) {
+        // no predicate => constant true
         assert(simplifiedLHS->printTerm() == "true");
         return getOrCreateTrueStep();
     } else {
