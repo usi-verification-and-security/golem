@@ -32,11 +32,6 @@ inline bool operator ==(EId first, EId second) { return first.id == second.id; }
 inline bool operator !=(EId first, EId second) { return not(first == second); }
 inline bool operator <(EId first, EId second) { return first.id < second.id; }
 
-struct Vertex{
-    SymRef predicateSymbol;
-    VId id;
-};
-
 struct DirectedHyperEdge {
     std::vector<SymRef> from;
     SymRef to;
