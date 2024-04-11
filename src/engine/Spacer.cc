@@ -778,9 +778,6 @@ void computePremiseInstances(DerivationDatabase::Entry const & databaseEntry, En
     EId edge = databaseEntry.incomingEdge;
     SMTSolver solverWrapper(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
     auto & solver = solverWrapper.getCoreSolver();
-    PTRef edgeConstraint = graph.getEdgeLabel(edge);
-    solver.insertFormula(edgeConstraint);
-//    std::cout << logic.pp(edgeConstraint) << '\n';
     VersionManager versionManager(logic);
     vec<PTRef> sourcePredicates;
     for (std::size_t i = 0; i < databaseEntry.premises.size(); ++i) {
@@ -792,6 +789,7 @@ void computePremiseInstances(DerivationDatabase::Entry const & databaseEntry, En
         solver.insertFormula(premiseConstraint);
 //        std::cout << logic.pp(premiseConstraint) << '\n';
     }
+    PTRef edgeConstraint = graph.getEdgeLabel(edge);
     PTRef factInstance = entry.factInstance;
     auto targetNode = graph.getTarget(edge);
     if (targetNode != graph.getExit()) {
@@ -799,13 +797,10 @@ void computePremiseInstances(DerivationDatabase::Entry const & databaseEntry, En
         PTRef targetVersion = graph.getNextStateVersion(graph.getTarget(edge));
         TermUtils::substitutions_map mapping;
         TermUtils(logic).mapFromPredicate(targetVersion, factInstance, mapping);
-        vec<PTRef> factValues;
-        for (auto const & varValue : mapping) {
-            factValues.push(logic.mkEq(varValue.first, varValue.second));
-        }
-        PTRef factConstraint = logic.mkAnd(std::move(factValues));
-        solver.insertFormula(factConstraint);
-//        std::cout << logic.pp(factConstraint) << std::endl;
+        PTRef simplifiedConstraint = TermUtils(logic).varSubstitute(edgeConstraint, mapping);
+        solver.insertFormula(simplifiedConstraint);
+    } else {
+        solver.insertFormula(edgeConstraint);
     }
     auto res = solver.check();
     if (res != s_True) {
