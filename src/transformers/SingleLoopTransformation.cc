@@ -265,7 +265,7 @@ SingleLoopTransformation::WitnessBackTranslator::translateInvariant(PTRef induct
         }
         // No alien variable, we can translate the invariant using predicate's variables
         TermUtils::substitutions_map varSubstitutions;
-        PTRef basePredicate = TimeMachine(logic).versionZeroToUnversioned(graph.getStateVersion(vertex));
+        PTRef basePredicate = TimeMachine(logic).versionedFormulaToUnversioned(graph.getStateVersion(vertex));
         auto argsNum = logic.getPterm(basePredicate).nargs();
         for (auto i = 0u; i < argsNum; ++i) {
             PTRef positionVar = positionVarMap.at(VarPosition{vertex, i});

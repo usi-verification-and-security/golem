@@ -420,7 +420,7 @@ VerificationResult LawiContext::unwind() {
     for (auto vid : graph.getVertices()) {
         PTRef statePredicate = graph.getStateVersion(vid);
         if (logic.isTrue(statePredicate) or logic.isFalse(statePredicate)) { continue; }
-        PTRef predicate = logic.getPterm(statePredicate).size() > 0 ? TimeMachine(logic).versionZeroToUnversioned(statePredicate) : statePredicate;
+        PTRef predicate = logic.getPterm(statePredicate).size() > 0 ? TimeMachine(logic).versionedFormulaToUnversioned(statePredicate) : statePredicate;
         auto it = finalLabels.find(vid);
         const PTRef definition = [&]() {
             if (it == finalLabels.end()) {
@@ -430,7 +430,7 @@ VerificationResult LawiContext::unwind() {
             if (logic.isOr(definition) or logic.isAnd(definition)) {
                 definition = simplifyUnderAssignment_Aggressive(definition, logic);
             }
-            return TimeMachine(logic).versionZeroToUnversioned(definition);
+            return TimeMachine(logic).versionedFormulaToUnversioned(definition);
         }();
         auto insertRes = solution.insert(std::make_pair(predicate, definition));
         assert(insertRes.second);

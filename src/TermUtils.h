@@ -298,7 +298,7 @@ public:
         return isVersionedName(varName);
     }
 
-    PTRef versionZeroToUnversioned(PTRef fla) const;
+    [[nodiscard]] PTRef versionedFormulaToUnversioned(PTRef fla) const;
 };
 
 class VersionManager {

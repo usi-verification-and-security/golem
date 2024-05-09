@@ -488,7 +488,7 @@ void LATermUtils::simplifyConjunction(std::vector<PtAsgn> & conjuncts) {
     simplifyJunction<Conjunction>(conjuncts, logic);
 }
 
-PTRef TimeMachine::versionZeroToUnversioned(PTRef fla) const {
+PTRef TimeMachine::versionedFormulaToUnversioned(PTRef fla) const {
     class Config : public DefaultRewriterConfig {
         Logic const & logic;
         TimeMachine const& tm;
@@ -499,7 +499,6 @@ PTRef TimeMachine::versionZeroToUnversioned(PTRef fla) const {
         PTRef rewrite(PTRef term) override {
             if (logic.isVar(term)) {
                 if (tm.isVersioned(term)) {
-                    assert(tm.getVersionNumber(term) == 0);
                     return tm.getUnversioned(term);
                 }
             }
