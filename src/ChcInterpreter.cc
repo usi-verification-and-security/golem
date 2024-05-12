@@ -22,6 +22,7 @@
 #include <engine/Lawi.h>
 #include <engine/Spacer.h>
 #include <engine/TPA.h>
+#include <engine/ArgBasedEngine.h>
 #include <memory>
 #include <signal.h>
 #include <sys/types.h>
@@ -596,6 +597,8 @@ std::unique_ptr<Engine> ChcInterpreterContext::getEngine(std::string const & eng
         return std::unique_ptr<Engine>(new Kind(logic, opts));
     } else if (engineStr == "imc") {
         return std::unique_ptr<Engine>(new IMC(logic, opts));
+    } else if (engineStr == "pa") {
+        return std::unique_ptr<Engine>(new ARGBasedEngine(logic, opts));
     } else {
         throw std::invalid_argument("Unknown engine specified");
     }
