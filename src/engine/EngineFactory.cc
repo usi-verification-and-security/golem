@@ -6,6 +6,7 @@
 
 #include "EngineFactory.h"
 
+#include "ArgBasedEngine.h"
 #include "Bmc.h"
 #include "IMC.h"
 #include "Kind.h"
@@ -31,6 +32,8 @@ std::unique_ptr<Engine> EngineFactory::getEngine(std::string_view engine) && {
         return std::make_unique<IMC>(logic, options);
     } else if (engine == "pdkind") {
         return std::make_unique<PDKind>(logic, options);
+    } else if (engine == "pa") {
+        return std::make_unique<ARGBasedEngine>(logic, options);
     } else {
         throw std::invalid_argument("Unknown engine specified");
     }
