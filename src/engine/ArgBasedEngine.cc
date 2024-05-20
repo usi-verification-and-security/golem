@@ -149,7 +149,7 @@ public:
 
     [[nodiscard]] auto const & getClauses() const { return clauses; }
 
-    void refine(std::unordered_map<NodeId, PTRef> const & refinementInfo);
+    void refine(std::unordered_map<SymRef, std::vector<PTRef>, SymRefHash> const & refinementInfo);
 };
 
 struct UnprocessedEdge {
@@ -163,43 +163,43 @@ public:
     static constexpr std::size_t NO_ID = static_cast<std::size_t>(-1);
     static InterpolationTree make(ARG const & arg, UnprocessedEdge const & queryEdge);
     [[nodiscard]] PTRef getInstanceFor(NodeId id) const {
-        ARG::NodeId argId = nodes[id].argNode;
-        return argId == NO_ID ? versioningHelper.getClauses().getLogic().getTerm_false() : versioningHelper.argNodeToSymbolInstance.at(argId);
+        assert(nodeToSymbolInstance.count(id) > 0);
+        return nodeToSymbolInstance.at(id);
     }
 private:
-    struct VersioningHelper {
-        friend InterpolationTree;
-    public:
-        explicit VersioningHelper(ARG const & arg) : arg(arg) {}
-        PTRef getVersionedConstraint(ARG::Edge const & argEdge);
-    private:
-        [[nodiscard]] ChcDirectedHyperGraph const & getClauses() const { return arg.getClauses(); }
-
-        ARG const & arg;
-        std::map<ARG::NodeId, PTRef> argNodeToSymbolInstance;
-        std::unordered_map<SymRef, std::size_t, SymRefHash> symbolEncountered;
-    };
-
-
     struct Node {
-        PTRef constraint;
         NodeId id;
         NodeId parent;
-        ARG::NodeId argNode;
+        std::vector<NodeId> children;
+        PTRef label;
         // For CEX generation
         EId clauseId;
     };
 
     std::vector<Node> nodes;
-    VersioningHelper versioningHelper;
+    std::map<NodeId, PTRef> nodeToSymbolInstance;
+    NodeId rootId {0};
 
-    explicit InterpolationTree(ARG const & arg) : versioningHelper(arg) {}
+    explicit InterpolationTree() {}
 
-    NodeId addNode(ARG::NodeId argNode, NodeId parent, PTRef label, EId clauseId) {
-        Node node{.constraint = label, .id = nodes.size(), .parent = parent, .argNode = argNode, .clauseId = clauseId};
+    NodeId createNode(NodeId parent, EId clauseId) {
+        Node node{.id = nodes.size(), .parent = parent, .clauseId = clauseId};
         nodes.push_back(node);
         return nodes.back().id;
     }
+
+    void addChild(NodeId parent, NodeId child) {
+        assert(parent < nodes.size());
+        nodes[parent].children.push_back(child);
+    }
+
+    void setLabel(NodeId node, PTRef label) {
+        assert(node < nodes.size());
+        nodes[node].label = label;
+    }
+
+    void computeLabels(ARG const & arg);
+
 public:
     struct Result {
         std::unique_ptr<Model> model = nullptr;
@@ -229,7 +229,7 @@ class Algorithm {
     AdjacencyListsGraphRepresentation representation;
     EdgeQueue queue;
     ARG arg;
-    std::unordered_map<ARG::NodeId, PTRef> lastRefinementInfo;
+    std::unordered_map<SymRef, std::vector<PTRef>, SymRefHash> lastRefinementInfo;
     InvalidityWitness witness;
 
 public:
@@ -302,6 +302,7 @@ void Algorithm::computeNewUnprocessedEdges(ARG::NodeId nodeId) {
     };
 
     auto const & candidateClauses = representation.getOutgoingEdgesFor(arg.getPredicateSymbol(nodeId));
+    // TODO: We may get the same edge multiple times if the predicate symbol appears multiple times in the body
     for (EId edge : candidateClauses) {
         // find all instances of edge sources in ARG and check feasibility
         auto sources = clauses.getSources(edge);
@@ -310,7 +311,7 @@ void Algorithm::computeNewUnprocessedEdges(ARG::NodeId nodeId) {
         // TODO: What if we have a clause with multiple occurences of the same predicate?
         std::transform(std::begin(sources), std::end(sources), std::back_inserter(allInstances), [&](auto symbol) { return arg.getInstancesFor(symbol);});
         if (std::any_of(allInstances.begin(), allInstances.end(), [](auto const & nodeInstances){ return nodeInstances.empty(); })) {
-            return;
+            continue;
         }
         std::vector<std::size_t> indices(sources.size(), 0u);
         Checker checker(clauses.getEdgeLabel(edge), clauses.getLogic(), arg);
@@ -361,12 +362,12 @@ bool Algorithm::isRealProof(UnprocessedEdge const & query) {
     } else {
         TimeMachine timeMachine(clauses.getLogic());
         for (auto const & node : interpolationTree.getNodes()) {
-            if (node.argNode == InterpolationTree::NO_ID) { continue; }
+            if (node.parent == InterpolationTree::NO_ID) { continue; }
             assert(itpResult.interpolant.count(node.id) > 0);
             PTRef interpolant = itpResult.interpolant.at(node.id);
             PTRef clearedInterpolant = timeMachine.versionedFormulaToUnversioned(interpolant);
-            auto [_, inserted] = lastRefinementInfo.emplace(node.argNode, clearedInterpolant);
-            assert(inserted); (void)inserted;
+            auto symbol = clauses.getTarget(node.clauseId);
+            lastRefinementInfo[symbol].push_back(clearedInterpolant);
         }
     }
     return itpResult.isFeasible();
@@ -448,7 +449,7 @@ InterpolationTree::Result InterpolationTree::solve(Logic & logic) const {
     SMTSolver solver(logic, SMTSolver::WitnessProduction::MODEL_AND_INTERPOLANTS);
     for (auto const & node : nodes) {
         assert(node.parent == InterpolationTree::NO_ID or node.id > node.parent);
-        solver.getCoreSolver().insertFormula(node.constraint);
+        solver.getCoreSolver().insertFormula(node.label);
     }
     auto res = solver.getCoreSolver().check();
     if (res == s_True) { return InterpolationTree::Result{.model = solver.getCoreSolver().getModel(), .interpolant = {}}; }
@@ -483,55 +484,65 @@ void Algorithm::refine() {
     }
 }
 
-PTRef InterpolationTree::VersioningHelper::getVersionedConstraint(ARG::Edge const & edge) {
-    auto const & clauses = getClauses();
+void InterpolationTree::computeLabels(ARG const & arg) {
+    assert(nodeToSymbolInstance.empty());
+    std::unordered_map<SymRef, std::size_t, SymRefHash> symbolEncountered;
+    auto const & clauses = arg.getClauses();
     auto & logic = clauses.getLogic();
+    nodeToSymbolInstance.emplace(rootId, logic.getTerm_false());
     TermUtils utils{logic};
     VersionManager manager{logic};
     TimeMachine timeMachine{logic};
-    TermUtils::substitutions_map substitutions;
-    EId clauseId = edge.clauseId;
-    // First process target.
-    // Assuming we process ARG from error to entry, target should always be already processed when processing ARG edge.
-    if (auto target = clauses.getTarget(clauseId); target != clauses.getExit()) {
-        assert(this->argNodeToSymbolInstance.count(edge.target) > 0);
-        PTRef predicateInstance = clauses.getNextStateVersion(target);
-        PTRef argNodeInstance = argNodeToSymbolInstance.at(edge.target);
-        utils.mapFromPredicate(predicateInstance, argNodeInstance, substitutions);
-    }
-    // Now process sources
-    std::unordered_map<SymRef, int, SymRefHash> sourcesCounter;
-    auto const & sourceSymbols = clauses.getSources(clauseId);
-    auto const & argNodeSources = edge.sources;
-    assert(argNodeSources.size() == sourceSymbols.size());
-    for (std::size_t i = 0; i < argNodeSources.size(); ++i) {
-        SymRef sourceSymbol = sourceSymbols[i];
-        if (sourceSymbol == clauses.getEntry()) { continue; }
-        ARG::NodeId argNode = argNodeSources[i];
-        PTRef predicateInstance = clauses.getStateVersion(sourceSymbol, sourcesCounter[sourceSymbol]++);
-        auto symbolVersion = symbolEncountered[sourceSymbol]++;
-        auto vars = utils.predicateArgsInOrder(predicateInstance);
-        for (PTRef var : vars) {
-            PTRef versionedVar = timeMachine.sendFlaThroughTime(
-                timeMachine.getVarVersionZero(manager.toBase(var)), static_cast<int>(symbolVersion));
-            auto[_, inserted] = substitutions.emplace(var, versionedVar);
-            assert(inserted); (void)inserted;
-            // TODO: Check how auxiliary vars look like
+    assert(not nodes.empty());
+    NodeId root = 0;
+    std::vector<NodeId> stack {root};
+    while (not stack.empty()) {
+        NodeId current = stack.back();
+        stack.pop_back();
+        assert(current < nodes.size());
+        auto const & node = nodes[current];
+//        if (node.children.empty()) { continue; }
+        TermUtils::substitutions_map substitutions;
+        auto const & edge = clauses.getEdge(node.clauseId);
+        assert((edge.from.size() == 1 and edge.from[0] == clauses.getEntry()) or edge.from.size() == node.children.size());
+        if (auto target = edge.to; target != clauses.getExit()) {
+            assert(nodeToSymbolInstance.count(current) > 0);
+            PTRef predicateInstance = clauses.getNextStateVersion(target);
+            PTRef nodeInstance = nodeToSymbolInstance.at(current);
+            utils.mapFromPredicate(predicateInstance, nodeInstance, substitutions);
         }
-        PTRef argNodePredicate = utils.varSubstitute(predicateInstance, substitutions);
-        auto [_, inserted] = argNodeToSymbolInstance.emplace(argNode, argNodePredicate);
-        assert(inserted); (void)inserted;
+        std::unordered_map<SymRef, int, SymRefHash> sourcesCounter;
+        for (std::size_t i = 0; i < node.children.size(); ++i) {
+            SymRef sourceSymbol = edge.from[i];
+            if (sourceSymbol == clauses.getEntry()) { assert(false); continue; } // TODO: check if this is needed
+            PTRef predicateInstance = clauses.getStateVersion(sourceSymbol, sourcesCounter[sourceSymbol]++);
+            auto symbolVersion = symbolEncountered[sourceSymbol]++;
+            auto vars = utils.predicateArgsInOrder(predicateInstance);
+            for (PTRef var : vars) {
+                PTRef versionedVar = timeMachine.sendFlaThroughTime(
+                    timeMachine.getVarVersionZero(manager.toBase(var)), static_cast<int>(symbolVersion));
+                auto[_, inserted] = substitutions.emplace(var, versionedVar);
+                assert(inserted); (void)inserted;
+                // TODO: Check how auxiliary vars look like
+            }
+            PTRef nodePredicate = utils.varSubstitute(predicateInstance, substitutions);
+            auto [_, inserted] = nodeToSymbolInstance.emplace(node.children[i], nodePredicate);
+            assert(inserted); (void)inserted;
+        }
+        PTRef defaultConstraint = edge.fla.fla;
+        PTRef versionedConstraint = utils.varSubstitute(defaultConstraint, substitutions);
+        setLabel(current, versionedConstraint);
+        for (NodeId childId : node.children) {
+            stack.push_back(childId);
+        }
     }
-
-    PTRef defaultConstraint = clauses.getEdgeLabel(clauseId);
-    PTRef versionedConstraint = utils.varSubstitute(defaultConstraint, substitutions);
-    return versionedConstraint;
 }
 
-void ARG::refine(std::unordered_map<NodeId, PTRef> const & refinementInfo) {
-    for (auto && [nodeId, newPredicate] : refinementInfo) {
-        assert(nodeId < nodes.size());
-        predicateManager.addPredicate(nodes[nodeId].predicateSymbol, newPredicate);
+void ARG::refine(std::unordered_map<SymRef, std::vector<PTRef>, SymRefHash> const & refinementInfo) {
+    for (auto && [predicateSymbol, newPredicates] : refinementInfo) {
+        for (PTRef newPredicate : newPredicates) {
+            predicateManager.addPredicate(predicateSymbol, newPredicate);
+        }
     }
     // Regenerate ARG
     // For now, we clear it completely
@@ -544,9 +555,8 @@ void ARG::refine(std::unordered_map<NodeId, PTRef> const & refinementInfo) {
 }
 
 InterpolationTree InterpolationTree::make(ARG const & arg, UnprocessedEdge const & queryEdge) {
-    InterpolationTree tree(arg);
-    ARG::Edge fakeEdge {.sources = queryEdge.sources, .target = InterpolationTree::NO_ID, .clauseId = queryEdge.eid};
-    auto itpNodeId = tree.addNode(InterpolationTree::NO_ID, InterpolationTree::NO_ID, tree.versioningHelper.getVersionedConstraint(fakeEdge), queryEdge.eid);
+    InterpolationTree tree;
+    tree.rootId = tree.createNode(InterpolationTree::NO_ID, queryEdge.eid);
 
     struct Entry {
         ARG::NodeId argId;
@@ -558,15 +568,17 @@ InterpolationTree InterpolationTree::make(ARG const & arg, UnprocessedEdge const
             stack.push_back({.argId = *it, .parentId = parentId});
         }
     };
-    addSources(queryEdge.sources.begin(), queryEdge.sources.end(), itpNodeId);
+    addSources(queryEdge.sources.rbegin(), queryEdge.sources.rend(), tree.rootId);
     while (not stack.empty()) {
         auto [current, parent] = stack.back();
         stack.pop_back();
         if (current == ARG::ENTRY) { continue; }
         auto const & edge = arg.getIncomingEdge(current);
-        auto currentId = tree.addNode(current, parent, tree.versioningHelper.getVersionedConstraint(edge), edge.clauseId);
-        addSources(edge.sources.begin(), edge.sources.end(), currentId);
+        auto currentId = tree.createNode(parent, edge.clauseId);
+        tree.addChild(parent, currentId);
+        addSources(edge.sources.rbegin(), edge.sources.rend(), currentId);
     }
+    tree.computeLabels(arg);
     return tree;
 }
 
@@ -594,7 +606,8 @@ void Algorithm::computeInvalidityWitness(InterpolationTree const & itpTree, Mode
         auto premisesIt = premiseMap.find(node.id);
         step.premises = premisesIt == premiseMap.end() ? std::vector<std::size_t>{0} : premisesIt->second;
         if (node.parent != InterpolationTree::NO_ID) {
-            premiseMap[node.parent].push_back(step.index);
+            auto & parentPremises = premiseMap[node.parent];
+            parentPremises.insert(parentPremises.begin(), step.index);
         }
         derivation.addDerivationStep(std::move(step));
 
