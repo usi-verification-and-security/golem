@@ -6,6 +6,7 @@
 
 #include "ArgBasedEngine.h"
 
+#include "transformers/Transformer.h"
 #include "utils/SmtSolver.h"
 
 #include <memory>
@@ -28,7 +29,9 @@ public:
         return it->second;
     }
 
-    void addPredicate(SymRef symbol, PTRef predicate) { symbolsToPredicates.at(symbol).insert(predicate); }
+    void addPredicate(SymRef symbol, PTRef predicate) {
+        symbolsToPredicates.at(symbol).insert(predicate);
+    }
 private:
     Logic & logic;
     std::unordered_map<SymRef, Predicates, SymRefHash> symbolsToPredicates;
@@ -161,7 +164,9 @@ class InterpolationTree {
 public:
     using NodeId = std::size_t;
     static constexpr std::size_t NO_ID = static_cast<std::size_t>(-1);
+
     static InterpolationTree make(ARG const & arg, UnprocessedEdge const & queryEdge);
+
     [[nodiscard]] PTRef getInstanceFor(NodeId id) const {
         assert(nodeToSymbolInstance.count(id) > 0);
         return nodeToSymbolInstance.at(id);
@@ -209,6 +214,7 @@ public:
     };
 
     Result solve(Logic & logic) const;
+
 
     [[nodiscard]] std::vector<Node> getNodes() const { return nodes; }
 };
@@ -420,10 +426,65 @@ namespace {
     bool computeWitness(Options const & options) {
         return options.hasOption(Options::COMPUTE_WITNESS) and options.getOption(Options::COMPUTE_WITNESS) == "true";
     }
+
+    class AuxCleanupPass : public Transformer {
+    public:
+        struct BackTranslator : public WitnessBackTranslator {
+            InvalidityWitness translate(InvalidityWitness witness) override { return witness; }
+            ValidityWitness translate(ValidityWitness witness) override { return witness; }
+        };
+
+        TransformationResult transform(std::unique_ptr<ChcDirectedHyperGraph> graph) override {
+            Logic & logic = graph->getLogic();
+            TermUtils utils(logic);
+            std::size_t auxVarCounter = 0;
+            graph->forEachEdge([&](auto & edge) {
+                PTRef & constraint = edge.fla.fla;
+                vec<PTRef> predicateVars;
+                // vars from head
+                {
+                    auto headVars = utils.predicateArgsInOrder(graph->getNextStateVersion(edge.to));
+                    for (PTRef var : headVars) {
+                        assert(logic.isVar(var));
+                        predicateVars.push(var);
+                    }
+                }
+                // TODO: Implement a helper to iterate over source vertices together with instantiation counter
+                std::unordered_map<SymRef, std::size_t, SymRefHash> instanceCounter;
+                for (auto source : edge.from) {
+                    PTRef sourcePredicate = graph->getStateVersion(source, instanceCounter[source]++);
+                    for (PTRef var : utils.predicateArgsInOrder(sourcePredicate)) {
+                        assert(logic.isVar(var));
+                        predicateVars.push(var);
+                    }
+                }
+                constraint = TrivialQuantifierElimination(logic).tryEliminateVarsExcept(predicateVars, constraint);
+                auto isVarToNormalize = [&](PTRef var) {
+                    return logic.isVar(var) and std::find(predicateVars.begin(), predicateVars.end(), var) == predicateVars.end();
+                };
+                auto localVars = matchingSubTerms(logic, constraint, isVarToNormalize);
+                if (localVars.size() > 0) {
+                    TermUtils::substitutions_map subst;
+                    for (PTRef localVar : localVars) {
+                        SRef sort = logic.getSortRef(localVar);
+                        std::string uniq_name = "paux#" + std::to_string(auxVarCounter++);
+                        PTRef renamed = logic.mkVar(sort, uniq_name.c_str());
+                        subst.insert({localVar, renamed});
+                    }
+                    constraint = utils.varSubstitute(constraint, subst);
+                }
+            });
+
+            return {std::move(graph), std::make_unique<BackTranslator>()};
+        }
+    };
 }
 
 VerificationResult ARGBasedEngine::solve(const ChcDirectedHyperGraph & graph) {
-    return Algorithm(graph, computeWitness(options)).run();
+    auto graphCopy = std::make_unique<ChcDirectedHyperGraph>(graph);
+    AuxCleanupPass pass;
+    auto cleanedGraph = pass.transform(std::move(graphCopy));
+    return Algorithm(*cleanedGraph.first, computeWitness(options)).run();
 }
 
 bool EdgeQueue::isEmpty() const {
@@ -501,7 +562,6 @@ void InterpolationTree::computeLabels(ARG const & arg) {
         stack.pop_back();
         assert(current < nodes.size());
         auto const & node = nodes[current];
-//        if (node.children.empty()) { continue; }
         TermUtils::substitutions_map substitutions;
         auto const & edge = clauses.getEdge(node.clauseId);
         assert((edge.from.size() == 1 and edge.from[0] == clauses.getEntry()) or edge.from.size() == node.children.size());
@@ -514,7 +574,7 @@ void InterpolationTree::computeLabels(ARG const & arg) {
         std::unordered_map<SymRef, int, SymRefHash> sourcesCounter;
         for (std::size_t i = 0; i < node.children.size(); ++i) {
             SymRef sourceSymbol = edge.from[i];
-            if (sourceSymbol == clauses.getEntry()) { assert(false); continue; } // TODO: check if this is needed
+            assert(sourceSymbol != clauses.getEntry());
             PTRef predicateInstance = clauses.getStateVersion(sourceSymbol, sourcesCounter[sourceSymbol]++);
             auto symbolVersion = symbolEncountered[sourceSymbol]++;
             auto vars = utils.predicateArgsInOrder(predicateInstance);
@@ -523,13 +583,21 @@ void InterpolationTree::computeLabels(ARG const & arg) {
                     timeMachine.getVarVersionZero(manager.toBase(var)), static_cast<int>(symbolVersion));
                 auto[_, inserted] = substitutions.emplace(var, versionedVar);
                 assert(inserted); (void)inserted;
-                // TODO: Check how auxiliary vars look like
             }
             PTRef nodePredicate = utils.varSubstitute(predicateInstance, substitutions);
             auto [_, inserted] = nodeToSymbolInstance.emplace(node.children[i], nodePredicate);
             assert(inserted); (void)inserted;
         }
         PTRef defaultConstraint = edge.fla.fla;
+        // Deal with auxiliary variables which need to be versioned, because same constraint can be present multiple times in the ITP tree
+        auto auxVars = matchingSubTerms(logic, defaultConstraint, [&](PTRef term) { return logic.isVar(term) and substitutions.find(term) == substitutions.end(); });
+        if (auxVars.size() > 0) {
+            for (PTRef var : auxVars) {
+                assert(not timeMachine.isVersioned(var));
+                PTRef versionZero = timeMachine.getVarVersionZero(var);
+                substitutions.insert({var, timeMachine.sendVarThroughTime(versionZero, current)});
+            }
+        }
         PTRef versionedConstraint = utils.varSubstitute(defaultConstraint, substitutions);
         setLabel(current, versionedConstraint);
         for (NodeId childId : node.children) {
