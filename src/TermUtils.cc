@@ -132,12 +132,16 @@ void TermUtils::printTermWithLets(std::ostream & out, PTRef root) {
 
     auto toStr = [this, &strRepr](PTRef ref) -> std::string {
         Pterm const & pterm = logic.getPterm(ref);
-        auto symbol = logic.printSym(pterm.symb());
+        SymRef symbol = pterm.symb();
         if (pterm.size() == 0) {
-            return symbol;
+            if (auto * arithLogic = dynamic_cast<ArithLogic *>(&logic); arithLogic and arithLogic->isNumConst(symbol)) {
+                // TODO: OpenSMT should override printSym in ArithLogic in a similar manner it overrides printTerm
+                return logic.printTerm(ref);
+            }
+            return logic.printSym(symbol);
         }
         std::stringstream ss;
-        ss << '(' << symbol << ' ';
+        ss << '(' << logic.printSym(symbol) << ' ';
         for (PTRef child : pterm) {
             ss << strRepr.at(child) << ' ';
         }
