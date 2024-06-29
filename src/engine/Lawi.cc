@@ -343,7 +343,7 @@ class LawiContext{
         auto solverWrapper = std::make_unique<SMTSolver>(logic, SMTSolver::WitnessProduction::ONLY_INTERPOLANTS);
         solverWrapper->getConfig().setSimplifyInterpolant(4);
         if (options.hasOption(Options::LRA_ITP_ALG)) {
-            int algNumber = std::atoi(options.getOption(Options::LRA_ITP_ALG).c_str());
+            int algNumber = std::atoi(options.getOption(Options::LRA_ITP_ALG).value().c_str());
             solverWrapper->getConfig().setLRAInterpolationAlgorithm(ItpAlgorithm{algNumber});
         }
         return solverWrapper;

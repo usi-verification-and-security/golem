@@ -10,10 +10,12 @@
 #include "ChcSystem.h"
 #include "Normalizer.h"
 #include "Options.h"
-#include "osmt_parser.h"
+
+#include "engine/Engine.h" // TODO: remove this and create an engine factory
 #include "proofs/Term.h"
 #include "transformers/Transformer.h"
-#include <engine/Engine.h> // TODO: remove this and create an engine factory
+
+#include "osmt_parser.h"
 
 #include <memory>
 
@@ -113,13 +115,15 @@ private:
 
     void interpretCheckSat();
 
-    void reportError(std::string const & msg);
+    static void reportError(std::string const & msg);
 
-    VerificationResult solve(std::string engine, ChcDirectedHyperGraph const & hyperGraph);
+    VerificationResult solve(std::string const & engine, ChcDirectedHyperGraph const & hyperGraph);
 
-    void validate(VerificationResult result, ChcDirectedHyperGraph const & originalGraph, bool validateWitness,
-                  bool printWitness, WitnessBackTranslator & translator,
-                  Normalizer::Equalities const & normalizingEqualities, std::string format);
+    bool hasWorkAfterAnswer() const;
+
+    void doWorkAfterAnswer(VerificationResult result, ChcDirectedHyperGraph const & originalGraph,
+                           WitnessBackTranslator & translator,
+                           Normalizer::Equalities const & normalizingEqualities) const;
 
     SRef sortFromASTNode(ASTNode const & node) const;
 
@@ -140,7 +144,7 @@ class ChcInterpreter {
 public:
     std::unique_ptr<ChcSystem> interpretSystemAst(Logic & logic, const ASTNode * root);
 
-    ChcInterpreter(Options const & opts) : opts(opts) {}
+    explicit ChcInterpreter(Options const & opts) : opts(opts) {}
 
 private:
     Options const & opts;

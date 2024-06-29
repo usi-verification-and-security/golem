@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2022, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2020-2024, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
@@ -8,6 +8,7 @@
 #define GOLEM_OPTIONS_H
 
 #include <map>
+#include <optional>
 #include <string>
 
 class Options {
@@ -17,12 +18,17 @@ public:
         options.emplace(std::move(key), std::move(value));
     }
 
-    std::string getOption(std::string const & key) const {
+    [[nodiscard]] std::optional<std::string> getOption(std::string const & key) const {
         auto it = options.find(key);
-        return it == options.end() ? "" : it->second;
+        return it == options.end() ? std::nullopt : std::optional<std::string>(it->second);
     }
 
-    bool hasOption(std::string const & key) const {
+    [[nodiscard]] std::string getOrDefault(std::string const & key, std::string const & def) const {
+        auto it = options.find(key);
+        return it == options.end() ? def : it->second;
+    }
+
+    [[nodiscard]] bool hasOption(std::string const & key) const {
         auto it = options.find(key);
         return it != options.end();
     }

@@ -29,13 +29,17 @@ public:
 
 class TPABase;
 
+enum class TPACore { BASIC, SPLIT };
+
 class TPAEngine : public Engine {
     Logic & logic;
     Options options;
+    TPACore coreAlgorithm;
     friend class TransitionSystemNetworkManager;
 
 public:
-    TPAEngine(Logic & logic, Options options) : logic(logic), options(std::move(options)) {}
+    TPAEngine(Logic & logic, Options options, TPACore core)
+        : logic(logic), options(std::move(options)), coreAlgorithm(core) {}
 
     VerificationResult solve(ChcDirectedHyperGraph const & graph) override;
 
@@ -100,7 +104,7 @@ protected:
 
 public:
     TPABase(Logic & logic, Options const & options) : logic(logic), options(options) {
-        if (options.hasOption(Options::VERBOSE)) { verbosity = std::stoi(options.getOption(Options::VERBOSE)); }
+        verbosity = std::stoi(options.getOrDefault(Options::VERBOSE, "0"));
         if (options.hasOption(Options::TPA_USE_QE)) { useQE = true; }
     }
 

@@ -20,12 +20,8 @@ class Kind : public Engine {
 public:
 
     Kind(Logic & logic, Options const & options) : logic(logic) {
-        if (options.hasOption(Options::VERBOSE)) {
-            verbosity = std::stoi(options.getOption(Options::VERBOSE));
-        }
-        if (options.hasOption(Options::COMPUTE_WITNESS)) {
-            computeWitness = options.getOption(Options::COMPUTE_WITNESS) == "true";
-        }
+        verbosity = std::stoi(options.getOrDefault(Options::VERBOSE, "0"));
+        computeWitness = options.getOrDefault(Options::COMPUTE_WITNESS, "") == "true";
     }
 
     virtual VerificationResult solve(ChcDirectedHyperGraph const & graph) override;

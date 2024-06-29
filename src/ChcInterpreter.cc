@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2023, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2020-2024, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
@@ -7,6 +7,12 @@
 #include "ChcInterpreter.h"
 #include "Normalizer.h"
 #include "Validator.h"
+#include "engine/Bmc.h"
+#include "engine/IMC.h"
+#include "engine/Kind.h"
+#include "engine/Lawi.h"
+#include "engine/Spacer.h"
+#include "engine/TPA.h"
 #include "graph/ChcGraph.h"
 #include "graph/ChcGraphBuilder.h"
 #include "proofs/Term.h"
@@ -16,14 +22,10 @@
 #include "transformers/RemoveUnreachableNodes.h"
 #include "transformers/SimpleChainSummarizer.h"
 #include "transformers/TransformationPipeline.h"
-#include <engine/Bmc.h>
-#include <engine/IMC.h>
-#include <engine/Kind.h>
-#include <engine/Lawi.h>
-#include <engine/Spacer.h>
-#include <engine/TPA.h>
+
+#include <csignal>
 #include <memory>
-#include <signal.h>
+
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -53,7 +55,7 @@ std::unique_ptr<ChcSystem> ChcInterpreter::interpretSystemAst(Logic & logic, con
 }
 
 std::unique_ptr<ChcSystem> ChcInterpreterContext::interpretSystemAst(const ASTNode * root) {
-    if (not root) { return std::unique_ptr<ChcSystem>(); }
+    if (not root) { return {}; }
     this->system.reset();
     auto it = root->children->begin();
     for (; it != root->children->end() && not this->doExit; ++it) {
@@ -241,8 +243,7 @@ std::shared_ptr<Term> ChcInterpreterContext::ASTtoTerm(const ASTNode & node) {
             std::shared_ptr arg_term = ASTtoTerm(**it);
             args.push_back(arg_term);
         }
-        assert(args.size() > 0);
-
+        assert(not args.empty());
         if (op == "-" or op == "+") {
             if (args.size() <= 1) { return std::make_shared<Terminal>("(- " + args[0]->printTerm() + ")", Term::INT); }
         }
@@ -386,27 +387,29 @@ PTRef ChcInterpreterContext::parseTerm(const ASTNode & termNode) {
     }
 }
 
-VerificationResult ChcInterpreterContext::solve(std::string engine_s, ChcDirectedHyperGraph const & hypergraph) {
+VerificationResult ChcInterpreterContext::solve(std::string const & engine_s,
+                                                ChcDirectedHyperGraph const & hypergraph) {
     auto engine = getEngine(engine_s);
     auto result = engine->solve(hypergraph);
-    switch (result.getAnswer()) {
-        case VerificationAnswer::SAFE: {
-            std::cout << "sat" << std::endl;
-            break;
-        }
-        case VerificationAnswer::UNSAFE: {
-            std::cout << "unsat" << std::endl;
-            break;
-        }
-        case VerificationAnswer::UNKNOWN:
-            break;
-    }
     return result;
 }
 
-void ChcInterpreterContext::validate(VerificationResult result, ChcDirectedHyperGraph const & originalGraph,
-                                     bool validateWitness, bool printWitness, WitnessBackTranslator & translator,
-                                     Normalizer::Equalities const & normalizingEqualities, std::string format) {
+bool ChcInterpreterContext::hasWorkAfterAnswer() const {
+    bool validateWitness = opts.hasOption(Options::VALIDATE_RESULT);
+    assert(not validateWitness || opts.getOption(Options::VALIDATE_RESULT) == std::string("true"));
+    bool printWitness = opts.hasOption(Options::PRINT_WITNESS);
+    assert(not printWitness || opts.getOption(Options::PRINT_WITNESS) == std::string("true"));
+    return printWitness or validateWitness;
+}
+
+void ChcInterpreterContext::doWorkAfterAnswer(VerificationResult result, ChcDirectedHyperGraph const & originalGraph,
+                                              WitnessBackTranslator & translator,
+                                              Normalizer::Equalities const & normalizingEqualities) const {
+    bool validateWitness = opts.hasOption(Options::VALIDATE_RESULT);
+    assert(not validateWitness || opts.getOption(Options::VALIDATE_RESULT) == std::string("true"));
+    bool printWitness = opts.hasOption(Options::PRINT_WITNESS);
+    assert(not printWitness || opts.getOption(Options::PRINT_WITNESS) == std::string("true"));
+    if (not printWitness and not validateWitness) { return; }
 
     result = translator.translate(std::move(result));
     if (not result.hasWitness()) {
@@ -414,8 +417,8 @@ void ChcInterpreterContext::validate(VerificationResult result, ChcDirectedHyper
         std::cerr << ";No witness has been computed.\n;Reason: " << result.getNoWitnessReason() << std::endl;
         return;
     }
-
     if (printWitness) {
+        auto format = opts.getOrDefault(Options::PROOF_FORMAT, "legacy");
         result.printWitness(std::cout, logic, originalGraph, originalAssertions, normalizingEqualities, format);
     }
     if (validateWitness) {
@@ -435,22 +438,31 @@ void ChcInterpreterContext::validate(VerificationResult result, ChcDirectedHyper
     }
 }
 
+namespace {
+void printAnswer(VerificationAnswer answer) {
+    switch (answer) {
+        case VerificationAnswer::SAFE: {
+            std::cout << "sat" << std::endl;
+            break;
+        }
+        case VerificationAnswer::UNSAFE: {
+            std::cout << "unsat" << std::endl;
+            break;
+        }
+        case VerificationAnswer::UNKNOWN:
+            std::cout << "unknown" << std::endl;
+            break;
+    }
+}
+} // namespace
+
 void ChcInterpreterContext::interpretCheckSat() {
-
-    bool validateWitness = opts.hasOption(Options::VALIDATE_RESULT);
-    assert(not validateWitness || opts.getOption(Options::VALIDATE_RESULT) == std::string("true"));
-    bool printWitness = opts.hasOption(Options::PRINT_WITNESS);
-    std::string format = "legacy";
-    if (opts.hasOption(Options::PROOF_FORMAT)) { format = opts.getOption(Options::PROOF_FORMAT); }
-    assert(not printWitness || opts.getOption(Options::PRINT_WITNESS) == std::string("true"));
-
     Normalizer normalizer(logic);
     auto normalizedSystem = normalizer.normalize(*system);
-    auto const & normalizingEqualities = normalizer.getNormalizingEqualities();
 
     auto hypergraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
     std::unique_ptr<ChcDirectedHyperGraph> originalGraph{nullptr};
-    if (validateWitness or printWitness) { // Store copy of the original graph for validating purposes
+    if (hasWorkAfterAnswer()) { // Store copy of the original graph for validating purposes
         originalGraph = std::make_unique<ChcDirectedHyperGraph>(*hypergraph);
     }
 
@@ -464,10 +476,11 @@ void ChcInterpreterContext::interpretCheckSat() {
     auto [newGraph, translator] = TransformationPipeline(std::move(transformations)).transform(std::move(hypergraph));
     hypergraph = std::move(newGraph);
     // This if is needed to run the portfolio of multiple engines
-    if (opts.getOption(Options::ENGINE).find(',') != std::string::npos) {
+    auto engineName = opts.getOrDefault(Options::ENGINE, "spacer");
+    if (engineName.find(',') != std::string::npos) {
         std::string tmp;
         std::vector<std::string> engines;
-        std::stringstream ss(opts.getOption(Options::ENGINE));
+        std::stringstream ss(engineName);
         while (getline(ss, tmp, ',')) {
             engines.push_back(tmp);
         }
@@ -477,11 +490,13 @@ void ChcInterpreterContext::interpretCheckSat() {
         for (uint i = 0; i < engines.size(); i++) {
             if (getpid() == parent) { processes.push_back(fork()); }
             if (processes[i] == 0) {
+                // child process
                 auto result = solve(engines[i], *hypergraph);
                 if (result.getAnswer() == VerificationAnswer::UNKNOWN) { exit(1); }
-                if (validateWitness || printWitness) {
-                    validate(std::move(result), *originalGraph, validateWitness, printWitness, *translator,
-                             normalizingEqualities, format);
+                printAnswer(result.getAnswer());
+                if (hasWorkAfterAnswer()) {
+                    doWorkAfterAnswer(std::move(result), *originalGraph, *translator,
+                                      normalizer.getNormalizingEqualities());
                 }
                 return;
             }
@@ -492,7 +507,7 @@ void ChcInterpreterContext::interpretCheckSat() {
             // Parent process waits until at least one child finishes
             pid_t done = wait(&status);
             if (done == -1) {
-                // If all of the children processes are finished the run, we stop
+                // If all the children processes are finished, we stop
                 if (errno == ECHILD) return;
             } else {
                 // If some child process encountered error, we continue, otherwise if it returned
@@ -506,15 +521,10 @@ void ChcInterpreterContext::interpretCheckSat() {
         }
     }
 
-    auto result = solve(opts.hasOption(Options::ENGINE) ? opts.getOption(Options::ENGINE) : "spacer", *hypergraph);
-    if (result.getAnswer() == VerificationAnswer::UNKNOWN) {
-        std::cout << "unknown" << std::endl;
-        return;
-    }
-    if (validateWitness || printWitness) {
-
-        validate(std::move(result), *originalGraph, validateWitness, printWitness, *translator, normalizingEqualities,
-                 format);
+    auto result = solve(engineName, *hypergraph);
+    printAnswer(result.getAnswer());
+    if (result.getAnswer() != VerificationAnswer::UNKNOWN and hasWorkAfterAnswer()) {
+        doWorkAfterAnswer(std::move(result), *originalGraph, *translator, normalizer.getNormalizingEqualities());
     }
 }
 
@@ -584,18 +594,20 @@ bool ChcInterpreterContext::isUninterpretedPredicate(PTRef ref) const {
 }
 
 std::unique_ptr<Engine> ChcInterpreterContext::getEngine(std::string const & engineStr) const {
-    if (engineStr == TPAEngine::TPA or engineStr == TPAEngine::SPLIT_TPA) {
-        return std::unique_ptr<Engine>(new TPAEngine(logic, opts));
+    if (engineStr == "spacer") {
+        return std::make_unique<Spacer>(logic, opts);
+    } else if (engineStr == TPAEngine::TPA) {
+        return std::make_unique<TPAEngine>(logic, opts, TPACore::BASIC);
+    } else if (engineStr == TPAEngine::SPLIT_TPA) {
+        return std::make_unique<TPAEngine>(logic, opts, TPACore::SPLIT);
     } else if (engineStr == "bmc") {
-        return std::unique_ptr<Engine>(new BMC(logic, opts));
+        return std::make_unique<BMC>(logic, opts);
     } else if (engineStr == "lawi") {
-        return std::unique_ptr<Engine>(new Lawi(logic, opts));
-    } else if (engineStr == "spacer") {
-        return std::unique_ptr<Engine>(new Spacer(logic, opts));
+        return std::make_unique<Lawi>(logic, opts);
     } else if (engineStr == "kind") {
-        return std::unique_ptr<Engine>(new Kind(logic, opts));
+        return std::make_unique<Kind>(logic, opts);
     } else if (engineStr == "imc") {
-        return std::unique_ptr<Engine>(new IMC(logic, opts));
+        return std::make_unique<IMC>(logic, opts);
     } else {
         throw std::invalid_argument("Unknown engine specified");
     }

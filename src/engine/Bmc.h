@@ -17,9 +17,7 @@ class BMC : public Engine {
 public:
 
     BMC(Logic & logic, Options const & options) : logic(logic) {
-        if (options.hasOption(Options::VERBOSE)) {
-            verbosity = std::stoi(options.getOption(Options::VERBOSE));
-        }
+        verbosity = std::stoi(options.getOrDefault(Options::VERBOSE, "0"));
     }
 
     virtual VerificationResult solve(ChcDirectedHyperGraph const & graph) override {

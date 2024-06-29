@@ -30,7 +30,7 @@ TEST_F(TPATest, test_TPA_simple_safe)
             ChcHead{UninterpretedPredicate{logic->getTerm_false()}},
             ChcBody{{logic->mkLt(x, zero)}, {UninterpretedPredicate{current}}}
         }};
-    TPAEngine engine(*logic, options);
+    TPAEngine engine(*logic, options, TPACore::SPLIT);
     solveSystem(clauses, engine, VerificationAnswer::SAFE, true);
 }
 
@@ -53,7 +53,7 @@ TEST_F(TPATest, test_TPA_simple_unsafe)
             ChcHead{UninterpretedPredicate{logic->getTerm_false()}},
             ChcBody{{logic->mkGt(x, one)}, {UninterpretedPredicate{current}}}
         }};
-    TPAEngine engine(*logic, options);
+    TPAEngine engine(*logic, options, TPACore::SPLIT);
     solveSystem(clauses, engine, VerificationAnswer::UNSAFE, true);
 }
 
@@ -77,7 +77,7 @@ TEST_F(TPATest, test_TPA_CEX_zero) {
             ChcHead{UninterpretedPredicate{logic->getTerm_false()}},
             ChcBody{{logic->mkEq(x, zero)}, {UninterpretedPredicate{current}}}
         }};
-    TPAEngine engine(*logic, options);
+    TPAEngine engine(*logic, options, TPACore::BASIC);
     solveSystem(clauses, engine, VerificationAnswer::UNSAFE, true);
 }
 
@@ -101,7 +101,7 @@ TEST_F(TPATest, test_TPA_CEX_one) {
             ChcHead{UninterpretedPredicate{logic->getTerm_false()}},
             ChcBody{{logic->mkEq(x, one)}, {UninterpretedPredicate{current}}}
         }};
-    TPAEngine engine(*logic, options);
+    TPAEngine engine(*logic, options, TPACore::BASIC);
     solveSystem(clauses, engine, VerificationAnswer::UNSAFE, true);
 }
 
@@ -125,7 +125,7 @@ TEST_F(TPATest, test_TPA_CEX_six) {
             ChcHead{UninterpretedPredicate{logic->getTerm_false()}},
             ChcBody{{logic->mkEq(x, logic->mkIntConst(6))}, {UninterpretedPredicate{current}}}
         }};
-    TPAEngine engine(*logic, options);
+    TPAEngine engine(*logic, options, TPACore::BASIC);
     solveSystem(clauses, engine, VerificationAnswer::UNSAFE, true);
 }
 
@@ -161,7 +161,7 @@ TEST_F(TPATest, test_TPA_chain_of_two_unsafe) {
             ChcHead{UninterpretedPredicate{logic->getTerm_false()}},
             ChcBody{{logic->mkLt(x, zero)}, {UninterpretedPredicate{predS2Current}}}
         }};
-    TPAEngine engine(*logic, options);
+    TPAEngine engine(*logic, options, TPACore::SPLIT);
     solveSystem(clauses, engine, VerificationAnswer::UNSAFE, true);
 }
 
@@ -202,7 +202,7 @@ TEST_F(TPATest, test_TPA_graph_of_two_unsafe) {
                                           ChcHead{UninterpretedPredicate{logic->getTerm_false()}},
                                           ChcBody{{logic->mkLeq(x, zero)}, {UninterpretedPredicate{predS2Current}}}
                                   }};
-    TPAEngine engine(*logic, options);
+    TPAEngine engine(*logic, options, TPACore::SPLIT);
     solveSystem(clauses, engine, VerificationAnswer::UNSAFE, true);
 }
 
@@ -257,7 +257,7 @@ TEST_F(TPATest, test_TPA_graph_of_three_unsafe) {
                                           ChcHead{UninterpretedPredicate{logic->getTerm_false()}},
                                           ChcBody{{logic->mkGt(x, zero)}, {UninterpretedPredicate{predS2Current}}}
                                   }};
-    TPAEngine engine(*logic, options);
+    TPAEngine engine(*logic, options, TPACore::SPLIT);
     solveSystem(clauses, engine, VerificationAnswer::UNSAFE, true);
 }
 
@@ -293,7 +293,7 @@ TEST_F(TPATest, test_TPA_chain_of_two_safe) {
             ChcHead{UninterpretedPredicate{logic->getTerm_false()}},
             ChcBody{{logic->mkLt(x, zero)}, {UninterpretedPredicate{predS2Current}}}
         }};
-    TPAEngine engine(*logic, options);
+    TPAEngine engine(*logic, options, TPACore::SPLIT);
     solveSystem(clauses, engine, VerificationAnswer::SAFE, true);
 }
 
@@ -340,7 +340,7 @@ TEST_F(TPATest, test_TPA_chain_regression) {
             ChcBody{{logic->mkAnd(logic->mkEq(x, doubleVal), logic->mkNot(logic->mkEq(x, y)))},
                 {UninterpretedPredicate{predS2Current}}}
         }};
-    TPAEngine engine(*logic, options);
+    TPAEngine engine(*logic, options, TPACore::SPLIT);
     solveSystem(clauses, engine, VerificationAnswer::SAFE, true);
 }
 
@@ -385,7 +385,7 @@ TEST_F(TPATest, test_TPA_chain_regression_2) {
             ChcBody{{logic->mkEq(x, three)},
                 {UninterpretedPredicate{predS2Current}}}
         }};
-    TPAEngine engine(*logic, options);
+    TPAEngine engine(*logic, options, TPACore::SPLIT);
     solveSystem(clauses, engine, VerificationAnswer::UNSAFE);
 }
 
@@ -431,7 +431,7 @@ TEST_F(TPATest, test_TPA_chain_unsatisfiable_transition) {
             ChcBody{{logic->mkAnd(logic->mkEq(x, y), logic->mkGt(x, zero))},
                 {UninterpretedPredicate{predS2Current}}}
         }};
-    TPAEngine engine(*logic, options);
+    TPAEngine engine(*logic, options, TPACore::SPLIT);
     solveSystem(clauses, engine, VerificationAnswer::SAFE, true);
 }
 
@@ -471,7 +471,7 @@ TEST_F(TPATest, test_transformContractVertex_safe) {
             ChcHead{UninterpretedPredicate{logic->getTerm_false()}},
             ChcBody{{logic->mkEq(x, zero)}, {UninterpretedPredicate{predS2Current}}}
         }};
-    TPAEngine engine(*logic, options);
+    TPAEngine engine(*logic, options, TPACore::SPLIT);
     solveSystem(clauses, engine, VerificationAnswer::SAFE, true);
 }
 
@@ -504,7 +504,7 @@ TEST_F(TPATest, test_transformContractVertex_unsafe) {
             ChcHead{UninterpretedPredicate{logic->getTerm_false()}},
             ChcBody{{logic->mkEq(x, zero)}, {UninterpretedPredicate{predS2Current}}}
         }};
-    TPAEngine engine(*logic, options);
+    TPAEngine engine(*logic, options, TPACore::SPLIT);
     solveSystem(clauses, engine, VerificationAnswer::UNSAFE, true);
 }
 
@@ -518,7 +518,7 @@ TEST_F(TPATest, test_trivialSystem_unsafe) {
             ChcHead{UninterpretedPredicate{logic->getTerm_false()}},
             ChcBody{{logic->mkGt(xp, zero)}, {}}
         }};
-    TPAEngine engine(*logic, options);
+    TPAEngine engine(*logic, options, TPACore::SPLIT);
     solveSystem(clauses, engine, VerificationAnswer::UNSAFE, true);
 }
 
@@ -532,7 +532,7 @@ TEST_F(TPATest, test_trivialSystem_safe) {
             ChcHead{UninterpretedPredicate{logic->getTerm_false()}},
             ChcBody{{logic->mkAnd(logic->mkGt(xp, zero), logic->mkLt(xp, logic->mkNeg(one)))}, {}}
         }};
-    TPAEngine engine(*logic, options);
+    TPAEngine engine(*logic, options, TPACore::SPLIT);
     solveSystem(clauses, engine, VerificationAnswer::SAFE, true);
 }
 
@@ -575,7 +575,7 @@ TEST_F(TPATest, test_nextQueryVersion) {
          ChcBody{{logic->mkAnd(logic->mkNot(logic->mkLeq(z, seven)), logic->mkNot(logic->mkGeq(z, three)))},
                  {UninterpretedPredicate{predItpCurrent4}}}
         }};
-    TPAEngine engine(*logic, options);
+    TPAEngine engine(*logic, options, TPACore::SPLIT);
     solveSystem(clauses, engine, VerificationAnswer::SAFE, true);
 }
 
@@ -622,7 +622,7 @@ TEST_F(TPATest, test_TPA_BeyondTransitionSystemDAG_Unsafe)
             ChcHead{UninterpretedPredicate{logic->getTerm_false()}},
             ChcBody{{logic->mkAnd(logic->mkGt(y, zero), logic->mkEq(x, logic->mkIntConst(5)))}, {UninterpretedPredicate{current1}}}
         }};
-    TPAEngine engine(*logic, options);
+    TPAEngine engine(*logic, options, TPACore::SPLIT);
     solveSystem(clauses, engine, VerificationAnswer::UNSAFE, true);
 }
 
@@ -669,7 +669,7 @@ TEST_F(TPATest, test_TPA_BeyondTransitionSystemDAG_Safe)
             ChcHead{UninterpretedPredicate{logic->getTerm_false()}},
             ChcBody{{logic->mkOr(logic->mkLt(y, zero), logic->mkLt(x, zero))}, {UninterpretedPredicate{current1}}}
         }};
-    TPAEngine engine(*logic, options);
+    TPAEngine engine(*logic, options, TPACore::SPLIT);
     solveSystem(clauses, engine, VerificationAnswer::SAFE, true);
 }
 
@@ -730,7 +730,7 @@ TEST_F(TPATest, test_TPA_BeyondTransitionSystemDAG_Branching_Unsafe)
             ChcHead{UninterpretedPredicate{logic->getTerm_false()}},
             ChcBody{{logic->mkLt(x, logic->mkIntConst(5))}, {UninterpretedPredicate{current3}}}
         }};
-    TPAEngine engine(*logic, options);
+    TPAEngine engine(*logic, options, TPACore::SPLIT);
     solveSystem(clauses, engine, VerificationAnswer::UNSAFE, true);
 }
 
@@ -820,6 +820,6 @@ TEST_F(TPATest, test_TPA_BeyondTransitionSystemDAG_Branching_Unsafe2)
             ChcHead{UninterpretedPredicate{logic->getTerm_false()}},
             ChcBody{{logic->mkLt(x, zero)}, {UninterpretedPredicate{current3}}}
         }};
-    TPAEngine engine(*logic, options);
+    TPAEngine engine(*logic, options, TPACore::SPLIT);
     solveSystem(clauses, engine, VerificationAnswer::UNSAFE, true);
 }

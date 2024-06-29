@@ -26,28 +26,17 @@ const std::string TPAEngine::TPA = "tpa";
 const std::string TPAEngine::SPLIT_TPA = "split-tpa";
 
 bool TPAEngine::shouldComputeWitness() const {
-    return options.hasOption(Options::COMPUTE_WITNESS) and options.getOption(Options::COMPUTE_WITNESS) == "true";
+    return options.getOrDefault(Options::COMPUTE_WITNESS, "") == "true";
 }
 
 std::unique_ptr<TPABase> TPAEngine::mkSolver() {
-    assert(options.hasOption(Options::ENGINE));
-    auto val = options.getOption(Options::ENGINE);
-    if (val == SPLIT_TPA) {
-        return std::unique_ptr<TPABase>(new TPASplit(logic, options));
-    } else if (val == TPA) {
-        return std::unique_ptr<TPABase>(new TPABasic(logic, options));
+    switch (coreAlgorithm) {
+        case TPACore::BASIC:
+            return std::make_unique<TPABasic>(logic, options);
+        case TPACore::SPLIT:
+            return std::make_unique<TPASplit>(logic, options);
     }
-    std::string tmp;
-    std::stringstream ss(options.getOption(Options::ENGINE));
-    while (getline(ss, tmp, ',')) {
-        if (tmp == SPLIT_TPA) {
-            return std::unique_ptr<TPABase>(new TPASplit(logic, options));
-        } else if (tmp == TPA) {
-            return std::unique_ptr<TPABase>(new TPABasic(logic, options));
-        }
-    }
-
-    throw std::logic_error("Unexpected situation");
+    throw std::logic_error("UNREACHABLE");
 }
 
 VerificationResult TPAEngine::solve(ChcDirectedHyperGraph const & graph) {

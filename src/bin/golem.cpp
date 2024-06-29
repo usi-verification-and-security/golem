@@ -66,7 +66,7 @@ int main( int argc, char * argv[] ) {
 
     CommandLineParser parser;
     auto options = parser.parse(argc, argv);
-    auto inputFile = options.getOption(Options::INPUT_FILE);
+    auto inputFile = options.getOrDefault(Options::INPUT_FILE, "");
     auto logicFromString = [](std::string const & logic_str) -> std::unique_ptr<Logic> {
         if (logic_str == std::string("QF_LRA")) {
             return std::make_unique<ArithLogic>(opensmt::Logic_t::QF_LRA);
@@ -98,7 +98,7 @@ int main( int argc, char * argv[] ) {
                 fclose(fin);
                 error("Error when parsing input file");
             }
-            auto logicStr = options.hasOption(Options::LOGIC) ? options.getOption(Options::LOGIC) : tryDetectLogic(context.getRoot());
+            auto logicStr = options.hasOption(Options::LOGIC) ? options.getOption(Options::LOGIC).value() : tryDetectLogic(context.getRoot());
             auto logic = logicFromString(logicStr);
             ChcInterpreter interpreter(options);
             interpreter.interpretSystemAst(*logic, context.getRoot());
@@ -110,7 +110,7 @@ int main( int argc, char * argv[] ) {
         }
     }
     if (options.hasOption(Options::PROOF_FORMAT)) {
-        auto formatStr = options.getOption(Options::PROOF_FORMAT);
+        auto formatStr = options.getOption(Options::PROOF_FORMAT).value();
         if (not (formatStr == "alethe" or formatStr == "intermediate" or formatStr == "legacy")) {
             error("Unsupported proof format");
         }
