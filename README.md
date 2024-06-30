@@ -13,7 +13,7 @@ Golem can be compiled on Linux and MacOS.
 It uses `CMake` for build configuration.
 Golem depends on [OpenSMT](https://github.com/usi-verification-and-security/opensmt/) for SMT solving and interpolation.
 If you already have OpenSMT installed, you can pass the path using `-DOPENSMT_HOME` option to `cmake` command.
-Note that Golem requires a specific version of OpenSMT, currently v2.6.0.
+Note that Golem requires a specific version of OpenSMT, currently v2.7.0.
 Otherwise, `cmake` will download the latest compatible version of OpenSMT and build it as a subproject.
 
 ## Usage
