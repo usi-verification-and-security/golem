@@ -7,12 +7,7 @@
 #include "ChcInterpreter.h"
 #include "Normalizer.h"
 #include "Validator.h"
-#include "engine/Bmc.h"
-#include "engine/IMC.h"
-#include "engine/Kind.h"
-#include "engine/Lawi.h"
-#include "engine/Spacer.h"
-#include "engine/TPA.h"
+#include "engine/EngineFactory.h"
 #include "graph/ChcGraph.h"
 #include "graph/ChcGraphBuilder.h"
 #include "proofs/Term.h"
@@ -389,7 +384,7 @@ PTRef ChcInterpreterContext::parseTerm(const ASTNode & termNode) {
 
 VerificationResult ChcInterpreterContext::solve(std::string const & engine_s,
                                                 ChcDirectedHyperGraph const & hypergraph) {
-    auto engine = getEngine(engine_s);
+    auto engine = EngineFactory(logic, opts).getEngine(engine_s);
     auto result = engine->solve(hypergraph);
     return result;
 }
@@ -591,24 +586,4 @@ ChClause ChcInterpreterContext::chclauseFromPTRef(PTRef ref) {
 
 bool ChcInterpreterContext::isUninterpretedPredicate(PTRef ref) const {
     return system->isUninterpretedPredicate(logic.getSymRef(ref));
-}
-
-std::unique_ptr<Engine> ChcInterpreterContext::getEngine(std::string const & engineStr) const {
-    if (engineStr == "spacer") {
-        return std::make_unique<Spacer>(logic, opts);
-    } else if (engineStr == TPAEngine::TPA) {
-        return std::make_unique<TPAEngine>(logic, opts, TPACore::BASIC);
-    } else if (engineStr == TPAEngine::SPLIT_TPA) {
-        return std::make_unique<TPAEngine>(logic, opts, TPACore::SPLIT);
-    } else if (engineStr == "bmc") {
-        return std::make_unique<BMC>(logic, opts);
-    } else if (engineStr == "lawi") {
-        return std::make_unique<Lawi>(logic, opts);
-    } else if (engineStr == "kind") {
-        return std::make_unique<Kind>(logic, opts);
-    } else if (engineStr == "imc") {
-        return std::make_unique<IMC>(logic, opts);
-    } else {
-        throw std::invalid_argument("Unknown engine specified");
-    }
 }

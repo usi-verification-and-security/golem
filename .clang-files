@@ -9,6 +9,8 @@ src/engine/TPA.cc
 src/engine/TPA.h
 src/engine/Common.cc
 src/engine/Common.h
+src/engine/EngineFactory.cc
+src/engine/EngineFactory.h
 
 src/proofs/ProofSteps.cc
 src/proofs/ProofSteps.h

@@ -11,7 +11,6 @@
 #include "Normalizer.h"
 #include "Options.h"
 
-#include "engine/Engine.h" // TODO: remove this and create an engine factory
 #include "proofs/Term.h"
 #include "transformers/Transformer.h"
 
@@ -136,8 +135,6 @@ private:
     ChClause chclauseFromPTRef(PTRef ref);
 
     bool isUninterpretedPredicate(PTRef ref) const;
-
-    std::unique_ptr<Engine> getEngine(std::string const & engine) const;
 };
 
 class ChcInterpreter {
