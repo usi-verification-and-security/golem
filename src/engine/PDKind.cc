@@ -39,43 +39,46 @@ VerificationResult PDKind::solve(ChcDirectedGraph const & system) {
     }
     if (isTransitionSystem(system)) {
         auto ts = toTransitionSystem(system);
-        return solveTransitionSystem(*ts);
+        auto res = solveTransitionSystem(*ts);
+        return translateTransitionSystemResult(res, system, *ts);
     }
     SingleLoopTransformation transformation;
     auto[ts, backtranslator] = transformation.transform(system);
     assert(ts);
     auto res = solveTransitionSystem(*ts);
-    return res;
+    return computeWitness ? backtranslator->translate(res) : VerificationResult(res.answer);
 }
 
 /**
  * Solve system with PDKIND algorithm.
- * @param system
- * @return
  */
-VerificationResult PDKind::solveTransitionSystem (TransitionSystem const & system) {
+TransitionSystemVerificationResult PDKind::solveTransitionSystem(TransitionSystem const & system) {
     PTRef init = system.getInit();
     PTRef query = system.getQuery();
 
     ReachabilityChecker reachability_checker(logic, system);
 
-    { // Check for system with empty initial states
+    { // Check for system with empty initial states and system where initial and bad states intersect.
         SMTConfig config;
         TimeMachine tm{logic};
         MainSolver init_solver(logic, config, "Empty initial states");
         init_solver.insertFormula(init);
         auto res = init_solver.check();
-        if (res == s_False) { return VerificationResult{VerificationAnswer::SAFE}; }
+        if (res == s_False) {
+            return TransitionSystemVerificationResult{VerificationAnswer::SAFE, logic.getTerm_false()};
+        }
 
         init_solver.insertFormula(query);
         res = init_solver.check();
-        if (res == s_True) { return VerificationResult{VerificationAnswer::UNSAFE}; }
+        if (res == s_True) {
+            return TransitionSystemVerificationResult{.answer = VerificationAnswer::UNSAFE, .witness = static_cast<std::size_t>(0)};
+        }
     }
     
     int n = 0;
     PTRef p = logic.mkNot(query);
     InductionFrame inductionFrame;
-    inductionFrame.insert(IFrameElement(p, logic.mkNot(p)));
+    inductionFrame.insert(IFrameElement(p, CounterExample(logic.mkNot(p))));
 
     // Solve the system by iteratively trying to construct an inductive strengthening of (p, not p) induction frame.
     while (true) {
@@ -83,10 +86,15 @@ VerificationResult PDKind::solveTransitionSystem (TransitionSystem const & syste
         auto res = push(system, inductionFrame, n, k, reachability_checker);
 
         if (res.is_invalid) {
-            return VerificationResult(VerificationAnswer::UNSAFE, InvalidityWitness{});
+            auto steps_to_ctx = res.steps_to_ctx;
+            return TransitionSystemVerificationResult{.answer = VerificationAnswer::UNSAFE, .witness = static_cast<std::size_t>(steps_to_ctx)};
         }
         if (res.i_frame == res.new_i_frame) {
-            return VerificationResult(VerificationAnswer::SAFE);
+            if (computeWitness) {
+                auto invariant = getInvariant(res.i_frame, res.n, system);
+                return TransitionSystemVerificationResult{VerificationAnswer::SAFE, invariant};
+            }
+            return TransitionSystemVerificationResult{VerificationAnswer::SAFE, logic.getTerm_false()};
         }
         n = res.n;
         inductionFrame = res.new_i_frame;
@@ -95,12 +103,6 @@ VerificationResult PDKind::solveTransitionSystem (TransitionSystem const & syste
 
 /**
  * Check if p is invariant by iteratively constructing k-inductive strengthening of p.
- * @param system
- * @param iframe
- * @param n
- * @param k
- * @param reachability_checker
- * @return
  */
 PushResult PDKind::push(TransitionSystem const & system, InductionFrame & iframe, int n, int k, ReachabilityChecker & reachability_checker) {
     // Prepare config and tm for solver initialization.
@@ -171,7 +173,8 @@ PushResult PDKind::push(TransitionSystem const & system, InductionFrame & iframe
 
         if (res2 == s_True) {
             auto model2 = solver2.getModel();
-            CounterExample g_cex (reachability_checker.generalize(*model2, t_k, f_cex), obligation.counter_example.num_of_steps + k);
+            CounterExample g_cex(reachability_checker.generalize(*model2, t_k, f_cex), obligation.counter_example.num_of_steps + k);
+            // Remember num of steps for each cex, g_cex is f_cex + k
             auto reach_res = reachability_checker.checkReachability(n - k + 1, n, g_cex.ctx);
             if (std::get<0>(reach_res)) {
                 // g_cex is reachable, return invalid.
@@ -212,11 +215,22 @@ PushResult PDKind::push(TransitionSystem const & system, InductionFrame & iframe
     PushResult res(iframe, newIframe, np, invalid, steps_to_ctx);
     return res;
 }
+/**
+ * Make k-inductive invariant as a conjunction of formulas in frame and transofmr it to inductive invariant.
+ * @return inductive invariant
+ */
+PTRef PDKind::getInvariant(const InductionFrame & iframe, unsigned int k, TransitionSystem const & system) {
+    std::vector<PTRef> lemmas;
+    for(auto o : iframe) {
+        lemmas.push_back(o.lemma);
+    }
+    PTRef kinvariant = logic.mkAnd(lemmas);
+    return kinductiveToInductive(kinvariant, k, system);
+}
 
 /**
  * Recursively checks if formula is reachable in k steps from initial states by updating and using the reachability frame.
  * @param k number of steps
- * @param formula
  * @return true if is reachable, false and interpolant if isn't
  */
 std::tuple<bool, PTRef> ReachabilityChecker::reachable(unsigned k, PTRef formula) {
@@ -244,9 +258,9 @@ std::tuple<bool, PTRef> ReachabilityChecker::reachable(unsigned k, PTRef formula
     }
     PTRef versioned_formula = tm.sendFlaThroughTime(formula, 1); // Send the formula through time by one, so it matches the pattern init_0 transition_0-1 formula_1.
     while (true) {
-        // Check if formula is reachable from r_frame[k-1] in 1 step.
+        // Check if formula is reachable from r_frames[k-1] in 1 step.
         MainSolver solver(logic, config, "Transitioned states rechability");
-        solver.insertFormula(r_frame[k-1]);
+        solver.insertFormula(r_frames[k-1]);
         solver.insertFormula(system.getTransition());
         solver.insertFormula(versioned_formula);
         auto res = solver.check();
@@ -260,22 +274,17 @@ std::tuple<bool, PTRef> ReachabilityChecker::reachable(unsigned k, PTRef formula
             if (std::get<0>(reach_res)) {
                 return std::make_tuple(true, logic.getTerm_false());
             } else {
-                r_frame.insert(std::get<1>(reach_res), k-1);
+                r_frames.insert(std::get<1>(reach_res), k-1);
             }
         } else {
-            /*
-             *  Get interpolant
-             */
             auto itpContext = solver.getInterpolationContext();
             vec<PTRef> itps;
-            int mask = 3; // A ^ B => C
+            int mask = 3;
             itpContext->getSingleInterpolant(itps, mask);
             assert(itps.size() == 1);
             PTRef interpolant = tm.sendFlaThroughTime(itps[0], -1);
 
-            /*
-             *  Get interpolant for initial states. If it exists, return disjunction of both interpolants.
-             */
+            // Get interpolant for initial states. If it exists, return disjunction of both interpolants.
             MainSolver init_solver(logic, config, "Initial states interpolant");
             init_solver.insertFormula(system.getInit());
             init_solver.insertFormula(formula);
@@ -304,7 +313,7 @@ std::tuple<bool, PTRef> ReachabilityChecker::reachable(unsigned k, PTRef formula
  * @param formula   tested formula
  * @return is reachable, number of steps, interpolant of the formula if not reachable
  */
-std::tuple<bool, int, PTRef> ReachabilityChecker::checkReachability (int k_from, int k_to, PTRef formula) {
+std::tuple<bool, int, PTRef> ReachabilityChecker::checkReachability(int k_from, int k_to, PTRef formula) {
     for (int i = k_from; i <= k_to; i++) {
         auto reach_res = reachable(i, formula);
         if (std::get<0>(reach_res)) {
@@ -319,10 +328,6 @@ std::tuple<bool, int, PTRef> ReachabilityChecker::checkReachability (int k_from,
 
 /**
  * Creates a generalization of a formula by removing non-state variables.
- * @param model
- * @param transition
- * @param formula
- * @return
  */
 PTRef ReachabilityChecker::generalize(Model & model, PTRef transition, PTRef formula) {
     auto xvars = system.getStateVars();

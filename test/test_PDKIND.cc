@@ -29,7 +29,7 @@ TEST_F(PDKindTest, test_PDKIND_simple_safe)
             ChcBody{{logic->mkLt(x, zero)}, {UninterpretedPredicate{current}}}
         }};
     PDKind engine(*logic, options);
-    solveSystem(clauses, engine, VerificationAnswer::SAFE, false);
+    solveSystem(clauses, engine, VerificationAnswer::SAFE, true);
 }
 
 TEST_F(PDKindTest, test_PDKIND_simple_unsafe)
@@ -56,7 +56,7 @@ TEST_F(PDKindTest, test_PDKIND_simple_unsafe)
             ChcBody{{logic->mkGt(x, one)}, {UninterpretedPredicate{current}}}
         }};
     PDKind engine(*logic, options);
-    solveSystem(clauses, engine, VerificationAnswer::UNSAFE, false);
+    solveSystem(clauses, engine, VerificationAnswer::UNSAFE, true);
 }
 
 TEST_F(PDKindTest, test_PDKIND_moreInductionForward_safe)
@@ -83,7 +83,7 @@ TEST_F(PDKindTest, test_PDKIND_moreInductionForward_safe)
             ChcBody{{logic->mkEq(x, logic->mkIntConst(15))}, {UninterpretedPredicate{current}}}
         }};
     PDKind engine(*logic, options);
-    solveSystem(clauses, engine, VerificationAnswer::SAFE, false);
+    solveSystem(clauses, engine, VerificationAnswer::SAFE, true);
 }
 
 TEST_F(PDKindTest, test_PDKIND_moreInductionBackward_safe)
@@ -110,7 +110,7 @@ TEST_F(PDKindTest, test_PDKIND_moreInductionBackward_safe)
         }
     };
     PDKind engine(*logic, options);
-    solveSystem(clauses, engine, VerificationAnswer::SAFE, false);
+    solveSystem(clauses, engine, VerificationAnswer::SAFE, true);
 }
 
 TEST_F(PDKindTest, test_PDKIND_BeyondTransitionSystem_safe)
@@ -156,7 +156,7 @@ TEST_F(PDKindTest, test_PDKIND_BeyondTransitionSystem_safe)
             ChcBody{{logic->mkLt(x, zero)}, {UninterpretedPredicate{current1}}}
         }};
     PDKind engine(*logic, options);
-    solveSystem(clauses, engine, VerificationAnswer::SAFE, false);
+    solveSystem(clauses, engine, VerificationAnswer::SAFE, true);
 }
 
 TEST_F(PDKindTest, test_PDKIND_modelRegression_safe) {
@@ -189,7 +189,7 @@ TEST_F(PDKindTest, test_PDKIND_modelRegression_safe) {
         }
     };
     PDKind engine(*logic, options);
-    solveSystem(clauses, engine, VerificationAnswer::SAFE, false);
+    solveSystem(clauses, engine, VerificationAnswer::SAFE, true);
 }
 
 TEST_F(PDKindTest, test_PDKIND_RegressionUnsafe) {
@@ -242,5 +242,5 @@ TEST_F(PDKindTest, test_PDKIND_RegressionUnsafe) {
         }
     };
     PDKind engine(*logic, options);
-    solveSystem(clauses, engine, VerificationAnswer::UNSAFE, false);
+    solveSystem(clauses, engine, VerificationAnswer::UNSAFE, true);
 }

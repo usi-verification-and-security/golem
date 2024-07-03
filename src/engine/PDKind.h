@@ -23,7 +23,6 @@ struct CounterExample {
     int num_of_steps;
     CounterExample(PTRef ctx) : ctx(ctx), num_of_steps(0) {}
     CounterExample(PTRef ctx, int num_of_steps) : ctx(ctx), num_of_steps(num_of_steps) {}
-
 };
 
 /**
@@ -36,14 +35,14 @@ struct IFrameElement {
         IFrameElement(PTRef lemma, CounterExample counter_example) : lemma(lemma), counter_example(counter_example) {}
 
         bool operator==(IFrameElement const & other) const {
-            return this -> lemma == other.lemma && this -> counter_example.ctx == other.counter_example.ctx;
+            return this->lemma == other.lemma && this->counter_example.ctx == other.counter_example.ctx;
         }
 
         bool operator<(IFrameElement const & other) const {
-            if (this -> lemma == other.lemma) {
-                return this -> counter_example.ctx < other.counter_example.ctx;
+            if (this->lemma == other.lemma) {
+                return this->counter_example.ctx < other.counter_example.ctx;
             } else {
-                return this -> lemma < other.lemma;
+                return this->lemma < other.lemma;
             }
         }
 };
@@ -53,86 +52,14 @@ struct IFrameElement {
  */
 struct IFrameElementCompare {
         bool operator()(const IFrameElement &a, const IFrameElement &b) const {
-            if (a.lemma == b.lemma) {
-                return a.counter_example.ctx < b.counter_example.ctx;
-            } else {
-                return a.lemma < b.lemma;
-            }
+            return a < b;
         }
 };
 
 /**
  * Wrapper for Induction Frame set.
  */
-struct InductionFrame {
-private:
-    std::set<IFrameElement, IFrameElementCompare> elements;
-
-public:
-    InductionFrame() = default;
-
-    InductionFrame(const InductionFrame& other) : elements(other.elements) {}
-
-    InductionFrame(InductionFrame&& other) noexcept : elements(std::move(other.elements)) {}
-
-    InductionFrame& operator=(const InductionFrame& other) {
-        if (this != &other) {
-            elements = other.elements;
-        }
-        return *this;
-    }
-
-    InductionFrame& operator=(InductionFrame&& other) noexcept {
-        if (this != &other) {
-            elements = std::move(other.elements);
-        }
-        return *this;
-    }
-
-    bool operator==(const InductionFrame& other) {
-        return elements == other.elements;
-    }
-
-    ~InductionFrame() = default;
-
-    using iterator = std::set<IFrameElement, IFrameElementCompare>::iterator;
-    using const_iterator = std::set<IFrameElement, IFrameElementCompare>::const_iterator;
-
-    iterator begin() { return elements.begin(); }
-    const_iterator begin() const { return elements.begin(); }
-    const_iterator cbegin() const { return elements.cbegin(); }
-
-    iterator end() { return elements.end(); }
-    const_iterator end() const { return elements.end(); }
-    const_iterator cend() const { return elements.cend(); }
-
-    std::pair<iterator, bool> insert(const IFrameElement& element) {
-        return elements.insert(element);
-    }
-
-    size_t erase(const IFrameElement& element) {
-        return elements.erase(element);
-    }
-
-    iterator find(const IFrameElement& element) {
-        return elements.find(element);
-    }
-    const_iterator find(const IFrameElement& element) const {
-        return elements.find(element);
-    }
-
-    void clear() {
-        elements.clear();
-    }
-
-    size_t size() const {
-        return elements.size();
-    }
-
-    bool empty() const {
-        return elements.empty();
-    }
-};
+using InductionFrame = std::set<IFrameElement, IFrameElementCompare>;
 
 /**
  * Wrapper for return value of the Push function.
@@ -153,11 +80,11 @@ struct PushResult {
 /**
  * A data structure where r[i] represents the states that are reachable in i steps from some initial states, i.e., r[0].
  */
-class RFrame {
+class RFrames {
     std::vector<PTRef> r;
     Logic & logic;
 public:
-    RFrame(Logic & logic) : logic(logic) {}
+    RFrames(Logic & logic) : logic(logic) {}
 
     const PTRef & operator[] (size_t i) {
         if (i >= r.size()) {
@@ -184,18 +111,20 @@ public:
  */
 class ReachabilityChecker {
 private:
-    RFrame r_frame;
+    RFrames r_frames;
     Logic & logic;
     TransitionSystem const & system;
-    std::tuple<bool, PTRef> reachable (unsigned k, PTRef formula);
+    std::tuple<bool, PTRef> reachable(unsigned k, PTRef formula);
 public:
-    ReachabilityChecker(Logic & logic, TransitionSystem const & system) : r_frame(logic), logic(logic), system(system) {}
-    std::tuple<bool, int, PTRef> checkReachability (int from, int to, PTRef formula);
+    ReachabilityChecker(Logic & logic, TransitionSystem const & system) : r_frames(logic), logic(logic), system(system) {}
+    std::tuple<bool, int, PTRef> checkReachability(int from, int to, PTRef formula);
     PTRef generalize(Model & model, PTRef transition, PTRef formula);
 };
 
 /**
- * Uses PDKind algorithm to solve a transition system.
+ * Uses PDKind algorithm [1] to solve a transition system.
+ *
+ * [1] https://ieeexplore.ieee.org/document/7886665
  */
 class PDKind : public Engine {
         Logic & logic;
@@ -214,7 +143,8 @@ class PDKind : public Engine {
 
     private:
         PushResult push(TransitionSystem const & system, InductionFrame & iframe, int n, int k, ReachabilityChecker & reachability_checker);
-        VerificationResult solveTransitionSystem(TransitionSystem const & system);
+        TransitionSystemVerificationResult solveTransitionSystem(TransitionSystem const & system);
+        PTRef getInvariant(InductionFrame const & iframe, unsigned int k, TransitionSystem const & system);
 };
 
 #endif // GOLEM_PDKIND_H
