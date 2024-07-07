@@ -15,14 +15,12 @@
 #include "osmt_terms.h"
 
 class ARGBasedEngine : public Engine {
-   Logic & logic;
-   Options const & options;
+    Options const & options;
+
 public:
+    ARGBasedEngine(Logic &, Options const & options) : options(options) {}
 
-   ARGBasedEngine(Logic & logic, Options const & options) : logic(logic), options(options) {}
-
-   VerificationResult solve(ChcDirectedHyperGraph const & graph) override;
+    VerificationResult solve(ChcDirectedHyperGraph const & graph) override;
 };
 
-
-#endif //GOLEM_ARGBASEDENGINE_H
+#endif // GOLEM_ARGBASEDENGINE_H

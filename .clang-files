@@ -11,6 +11,8 @@ src/engine/Common.cc
 src/engine/Common.h
 src/engine/EngineFactory.cc
 src/engine/EngineFactory.h
+src/engine/ArgBasedEngine.cc
+src/engine/ArgBasedEngine.h
 
 src/proofs/ProofSteps.cc
 src/proofs/ProofSteps.h

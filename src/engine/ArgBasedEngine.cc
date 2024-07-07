@@ -31,9 +31,8 @@ public:
         return it->second;
     }
 
-    void addPredicate(SymRef symbol, PTRef predicate) {
-        symbolsToPredicates.at(symbol).insert(predicate);
-    }
+    void addPredicate(SymRef symbol, PTRef predicate) { symbolsToPredicates.at(symbol).insert(predicate); }
+
 private:
     Logic & logic;
     std::unordered_map<SymRef, Predicates, SymRefHash> symbolsToPredicates;
@@ -44,9 +43,10 @@ class OverApproximatedStates {};
 class CartesianPredicateAbstractionStates : public OverApproximatedStates {
     PredicateAbstractionManager & manager;
     PredicateAbstractionManager::Predicates satisfiedPredicates;
+
 public:
-    CartesianPredicateAbstractionStates(
-        PredicateAbstractionManager & manager, PredicateAbstractionManager::Predicates && predicates)
+    CartesianPredicateAbstractionStates(PredicateAbstractionManager & manager,
+                                        PredicateAbstractionManager::Predicates && predicates)
         : manager(manager), satisfiedPredicates(std::move(predicates)) {}
 
     [[nodiscard]] PTRef asSingleFormula() const {
@@ -68,9 +68,7 @@ public:
 struct ARGNode {
     SymRef predicateSymbol;
     std::unique_ptr<CartesianPredicateAbstractionStates> reachedStates;
-    [[nodiscard]] PTRef getReachedStates() const {
-        return reachedStates->asSingleFormula();
-    };
+    [[nodiscard]] PTRef getReachedStates() const { return reachedStates->asSingleFormula(); };
 };
 
 inline bool operator==(ARGNode n1, ARGNode n2) {
@@ -86,6 +84,7 @@ public:
         NodeId target;
         EId clauseId;
     };
+
 private:
     ChcDirectedHyperGraph const & clauses;
     PredicateAbstractionManager predicateManager;
@@ -104,27 +103,22 @@ public:
         predicateManager.initialize(symbols);
     }
 
-    [[nodiscard]] PTRef getReachedStates(NodeId id) const {
-        return nodes[id].getReachedStates();
-    }
+    [[nodiscard]] PTRef getReachedStates(NodeId id) const { return nodes[id].getReachedStates(); }
 
-    [[nodiscard]] SymRef getPredicateSymbol(NodeId id) const {
-        return nodes[id].predicateSymbol;
-    }
+    [[nodiscard]] SymRef getPredicateSymbol(NodeId id) const { return nodes[id].predicateSymbol; }
 
-    [[nodiscard]] PTRef getClauseConstraint(EId eid) const {
-        return clauses.getEdgeLabel(eid);
-    }
+    [[nodiscard]] PTRef getClauseConstraint(EId eid) const { return clauses.getEdgeLabel(eid); }
 
     /// Returns the ID of the new node with the given symbol and predicates and bool flag indicating if this new node
     /// is covered (subsumed) by an existing node in ARG
     /// NOTE: Currently we check exact match, this can be improved with subsumption
     std::pair<NodeId, bool> tryInsertNode(SymRef symbol, PredicateAbstractionManager::Predicates && predicates) {
-        ARGNode node{symbol, std::make_unique<CartesianPredicateAbstractionStates>(predicateManager, std::move(predicates))};
+        ARGNode node{symbol,
+                     std::make_unique<CartesianPredicateAbstractionStates>(predicateManager, std::move(predicates))};
         auto const & existingInstances = instances.at(symbol);
         bool subsumed = std::find_if(existingInstances.begin(), existingInstances.end(), [&](NodeId id) {
-            return *nodes[id].reachedStates == *node.reachedStates;
-        }) != existingInstances.end();
+                            return *nodes[id].reachedStates == *node.reachedStates;
+                        }) != existingInstances.end();
 
         auto id = nodes.size();
         nodes.push_back(std::move(node));
@@ -149,9 +143,7 @@ public:
         return it->second;
     }
 
-    [[nodiscard]] auto const & getPredicatesFor(SymRef symbol) const {
-        return predicateManager.predicatesFor(symbol);
-    }
+    [[nodiscard]] auto const & getPredicatesFor(SymRef symbol) const { return predicateManager.predicatesFor(symbol); }
 
     [[nodiscard]] auto const & getClauses() const { return clauses; }
 
@@ -174,6 +166,7 @@ public:
         assert(nodeToSymbolInstance.count(id) > 0);
         return nodeToSymbolInstance.at(id);
     }
+
 private:
     struct Node {
         NodeId id;
@@ -186,12 +179,12 @@ private:
 
     std::vector<Node> nodes;
     std::map<NodeId, PTRef> nodeToSymbolInstance;
-    NodeId rootId {0};
+    NodeId rootId{0};
 
     explicit InterpolationTree() {}
 
     NodeId createNode(NodeId parent, EId clauseId) {
-        Node node{.id = nodes.size(), .parent = parent, .clauseId = clauseId};
+        Node node{.id = nodes.size(), .parent = parent, .children = {}, .label = PTRef_Undef, .clauseId = clauseId};
         nodes.push_back(node);
         return nodes.back().id;
     }
@@ -218,7 +211,6 @@ public:
 
     Result solve(Logic & logic) const;
 
-
     [[nodiscard]] std::vector<Node> getNodes() const { return nodes; }
 };
 
@@ -229,6 +221,7 @@ public:
     UnprocessedEdge pop();
     [[nodiscard]] bool isEmpty() const;
     void clear();
+
 private:
     ChcDirectedHyperGraph const & clauses;
     std::deque<UnprocessedEdge> queue;
@@ -245,18 +238,14 @@ class Algorithm {
 
 public:
     explicit Algorithm(ChcDirectedHyperGraph const & clauses, bool computeWitness = false)
-        : clauses(clauses),
-          computeWitness(computeWitness),
-          representation{AdjacencyListsGraphRepresentation::from(clauses)},
-          queue(clauses),
-          arg{clauses}
-    {
+        : clauses(clauses), computeWitness(computeWitness),
+          representation(AdjacencyListsGraphRepresentation::from(clauses)), queue(clauses), arg{clauses} {
         auto [nodeId, covered] = arg.tryInsertNode(clauses.getEntry(), PredicateAbstractionManager::Predicates{});
         assert(not covered);
         assert(nodeId == ARG::ENTRY);
         auto facts = representation.getOutgoingEdgesFor(clauses.getEntry());
         for (EId fact : facts) {
-            queue.addEdge({.eid = fact, .sources = {nodeId} });
+            queue.addEdge({.eid = fact, .sources = {nodeId}});
         }
     }
 
@@ -270,16 +259,19 @@ private:
     void computeInvalidityWitness(InterpolationTree const & itpTree, Model & model);
 };
 
-namespace{
+namespace {
 void increment(std::vector<std::size_t> & indices, std::vector<std::vector<ARG::NodeId>> const & allInstances) {
     assert(not indices.empty());
-    for (int i = static_cast<int>(indices.size()) - 1; ; --i) {
+    for (int i = static_cast<int>(indices.size()) - 1;; --i) {
         ++indices[i];
-        if (indices[i] == allInstances[i].size() and i > 0) { indices[i] = 0; }
-        else { break; }
+        if (indices[i] == allInstances[i].size() and i > 0) {
+            indices[i] = 0;
+        } else {
+            break;
+        }
     }
 }
-}
+} // namespace
 
 void Algorithm::computeNewUnprocessedEdges(ARG::NodeId nodeId) {
     struct Checker {
@@ -288,10 +280,7 @@ void Algorithm::computeNewUnprocessedEdges(ARG::NodeId nodeId) {
         ARG const & arg;
 
         Checker(PTRef edgeConstraint, Logic & logic, ARG const & arg)
-            : logic(logic),
-              solver(logic, SMTSolver::WitnessProduction::NONE),
-              arg(arg)
-        {
+            : logic(logic), solver(logic, SMTSolver::WitnessProduction::NONE), arg(arg) {
             solver.getCoreSolver().insertFormula(edgeConstraint);
         }
 
@@ -301,7 +290,8 @@ void Algorithm::computeNewUnprocessedEdges(ARG::NodeId nodeId) {
             VersionManager versionManager{logic};
             for (auto sourceId : sources) {
                 PTRef reachedStates = arg.getReachedStates(sourceId);
-                PTRef versionedStates = versionManager.baseFormulaToSource(reachedStates, sourceCounts[arg.getPredicateSymbol(sourceId)]++);
+                PTRef versionedStates =
+                    versionManager.baseFormulaToSource(reachedStates, sourceCounts[arg.getPredicateSymbol(sourceId)]++);
                 solver.getCoreSolver().insertFormula(versionedStates);
             }
             auto res = solver.getCoreSolver().check();
@@ -319,8 +309,10 @@ void Algorithm::computeNewUnprocessedEdges(ARG::NodeId nodeId) {
         std::vector<std::vector<ARG::NodeId>> allInstances;
         // TODO: one of the sources (corresponding to the new ARGnode) should be fixed!
         // TODO: What if we have a clause with multiple occurences of the same predicate?
-        std::transform(std::begin(sources), std::end(sources), std::back_inserter(allInstances), [&](auto symbol) { return arg.getInstancesFor(symbol);});
-        if (std::any_of(allInstances.begin(), allInstances.end(), [](auto const & nodeInstances){ return nodeInstances.empty(); })) {
+        std::transform(std::begin(sources), std::end(sources), std::back_inserter(allInstances),
+                       [&](auto symbol) { return arg.getInstancesFor(symbol); });
+        if (std::any_of(allInstances.begin(), allInstances.end(),
+                        [](auto const & nodeInstances) { return nodeInstances.empty(); })) {
             continue;
         }
         std::vector<std::size_t> indices(sources.size(), 0u);
@@ -330,9 +322,7 @@ void Algorithm::computeNewUnprocessedEdges(ARG::NodeId nodeId) {
             for (std::size_t i = 0; i < indices.size(); ++i) {
                 argSources.push_back(allInstances[i][indices[i]]);
             }
-            if (checker.isFeasible(argSources)) {
-                queue.addEdge({.eid = edge, .sources = std::move(argSources)});
-            }
+            if (checker.isFeasible(argSources)) { queue.addEdge({.eid = edge, .sources = std::move(argSources)}); }
         }
     }
 }
@@ -341,11 +331,12 @@ std::pair<ARG::NodeId, bool> Algorithm::computeTarget(const UnprocessedEdge & ed
     Logic & logic = clauses.getLogic();
     VersionManager versionManager{logic};
     std::unordered_map<SymRef, int, SymRefHash> sourcesCount;
-    SMTSolver solver(logic,SMTSolver::WitnessProduction::NONE);
+    SMTSolver solver(logic, SMTSolver::WitnessProduction::NONE);
     solver.getCoreSolver().insertFormula(clauses.getEdgeLabel(edge.eid));
     for (auto sourceId : edge.sources) {
         PTRef reachedStates = arg.getReachedStates(sourceId);
-        PTRef versioned = versionManager.baseFormulaToSource(reachedStates, sourcesCount[arg.getPredicateSymbol(sourceId)]++);
+        PTRef versioned =
+            versionManager.baseFormulaToSource(reachedStates, sourcesCount[arg.getPredicateSymbol(sourceId)]++);
         solver.getCoreSolver().insertFormula(versioned);
     }
     auto target = clauses.getEdge(edge.eid).to;
@@ -388,16 +379,12 @@ VerificationResult Algorithm::run() {
         auto nextEdge = queue.pop();
         EId originalEdge = nextEdge.eid;
         if (clauses.getEdge(originalEdge).to == clauses.getExit()) {
-            if (isRealProof(nextEdge)) {
-                return VerificationResult{VerificationAnswer::UNSAFE, witness};
-            }
+            if (isRealProof(nextEdge)) { return VerificationResult{VerificationAnswer::UNSAFE, witness}; }
             refine();
             continue;
         }
         auto [id, isCovered] = computeTarget(nextEdge);
-        if (not isCovered) {
-            computeNewUnprocessedEdges(id);
-        }
+        if (not isCovered) { computeNewUnprocessedEdges(id); }
         arg.addEdge(ARG::Edge{.sources = std::move(nextEdge.sources), .target = id, .clauseId = nextEdge.eid});
     }
     if (not computeWitness) { return VerificationResult{VerificationAnswer::SAFE}; }
@@ -420,69 +407,72 @@ VerificationResult Algorithm::run() {
         }
         PTRef definition = logic.mkOr(std::move(reachedStates));
         PTRef sourcePredicate = clauses.getStateVersion(symbol);
-        PTRef predicate = logic.getPterm(sourcePredicate).size() > 0 ? VersionManager(logic).sourceFormulaToBase(sourcePredicate) : sourcePredicate;
+        PTRef predicate = logic.getPterm(sourcePredicate).size() > 0
+                              ? VersionManager(logic).sourceFormulaToBase(sourcePredicate)
+                              : sourcePredicate;
         definitions.emplace(predicate, definition);
     }
     return VerificationResult{VerificationAnswer::SAFE, ValidityWitness(std::move(definitions))};
 }
 
 namespace {
-    bool computeWitness(Options const & options) {
-        return options.hasOption(Options::COMPUTE_WITNESS) and options.getOption(Options::COMPUTE_WITNESS) == "true";
-    }
-
-    class AuxCleanupPass : public Transformer {
-    public:
-        struct BackTranslator : public WitnessBackTranslator {
-            InvalidityWitness translate(InvalidityWitness witness) override { return witness; }
-            ValidityWitness translate(ValidityWitness witness) override { return witness; }
-        };
-
-        TransformationResult transform(std::unique_ptr<ChcDirectedHyperGraph> graph) override {
-            Logic & logic = graph->getLogic();
-            TermUtils utils(logic);
-            std::size_t auxVarCounter = 0;
-            graph->forEachEdge([&](auto & edge) {
-                PTRef & constraint = edge.fla.fla;
-                vec<PTRef> predicateVars;
-                // vars from head
-                {
-                    auto headVars = utils.predicateArgsInOrder(graph->getNextStateVersion(edge.to));
-                    for (PTRef var : headVars) {
-                        assert(logic.isVar(var));
-                        predicateVars.push(var);
-                    }
-                }
-                // TODO: Implement a helper to iterate over source vertices together with instantiation counter
-                std::unordered_map<SymRef, std::size_t, SymRefHash> instanceCounter;
-                for (auto source : edge.from) {
-                    PTRef sourcePredicate = graph->getStateVersion(source, instanceCounter[source]++);
-                    for (PTRef var : utils.predicateArgsInOrder(sourcePredicate)) {
-                        assert(logic.isVar(var));
-                        predicateVars.push(var);
-                    }
-                }
-                constraint = TrivialQuantifierElimination(logic).tryEliminateVarsExcept(predicateVars, constraint);
-                auto isVarToNormalize = [&](PTRef var) {
-                    return logic.isVar(var) and std::find(predicateVars.begin(), predicateVars.end(), var) == predicateVars.end();
-                };
-                auto localVars = matchingSubTerms(logic, constraint, isVarToNormalize);
-                if (localVars.size() > 0) {
-                    TermUtils::substitutions_map subst;
-                    for (PTRef localVar : localVars) {
-                        SRef sort = logic.getSortRef(localVar);
-                        std::string uniq_name = "paux#" + std::to_string(auxVarCounter++);
-                        PTRef renamed = logic.mkVar(sort, uniq_name.c_str());
-                        subst.insert({localVar, renamed});
-                    }
-                    constraint = utils.varSubstitute(constraint, subst);
-                }
-            });
-
-            return {std::move(graph), std::make_unique<BackTranslator>()};
-        }
-    };
+bool computeWitness(Options const & options) {
+    return options.hasOption(Options::COMPUTE_WITNESS) and options.getOption(Options::COMPUTE_WITNESS) == "true";
 }
+
+class AuxCleanupPass : public Transformer {
+public:
+    struct BackTranslator : public WitnessBackTranslator {
+        InvalidityWitness translate(InvalidityWitness witness) override { return witness; }
+        ValidityWitness translate(ValidityWitness witness) override { return witness; }
+    };
+
+    TransformationResult transform(std::unique_ptr<ChcDirectedHyperGraph> graph) override {
+        Logic & logic = graph->getLogic();
+        TermUtils utils(logic);
+        std::size_t auxVarCounter = 0;
+        graph->forEachEdge([&](auto & edge) {
+            PTRef & constraint = edge.fla.fla;
+            vec<PTRef> predicateVars;
+            // vars from head
+            {
+                auto headVars = utils.predicateArgsInOrder(graph->getNextStateVersion(edge.to));
+                for (PTRef var : headVars) {
+                    assert(logic.isVar(var));
+                    predicateVars.push(var);
+                }
+            }
+            // TODO: Implement a helper to iterate over source vertices together with instantiation counter
+            std::unordered_map<SymRef, std::size_t, SymRefHash> instanceCounter;
+            for (auto source : edge.from) {
+                PTRef sourcePredicate = graph->getStateVersion(source, instanceCounter[source]++);
+                for (PTRef var : utils.predicateArgsInOrder(sourcePredicate)) {
+                    assert(logic.isVar(var));
+                    predicateVars.push(var);
+                }
+            }
+            constraint = TrivialQuantifierElimination(logic).tryEliminateVarsExcept(predicateVars, constraint);
+            auto isVarToNormalize = [&](PTRef var) {
+                return logic.isVar(var) and
+                       std::find(predicateVars.begin(), predicateVars.end(), var) == predicateVars.end();
+            };
+            auto localVars = matchingSubTerms(logic, constraint, isVarToNormalize);
+            if (localVars.size() > 0) {
+                TermUtils::substitutions_map subst;
+                for (PTRef localVar : localVars) {
+                    SRef sort = logic.getSortRef(localVar);
+                    std::string uniq_name = "paux#" + std::to_string(auxVarCounter++);
+                    PTRef renamed = logic.mkVar(sort, uniq_name.c_str());
+                    subst.insert({localVar, renamed});
+                }
+                constraint = utils.varSubstitute(constraint, subst);
+            }
+        });
+
+        return {std::move(graph), std::make_unique<BackTranslator>()};
+    }
+};
+} // namespace
 
 VerificationResult ARGBasedEngine::solve(const ChcDirectedHyperGraph & graph) {
     auto graphCopy = std::make_unique<ChcDirectedHyperGraph>(graph);
@@ -523,7 +513,9 @@ InterpolationTree::Result InterpolationTree::solve(Logic & logic) const {
         solver.getCoreSolver().insertFormula(node.label);
     }
     auto res = solver.getCoreSolver().check();
-    if (res == s_True) { return InterpolationTree::Result{.model = solver.getCoreSolver().getModel(), .interpolant = {}}; }
+    if (res == s_True) {
+        return InterpolationTree::Result{.model = solver.getCoreSolver().getModel(), .interpolant = {}};
+    }
 
     if (res != s_False) { throw std::logic_error("Solver could not return answer!"); }
     auto itpContext = solver.getCoreSolver().getInterpolationContext();
@@ -551,7 +543,7 @@ void Algorithm::refine() {
     queue.clear();
     auto facts = representation.getOutgoingEdgesFor(clauses.getEntry());
     for (EId fact : facts) {
-        queue.addEdge({.eid = fact, .sources = {ARG::ENTRY} });
+        queue.addEdge({.eid = fact, .sources = {ARG::ENTRY}});
     }
 }
 
@@ -566,7 +558,7 @@ void InterpolationTree::computeLabels(ARG const & arg) {
     TimeMachine timeMachine{logic};
     assert(not nodes.empty());
     NodeId root = 0;
-    std::vector<NodeId> stack {root};
+    std::vector<NodeId> stack{root};
     while (not stack.empty()) {
         NodeId current = stack.back();
         stack.pop_back();
@@ -574,7 +566,8 @@ void InterpolationTree::computeLabels(ARG const & arg) {
         auto const & node = nodes[current];
         TermUtils::substitutions_map substitutions;
         auto const & edge = clauses.getEdge(node.clauseId);
-        assert((edge.from.size() == 1 and edge.from[0] == clauses.getEntry()) or edge.from.size() == node.children.size());
+        assert((edge.from.size() == 1 and edge.from[0] == clauses.getEntry()) or
+               edge.from.size() == node.children.size());
         if (auto target = edge.to; target != clauses.getExit()) {
             assert(nodeToSymbolInstance.count(current) > 0);
             PTRef predicateInstance = clauses.getNextStateVersion(target);
@@ -589,18 +582,23 @@ void InterpolationTree::computeLabels(ARG const & arg) {
             auto symbolVersion = symbolEncountered[sourceSymbol]++;
             auto vars = utils.predicateArgsInOrder(predicateInstance);
             for (PTRef var : vars) {
-                PTRef versionedVar = timeMachine.sendFlaThroughTime(
-                    timeMachine.getVarVersionZero(manager.toBase(var)), static_cast<int>(symbolVersion));
-                auto[_, inserted] = substitutions.emplace(var, versionedVar);
-                assert(inserted); (void)inserted;
+                PTRef versionedVar = timeMachine.sendFlaThroughTime(timeMachine.getVarVersionZero(manager.toBase(var)),
+                                                                    static_cast<int>(symbolVersion));
+                auto [_, inserted] = substitutions.emplace(var, versionedVar);
+                assert(inserted);
+                (void)inserted;
             }
             PTRef nodePredicate = utils.varSubstitute(predicateInstance, substitutions);
             auto [_, inserted] = nodeToSymbolInstance.emplace(node.children[i], nodePredicate);
-            assert(inserted); (void)inserted;
+            assert(inserted);
+            (void)inserted;
         }
         PTRef defaultConstraint = edge.fla.fla;
-        // Deal with auxiliary variables which need to be versioned, because same constraint can be present multiple times in the ITP tree
-        auto auxVars = matchingSubTerms(logic, defaultConstraint, [&](PTRef term) { return logic.isVar(term) and substitutions.find(term) == substitutions.end(); });
+        // Deal with auxiliary variables which need to be versioned, because same constraint can be present multiple
+        // times in the ITP tree
+        auto auxVars = matchingSubTerms(logic, defaultConstraint, [&](PTRef term) {
+            return logic.isVar(term) and substitutions.find(term) == substitutions.end();
+        });
         if (auxVars.size() > 0) {
             for (PTRef var : auxVars) {
                 assert(not timeMachine.isVersioned(var));
@@ -668,7 +666,10 @@ void Algorithm::computeInvalidityWitness(InterpolationTree const & itpTree, Mode
     using DerivationStep = InvalidityWitness::Derivation::DerivationStep;
     std::size_t stepIndex = 0;
     // First step is just true
-    derivation.addDerivationStep({.index = stepIndex++, .premises = {}, .derivedFact = logic.getTerm_true(), .clauseId = {static_cast<id_t>(-1)}});
+    derivation.addDerivationStep({.index = stepIndex++,
+                                  .premises = {},
+                                  .derivedFact = logic.getTerm_true(),
+                                  .clauseId = {static_cast<id_t>(-1)}});
 
     auto const & nodes = itpTree.getNodes();
     for (auto it = nodes.rbegin(); it != nodes.rend(); ++it) {
@@ -688,7 +689,6 @@ void Algorithm::computeInvalidityWitness(InterpolationTree const & itpTree, Mode
             parentPremises.insert(parentPremises.begin(), step.index);
         }
         derivation.addDerivationStep(std::move(step));
-
     }
     witness.setDerivation(std::move(derivation));
 }
