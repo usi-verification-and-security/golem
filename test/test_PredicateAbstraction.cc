@@ -177,3 +177,34 @@ TEST_F(PredicateAbstractionTest, test_BasicNonLinearSystem_Unsafe) {
     ARGBasedEngine engine(*logic, options);
     solveSystem(clauses, engine, VerificationAnswer::UNSAFE, true);
 }
+
+TEST_F(PredicateAbstractionTest, test_MultiPredicateInBody_Safe) {
+    options.addOption(Options::COMPUTE_WITNESS, "true");
+    SymRef inv_sym = mkPredicateSymbol("Inv", {intSort(), intSort()});
+    PTRef inv1 = instantiatePredicate(inv_sym, {x,y});
+    PTRef inv2 = instantiatePredicate(inv_sym, {xp,yp});
+    // x = 0 and y = 0 => Inv(x,y)
+    // x = 1 and y = 1 => Inv(x,y)
+    // Inv(x,y) and Inv(x',y') => Inv(y + y', x + x')
+    // Inv(x,y) and x = 0 and y = 1 => false
+    std::vector<ChClause> clauses{
+        {
+            ChcHead{UninterpretedPredicate{inv1}},
+            ChcBody{{logic->mkAnd(logic->mkEq(x, zero), logic->mkEq(y, zero))}, {}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{inv1}},
+            ChcBody{{logic->mkAnd(logic->mkEq(x, one), logic->mkEq(y, one))}, {}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{instantiatePredicate(inv_sym, {logic->mkPlus(y,yp), logic->mkPlus(x,xp)})}},
+            ChcBody{{logic->getTerm_true()}, {UninterpretedPredicate{inv1}, UninterpretedPredicate{inv2}}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{logic->getTerm_false()}},
+            ChcBody{{logic->mkAnd(logic->mkEq(x, zero), logic->mkEq(y, one))}, {UninterpretedPredicate{inv1}}}
+        }
+    };
+    ARGBasedEngine engine(*logic, options);
+    solveSystem(clauses, engine, VerificationAnswer::SAFE, true);
+}
