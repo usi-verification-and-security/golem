@@ -224,11 +224,13 @@ public:
 
 class EdgeQueue {
 public:
+    explicit EdgeQueue(ChcDirectedHyperGraph const & clauses);
     void addEdge(UnprocessedEdge e);
     UnprocessedEdge pop();
     [[nodiscard]] bool isEmpty() const;
     void clear();
 private:
+    ChcDirectedHyperGraph const & clauses;
     std::deque<UnprocessedEdge> queue;
 };
 
@@ -246,6 +248,7 @@ public:
         : clauses(clauses),
           computeWitness(computeWitness),
           representation{AdjacencyListsGraphRepresentation::from(clauses)},
+          queue(clauses),
           arg{clauses}
     {
         auto [nodeId, covered] = arg.tryInsertNode(clauses.getEntry(), PredicateAbstractionManager::Predicates{});
@@ -488,12 +491,18 @@ VerificationResult ARGBasedEngine::solve(const ChcDirectedHyperGraph & graph) {
     return Algorithm(*cleanedGraph.first, computeWitness(options)).run();
 }
 
+EdgeQueue::EdgeQueue(const ChcDirectedHyperGraph & clauses) : clauses(clauses) {}
+
 bool EdgeQueue::isEmpty() const {
     return queue.empty();
 }
 
 void EdgeQueue::addEdge(UnprocessedEdge e) {
-    queue.push_back(std::move(e));
+    if (clauses.getExit() == clauses.getTarget(e.eid)) {
+        queue.push_front(std::move(e));
+    } else {
+        queue.push_back(std::move(e));
+    }
 }
 
 UnprocessedEdge EdgeQueue::pop() {
