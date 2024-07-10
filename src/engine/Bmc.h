@@ -13,14 +13,18 @@
 class BMC : public Engine {
     Logic & logic;
 //    Options const & options;
+    bool needsWitness = false;
     int verbosity = 0;
+    bool forceTransitionSystem = true;
 public:
 
     BMC(Logic & logic, Options const & options) : logic(logic) {
+        needsWitness = options.getOrDefault(Options::COMPUTE_WITNESS, "") == "true";
         verbosity = std::stoi(options.getOrDefault(Options::VERBOSE, "0"));
+        forceTransitionSystem = options.getOrDefault(Options::EXPERIMENTAL, "") != "true";
     }
 
-    virtual VerificationResult solve(ChcDirectedHyperGraph const & graph) override {
+    VerificationResult solve(ChcDirectedHyperGraph const & graph) override {
         if (graph.isNormalGraph()) {
             auto normalGraph = graph.toNormalGraph();
             return solve(*normalGraph);
@@ -33,6 +37,7 @@ public:
 private:
     VerificationResult solveTransitionSystem(ChcDirectedGraph const & graph);
     TransitionSystemVerificationResult solveTransitionSystemInternal(TransitionSystem const & system);
+    VerificationResult solveGeneralLinearSystem(ChcDirectedGraph const & graph);
 };
 
 

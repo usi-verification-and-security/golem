@@ -24,6 +24,7 @@ const std::string Options::VERBOSE = "verbose";
 const std::string Options::TPA_USE_QE = "tpa.use-qe";
 const std::string Options::FORCE_TS = "force-ts";
 const std::string Options::PROOF_FORMAT = "proof-format";
+const std::string Options::EXPERIMENTAL = "experimental";
 
 namespace{
 
@@ -74,6 +75,7 @@ Options CommandLineParser::parse(int argc, char ** argv) {
     int tpaUseQE = 0;
     int printVersion = 0;
     int forceTS = 0;
+    int experimental = 0;
 
     struct option long_options[] =
         {
@@ -92,6 +94,7 @@ Options CommandLineParser::parse(int argc, char ** argv) {
             {Options::TPA_USE_QE.c_str(), optional_argument, &tpaUseQE, 1},
             {Options::PROOF_FORMAT.c_str(), required_argument, nullptr, 'p'},
             {Options::FORCE_TS.c_str(), no_argument, &forceTS, 1},
+            {Options::EXPERIMENTAL.c_str(), no_argument, &experimental, 1},
             {0, 0, 0, 0}
         };
 
@@ -181,6 +184,9 @@ Options CommandLineParser::parse(int argc, char ** argv) {
     }
     if (forceTS) {
         res.addOption(Options::FORCE_TS, "true");
+    }
+    if (experimental) {
+        res.addOption(Options::EXPERIMENTAL, "true");
     }
     res.addOption(Options::LRA_ITP_ALG, std::to_string(lraItpAlg));
     res.addOption(Options::VERBOSE, std::to_string(verbose));
