@@ -63,6 +63,7 @@ target_sources(golem_lib
     PRIVATE transformers/SingleLoopTransformation.cc
     PRIVATE transformers/TransformationPipeline.cc
     PRIVATE transformers/TrivialEdgePruner.cc
+    PRIVATE transformers/NestedLoopTransformation.cc
     PRIVATE utils/SmtSolver.cc
     )
 

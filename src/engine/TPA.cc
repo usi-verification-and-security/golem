@@ -15,6 +15,7 @@
 #include "Witnesses.h"
 #include "transformers/BasicTransformationPipelines.h"
 #include "transformers/SingleLoopTransformation.h"
+#include "transformers/NestedLoopTransformation.h"
 #include "utils/SmtSolver.h"
 
 #define TRACE_LEVEL 0
@@ -57,6 +58,10 @@ VerificationResult TPAEngine::solve(ChcDirectedHyperGraph const & graph) {
     auto translator = std::move(transformationResult.second);
     if (transformedGraph->isNormalGraph()) {
         auto normalGraph = transformedGraph->toNormalGraph();
+        if (options.hasOption(Options::SIMPLIFY_NESTED)) {
+            NestedLoopTransformation transformation;
+            transformation.transform(*normalGraph);
+        }
         auto res = solve(*normalGraph);
         return shouldComputeWitness() ? translator->translate(std::move(res)) : std::move(res);
     }
@@ -1650,7 +1655,6 @@ VerificationResult TransitionSystemNetworkManager::solve() && {
                     activePath.push(nextEdge);
                     current = next;
                     break; // Information has been propagated to the next node, switch to the new node
-
                 } else { // Edge cannot propagate forward
                     addRestrictions(current, logic.mkNot(edgeExplanation));
                     continue; // Repeat the query for the same TS with stronger query

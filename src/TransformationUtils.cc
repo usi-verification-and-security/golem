@@ -32,6 +32,7 @@ bool isTransitionSystem(ChcDirectedGraph const & graph) {
     return true;
 }
 
+
 std::unique_ptr<TransitionSystem> toTransitionSystem(ChcDirectedGraph const & graph) {
     Logic & logic = graph.getLogic();
     auto adjacencyRepresentation = AdjacencyListsGraphRepresentation::from(graph);
@@ -105,7 +106,9 @@ bool strongConnection(std::unordered_set<int> & visitedVertices, std::unordered_
             if (visitedVertices.find(nextVertex.x) == visitedVertices.end()) {
                 bool loopFound =
                     strongConnection(visitedVertices, verticesOnStack, graphRepresentation, graph, nextVertex);
-                if (loopFound) { return true; }
+                if (loopFound) {
+                    return true;
+                }
             } else if (verticesOnStack.find(nextVertex.x) != verticesOnStack.end()) {
                 return true;
             }
@@ -122,12 +125,11 @@ bool TarjanLoopDetection(ChcDirectedGraph const & graph) {
     auto vertices = reversePostOrder(graph, graphRepresentation);
     std::unordered_set<int> visitedVertices;
     std::unordered_set<int> verticesOnStack;
-
     for (uint i = 1; i < vertices.size() - 1; i++) {
         if (visitedVertices.find(vertices[i].x) == visitedVertices.end()) {
-            bool loop_detected =
-                strongConnection(visitedVertices, verticesOnStack, graphRepresentation, graph, vertices[i]);
-            if (loop_detected) { return true; }
+            if (strongConnection(visitedVertices, verticesOnStack, graphRepresentation, graph, vertices[i])) {
+                return true;
+            }
         }
     }
     return false;
@@ -158,13 +160,21 @@ bool isTransitionSystemDAG(ChcDirectedGraph const & graph) {
     return not canReachExit;
 }
 
+
+// TODO: SOMETHING WEIRD WITH NEWLY INTROD VARS
 EdgeVariables getVariablesFromEdge(Logic & logic, ChcDirectedGraph const & graph, EId eid) {
     EdgeVariables res;
     TermUtils utils(logic);
     PTRef sourcePred = graph.getStateVersion(graph.getSource(eid));
     PTRef targetPred = graph.getNextStateVersion(graph.getTarget(eid));
     res.stateVars = utils.predicateArgsInOrder(sourcePred);
+    auto auxSource = graph.getAuxVars(graph.getSource(eid));
+    res.stateVars.insert(res.stateVars.end(), auxSource.begin(), auxSource.end());
+    auto auxTarget = graph.getAuxVars(graph.getTarget(eid));
     res.nextStateVars = utils.predicateArgsInOrder(targetPred);
+    for(auto var: auxTarget){
+        res.nextStateVars.push_back(TimeMachine(logic).sendFlaThroughTime(var, 1));
+    }
     PTRef edgeLabel = graph.getEdgeLabel(eid);
     auto allVars = TermUtils(logic).getVars(edgeLabel);
     for (PTRef var : allVars) {
