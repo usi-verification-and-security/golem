@@ -23,6 +23,7 @@ const std::string Options::FORCED_COVERING = "forced-covering";
 const std::string Options::VERBOSE = "verbose";
 const std::string Options::TPA_USE_QE = "tpa.use-qe";
 const std::string Options::FORCE_TS = "force-ts";
+const std::string Options::SIMPLIFY_NESTED = "simplify-nested";
 const std::string Options::PROOF_FORMAT = "proof-format";
 
 namespace{
@@ -75,6 +76,7 @@ Options CommandLineParser::parse(int argc, char ** argv) {
     int tpaUseQE = 0;
     int printVersion = 0;
     int forceTS = 0;
+    int simplifyNested = 0;
 
     struct option long_options[] =
         {
@@ -93,6 +95,7 @@ Options CommandLineParser::parse(int argc, char ** argv) {
             {Options::TPA_USE_QE.c_str(), optional_argument, &tpaUseQE, 1},
             {Options::PROOF_FORMAT.c_str(), required_argument, nullptr, 'p'},
             {Options::FORCE_TS.c_str(), no_argument, &forceTS, 1},
+            {Options::SIMPLIFY_NESTED.c_str(), no_argument, &simplifyNested, 1},
             {0, 0, 0, 0}
         };
 
@@ -129,6 +132,8 @@ Options CommandLineParser::parse(int argc, char ** argv) {
                     verbose = std::atoi(optarg);
                 } else if (long_options[option_index].flag == &forceTS) {
                     forceTS = 1;
+                } else if (long_options[option_index].flag == &simplifyNested) {
+                    simplifyNested = 1;
                 }
                 break;
             case 'e':
@@ -182,6 +187,9 @@ Options CommandLineParser::parse(int argc, char ** argv) {
     }
     if (forceTS) {
         res.addOption(Options::FORCE_TS, "true");
+    }
+    if (simplifyNested) {
+        res.addOption(Options::SIMPLIFY_NESTED, "true");
     }
     res.addOption(Options::LRA_ITP_ALG, std::to_string(lraItpAlg));
     res.addOption(Options::VERBOSE, std::to_string(verbose));

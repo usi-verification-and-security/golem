@@ -85,24 +85,6 @@ InvalidityWitness::Derivation expandStepWithHyperEdge(
     Logic & logic
 );
 
-
-struct VarPosition {
-    SymRef vertex;
-    uint32_t pos;
-
-    inline bool operator==(VarPosition other) const { return vertex == other.vertex and pos == other.pos; }
-};
-struct VarPositionHasher {
-    std::size_t operator()(VarPosition pos) const {
-        std::hash<std::uint32_t> hasher;
-        return hasher(pos.vertex.x) ^ hasher(pos.pos);
-    }
-};
-
-using LocationVarMap = std::unordered_map<SymRef, PTRef, SymRefHash>;
-using PositionVarMap = std::unordered_map<VarPosition, PTRef, VarPositionHasher>;
-
-
 struct EdgeTranslator {
     ChcDirectedGraph const & graph;
     LocationVarMap const & locationVarMap;

@@ -27,6 +27,8 @@ src/transformers/MultiEdgeMerger.cc
 src/transformers/MultiEdgeMerger.h
 src/transformers/SingleLoopTransformation.cc
 src/transformers/SingleLoopTransformation.h
+src/transformers/NestedLoopTransformation.cc
+src/transformers/NestedLoopTransformation.h
 src/transformers/TrivialEdgePruner.cc
 src/transformers/TrivialEdgePruner.h
 

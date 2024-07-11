@@ -14,6 +14,7 @@
 #include "TransitionSystem.h"
 #include "Witnesses.h"
 #include "transformers/BasicTransformationPipelines.h"
+#include "transformers/NestedLoopTransformation.h"
 #include "transformers/SingleLoopTransformation.h"
 #include "utils/SmtSolver.h"
 
@@ -73,8 +74,17 @@ VerificationResult TPAEngine::solve(const ChcDirectedGraph & graph) {
                 assert(false);
                 throw std::logic_error("Unreachable!");
         }
-    } else if (isTransitionSystemDAG(graph) && not options.hasOption(Options::FORCE_TS)) {
-        return solveTransitionSystemGraph(graph);
+    } else if ((isTransitionSystemDAG(graph) && not options.hasOption(Options::FORCE_TS)) ||
+               options.hasOption(Options::SIMPLIFY_NESTED)) {
+        if (options.hasOption(Options::SIMPLIFY_NESTED)) {
+            NestedLoopTransformation transformation;
+            auto [transformedGraph, preTranslator] = transformation.transform(graph);
+            assert(isTransitionSystemDAG(*transformedGraph));
+            auto res = solveTransitionSystemGraph(*transformedGraph);
+            return preTranslator->translate(res);
+        } else {
+            return solveTransitionSystemGraph(graph);
+        }
     }
     // Translate CHCGraph into transition system
     SingleLoopTransformation transformation;
