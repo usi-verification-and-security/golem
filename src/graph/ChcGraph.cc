@@ -6,6 +6,8 @@
 
 #include "ChcGraph.h"
 
+#include "transformers/CommonUtils.h"
+#include "TransformationUtils.h"
 #include <iostream>
 #include <map>
 
@@ -599,4 +601,126 @@ std::unique_ptr<ChcDirectedHyperGraph> ChcDirectedHyperGraph::makeEmpty(Logic & 
         std::move(predicateRepresentation),
         logic
         );
+}
+
+WitnessInfo ChcDirectedGraph::contractConnectedVertices(std::vector<EId> edges) {
+    assert(edges.size() >= 2);
+    assert(getSource(edges[0]) == getTarget(edges[edges.size() - 1]));
+    TimeMachine timeMachine(logic);
+    TermUtils utils(logic);
+    std::vector<SymRef> vertices;
+    assert(std::adjacent_find(edges.begin(), edges.end(), [&](auto first, auto second) { return getTarget(first) != getSource(second); }) == edges.end());
+    for (uint i = 0; i < edges.size(); i++) {
+        vertices.push_back(getSource(edges[i]));
+    }
+
+    LocationVarMap locationVars;
+    PositionVarMap argVars;
+    locationVars.reserve(vertices.size());
+    for (auto vertex : vertices) {
+        auto varName = std::string(".loc_") + std::to_string(vertex.x);
+        locationVars.insert({vertex, timeMachine.getVarVersionZero(varName, logic.getSort_bool())});
+    }
+
+    for (auto vertex : vertices) {
+        auto args_count = logic.getSym(vertex).nargs();
+        for (uint32_t i = 0; i < args_count; ++i) {
+            VarPosition pos = {vertex, i};
+            auto varName = std::string(".arg_") + std::to_string(vertex.x) + '_' + std::to_string(i);
+            PTRef var = timeMachine.getVarVersionZero(varName, logic.getSym(vertex)[i]);
+            argVars.insert({pos, var});
+        }
+    }
+
+    vec<PTRef> transitionRelationComponent;
+
+    // KB: creation of the location variables for nodes and argument variables (params of predicates)
+    std::vector<EId> allEdges = getEdges();
+    EdgeTranslator edgeTranslator{*this, locationVars, argVars, {}};
+    // KB: Translation of self-loop edges for the edges vertices
+    //     and edges between vertices in DAG
+    for (auto edge : allEdges) {
+        if (std::find(vertices.begin(), vertices.end(), getSource(edge)) != vertices.end() &&
+            std::find(vertices.begin(), vertices.end(), getTarget(edge)) != vertices.end()) {
+            transitionRelationComponent.push(edgeTranslator.translateEdge(getEdge(edge)));
+            removeEdge(edge);
+        }
+    };
+    PTRef transitionRelation = logic.mkOr(std::move(transitionRelationComponent));
+
+    // KB: Extraction of the state variables of the nested loop nodes, creation of new predicate to replace node with
+    //     nested loops
+    std::vector<PTRef> stateVars = [&locationVars, &argVars]() {
+        std::vector<PTRef> ret;
+        for (auto && entry : locationVars) {
+            ret.push_back(entry.second);
+        }
+        for (auto && entry : argVars) {
+            ret.push_back(entry.second);
+        }
+        return ret;
+    }();
+
+    vec<SRef> argSorts;
+    std::vector<PTRef> vars;
+    for (auto arg : stateVars) {
+        argSorts.push(logic.getSortRef(arg));
+        vars.push_back(timeMachine.getUnversioned(arg));
+    }
+
+    std::string name;
+    for (auto vertex : vertices) {
+        name += logic.getSymName(vertex);
+    }
+
+    SymRef newRef = logic.declareFun(name, logic.getSort_bool(), argSorts);
+    predicates.addRepresentation(newRef, std::move(vars));
+
+    // KB: Changing input and output edges to and from the loop in the graph with new state and loc variables
+    //     Redirecting edges to the newly created vertice
+    allEdges = getEdges();
+    for (auto edge : allEdges) {
+        if (std::find(vertices.begin(), vertices.end(), getSource(edge)) != vertices.end()) {
+            PTRef newSourceLoc = locationVars.at(getSource(edge));
+            auto oldEdgeVars = getVariablesFromEdge(logic, *this, edge);
+            std::unordered_map<PTRef, PTRef, PTRefHash> subMap;
+            for (uint i = 0; i < oldEdgeVars.stateVars.size(); i++) {
+                subMap.insert(std::make_pair(oldEdgeVars.stateVars[i], argVars[{getSource(edge), i}]));
+            }
+            updateEdgeSource(edge, newRef);
+            PTRef label = utils.varSubstitute(logic.mkAnd(getEdgeLabel(edge), newSourceLoc), subMap);
+
+            updateEdgeLabel(edge, InterpretedFla{label});
+        }
+        if (std::find(vertices.begin(), vertices.end(), getTarget(edge)) != vertices.end()) {
+
+            PTRef newTargetLoc = [&]() -> PTRef {
+                vec<PTRef> negatedLocations;
+                negatedLocations.capacity(locationVars.size());
+                for (auto && entry : locationVars) {
+                    if (entry.first != getTarget(edge)) {
+                        negatedLocations.push(logic.mkNot(timeMachine.sendVarThroughTime(entry.second, 1)));
+                    }
+                }
+                return logic.mkAnd(std::move(negatedLocations));
+            }();
+            PTRef destination = timeMachine.sendVarThroughTime(locationVars.at(getTarget(edge)), 1);
+
+            auto oldEdgeVars = getVariablesFromEdge(logic, *this, edge);
+            std::unordered_map<PTRef, PTRef, PTRefHash> subMap;
+            for (uint i = 0; i < oldEdgeVars.nextStateVars.size(); i++) {
+                subMap.insert(std::make_pair(oldEdgeVars.nextStateVars[i],
+                                             timeMachine.sendVarThroughTime(argVars[{getTarget(edge), i}], 1)));
+            }
+            updateEdgeTarget(edge, newRef);
+            PTRef label = utils.varSubstitute(getEdgeLabel(edge), subMap);
+
+            updateEdgeLabel(edge, InterpretedFla{rewriteMaxArityClassic(
+                                            logic, logic.mkAnd({newTargetLoc, destination, label}))});
+        }
+    }
+
+    // KB: Creating new self-looping edge (which represents all of the transitions in the outer loop)
+    newEdge(newRef, newRef, InterpretedFla{transitionRelation});
+    return {newRef, locationVars, argVars};
 }

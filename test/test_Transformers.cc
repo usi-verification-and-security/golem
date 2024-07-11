@@ -11,13 +11,16 @@
 #include "engine/Common.h"
 #include "engine/IMC.h"
 #include "engine/Spacer.h"
+#include "engine/TPA.h"
 #include "graph/ChcGraphBuilder.h"
+#include "transformers/BasicTransformationPipelines.h"
 #include "transformers/ConstraintSimplifier.h"
 #include "transformers/MultiEdgeMerger.h"
+#include "transformers/NestedLoopTransformation.h"
 #include "transformers/NodeEliminator.h"
+#include "transformers/RemoveUnreachableNodes.h"
 #include "transformers/SimpleChainSummarizer.h"
 #include "transformers/TransformationPipeline.h"
-#include "transformers/RemoveUnreachableNodes.h"
 
 class Transformer_New_Test : public LIAEngineTest {
 };
@@ -802,4 +805,161 @@ TEST_F(Transformer_New_Test, test_SummarizerAndUnreachable_WitnessBacktranslatio
     VerificationResult translatedResult(VerificationAnswer::SAFE, translatedWitness);
     Validator validator(logic);
     EXPECT_EQ(validator.validate(originalGraph, translatedResult), Validator::Result::VALIDATED);
+}
+
+
+TEST_F(Transformer_New_Test, test_NestedLoopMerger_SimpleSafe) {
+    Options options;
+    options.addOption(Options::LOGIC, "QF_LIA");
+    options.addOption(Options::COMPUTE_WITNESS, "true");
+    options.addOption(Options::SIMPLIFY_NESTED, "true");
+    SymRef s1 = mkPredicateSymbol("s1", {intSort(), intSort()});
+    SymRef s2 = mkPredicateSymbol("s2", {intSort(), intSort()});
+    SymRef s3 = mkPredicateSymbol("s3", {intSort(), intSort()});
+    PTRef currentS1 = instantiatePredicate(s1, {x,y});
+    PTRef nextS1 = instantiatePredicate(s1, {xp,yp});
+    PTRef currentS2 = instantiatePredicate(s2, {x,y});
+    PTRef nextS2 = instantiatePredicate(s2, {xp,yp});
+    PTRef currentS3 = instantiatePredicate(s3, {x,y});
+    PTRef nextS3 = instantiatePredicate(s3, {xp,yp});
+    PTRef ten = logic->mkIntConst(10);
+    PTRef seven = logic->mkIntConst(7);
+    // 0 <= x <= 10 and 0 <= y <= 5 => S1(x,y)
+    // S1(x,y) and y < 10 => S2(x,y,z)
+    // S2(x,y) and x < 7 and x' = x + 1 and y' = y + 1 => S2(x',y')
+    // S2(x,y) and x >= 7 => S3(x,y)
+    // S3(x,y) and y > 0 and x' = x - 1 => S3(x',y)
+    // S3(x,y) and y <= 0 and y' = y + 1 => S1(x,y')
+    // S1(x,y) and y >= 10 and x <= 0 => false
+
+    std::vector<ChClause> clauses{
+        {
+            ChcHead{UninterpretedPredicate{nextS1}},
+            ChcBody{{logic->mkAnd(logic->mkAnd(logic->mkLeq(xp, ten), logic->mkGeq(xp, zero)),
+                                  logic->mkAnd(logic->mkLeq(yp, logic->mkIntConst(5)), logic->mkGeq(yp, zero)))}, {}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{nextS2}},
+            ChcBody{{logic->mkLt(y, ten)}, {UninterpretedPredicate{currentS1}}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{nextS2}},
+            ChcBody{{logic->mkAnd(
+                            {logic->mkLt(x, seven),
+                            logic->mkEq(xp, logic->mkPlus(x, one)),
+                            logic->mkEq(yp, logic->mkPlus(y, one))})},
+                    {UninterpretedPredicate{currentS2}}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{nextS3}},
+            ChcBody{{logic->mkGeq(x,seven)}, {UninterpretedPredicate{currentS2}}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{nextS3}},
+            ChcBody{{logic->mkAnd( logic->mkGt(y, zero), logic->mkEq(xp, logic->mkMinus(x, one)))},
+                         {UninterpretedPredicate{currentS3}}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{nextS1}},
+            ChcBody{{logic->mkAnd( logic->mkLeq(y, zero), logic->mkEq(yp, logic->mkPlus(y, one)))},
+                    {UninterpretedPredicate{currentS3}}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{logic->getTerm_false()}},
+            ChcBody{{logic->mkAnd(logic->mkGeq(y, ten), logic->mkLeq(x, zero))}, {UninterpretedPredicate{currentS1}}}
+        }};
+
+    for (auto const & clause : clauses) { system.addClause(clause); }
+
+    Logic & logic = *this->logic;
+    auto normalizedSystem = Normalizer(logic).normalize(system);
+    auto hyperGraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
+    NestedLoopTransformation NLTransformation;
+    auto properGraph = *hyperGraph->toNormalGraph();
+    ASSERT_EQ(properGraph.getEdges().size(), 7);
+    auto [transformedGraph, preTranslator]= NLTransformation.transform(properGraph);
+    ASSERT_EQ(transformedGraph->getEdges().size(), 3);
+    auto res = TPAEngine(logic, options, TPACore::SPLIT).solve(*hyperGraph);
+    auto answer = res.getAnswer();
+    ASSERT_EQ(answer, VerificationAnswer::SAFE);
+    Validator validator(logic);
+    EXPECT_EQ(validator.validate(*hyperGraph, res), Validator::Result::VALIDATED);
+}
+
+TEST_F(Transformer_New_Test, test_NestedLoopMerger_SimpleUnsafe) {
+    Options options;
+    options.addOption(Options::LOGIC, "QF_LIA");
+    options.addOption(Options::COMPUTE_WITNESS, "true");
+    options.addOption(Options::SIMPLIFY_NESTED, "true");
+    SymRef s1 = mkPredicateSymbol("s1", {intSort(), intSort()});
+    SymRef s2 = mkPredicateSymbol("s2", {intSort(), intSort()});
+    SymRef s3 = mkPredicateSymbol("s3", {intSort(), intSort()});
+    PTRef currentS1 = instantiatePredicate(s1, {x,y});
+    PTRef nextS1 = instantiatePredicate(s1, {xp,yp});
+    PTRef currentS2 = instantiatePredicate(s2, {x,y});
+    PTRef nextS2 = instantiatePredicate(s2, {xp,yp});
+    PTRef currentS3 = instantiatePredicate(s3, {x,y});
+    PTRef nextS3 = instantiatePredicate(s3, {xp,yp});
+    PTRef ten = logic->mkIntConst(10);
+    PTRef seven = logic->mkIntConst(7);
+    // 0 <= x <= 10 and 0 <= y <= 5 => S1(x,y)
+    // S1(x,y) and y < 10 => S2(x,y,z)
+    // S2(x,y) and x < 7 and x' = x + 1 and y' = y + 1 => S2(x',y')
+    // S2(x,y) and x >= 7 => S3(x,y)
+    // S3(x,y) and x > 0 and x' = x - 1 => S3(x',y)
+    // S3(x,y) and x <= 0 and y' = y + 1 => S1(x,y')
+    // S1(x,y) and y >= 10 and x <= 0 => false
+
+    std::vector<ChClause> clauses{
+        {
+            ChcHead{UninterpretedPredicate{nextS1}},
+            ChcBody{{logic->mkAnd(logic->mkAnd(logic->mkLeq(xp, ten), logic->mkGeq(xp, zero)),
+                                  logic->mkAnd(logic->mkLeq(yp, logic->mkIntConst(5)), logic->mkGeq(yp, zero)))}, {}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{nextS2}},
+            ChcBody{{logic->mkLt(y, ten)}, {UninterpretedPredicate{currentS1}}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{nextS2}},
+            ChcBody{{logic->mkAnd(
+                        {logic->mkLt(x, seven),
+                         logic->mkEq(xp, logic->mkPlus(x, one)),
+                         logic->mkEq(yp, logic->mkPlus(y, one))})},
+                    {UninterpretedPredicate{currentS2}}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{nextS3}},
+            ChcBody{{logic->mkGeq(x,seven)}, {UninterpretedPredicate{currentS2}}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{nextS3}},
+            ChcBody{{logic->mkAnd( logic->mkGt(x, zero), logic->mkEq(xp, logic->mkMinus(x, one)))},
+                    {UninterpretedPredicate{currentS3}}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{nextS1}},
+            ChcBody{{logic->mkAnd( logic->mkLeq(x, zero), logic->mkEq(yp, logic->mkPlus(y, one)))},
+                    {UninterpretedPredicate{currentS3}}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{logic->getTerm_false()}},
+            ChcBody{{logic->mkAnd(logic->mkGeq(y, ten), logic->mkLeq(x, zero))}, {UninterpretedPredicate{currentS1}}}
+        }};
+
+    for (auto const & clause : clauses) { system.addClause(clause); }
+
+    Logic & logic = *this->logic;
+    auto normalizedSystem = Normalizer(logic).normalize(system);
+    auto hyperGraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
+    NestedLoopTransformation NLTransformation;
+    auto properGraph = *hyperGraph->toNormalGraph();
+    ASSERT_EQ(properGraph.getEdges().size(), 7);
+    auto [transformedGraph, preTranslator] = NLTransformation.transform(properGraph);
+    ASSERT_EQ(transformedGraph->getEdges().size(), 3);
+    auto res = TPAEngine(logic, options, TPACore::SPLIT).solve(*hyperGraph);
+    auto answer = res.getAnswer();
+    ASSERT_EQ(answer, VerificationAnswer::UNSAFE);
+    Validator validator(logic);
+    EXPECT_EQ(validator.validate(*hyperGraph, res), Validator::Result::VALIDATED);
 }

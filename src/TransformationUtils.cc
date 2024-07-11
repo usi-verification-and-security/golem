@@ -134,6 +134,7 @@ std::vector<EId> detectLoop(const ChcDirectedGraph & graph) {
     std::unordered_set<SymRef, SymRefHash> visitedVertices;
     std::unordered_set<SymRef, SymRefHash> verticesOnStack;
     visit(visitedVertices, verticesOnStack, graphRepresentation, graph, graph.getEntry(), loop);
+    std::reverse(loop.begin(), loop.end());
     return loop;
 }
 

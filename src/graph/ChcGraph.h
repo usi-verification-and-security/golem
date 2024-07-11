@@ -107,6 +107,28 @@ struct VertexHasher {
     }
 };
 
+struct VarPosition {
+    SymRef vertex;
+    uint32_t pos;
+
+    inline bool operator==(VarPosition other) const { return vertex == other.vertex and pos == other.pos; }
+};
+struct VarPositionHasher {
+    std::size_t operator()(VarPosition pos) const {
+        std::hash<std::uint32_t> hasher;
+        return hasher(pos.vertex.x) ^ hasher(pos.pos);
+    }
+};
+
+using LocationVarMap = std::unordered_map<SymRef, PTRef, SymRefHash>;
+using PositionVarMap = std::unordered_map<VarPosition, PTRef, VarPositionHasher>;
+
+struct WitnessInfo {
+    SymRef loopVertex;
+    LocationVarMap locations;
+    PositionVarMap positions;
+};
+
 class ChcDirectedGraph {
     std::map<EId, DirectedEdge> edges;
     LinearCanonicalPredicateRepresentation predicates;
@@ -114,8 +136,10 @@ class ChcDirectedGraph {
     mutable std::size_t freeId {0};
 
     // graph transformations
-    friend class GraphTransformations;
+    friend class NestedLoopTransformation;
+    friend class SingleLoopTransformation;
     void contractVertex(SymRef sym);
+    WitnessInfo contractConnectedVertices(std::vector<EId> edges);
     void mergeEdges(EId incoming, EId outgoing);
     void deleteNode(SymRef sym);
     PTRef mergeLabels(DirectedEdge const & incoming, DirectedEdge const & outgoing);
@@ -158,9 +182,9 @@ public:
         return getEdge(eid).from;
     }
 
-	SymRef getTarget(EId eid) const {
-		return getEdge(eid).to;
-	}
+    SymRef getTarget(EId eid) const {
+            return getEdge(eid).to;
+    }
 
     std::unique_ptr<ChcDirectedHyperGraph> toHyperGraph() const;
 
@@ -192,6 +216,24 @@ private:
     void newEdge(SymRef from, SymRef to, InterpretedFla label) {
         EId eid = freshId();
         edges.emplace(eid, DirectedEdge{.from = from, .to = to, .fla = label, .id = eid});
+    }
+
+    void updateEdgeLabel(EId edge, InterpretedFla label) {
+        edges[edge].fla  = label;
+    }
+
+    void updateEdgeSource(EId edge, SymRef source) {
+        edges[edge].from  = source;
+    }
+
+    void updateEdgeTarget(EId edge, SymRef target) {
+        edges[edge].to  = target;
+    }
+
+    void removeEdge(EId edge){
+        const auto it = edges.find(edge);
+        if (it != edges.end())
+            edges.erase(it);
     }
 
 };
