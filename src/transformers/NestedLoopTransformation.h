@@ -3,22 +3,21 @@
  *
  * SPDX-License-Identifier: MIT
  */
-#ifndef GOLEM_SINGLELOOPTRANSFORMATION_H
-#define GOLEM_SINGLELOOPTRANSFORMATION_H
+#ifndef GOLEM_NESTED_LOOP_TRANSFORMATION_H
+#define GOLEM_NESTED_LOOP_TRANSFORMATION_H
 
 #include "TransitionSystem.h"
 #include "Witnesses.h"
 #include "graph/ChcGraph.h"
 
 /**
- * This class implements a transformation from a general linear CHC system to a transition system (defined by initial
- * states, transition relation and bad states).
- * The implementation follows the algorithm described in the short paper
- * Horn2VMT: Translating Horn Reachability into Transition Systems
- * presented in HCVS 2020. See, e.g., https://www.osti.gov/biblio/1783647
+ * This class implements a transformation from a general linear CHC system to a linear CHC system without
+ * nested loops.
+ * The implementation is influenced by the algorithm used in SingleLoopTransformation.cc
  *
  * The idea behind the transformation is the following.
- * We introduce a separate boolean variable for each location (predicate, vertex in the CHC graph).
+ * First we parse CHC DAG, detecting loops.
+ * We introduce a separate boolean variable for each location inside of the loop (predicate, vertex in the CHC graph).
  * For each predicate and each argument of the predicate we add a new state variable of the transition system.
  * Then, for each edge (clause), we create a new disjunct of the transition relation.
  * This fragment captures the changes to the variables as defined by the edge constraint.
@@ -36,8 +35,11 @@
  * values for location variables. This may still leave some undesired variables in the invariant. We currently make
  * best effort to eliminate these variables by simplifying the formula.
  */
-class SingleLoopTransformation {
+class NestedLoopTransformation {
+
+
 public:
+
     // Helper types
     struct VarPosition {
         SymRef vertex;
@@ -52,19 +54,21 @@ public:
         }
     };
 
+
     using LocationVarMap = std::unordered_map<SymRef, PTRef, SymRefHash>;
     using PositionVarMap = std::unordered_map<VarPosition, PTRef, VarPositionHasher>;
 
+
     class WitnessBackTranslator {
+        ChcDirectedGraph const & initialGraph;
         ChcDirectedGraph const & graph;
-        TransitionSystem const & transitionSystem;
         LocationVarMap locationVarMap;
         PositionVarMap positionVarMap;
 
     public:
-        WitnessBackTranslator(ChcDirectedGraph const & graph, TransitionSystem const & transitionSystem,
+        WitnessBackTranslator(ChcDirectedGraph const & initialGraph, ChcDirectedGraph const & graph,
                               LocationVarMap && locationVarMap, PositionVarMap && positionVarMap)
-            : graph(graph), transitionSystem(transitionSystem), locationVarMap(std::move(locationVarMap)),
+            : graph(graph), initialGraph(initialGraph), locationVarMap(std::move(locationVarMap)),
               positionVarMap(std::move(positionVarMap)) {}
 
         VerificationResult translate(TransitionSystemVerificationResult result);
@@ -79,12 +83,12 @@ public:
         std::unordered_set<PTRef, PTRefHash> getVarsForVertex(SymRef vertex) const;
     };
 
-    // Main method
-    using TransformationResult = std::pair<std::unique_ptr<TransitionSystem>, std::unique_ptr<WitnessBackTranslator>>;
 
-    TransformationResult transform(ChcDirectedGraph const & graph);
+    std::vector<EId> detectLoop(ChcDirectedGraph const & graph);
+    void simplifyLoop(ChcDirectedGraph & graph, std::vector<EId> loop);
 
-    void transformVertices(ChcDirectedGraph & graph, std::vector<SymRef> const & vertices);
+    void transform(ChcDirectedGraph & graph);
+
 };
 
-#endif // GOLEM_SINGLELOOPTRANSFORMATION_H
+#endif // GOLEM_NESTED_LOOP_TRANSFORMATION_H

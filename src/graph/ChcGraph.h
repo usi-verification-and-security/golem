@@ -109,6 +109,7 @@ struct VertexHasher {
 
 class ChcDirectedGraph {
     std::map<EId, DirectedEdge> edges;
+    std::map<uint32_t, std::vector<PTRef>> simplified_vars;
     LinearCanonicalPredicateRepresentation predicates;
     Logic & logic;
     mutable std::size_t freeId {0};
@@ -158,9 +159,9 @@ public:
         return getEdge(eid).from;
     }
 
-	SymRef getTarget(EId eid) const {
-		return getEdge(eid).to;
-	}
+    SymRef getTarget(EId eid) const {
+            return getEdge(eid).to;
+    }
 
     std::unique_ptr<ChcDirectedHyperGraph> toHyperGraph() const;
 
@@ -171,10 +172,48 @@ public:
         }
     }
 
-private:
+    void newEdge(SymRef from, SymRef to, InterpretedFla label) {
+        EId eid = freshId();
+        edges.emplace(eid, DirectedEdge{.from = from, .to = to, .fla = label, .id = eid});
+    }
+
+    void updateEdgeLabel(EId edge, InterpretedFla label) {
+        edges[edge].fla  = label;
+    }
+
+    void updateEdgeSource(EId edge, SymRef source) {
+        edges[edge].from  = source;
+    }
+
+    void updateEdgeTarget(EId edge, SymRef target) {
+        edges[edge].to  = target;
+    }
+
+    void removeEdge(EId edge){
+        const auto it = edges.find(edge);
+        if (it != edges.end())
+            edges.erase(it);
+    }
+
+
     DirectedEdge const & getEdge(EId eid) const {
         return edges.at(eid);
     }
+
+
+    std::vector<PTRef> const & getAuxVars(SymRef sym) const {
+        if(simplified_vars.find(sym.x)!=simplified_vars.end()){
+            return simplified_vars.at(sym.x);
+        } else {
+            std::vector<PTRef> empty;
+            return empty;
+        }
+    };
+    void addAuxVars(SymRef sym, std::vector<PTRef> & vars) {
+        simplified_vars[sym.x].insert(simplified_vars[sym.x].end(), vars.begin(), vars.end());
+    };
+
+private:
 
     template<typename TPred>
     void deleteMatchingEdges(TPred predicate) {
@@ -189,10 +228,7 @@ private:
 
     EId freshId() const { return EId{freeId++};}
 
-    void newEdge(SymRef from, SymRef to, InterpretedFla label) {
-        EId eid = freshId();
-        edges.emplace(eid, DirectedEdge{.from = from, .to = to, .fla = label, .id = eid});
-    }
+
 
 };
 
@@ -289,12 +325,14 @@ public:
     void deleteEdges(std::vector<EId> const & edgesToDelete);
     void deleteNode(SymRef sym);
 
-private:
     EId newEdge(std::vector<SymRef> && from, SymRef to, InterpretedFla label) {
         EId eid = freshId();
         edges.emplace(eid, DirectedHyperEdge{.from = std::move(from), .to = to, .fla = label, .id = eid});
         return eid;
     }
+
+private:
+
 
     template<typename TPred>
     void deleteMatchingEdges(TPred predicate) {
