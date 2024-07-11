@@ -9,6 +9,7 @@
 
 #include "graph/ChcGraph.h"
 #include "Witnesses.h"
+#include "TransformationUtils.h"
 
 class EdgeConverter {
     Logic & logic;
@@ -84,5 +85,35 @@ InvalidityWitness::Derivation expandStepWithHyperEdge(
     NonlinearCanonicalPredicateRepresentation const & predicateRepresentation,
     Logic & logic
 );
+
+
+struct VarPosition {
+    SymRef vertex;
+    uint32_t pos;
+
+    inline bool operator==(VarPosition other) const { return vertex == other.vertex and pos == other.pos; }
+};
+struct VarPositionHasher {
+    std::size_t operator()(VarPosition pos) const {
+        std::hash<std::uint32_t> hasher;
+        return hasher(pos.vertex.x) ^ hasher(pos.pos);
+    }
+};
+
+using LocationVarMap = std::unordered_map<SymRef, PTRef, SymRefHash>;
+using PositionVarMap = std::unordered_map<VarPosition, PTRef, VarPositionHasher>;
+
+
+struct EdgeTranslator {
+    ChcDirectedGraph const & graph;
+    LocationVarMap const & locationVarMap;
+    PositionVarMap const & positionVarMap;
+
+    mutable vec<PTRef> auxiliaryVariablesSeen;
+
+    PTRef translateEdge(DirectedEdge const & edge) const;
+};
+
+
 
 #endif //GOLEM_COMMONUTILS_H
