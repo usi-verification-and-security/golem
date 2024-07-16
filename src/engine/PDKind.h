@@ -8,9 +8,11 @@
 #define GOLEM_PDKIND_H
 
 #include "Engine.h"
-#include "MainSolver.h"
-#include "PTRef.h"
 #include "TransitionSystem.h"
+
+#include "osmt_solver.h"
+#include "osmt_terms.h"
+
 #include <memory>
 #include <set>
 #include <tuple>

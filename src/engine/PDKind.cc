@@ -7,9 +7,7 @@
 #include "PDKind.h"
 
 #include "Common.h"
-#include "MainSolver.h"
 #include "ModelBasedProjection.h"
-#include "PTRef.h"
 #include "QuantifierElimination.h"
 #include "TermUtils.h"
 #include "TransformationUtils.h"
