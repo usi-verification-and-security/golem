@@ -87,9 +87,9 @@ jobs:
                 command: ./ci/run_commands.sh
 
 
-    build-starexec-debug:
+    build-fedora-debug:
         docker:
-            - image: usiverify/verify-env:starexec
+            - image: usiverify/verify-env:fedora
               auth:
                 username: mydockerhub-user
                 password: $DOCKERHUB_PASSWORD
@@ -100,27 +100,27 @@ jobs:
         steps:
             - checkout
             - run:
-                name: Debug build gcc under devtoolset-8
+                name: Debug build gcc
                 command: |
-                    cat ./ci/run_commands.sh | scl enable devtoolset-8 bash
+                    bash ./ci/run_commands.sh
 
 
-    build-starexec-release:
+    build-fedora-release:
         docker:
-            - image: usiverify/verify-env:starexec
+            - image: usiverify/verify-env:fedora
               auth:
                 username: mydockerhub-user
                 password: $DOCKERHUB_PASSWORD
               environment:
                 CMAKE_BUILD_TYPE: Release
-                FLAGS: -Wall -Wextra -Werror
+                FLAGS: -Wall -Wextra -Werror -Wno-free-nonheap-object # -Wno-free-nonheap-object added to work around false positive of GCC
 
         steps:
             - checkout
             - run:
-                name: Release build gcc under devtoolset-8
+                name: Release build gcc
                 command: |
-                    cat ./ci/build_maximally_static.sh | scl enable devtoolset-8 bash
+                    bash ./ci/build_maximally_static.sh
 
 
     build-macos:
@@ -151,11 +151,11 @@ workflows:
   build-test:
       jobs:
         - formatter
-        - build-starexec-debug:
+        - build-fedora-debug:
           filters: &filters-build-test
             tags:
               only: /^v.*/
-        - build-starexec-release:
+        - build-fedora-release:
           filters:
             <<: *filters-build-test
         - build-recent-clang-debug:
