@@ -6,7 +6,9 @@
  */
 
 #include "Term.h"
-#include "FastRational.h"
+
+#include "osmt_terms.h"
+
 #include <cassert>
 #include <memory>
 #include <string>

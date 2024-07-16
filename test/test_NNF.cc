@@ -1,11 +1,23 @@
-//
-// Created by Martin Blicha on 10.06.21.
-//
+/*
+ * Copyright (c) 2021-2024, Martin Blicha <martin.blicha@gmail.com>
+ *
+ * SPDX-License-Identifier: MIT
+ */
 
 #include <gtest/gtest.h>
 #include "TermUtils.h"
 
-#include "VerificationUtils.h"
+#include "utils/SmtSolver.h"
+
+namespace{
+bool implies(Logic & logic, PTRef antecedent, PTRef consequent) {
+    SMTSolver solver(logic);
+    solver.getCoreSolver().insertFormula(logic.mkNot(logic.mkImpl(antecedent, consequent)));
+    auto res = solver.getCoreSolver().check();
+    return res == s_False;
+}
+}
+
 
 class NNFTest : public ::testing::Test {
 protected:
@@ -73,6 +85,6 @@ TEST_F(NNFTest, test_NestedNegatedDisjunction) {
     PTRef fla = logic.mkAnd(eq2, disj);
     PTRef nnf = TermUtils(logic).toNNF(fla);
 
-    ASSERT_TRUE(VerificationUtils(logic).impliesInternal(fla, nnf));
-    ASSERT_TRUE(VerificationUtils(logic).impliesInternal(nnf, fla));
+    ASSERT_TRUE(implies(logic, fla, nnf));
+    ASSERT_TRUE(implies(logic, nnf, fla));
 }
