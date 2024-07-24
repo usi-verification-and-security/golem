@@ -14,18 +14,12 @@
 #include "utils/SmtSolver.h"
 
 VerificationResult BMC::solve(ChcDirectedGraph const & graph) {
-    if (isTrivial(graph)) {
-        return solveTrivial(graph);
-    }
-    if (isTransitionSystem(graph)) {
-        return solveTransitionSystem(graph);
-    }
-    if (not forceTransitionSystem) {
-        return solveGeneralLinearSystem(graph);
-    }
+    if (isTrivial(graph)) { return solveTrivial(graph); }
+    if (isTransitionSystem(graph)) { return solveTransitionSystem(graph); }
+    if (not forceTransitionSystem) { return solveGeneralLinearSystem(graph); }
 
     SingleLoopTransformation transformation;
-    auto[ts, backtranslator] = transformation.transform(graph);
+    auto [ts, backtranslator] = transformation.transform(graph);
     assert(ts);
     auto res = solveTransitionSystemInternal(*ts);
     return needsWitness ? backtranslator->translate(res) : VerificationResult{res.answer};
@@ -45,7 +39,7 @@ TransitionSystemVerificationResult BMC::solveTransitionSystemInternal(Transition
 
     SMTSolver solverWrapper(logic, SMTSolver::WitnessProduction::NONE);
     auto & solver = solverWrapper.getCoreSolver();
-//    std::cout << "Adding initial states: " << logic.pp(init) << std::endl;
+    //    std::cout << "Adding initial states: " << logic.pp(init) << std::endl;
     solver.insertFormula(init);
     { // Check for system with empty initial states
         auto res = solver.check();
@@ -57,18 +51,19 @@ TransitionSystemVerificationResult BMC::solveTransitionSystemInternal(Transition
     TimeMachine tm{logic};
     for (std::size_t currentUnrolling = 0; currentUnrolling < maxLoopUnrollings; ++currentUnrolling) {
         PTRef versionedQuery = tm.sendFlaThroughTime(query, currentUnrolling);
-//        std::cout << "Adding query: " << logic.pp(versionedQuery) << std::endl;
+        //        std::cout << "Adding query: " << logic.pp(versionedQuery) << std::endl;
         solver.push();
         solver.insertFormula(versionedQuery);
         auto res = solver.check();
         if (res == s_True) {
             if (verbosity > 0) { std::cout << "; BMC: Bug found in depth: " << currentUnrolling << std::endl; }
-            return TransitionSystemVerificationResult{.answer = VerificationAnswer::UNSAFE, .witness = static_cast<std::size_t>(currentUnrolling)};
+            return TransitionSystemVerificationResult{.answer = VerificationAnswer::UNSAFE,
+                                                      .witness = static_cast<std::size_t>(currentUnrolling)};
         }
         if (verbosity > 1) { std::cout << "; BMC: No path of length " << currentUnrolling << " found!" << std::endl; }
         solver.pop();
         PTRef versionedTransition = tm.sendFlaThroughTime(transition, currentUnrolling);
-//        std::cout << "Adding transition: " << logic.pp(versionedTransition) << std::endl;
+        //        std::cout << "Adding transition: " << logic.pp(versionedTransition) << std::endl;
         solver.insertFormula(versionedTransition);
     }
     return TransitionSystemVerificationResult{VerificationAnswer::UNKNOWN, 0u};
@@ -84,11 +79,13 @@ public:
     PTRef getVarFor(SymRef node, std::size_t step) {
         return logic.mkBoolVar((auxName + std::to_string(node.x) + '#' + std::to_string(step)).c_str());
     }
+
 private:
     Logic & logic;
 };
 
-InvalidityWitness computeWitness(ChcDirectedGraph const & graph, Model & model, std::size_t const steps, std::unordered_set<PTRef, PTRefHash> const & knownNodes) {
+InvalidityWitness computeWitness(ChcDirectedGraph const & graph, Model & model, std::size_t const steps,
+                                 std::unordered_set<PTRef, PTRefHash> const & knownNodes) {
     auto adjacencyLists = AdjacencyListsGraphRepresentation::from(graph);
     Logic & logic = graph.getLogic();
     PTRef trueT = logic.getTerm_true();
@@ -117,7 +114,7 @@ InvalidityWitness computeWitness(ChcDirectedGraph const & graph, Model & model, 
     std::reverse(errorPath.begin(), errorPath.end());
     return InvalidityWitness::fromErrorPath(ErrorPath(std::move(errorPath)), graph);
 }
-}
+} // namespace
 
 /**
  * Algorithm to check linear system of CHCs using a single solver.
@@ -147,7 +144,8 @@ VerificationResult BMC::solveGeneralLinearSystem(ChcDirectedGraph const & graph)
     auto allnodes = graph.getVertices();
     std::size_t maxLoopUnrollings = std::numeric_limits<int>::max() - 1;
 
-    // TODO: Figure out how to compute CEX withtout this. Maybe OpenSMT should have a model that does not use default values?
+    // TODO: Figure out how to compute CEX withtout this. Maybe OpenSMT should have a model that does not use default
+    // values?
     std::unordered_set<PTRef, PTRefHash> encounteredNodes;
     {
         PTRef entry = utils.getVarFor(graph.getEntry(), 0u);
@@ -183,7 +181,8 @@ VerificationResult BMC::solveGeneralLinearSystem(ChcDirectedGraph const & graph)
             if (res == s_True) {
                 if (verbosity > 0) { std::cout << "; BMC: Bug found in depth: " << currentUnrolling << std::endl; }
                 if (not needsWitness) { return {VerificationAnswer::UNSAFE, NoWitness{}}; }
-                return {VerificationAnswer::UNSAFE, computeWitness(graph, *solver.getCoreSolver().getModel(), currentUnrolling + 1, encounteredNodes)};
+                return {VerificationAnswer::UNSAFE, computeWitness(graph, *solver.getCoreSolver().getModel(),
+                                                                   currentUnrolling + 1, encounteredNodes)};
             }
             solver.getCoreSolver().pop();
         }

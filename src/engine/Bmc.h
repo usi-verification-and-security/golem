@@ -12,12 +12,12 @@
 
 class BMC : public Engine {
     Logic & logic;
-//    Options const & options;
+    // Options const & options;
     bool needsWitness = false;
     int verbosity = 0;
     bool forceTransitionSystem = true;
-public:
 
+public:
     BMC(Logic & logic, Options const & options) : logic(logic) {
         needsWitness = options.getOrDefault(Options::COMPUTE_WITNESS, "") == "true";
         verbosity = std::stoi(options.getOrDefault(Options::VERBOSE, "0"));
@@ -40,5 +40,4 @@ private:
     VerificationResult solveGeneralLinearSystem(ChcDirectedGraph const & graph);
 };
 
-
-#endif //GOLEM_BMC_H
+#endif // GOLEM_BMC_H
