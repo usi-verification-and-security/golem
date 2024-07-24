@@ -46,7 +46,6 @@ public:
     static const std::string VERBOSE;
     static const std::string TPA_USE_QE;
     static const std::string FORCE_TS;
-    static const std::string EXPERIMENTAL;
 };
 
 class CommandLineParser {

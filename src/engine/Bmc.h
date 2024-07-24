@@ -21,7 +21,7 @@ public:
     BMC(Logic & logic, Options const & options) : logic(logic) {
         needsWitness = options.getOrDefault(Options::COMPUTE_WITNESS, "") == "true";
         verbosity = std::stoi(options.getOrDefault(Options::VERBOSE, "0"));
-        forceTransitionSystem = options.getOrDefault(Options::EXPERIMENTAL, "") != "true";
+        forceTransitionSystem = options.getOrDefault(Options::FORCE_TS, "") == "true";
     }
 
     VerificationResult solve(ChcDirectedHyperGraph const & graph) override {
