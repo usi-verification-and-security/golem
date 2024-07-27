@@ -62,12 +62,12 @@ TransitionSystemVerificationResult Kind::solveTransitionSystemInternal(Transitio
     PTRef negQuery = logic.mkNot(query);
     PTRef negInit = logic.mkNot(init);
     // starting point
-    solverBase.getCoreSolver().insertFormula(init);
-    solverStepBackward.getCoreSolver().insertFormula(init);
-    solverStepForward.getCoreSolver().insertFormula(query);
+    solverBase.assertProp(init);
+    solverStepBackward.assertProp(init);
+    solverStepForward.assertProp(query);
     { // Check for system with empty initial states
-        auto res = solverBase.getCoreSolver().check();
-        if (res == s_False) {
+        auto res = solverBase.check();
+        if (res == SMTSolver::Answer::UNSAT) {
             return TransitionSystemVerificationResult{VerificationAnswer::SAFE, logic.getTerm_false()};
         }
     }
@@ -76,10 +76,10 @@ TransitionSystemVerificationResult Kind::solveTransitionSystemInternal(Transitio
     for (std::size_t k = 0; k < maxK; ++k) {
         PTRef versionedQuery = tm.sendFlaThroughTime(query, k);
         // Base case
-        solverBase.getCoreSolver().push();
-        solverBase.getCoreSolver().insertFormula(versionedQuery);
-        auto res = solverBase.getCoreSolver().check();
-        if (res == s_True) {
+        solverBase.push();
+        solverBase.assertProp(versionedQuery);
+        auto res = solverBase.check();
+        if (res == SMTSolver::Answer::SAT) {
             if (verbosity > 0) {
                  std::cout << "; KIND: Bug found in depth: " << k << std::endl;
             }
@@ -92,14 +92,14 @@ TransitionSystemVerificationResult Kind::solveTransitionSystemInternal(Transitio
         if (verbosity > 1) {
             std::cout << "; KIND: No path of length " << k << " found!" << std::endl;
         }
-        solverBase.getCoreSolver().pop();
+        solverBase.pop();
         PTRef versionedTransition = tm.sendFlaThroughTime(transition, k);
 //        std::cout << "Adding transition: " << logic.pp(versionedTransition) << std::endl;
-        solverBase.getCoreSolver().insertFormula(versionedTransition);
+        solverBase.assertProp(versionedTransition);
 
         // step forward
-        res = solverStepForward.getCoreSolver().check();
-        if (res == s_False) {
+        res = solverStepForward.check();
+        if (res == SMTSolver::Answer::UNSAT) {
             if (verbosity > 0) {
                 std::cout << "; KIND: Found invariant with forward induction, which is " << k << "-inductive" << std::endl;
             }
@@ -110,13 +110,13 @@ TransitionSystemVerificationResult Kind::solveTransitionSystemInternal(Transitio
             }
         }
         PTRef versionedBackwardTransition = tm.sendFlaThroughTime(backwardTransition, k);
-        solverStepForward.getCoreSolver().push();
-        solverStepForward.getCoreSolver().insertFormula(versionedBackwardTransition);
-        solverStepForward.getCoreSolver().insertFormula(tm.sendFlaThroughTime(negQuery,k+1));
+        solverStepForward.push();
+        solverStepForward.assertProp(versionedBackwardTransition);
+        solverStepForward.assertProp(tm.sendFlaThroughTime(negQuery,k+1));
 
         // step backward
-        res = solverStepBackward.getCoreSolver().check();
-        if (res == s_False) {
+        res = solverStepBackward.check();
+        if (res == SMTSolver::Answer::UNSAT) {
             if (verbosity > 0) {
                 std::cout << "; KIND: Found invariant with backward induction, which is " << k << "-inductive" << std::endl;
             }
@@ -126,9 +126,9 @@ TransitionSystemVerificationResult Kind::solveTransitionSystemInternal(Transitio
                 return TransitionSystemVerificationResult{VerificationAnswer::SAFE, logic.getTerm_true()};
             }
         }
-        solverStepBackward.getCoreSolver().push();
-        solverStepBackward.getCoreSolver().insertFormula(versionedTransition);
-        solverStepBackward.getCoreSolver().insertFormula(tm.sendFlaThroughTime(negInit, k+1));
+        solverStepBackward.push();
+        solverStepBackward.assertProp(versionedTransition);
+        solverStepBackward.assertProp(tm.sendFlaThroughTime(negInit, k+1));
     }
     return TransitionSystemVerificationResult{VerificationAnswer::UNKNOWN, 0u};
 }

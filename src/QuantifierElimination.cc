@@ -33,21 +33,20 @@ PTRef QuantifierElimination::eliminate(PTRef fla, vec<PTRef> const & vars) {
     fla = TermUtils(logic).toNNF(fla);
     vec<PTRef> projections;
 
-    SMTSolver solverWrapper(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
-    auto & solver = solverWrapper.getCoreSolver();
-    solver.insertFormula(fla);
+    SMTSolver solver(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
+    solver.assertProp(fla);
     while(true) {
         auto res = solver.check();
-        if (res == s_False) {
+        if (res == SMTSolver::Answer::UNSAT) {
             break;
-        } else if (res == s_True) {
+        } else if (res == SMTSolver::Answer::SAT) {
             auto model = solver.getModel();
             ModelBasedProjection mbp(logic);
             PTRef projection = mbp.project(fla, vars, *model);
 //            std::cout << "Projection: " << logic.printTerm(projection) << std::endl;
             projections.push(projection);
             solver.push(); // to avoid processing the same formula over and over again
-            solver.insertFormula(logic.mkNot(projection));
+            solver.assertProp(logic.mkNot(projection));
         } else {
             throw std::logic_error("Error in solver during quantifier elimination");
         }

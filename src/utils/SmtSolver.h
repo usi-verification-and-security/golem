@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2023-2024, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
@@ -17,16 +17,29 @@ class SMTSolver {
     SMTConfig config;
 
 public:
+    enum class Answer { SAT, UNSAT, UNKNOWN, ERROR };
+
     enum class WitnessProduction { NONE, ONLY_MODEL, ONLY_INTERPOLANTS, MODEL_AND_INTERPOLANTS };
 
     // Default setup in OpenSMT is currently to produce models, but not interpolants
     explicit SMTSolver(Logic & logic, WitnessProduction setup = WitnessProduction::ONLY_MODEL);
 
+    void assertProp(PTRef prop);
+
+    void resetSolver();
+
+    Answer check();
+
+    void push();
+    void pop();
+
+    auto getModel() { return solver->getModel(); }
+
+    auto getInterpolationContext() { return solver->getInterpolationContext(); }
+
     MainSolver & getCoreSolver() { return *solver; }
 
     SMTConfig & getConfig() { return config; }
-
-    void resetSolver();
 };
 
 #endif // GOLEM_SMTSOLVER_H

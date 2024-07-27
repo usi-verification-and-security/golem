@@ -19,11 +19,10 @@ Transformer::TransformationResult TrivialEdgePruner::transform(std::unique_ptr<C
     Logic & logic = graph->getLogic();
     // Test if any edge is satisfiable
     for (EId eid : directEdges) {
-        SMTSolver solverWrapper(logic, SMTSolver::WitnessProduction::NONE);
-        auto & solver = solverWrapper.getCoreSolver();
-        solver.insertFormula(graph->getEdgeLabel(eid));
+        SMTSolver solver(logic, SMTSolver::WitnessProduction::NONE);
+        solver.assertProp(graph->getEdgeLabel(eid));
         auto res = solver.check();
-        if (res == s_True) {
+        if (res == SMTSolver::Answer::SAT) {
             // satisfiable direct edge, reduce the graph to this edge
             NonlinearCanonicalPredicateRepresentation predicateRepresentation(logic);
             predicateRepresentation.addRepresentation(graph->getEntry(), {});
@@ -32,7 +31,7 @@ Transformer::TransformationResult TrivialEdgePruner::transform(std::unique_ptr<C
                 std::vector<DirectedHyperEdge>{graph->getEdge(eid)}, std::move(predicateRepresentation), logic);
             return {std::move(singleEdgeGraph), std::make_unique<TrivialEdgePruner::BackTranslator>(eid)};
         }
-        if (res != s_False) {
+        if (res != SMTSolver::Answer::UNSAT) {
             // Something went wrong, bail out without any change
             return {std::move(graph), std::make_unique<TrivialEdgePruner::BackTranslator>()};
         }

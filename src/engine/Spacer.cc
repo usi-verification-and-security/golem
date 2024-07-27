@@ -370,22 +370,21 @@ SpacerContext::QueryResult SpacerContext::sat(PTRef A, PTRef B) const {
         qres.answer = QueryAnswer::UNSAT;
         return qres;
     }
-    SMTSolver solverWrapper(logic);
-    auto & solver = solverWrapper.getCoreSolver();
-    solver.insertFormula(A);
-    solver.insertFormula(B);
+    SMTSolver solver(logic);
+    solver.assertProp(A);
+    solver.assertProp(B);
     auto res = solver.check();
-    if (res == s_True) {
+    if (res == SMTSolver::Answer::SAT) {
         qres.answer = QueryAnswer::SAT;
         qres.model = solver.getModel();
     }
-    else if (res == s_False) {
+    else if (res == SMTSolver::Answer::UNSAT) {
         qres.answer = QueryAnswer::UNSAT;
     }
-    else if (res == s_Undef) {
+    else if (res == SMTSolver::Answer::UNKNOWN) {
         qres.answer = QueryAnswer::UNKNOWN;
     }
-    else if (res == s_Error) {
+    else if (res == SMTSolver::Answer::ERROR) {
         qres.answer = QueryAnswer::ERROR;
     }
     else {
@@ -396,17 +395,16 @@ SpacerContext::QueryResult SpacerContext::sat(PTRef A, PTRef B) const {
 }
 
 SpacerContext::ItpQueryResult SpacerContext::interpolatingSat(PTRef A, PTRef B) {
-    SMTSolver solverWrapper(logic, SMTSolver::WitnessProduction::ONLY_INTERPOLANTS);
-    solverWrapper.getConfig().setSimplifyInterpolant(4);
-    auto & solver = solverWrapper.getCoreSolver();
-    solver.insertFormula(A);
-    solver.insertFormula(B);
+    SMTSolver solver(logic, SMTSolver::WitnessProduction::ONLY_INTERPOLANTS);
+    solver.getConfig().setSimplifyInterpolant(4);
+    solver.assertProp(A);
+    solver.assertProp(B);
     auto res = solver.check();
     ItpQueryResult qres;
-    if (res == s_True) {
+    if (res == SMTSolver::Answer::SAT) {
         qres.answer = QueryAnswer::SAT;
     }
-    else if (res == s_False) {
+    else if (res == SMTSolver::Answer::UNSAT) {
         qres.answer = QueryAnswer::UNSAT;
         auto itpCtx = solver.getInterpolationContext();
         std::vector<PTRef> itps;
@@ -414,10 +412,10 @@ SpacerContext::ItpQueryResult SpacerContext::interpolatingSat(PTRef A, PTRef B) 
         itpCtx->getSingleInterpolant(itps, mask);
         qres.interpolant = itps[0];
     }
-    else if (res == s_Undef) {
+    else if (res == SMTSolver::Answer::UNKNOWN) {
         qres.answer = QueryAnswer::UNKNOWN;
     }
-    else if (res == s_Error) {
+    else if (res == SMTSolver::Answer::ERROR) {
         qres.answer = QueryAnswer::ERROR;
     }
     else {
@@ -612,24 +610,23 @@ bool SpacerContext::tryPushComponents(SymRef vid, std::size_t level, PTRef body)
     if (targetCandidates.size() == 0) { return true; }
 
     bool allPushed = true;
-    SMTSolver solverWrapper(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
-    auto & solver = solverWrapper.getCoreSolver();
-    solver.insertFormula(body);
+    SMTSolver solver(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
+    solver.assertProp(body);
     vec<PTRef> queries;
     queries.capacity(targetCandidates.size());
     for (auto i = 0; i < targetCandidates.size(); ++i) {
         queries.push(logic.mkAnd(activationLiterals[i], logic.mkNot(targetCandidates[i])));
     }
-    solver.insertFormula(logic.mkOr(queries));
+    solver.assertProp(logic.mkOr(queries));
 
     auto disabled = 0u;
     while (disabled < queries.size_()) {
         solver.push();
-        solver.insertFormula(logic.mkAnd(activationLiterals));
+        solver.assertProp(logic.mkAnd(activationLiterals));
         auto res = solver.check();
-        if (res == s_False) { break; }
-        if (res != s_True) { throw std::logic_error("Solver could not solve a problem while trying to push components!"); }
-        assert(res == s_True);
+        if (res == SMTSolver::Answer::UNSAT) { break; }
+        assert(res == SMTSolver::Answer::SAT);
+        if (res != SMTSolver::Answer::SAT) { throw std::logic_error("Solver could not solve a problem while trying to push components!"); }
         auto model = solver.getModel();
         for (auto i = 0; i < activationLiterals.size(); ++i) {
             if (logic.isNot(activationLiterals[i])) { continue; } // already disabled
@@ -776,8 +773,7 @@ void computePremiseInstances(DerivationDatabase::Entry const & databaseEntry, En
     assert(entry.premiseInstances.empty());
     Logic & logic = graph.getLogic();
     EId edge = databaseEntry.incomingEdge;
-    SMTSolver solverWrapper(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
-    auto & solver = solverWrapper.getCoreSolver();
+    SMTSolver solver(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
     VersionManager versionManager(logic);
     vec<PTRef> sourcePredicates;
     for (std::size_t i = 0; i < databaseEntry.premises.size(); ++i) {
@@ -786,7 +782,7 @@ void computePremiseInstances(DerivationDatabase::Entry const & databaseEntry, En
         auto instanceNumber = vertexInstances.getInstanceNumber(edge, i);
         PTRef premiseConstraint = versionManager.baseFormulaToSource(premiseEntry.derivedFact.fact, instanceNumber);
         sourcePredicates.push(graph.getStateVersion(premiseEntry.derivedFact.node, instanceNumber));
-        solver.insertFormula(premiseConstraint);
+        solver.assertProp(premiseConstraint);
 //        std::cout << logic.pp(premiseConstraint) << '\n';
     }
     PTRef edgeConstraint = graph.getEdgeLabel(edge);
@@ -798,12 +794,12 @@ void computePremiseInstances(DerivationDatabase::Entry const & databaseEntry, En
         TermUtils::substitutions_map mapping;
         TermUtils(logic).mapFromPredicate(targetVersion, factInstance, mapping);
         PTRef simplifiedConstraint = TermUtils(logic).varSubstitute(edgeConstraint, mapping);
-        solver.insertFormula(simplifiedConstraint);
+        solver.assertProp(simplifiedConstraint);
     } else {
-        solver.insertFormula(edgeConstraint);
+        solver.assertProp(edgeConstraint);
     }
     auto res = solver.check();
-    if (res != s_True) {
+    if (res != SMTSolver::Answer::SAT) {
         throw std::logic_error("Error in computing derivation!");
     }
     auto model = solver.getModel();

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2023-2024, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
@@ -18,4 +18,24 @@ SMTSolver::SMTSolver(Logic & logic, WitnessProduction setup) {
 
 void SMTSolver::resetSolver() {
     solver = std::make_unique<MainSolver>(solver->getLogic(), config, "");
+}
+
+void SMTSolver::assertProp(PTRef prop) {
+    solver->insertFormula(prop);
+}
+
+SMTSolver::Answer SMTSolver::check() {
+    auto res = solver->check();
+    if (res == s_True) { return Answer::SAT; }
+    if (res == s_False) { return Answer::UNSAT; }
+    if (res == s_Error) { return Answer::ERROR; }
+    return Answer::UNKNOWN;
+}
+
+void SMTSolver::push() {
+    solver->push();
+}
+
+void SMTSolver::pop() {
+    solver->pop();
 }

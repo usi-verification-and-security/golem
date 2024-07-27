@@ -281,22 +281,22 @@ void Algorithm::computeNewUnprocessedEdges(ARG::NodeId nodeId) {
 
         Checker(PTRef edgeConstraint, Logic & logic, ARG const & arg)
             : logic(logic), solver(logic, SMTSolver::WitnessProduction::NONE), arg(arg) {
-            solver.getCoreSolver().insertFormula(edgeConstraint);
+            solver.assertProp(edgeConstraint);
         }
 
         bool isFeasible(std::vector<ARG::NodeId> const & sources) {
-            solver.getCoreSolver().push();
+            solver.push();
             std::unordered_map<SymRef, int, SymRefHash> sourceCounts;
             VersionManager versionManager{logic};
             for (auto sourceId : sources) {
                 PTRef reachedStates = arg.getReachedStates(sourceId);
                 PTRef versionedStates =
                     versionManager.baseFormulaToSource(reachedStates, sourceCounts[arg.getPredicateSymbol(sourceId)]++);
-                solver.getCoreSolver().insertFormula(versionedStates);
+                solver.assertProp(versionedStates);
             }
-            auto res = solver.getCoreSolver().check();
-            bool infeasible = res == s_False;
-            solver.getCoreSolver().pop();
+            auto res = solver.check();
+            bool infeasible = res == SMTSolver::Answer::UNSAT;
+            solver.pop();
             return not infeasible;
         }
     };
@@ -332,22 +332,22 @@ std::pair<ARG::NodeId, bool> Algorithm::computeTarget(const UnprocessedEdge & ed
     VersionManager versionManager{logic};
     std::unordered_map<SymRef, int, SymRefHash> sourcesCount;
     SMTSolver solver(logic, SMTSolver::WitnessProduction::NONE);
-    solver.getCoreSolver().insertFormula(clauses.getEdgeLabel(edge.eid));
+    solver.assertProp(clauses.getEdgeLabel(edge.eid));
     for (auto sourceId : edge.sources) {
         PTRef reachedStates = arg.getReachedStates(sourceId);
         PTRef versioned =
             versionManager.baseFormulaToSource(reachedStates, sourcesCount[arg.getPredicateSymbol(sourceId)]++);
-        solver.getCoreSolver().insertFormula(versioned);
+        solver.assertProp(versioned);
     }
     auto target = clauses.getEdge(edge.eid).to;
     std::set<PTRef> impliedPredicates;
     for (PTRef predicate : arg.getPredicatesFor(target)) {
-        solver.getCoreSolver().push();
+        solver.push();
         PTRef versionedPredicate = versionManager.baseFormulaToTarget(predicate);
-        solver.getCoreSolver().insertFormula(logic.mkNot(versionedPredicate));
-        auto res = solver.getCoreSolver().check();
-        if (res == s_False) { impliedPredicates.insert(predicate); }
-        solver.getCoreSolver().pop();
+        solver.assertProp(logic.mkNot(versionedPredicate));
+        auto res = solver.check();
+        if (res == SMTSolver::Answer::UNSAT) { impliedPredicates.insert(predicate); }
+        solver.pop();
     }
     return arg.tryInsertNode(target, std::move(impliedPredicates));
 }
@@ -510,15 +510,15 @@ InterpolationTree::Result InterpolationTree::solve(Logic & logic) const {
     SMTSolver solver(logic, SMTSolver::WitnessProduction::MODEL_AND_INTERPOLANTS);
     for (auto const & node : nodes) {
         assert(node.parent == InterpolationTree::NO_ID or node.id > node.parent);
-        solver.getCoreSolver().insertFormula(node.label);
+        solver.assertProp(node.label);
     }
-    auto res = solver.getCoreSolver().check();
-    if (res == s_True) {
-        return InterpolationTree::Result{.model = solver.getCoreSolver().getModel(), .interpolant = {}};
+    auto res = solver.check();
+    if (res == SMTSolver::Answer::SAT) {
+        return InterpolationTree::Result{.model = solver.getModel(), .interpolant = {}};
     }
 
-    if (res != s_False) { throw std::logic_error("Solver could not return answer!"); }
-    auto itpContext = solver.getCoreSolver().getInterpolationContext();
+    if (res != SMTSolver::Answer::UNSAT) { throw std::logic_error("Solver could not return answer!"); }
+    auto itpContext = solver.getInterpolationContext();
     std::vector<opensmt::ipartitions_t> partitions;
     partitions.resize(nodes.size(), 0);
     for (auto rit = nodes.rbegin(); rit != nodes.rend(); ++rit) {

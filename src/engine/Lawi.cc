@@ -193,7 +193,7 @@ class ImplicationChecker {
 public:
     enum class QueryResult {VALID, INVALID, ERROR, UNKNOWN};
 
-    ImplicationChecker(Logic & logic) : logic(logic) {}
+    explicit ImplicationChecker(Logic & logic) : logic(logic) {}
     QueryResult checkImplication(PTRef antecedent, PTRef consequent) {
         if (antecedent == consequent || antecedent == logic.getTerm_false() || consequent == logic.getTerm_true()) {
             return QueryResult::VALID;
@@ -206,28 +206,24 @@ public:
         if (it != cache.end()) {
             return it->second;
         }
-        SMTSolver solverWrapper(logic, SMTSolver::WitnessProduction::NONE);
-        auto & solver = solverWrapper.getCoreSolver();
+        SMTSolver solver(logic, SMTSolver::WitnessProduction::NONE);
         PTRef negImpl = logic.mkAnd(antecedent, logic.mkNot(consequent)); // not(A->B) iff A and (not B)
 //        std::cout << logic.printTerm(negImpl) << std::endl;
-        solver.insertFormula(negImpl);
+        solver.assertProp(negImpl);
         auto res = solver.check();
-        if (res == s_True) {
-            cache.insert({pair, QueryResult::INVALID});
-            return QueryResult::INVALID;
+        switch (res) {
+            case SMTSolver::Answer::SAT:
+                cache.insert({pair, QueryResult::INVALID});
+                return QueryResult::INVALID;
+            case SMTSolver::Answer::UNSAT:
+                cache.insert({pair, QueryResult::VALID});
+                return QueryResult::VALID;
+            case SMTSolver::Answer::UNKNOWN:
+                return QueryResult::UNKNOWN;
+            case SMTSolver::Answer::ERROR:
+                return QueryResult::ERROR;
         }
-        if (res == s_False) {
-            cache.insert({pair, QueryResult::VALID});
-            return QueryResult::VALID;
-        }
-        if (res == s_Undef) {
-            return QueryResult::UNKNOWN;
-        }
-        if (res == s_Error) {
-            return QueryResult::ERROR;
-        }
-        assert(false);
-        throw std::logic_error("Unreachable code!");
+        return QueryResult::UNKNOWN;
     }
 
     QueryResult checkImplicationWithHints(PTRef antecedent, PTRef consequent, std::vector<std::unique_ptr<Model>>& antecedentModels) {
@@ -249,29 +245,25 @@ public:
                 return QueryResult::INVALID;
             }
         }
-        SMTSolver solverWrapper(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
-        auto & solver = solverWrapper.getCoreSolver();
+        SMTSolver solver(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
         PTRef negImpl = logic.mkAnd(antecedent, logic.mkNot(consequent)); // not(A->B) iff A and (not B)
 //        std::cout << logic.printTerm(negImpl) << std::endl;
-        solver.insertFormula(negImpl);
+        solver.assertProp(negImpl);
         auto res = solver.check();
-        if (res == s_True) {
-            cache.insert({pair, QueryResult::INVALID});
-            antecedentModels.push_back(solver.getModel());
-            return QueryResult::INVALID;
+        switch (res) {
+            case SMTSolver::Answer::SAT:
+                cache.insert({pair, QueryResult::INVALID});
+                antecedentModels.push_back(solver.getModel());
+                return QueryResult::INVALID;
+            case SMTSolver::Answer::UNSAT:
+                cache.insert({pair, QueryResult::VALID});
+                return QueryResult::VALID;
+            case SMTSolver::Answer::UNKNOWN:
+                return QueryResult::UNKNOWN;
+            case SMTSolver::Answer::ERROR:
+                return QueryResult::ERROR;
         }
-        if (res == s_False) {
-            cache.insert({pair, QueryResult::VALID});
-            return QueryResult::VALID;
-        }
-        if (res == s_Undef) {
-            return QueryResult::UNKNOWN;
-        }
-        if (res == s_Error) {
-            return QueryResult::ERROR;
-        }
-        assert(false);
-        throw std::logic_error("Unreachable code!");
+        return QueryResult::UNKNOWN;
     }
 
 private:
@@ -485,27 +477,26 @@ void LawiContext::applyForcedCovering(VId vertex) {
         // check label of nca and path to child implies label of candidate
         auto path = art.getPath(nca, vertex, logic);
         auto edgeFormulas = path.getEdgeFormulas();
-        auto solverWrapper = createInterpolatingSolver();
-        auto & solver = solverWrapper->getCoreSolver();
-        solver.insertFormula(labels.getLabel(nca));
+        auto solver = createInterpolatingSolver();
+        solver->assertProp(labels.getLabel(nca));
 //        std::cout << logic.printTerm(labels.getLabel(nca)) << std::endl;
         for (PTRef edge : edgeFormulas) {
-            solver.insertFormula(edge);
+            solver->assertProp(edge);
 //            std::cout << logic.printTerm(edge) << std::endl;
         }
         PTRef labelToTest = TimeMachine(logic).sendFlaThroughTime(labels.getLabel(candidate), edgeFormulas.size());
 //        std::cout << logic.printTerm(labelToTest) << std::endl;
-        solver.insertFormula(logic.mkNot(labelToTest));
+        solver->assertProp(logic.mkNot(labelToTest));
 //        PTRef fla = logic.mkAnd({labels.getLabel(nca), logic.mkAnd(edgeFormulas), logic.mkNot(labelToTest)});
 //        std::cout << logic.printTerm(fla) << std::endl;
-        auto res = solver.check();
-        if (res == s_False) {
+        auto res = solver->check();
+        if (res == SMTSolver::Answer::UNSAT) {
             // this vertex is covered by the candidate
             // compute interpolants, strenthen the labels
             auto edges = path.getEdges();
             assert(not edges.empty() && art.getSource(edges.front()) == nca && art.getTarget(edges.back()) == vertex);
             // Interpolation
-            vec<PTRef> pathInterpolants = getPathInterpolants(solver, path);
+            vec<PTRef> pathInterpolants = getPathInterpolants(solver->getCoreSolver(), path);
             vec<PTRef> normalizedInterpolants = normalizeInterpolants(pathInterpolants);
             strengthenLabelsAlongPath(path, normalizedInterpolants);
             // Don't forget to update the label of the last vertex in the path
@@ -539,22 +530,21 @@ LawiContext::RefinementResult LawiContext::refine(VId errVertex) {
      */
 //    std::cout << "\nChecking path: " << logic.printTerm(logic.mkAnd(edgeFormulas)) << std::endl;
 //    std::cout << "\nChecking path of length " << edgeFormulas.size() << std::endl;
-    auto solverWrapper = createInterpolatingSolver();
-    auto & solver = solverWrapper->getCoreSolver();
+    auto solver = createInterpolatingSolver();
     for (PTRef segment : edgeFormulas) {
 //    	std::cout << logic.printTerm(segment) << std::endl;
-        solver.insertFormula(segment);
+        solver->assertProp(segment);
     }
-    auto res = solver.check();
-    if (res == s_True) {
+    auto res = solver->check();
+    if (res == SMTSolver::Answer::SAT) {
         errorPath = buildGraphPathFromTreePath(path);
         return RefinementResult{VerificationAnswer::UNSAFE, {}};
-    } else if (res == s_False) {
+    } else if (res == SMTSolver::Answer::UNSAT) {
 		auto edges = path.getEdges();
 		assert(not edges.empty() and art.getSource(edges.front()) == this->art.getRoot()
 			and art.isErrorLocation(art.getTarget(edges.back())));
         // Interpolation
-        vec<PTRef> pathInterpolants = getPathInterpolants(solver, path);
+        vec<PTRef> pathInterpolants = getPathInterpolants(solver->getCoreSolver(), path);
         vec<PTRef> normalizedInterpolants = normalizeInterpolants(pathInterpolants);
         auto strengthened = strengthenLabelsAlongPath(path, normalizedInterpolants);
         // this vertex does not have to be considered anymore

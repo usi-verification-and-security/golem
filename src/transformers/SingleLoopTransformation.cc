@@ -164,17 +164,16 @@ SingleLoopTransformation::WitnessBackTranslator::translateErrorPath(std::size_t 
     // We need to get the CEX path, which will define the locations in the graph
     Logic & logic = graph.getLogic();
     TimeMachine tm(logic);
-    SMTSolver solverWrapper(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
-    auto & solver = solverWrapper.getCoreSolver();
-    solver.insertFormula(transitionSystem.getInit());
+    SMTSolver solver(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
+    solver.assertProp(transitionSystem.getInit());
     PTRef transition = transitionSystem.getTransition();
     for (auto i = 0u; i < unrolling; ++i) {
-        solver.insertFormula(tm.sendFlaThroughTime(transition, i));
+        solver.assertProp(tm.sendFlaThroughTime(transition, i));
     }
-    solver.insertFormula(tm.sendFlaThroughTime(transitionSystem.getQuery(), unrolling));
+    solver.assertProp(tm.sendFlaThroughTime(transitionSystem.getQuery(), unrolling));
     auto res = solver.check();
-    assert(res == s_True);
-    if (res != s_True) { throw std::logic_error("Unrolling should have been satisfiable"); }
+    assert(res == SMTSolver::Answer::SAT);
+    if (res != SMTSolver::Answer::SAT) { throw std::logic_error("Unrolling should have been satisfiable"); }
     auto model = solver.getModel();
     std::vector<SymRef> pathVertices;
     pathVertices.push_back(graph.getEntry());

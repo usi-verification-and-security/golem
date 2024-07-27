@@ -86,28 +86,27 @@ ValidityWitness SimpleChainSummarizer::BackTranslator::translate(ValidityWitness
     VersionManager manager(logic);
     for (auto && [chain, summary] : summarizedChains) {
         // Compute definitions for vertices on the chain using path interpolants
-        SMTSolver solverWrapper(logic, SMTSolver::WitnessProduction::ONLY_INTERPOLANTS);
-        auto & solver = solverWrapper.getCoreSolver();
+        SMTSolver solver(logic, SMTSolver::WitnessProduction::ONLY_INTERPOLANTS);
         assert(summary.from.size() == 1);
         PTRef sourceInterpretation = manager.baseFormulaToSource(
             definitions.at(manager.sourceFormulaToBase(predicateRepresentation.getSourceTermFor(summary.from.front())))
         );
-        solver.insertFormula(sourceInterpretation);
+        solver.assertProp(sourceInterpretation);
         for (auto const & edge : chain) {
             TermUtils::substitutions_map substitutionsMap;
             auto target = edge.to;
             utils.mapFromPredicate(predicateRepresentation.getTargetTermFor(target), predicateRepresentation.getSourceTermFor(target), substitutionsMap);
             PTRef updatedLabel = utils.varSubstitute(edge.fla.fla, substitutionsMap);
-            solver.insertFormula(updatedLabel);
+            solver.assertProp(updatedLabel);
         }
         PTRef predicate = predicateRepresentation.getSourceTermFor(summary.to);
         // MB: We cannot try to rewrite 0-ary predicates
         PTRef targetInterpretation = logic.isVar(predicate) ? definitions.at(predicate) : manager.baseFormulaToSource(
             definitions.at(manager.sourceFormulaToBase(predicate))
         );
-        solver.insertFormula(logic.mkNot(targetInterpretation));
+        solver.assertProp(logic.mkNot(targetInterpretation));
         auto res = solver.check();
-        if (res != s_False) {
+        if (res != SMTSolver::Answer::UNSAT) {
             //throw std::logic_error("SimpleChainBackTranslator could not recompute solution!");
             std::cerr << "; SimpleChainBackTranslator could not recompute solution! Solver could not prove UNSAT!" << std::endl;
             return ValidityWitness();

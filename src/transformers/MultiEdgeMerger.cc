@@ -65,10 +65,9 @@ InvalidityWitness MultiEdgeMerger::BackTranslator::translate(InvalidityWitness w
             // No edge evaluate to true, try to find one with satisfiable label
             for (std::size_t i = 0u; i < evaluatedLabels.size(); ++i) {
                 if (evaluatedLabels[i] == logic.getTerm_false()) { continue; }
-                SMTSolver solverWrapper(logic, SMTSolver::WitnessProduction::NONE);
-                auto & solver = solverWrapper.getCoreSolver();
-                solver.insertFormula(evaluatedLabels[i]);
-                if (solver.check() == s_True) { return i; }
+                SMTSolver solver(logic, SMTSolver::WitnessProduction::NONE);
+                solver.assertProp(evaluatedLabels[i]);
+                if (solver.check() == SMTSolver::Answer::SAT) { return i; }
             }
             return {};
         }();

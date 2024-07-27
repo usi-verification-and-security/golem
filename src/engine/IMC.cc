@@ -30,16 +30,16 @@ VerificationResult IMC::solveTransitionSystem(ChcDirectedGraph const & graph) {
 }
 
 TransitionSystemVerificationResult IMC::solveTransitionSystemInternal(TransitionSystem const & system) {
+    { // if I /\ F is Satisfiable, return true
+        SMTSolver solver(logic, SMTSolver::WitnessProduction::NONE);
+        solver.getConfig().setSimplifyInterpolant(4);
+        solver.assertProp(system.getInit());
+        solver.assertProp(system.getQuery());
+        if (solver.check() == SMTSolver::Answer::SAT) {
+            return TransitionSystemVerificationResult{VerificationAnswer::UNSAFE, 0u};
+        }
+    }
     std::size_t maxLoopUnrollings = std::numeric_limits<std::size_t>::max();
-
-    SMTSolver solverWrapper(logic, SMTSolver::WitnessProduction::NONE);
-    solverWrapper.getConfig().setSimplifyInterpolant(4);
-    auto & solver = solverWrapper.getCoreSolver();
-    TimeMachine tm{logic};
-    solver.insertFormula(system.getInit());
-    solver.insertFormula(system.getQuery());
-    // if I /\ F is Satisfiable, return true
-    if (solver.check() == s_True) { return TransitionSystemVerificationResult{VerificationAnswer::UNSAFE, 0u}; }
     for (uint32_t k = 1; k < maxLoopUnrollings; ++k) {
         auto res = finiteRun(system, k);
         if (res.answer != VerificationAnswer::UNKNOWN) { return res; }
@@ -60,8 +60,8 @@ PTRef lastIterationInterpolant(MainSolver & solver, ipartitions_t const & mask) 
 // procedure FiniteRun(M=(I,T,F), k>0)
 TransitionSystemVerificationResult IMC::finiteRun(TransitionSystem const & ts, unsigned k) {
     assert(k > 0);
-    SMTSolver solverWrapper(logic, SMTSolver::WitnessProduction::ONLY_INTERPOLANTS);
-    solverWrapper.getConfig().setSimplifyInterpolant(4);
+    SMTSolver solver(logic, SMTSolver::WitnessProduction::ONLY_INTERPOLANTS);
+    solver.getConfig().setSimplifyInterpolant(4);
     TimeMachine tm{logic};
     PTRef suffix = [&]() {
         int lookahead = static_cast<int>(k);
@@ -72,17 +72,16 @@ TransitionSystemVerificationResult IMC::finiteRun(TransitionSystem const & ts, u
         suffixTransitions.push(tm.sendFlaThroughTime(ts.getQuery(), lookahead));
         return logic.mkAnd(std::move(suffixTransitions));
     }();
-    solverWrapper.getCoreSolver().insertFormula(suffix);
+    solver.assertProp(suffix);
     PTRef movingInit = ts.getInit();
     unsigned iter = 0;
     while (true) {
-        auto & solver = solverWrapper.getCoreSolver();
         solver.push();
         PTRef prefix = logic.mkAnd(movingInit, ts.getTransition());
-        solver.insertFormula(prefix);
+        solver.assertProp(prefix);
         auto res = solver.check();
         // if prefix + suffix is satisfiable
-        if (res == s_True) {
+        if (res == SMTSolver::Answer::SAT) {
             if (movingInit == ts.getInit()) {
                 // Real counterexample
                 return {VerificationAnswer::UNSAFE, iter + k};
@@ -95,7 +94,7 @@ TransitionSystemVerificationResult IMC::finiteRun(TransitionSystem const & ts, u
             opensmt::setbit(mask, iter + 1);
             // let P = Itp(P, A, B)
             // let R' = P<W/W0>
-            PTRef itp = lastIterationInterpolant(solver, mask);
+            PTRef itp = lastIterationInterpolant(solver.getCoreSolver(), mask);
             itp = tm.sendFlaThroughTime(itp, -1);
             // if R' => R return False(if R' /\ not R returns True)
             if (implies(itp, movingInit)) {
@@ -113,11 +112,11 @@ TransitionSystemVerificationResult IMC::finiteRun(TransitionSystem const & ts, u
 }
 
 bool IMC::implies(PTRef antecedent, PTRef consequent) const {
-    SMTSolver solverWrapper(logic, SMTSolver::WitnessProduction::NONE);
+    SMTSolver solver(logic, SMTSolver::WitnessProduction::NONE);
     PTRef negated = logic.mkAnd(antecedent, logic.mkNot(consequent));
-    solverWrapper.getCoreSolver().insertFormula(negated);
-    auto res = solverWrapper.getCoreSolver().check();
-    return res == s_False;
+    solver.assertProp(negated);
+    auto res = solver.check();
+    return res == SMTSolver::Answer::UNSAT;
 }
 
 /**
@@ -133,12 +132,11 @@ bool IMC::implies(PTRef antecedent, PTRef consequent) const {
  * @return safe inductive invariant of the system
  */
 PTRef IMC::computeFinalInductiveInvariant(PTRef inductiveInvariant, unsigned k, TransitionSystem const & ts) {
-    SMTSolver solverWrapper(logic, SMTSolver::WitnessProduction::NONE);
-    auto & solver = solverWrapper.getCoreSolver();
-    solver.insertFormula(inductiveInvariant);
-    solver.insertFormula(ts.getQuery());
+    SMTSolver solver(logic, SMTSolver::WitnessProduction::NONE);
+    solver.assertProp(inductiveInvariant);
+    solver.assertProp(ts.getQuery());
     auto res = solver.check();
-    if (res == s_False) { return inductiveInvariant; }
+    if (res == SMTSolver::Answer::UNSAT) { return inductiveInvariant; }
     // Otherwise compute safe inductive invariant from k-inductive invariant
     PTRef kinductive = logic.mkAnd(inductiveInvariant, logic.mkNot(ts.getQuery()));
     return kinductiveToInductive(kinductive, k, ts);

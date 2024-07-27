@@ -50,16 +50,15 @@ InvalidityWitness::Derivation replaceSummarizingStep(
     utils.mapFromPredicate(targetPredicate, summarizedStep.derivedFact, subst);
     utils.mapFromPredicate(sourcePredicate, derivation[summarizedStep.premises.front()].derivedFact, subst);
 
-    SMTSolver solverWrapper(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
-    auto & solver = solverWrapper.getCoreSolver();
-    solver.insertFormula(logic.mkAnd(std::move(edgeConstraints)));
+    SMTSolver solver(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
+    solver.assertProp(logic.mkAnd(std::move(edgeConstraints)));
     for (auto const & [var,value] : subst) {
         assert(logic.isVar(var) and logic.isConstant(value));
-        solver.insertFormula(logic.mkEq(var, value));
+        solver.assertProp(logic.mkEq(var, value));
     }
     // 2ac Compute values for summarized predicates from model
     auto res = solver.check();
-    if (res != s_True) { throw std::logic_error("Summarized chain should have been satisfiable!"); }
+    if (res != SMTSolver::Answer::SAT) { throw std::logic_error("Summarized chain should have been satisfiable!"); }
     auto model = solver.getModel();
     std::vector<PTRef> intermediatePredicateInstances;
     for (std::size_t i = 1; i < simpleChain.size(); ++i) {
@@ -167,16 +166,17 @@ InvalidityWitness::Derivation expandStepWithHyperEdge(
         }
     }
 
-    SMTSolver solverWrapper(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
-    auto & solver = solverWrapper.getCoreSolver();
-    solver.insertFormula(unifiedConstraint);
+    SMTSolver solver(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
+    solver.assertProp(unifiedConstraint);
     for (auto const & [var,value] : subst) {
         assert(logic.isVar(var) and logic.isConstant(value));
-        solver.insertFormula(logic.mkEq(var, value));
+        solver.assertProp(logic.mkEq(var, value));
     }
     // 2ac Compute values for summarized predicates from model
     auto res = solver.check();
-    if (res != s_True) { throw std::logic_error("Proof transformation: Summarized edges should have been satisfiable!"); }
+    if (res != SMTSolver::Answer::SAT) {
+        throw std::logic_error("Proof transformation: Summarized edges should have been satisfiable!");
+    }
     auto model = solver.getModel();
     PTRef targetTerm = predicateRepresentation.getTargetTermFor(contractedNode);
     auto vars = utils.predicateArgsInOrder(targetTerm);

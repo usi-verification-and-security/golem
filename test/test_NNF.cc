@@ -12,9 +12,9 @@
 namespace{
 bool implies(Logic & logic, PTRef antecedent, PTRef consequent) {
     SMTSolver solver(logic);
-    solver.getCoreSolver().insertFormula(logic.mkNot(logic.mkImpl(antecedent, consequent)));
-    auto res = solver.getCoreSolver().check();
-    return res == s_False;
+    solver.assertProp(logic.mkNot(logic.mkImpl(antecedent, consequent)));
+    auto res = solver.check();
+    return res == SMTSolver::Answer::UNSAT;
 }
 }
 

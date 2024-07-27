@@ -177,12 +177,11 @@ ValidityWitness NodeEliminator::BackTranslator::translate(ValidityWitness witnes
         PTRef incomingPart = logic.mkOr(std::move(incomingFormulas));
         PTRef outgoingPart = logic.mkOr(std::move(outgoingFormulas));
         outgoingPart = utils.varSubstitute(outgoingPart, substitutionsMap);
-        SMTSolver solverWrapper(logic, SMTSolver::WitnessProduction::ONLY_INTERPOLANTS);
-        auto & solver = solverWrapper.getCoreSolver();
-        solver.insertFormula(incomingPart);
-        solver.insertFormula(outgoingPart);
+        SMTSolver solver(logic, SMTSolver::WitnessProduction::ONLY_INTERPOLANTS);
+        solver.assertProp(incomingPart);
+        solver.assertProp(outgoingPart);
         auto res = solver.check();
-        if (res != s_False) {
+        if (res != SMTSolver::Answer::UNSAT) {
             throw std::logic_error("Error in backtranslating of nonloop elimination");
         }
         auto itpContext = solver.getInterpolationContext();

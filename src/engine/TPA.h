@@ -195,9 +195,6 @@ protected:
 
     bool checkLessThanFixedPoint(unsigned short power);
 
-    QueryResult reachabilityExactOneStep(PTRef from, PTRef to);
-    QueryResult reachabilityExactZeroStep(PTRef from, PTRef to);
-
     PTRef computeIdentity() const;
 
     void resetExplanation();

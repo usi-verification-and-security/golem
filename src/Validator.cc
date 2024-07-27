@@ -65,11 +65,10 @@ Validator::Result Validator::validateValidityWitness(ChcDirectedHyperGraph const
         if (interpretedHead == PTRef_Undef) { return Result::NOT_VALIDATED; }
         PTRef query = logic.mkAnd(interpretedBody, logic.mkNot(interpretedHead));
         {
-            SMTSolver solverWrapper(logic, SMTSolver::WitnessProduction::NONE);
-            auto & solver = solverWrapper.getCoreSolver();
-            solver.insertFormula(query);
+            SMTSolver solver(logic, SMTSolver::WitnessProduction::NONE);
+            solver.assertProp(query);
             auto res = solver.check();
-            if (res != s_False) {
+            if (res != SMTSolver::Answer::UNSAT) {
                 std::cerr << ";Edge not validated!";
                 // TODO: print edge
                 return Validator::Result::NOT_VALIDATED;
@@ -110,11 +109,10 @@ Validator::Result validateStep(
     PTRef constraintAfterSubstitution = utils.varSubstitute(graph.getEdgeLabel(edge), subst);
     if (constraintAfterSubstitution == logic.getTerm_true()) { return Validator::Result::VALIDATED; }
     if (constraintAfterSubstitution == logic.getTerm_false()) { return Validator::Result::NOT_VALIDATED; }
-    SMTSolver solverWrapper(logic, SMTSolver::WitnessProduction::NONE);
-    auto & solver = solverWrapper.getCoreSolver();
-    solver.insertFormula(constraintAfterSubstitution);
+    SMTSolver solver(logic, SMTSolver::WitnessProduction::NONE);
+    solver.assertProp(constraintAfterSubstitution);
     auto res = solver.check();
-    if (res == s_True) { return Validator::Result::VALIDATED; }
+    if (res == SMTSolver::Answer::SAT) { return Validator::Result::VALIDATED; }
     return Validator::Result::NOT_VALIDATED;
 }
 

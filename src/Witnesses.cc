@@ -55,15 +55,14 @@ InvalidityWitness InvalidityWitness::fromErrorPath(ErrorPath const & errorPath, 
     auto edgeIds = path.getEdges();
     // Compute model for the error path
     auto model = [&]() {
-        SMTSolver solverWrapper(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
-        auto & solver = solverWrapper.getCoreSolver();
+        SMTSolver solver(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
         for (std::size_t i = 0; i < edgeIds.size(); ++i) {
             PTRef fla = graph.getEdgeLabel(edgeIds[i]);
             fla = TimeMachine(logic).sendFlaThroughTime(fla, i);
-            solver.insertFormula(fla);
+            solver.assertProp(fla);
         }
         auto res = solver.check();
-        if (res != s_True) { throw std::logic_error("Error in computing model for the error path"); }
+        if (res != SMTSolver::Answer::SAT) { throw std::logic_error("Error in computing model for the error path"); }
         return solver.getModel();
     }();
 

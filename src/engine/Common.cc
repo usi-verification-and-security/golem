@@ -11,13 +11,12 @@ VerificationResult solveTrivial(ChcDirectedGraph const & graph) {
         assert(graph.getTarget(eid) == graph.getExit());
         PTRef label = graph.getEdgeLabel(eid);
         if (label == logic.getTerm_false()) { continue; }
-        SMTSolver solverWrapper(logic, SMTSolver::WitnessProduction::NONE);
-        auto & solver = solverWrapper.getCoreSolver();
-        solver.insertFormula(label);
+        SMTSolver solver(logic, SMTSolver::WitnessProduction::NONE);
+        solver.assertProp(label);
         auto res = solver.check();
-        if (res == s_False) {
+        if (res == SMTSolver::Answer::UNSAT) {
             continue;
-        } else if (res == s_True) {
+        } else if (res == SMTSolver::Answer::SAT) {
             InvalidityWitness::Derivation derivation;
             derivation.addDerivationStep(
                 {.index = 0, .premises = {}, .derivedFact = logic.getTerm_true(), .clauseId = {static_cast<id_t>(-1)}});

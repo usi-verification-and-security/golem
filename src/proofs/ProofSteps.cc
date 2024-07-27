@@ -494,13 +494,13 @@ StepHandler::getInstPairs(std::size_t stepIndex, vec<Normalizer::Equality> const
         assert(instantiatedConstraint != logic.getTerm_false());
         // Find values for auxiliary variables
         SMTSolver solver(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
-        solver.getCoreSolver().insertFormula(instantiatedConstraint);
-        auto res = solver.getCoreSolver().check();
-        if (res != s_True) {
+        solver.assertProp(instantiatedConstraint);
+        auto res = solver.check();
+        if (res != SMTSolver::Answer::SAT) {
             assert(false);
             throw std::logic_error("Formula should have been satisfiable");
         }
-        auto model = solver.getCoreSolver().getModel();
+        auto model = solver.getModel();
         for (PTRef auxVar : auxVars) {
             PTRef val = model->evaluate(auxVar);
             auto it = std::find_if(stepNormEq.begin(), stepNormEq.end(),

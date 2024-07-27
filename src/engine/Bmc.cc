@@ -37,13 +37,12 @@ TransitionSystemVerificationResult BMC::solveTransitionSystemInternal(Transition
     PTRef query = system.getQuery();
     PTRef transition = system.getTransition();
 
-    SMTSolver solverWrapper(logic, SMTSolver::WitnessProduction::NONE);
-    auto & solver = solverWrapper.getCoreSolver();
+    SMTSolver solver(logic, SMTSolver::WitnessProduction::NONE);
     //    std::cout << "Adding initial states: " << logic.pp(init) << std::endl;
-    solver.insertFormula(init);
+    solver.assertProp(init);
     { // Check for system with empty initial states
         auto res = solver.check();
-        if (res == s_False) {
+        if (res == SMTSolver::Answer::UNSAT) {
             return TransitionSystemVerificationResult{VerificationAnswer::SAFE, logic.getTerm_false()};
         }
     }
@@ -53,9 +52,9 @@ TransitionSystemVerificationResult BMC::solveTransitionSystemInternal(Transition
         PTRef versionedQuery = tm.sendFlaThroughTime(query, currentUnrolling);
         //        std::cout << "Adding query: " << logic.pp(versionedQuery) << std::endl;
         solver.push();
-        solver.insertFormula(versionedQuery);
+        solver.assertProp(versionedQuery);
         auto res = solver.check();
-        if (res == s_True) {
+        if (res == SMTSolver::Answer::SAT) {
             if (verbosity > 0) { std::cout << "; BMC: Bug found in depth: " << currentUnrolling << std::endl; }
             return TransitionSystemVerificationResult{.answer = VerificationAnswer::UNSAFE,
                                                       .witness = static_cast<std::size_t>(currentUnrolling)};
@@ -64,7 +63,7 @@ TransitionSystemVerificationResult BMC::solveTransitionSystemInternal(Transition
         solver.pop();
         PTRef versionedTransition = tm.sendFlaThroughTime(transition, currentUnrolling);
         //        std::cout << "Adding transition: " << logic.pp(versionedTransition) << std::endl;
-        solver.insertFormula(versionedTransition);
+        solver.assertProp(versionedTransition);
     }
     return TransitionSystemVerificationResult{VerificationAnswer::UNKNOWN, 0u};
 }
@@ -144,12 +143,12 @@ VerificationResult BMC::solveGeneralLinearSystem(ChcDirectedGraph const & graph)
     auto allnodes = graph.getVertices();
     std::size_t maxLoopUnrollings = std::numeric_limits<int>::max() - 1;
 
-    // TODO: Figure out how to compute CEX withtout this. Maybe OpenSMT should have a model that does not use default
+    // TODO: Figure out how to compute CEX without this. Maybe OpenSMT should have a model that does not use default
     // values?
     std::unordered_set<PTRef, PTRefHash> encounteredNodes;
     {
         PTRef entry = utils.getVarFor(graph.getEntry(), 0u);
-        solver.getCoreSolver().insertFormula(entry);
+        solver.assertProp(entry);
         encounteredNodes.insert(entry);
     }
     for (std::size_t currentUnrolling = 0u; currentUnrolling < maxLoopUnrollings; ++currentUnrolling) {
@@ -167,7 +166,7 @@ VerificationResult BMC::solveGeneralLinearSystem(ChcDirectedGraph const & graph)
             if (predecessorTransitions.size() > 0) {
                 exitEncountered |= node == graph.getExit();
                 PTRef nodeReached = utils.getVarFor(node, currentUnrolling + 1);
-                solver.getCoreSolver().insertFormula(logic.mkImpl(nodeReached, logic.mkOr(predecessorTransitions)));
+                solver.assertProp(logic.mkImpl(nodeReached, logic.mkOr(predecessorTransitions)));
                 nextFrontier.insert(node);
                 encounteredNodes.insert(nodeReached);
             }
@@ -175,16 +174,16 @@ VerificationResult BMC::solveGeneralLinearSystem(ChcDirectedGraph const & graph)
         if (exitEncountered) {
             // TODO: Implement check-sat-assuming in OpenSMT
             PTRef exitReached = utils.getVarFor(graph.getExit(), currentUnrolling + 1);
-            solver.getCoreSolver().push();
-            solver.getCoreSolver().insertFormula(exitReached);
-            auto res = solver.getCoreSolver().check();
-            if (res == s_True) {
+            solver.push();
+            solver.assertProp(exitReached);
+            auto res = solver.check();
+            if (res == SMTSolver::Answer::SAT) {
                 if (verbosity > 0) { std::cout << "; BMC: Bug found in depth: " << currentUnrolling << std::endl; }
                 if (not needsWitness) { return {VerificationAnswer::UNSAFE, NoWitness{}}; }
-                return {VerificationAnswer::UNSAFE, computeWitness(graph, *solver.getCoreSolver().getModel(),
-                                                                   currentUnrolling + 1, encounteredNodes)};
+                return {VerificationAnswer::UNSAFE,
+                        computeWitness(graph, *solver.getModel(), currentUnrolling + 1, encounteredNodes)};
             }
-            solver.getCoreSolver().pop();
+            solver.pop();
         }
         if (verbosity > 1) { std::cout << "; BMC: No path of length " << currentUnrolling << " found!" << std::endl; }
         std::swap(frontier, nextFrontier);
