@@ -13,6 +13,8 @@
 #include "TransformationUtils.h"
 #include "transformers/BasicTransformationPipelines.h"
 #include "transformers/SingleLoopTransformation.h"
+#include "utils/SmtSolver.h"
+
 #include <memory>
 #include <queue>
 #include <set>
@@ -57,18 +59,15 @@ TransitionSystemVerificationResult PDKind::solveTransitionSystem(TransitionSyste
     ReachabilityChecker reachability_checker(logic, system);
 
     { // Check for system with empty initial states and system where initial and bad states intersect.
-        SMTConfig config;
-        TimeMachine tm{logic};
-        MainSolver init_solver(logic, config, "Empty initial states");
-        init_solver.insertFormula(init);
-        auto res = init_solver.check();
-        if (res == s_False) {
+        SMTSolver solver(logic, SMTSolver::WitnessProduction::NONE);
+        solver.assertProp(init);
+        auto res = solver.check();
+        if (res == SMTSolver::Answer::UNSAT) {
             return TransitionSystemVerificationResult{VerificationAnswer::SAFE, logic.getTerm_false()};
         }
-
-        init_solver.insertFormula(query);
-        res = init_solver.check();
-        if (res == s_True) {
+        solver.assertProp(query);
+        res = solver.check();
+        if (res == SMTSolver::Answer::SAT) {
             return TransitionSystemVerificationResult{.answer = VerificationAnswer::UNSAFE, .witness = static_cast<std::size_t>(0)};
         }
     }
@@ -103,10 +102,6 @@ TransitionSystemVerificationResult PDKind::solveTransitionSystem(TransitionSyste
  * Check if p is invariant by iteratively constructing k-inductive strengthening of p.
  */
 PushResult PDKind::push(TransitionSystem const & system, InductionFrame & iframe, int n, int k, ReachabilityChecker & reachability_checker) {
-    // Prepare config and tm for solver initialization.
-    SMTConfig config;
-    TimeMachine tm{logic};
-
     // Create a queue q and initialize it with iframe.
     std::queue<IFrameElement> q;
     for (auto e : iframe) {
@@ -114,6 +109,7 @@ PushResult PDKind::push(TransitionSystem const & system, InductionFrame & iframe
     }
     
     // Initialize used variables.
+    TimeMachine tm{logic};
     std::size_t maxUnrollings = k;
     PTRef transition = system.getTransition();
     InductionFrame newIframe = {};
@@ -148,28 +144,25 @@ PushResult PDKind::push(TransitionSystem const & system, InductionFrame & iframe
         PTRef t_k_constr = logic.mkAnd(t_k, f_abs_conj);
 
         // Check if iframe_abs is k-inductive?
-        MainSolver solver1(logic, config, "iframe_abs k-inductivity");
-        solver1.insertFormula(iframe_abs);
-        solver1.insertFormula(t_k_constr);
-        solver1.insertFormula(versioned_not_fabs);
+        SMTSolver solver1(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
+        solver1.assertProp(iframe_abs);
+        solver1.assertProp(t_k_constr);
+        solver1.assertProp(versioned_not_fabs);
         auto res1 = solver1.check();
-
-        if (res1 == s_False) {
+        if (res1 == SMTSolver::Answer::UNSAT) {
             newIframe.insert(obligation);
             continue;
         }
 
-        auto model1 = solver1.getModel();
-
         // Check if f_cex is reachable.
         PTRef f_cex = tm.sendFlaThroughTime(obligation.counter_example.ctx, currentUnrolling);
-        MainSolver solver2(logic, config, "f_cex reachability");
-        solver2.insertFormula(iframe_abs);
-        solver2.insertFormula(t_k_constr);
-        solver2.insertFormula(f_cex);
+        SMTSolver solver2(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
+        solver2.assertProp(iframe_abs);
+        solver2.assertProp(t_k_constr);
+        solver2.assertProp(f_cex);
         auto res2 = solver2.check();
 
-        if (res2 == s_True) {
+        if (res2 == SMTSolver::Answer::SAT) {
             auto model2 = solver2.getModel();
             CounterExample g_cex(reachability_checker.generalize(*model2, t_k, f_cex), obligation.counter_example.num_of_steps + k);
             // Remember num of steps for each cex, g_cex is f_cex + k
@@ -191,6 +184,7 @@ PushResult PDKind::push(TransitionSystem const & system, InductionFrame & iframe
         }
 
         // Analyze the induction failure.
+        auto model1 = solver1.getModel();
         PTRef g_cti = reachability_checker.generalize(*model1, t_k, versioned_not_fabs);
         auto reach_res = reachability_checker.checkReachability(n - k + 1, n, g_cti);
         if (std::get<0>(reach_res)) {
@@ -232,19 +226,14 @@ PTRef PDKind::getInvariant(const InductionFrame & iframe, unsigned int k, Transi
  * @return true if is reachable, false and interpolant if isn't
  */
 std::tuple<bool, PTRef> ReachabilityChecker::reachable(unsigned k, PTRef formula) {
-    SMTConfig config;
-    const char * msg = "ok";
-    config.setOption(SMTConfig::o_produce_inter, SMTOption(true), msg);
-    config.setSimplifyInterpolant(4);
-    TimeMachine tm{logic};
-
     // Check reachability from initial states in 0 steps.
     if (k == 0) {
-        MainSolver init_solver(logic, config, "Init state reachability");
-        init_solver.insertFormula(system.getInit());
-        init_solver.insertFormula(formula);
+        SMTSolver init_solver(logic, SMTSolver::WitnessProduction::ONLY_INTERPOLANTS);
+        init_solver.getConfig().setSimplifyInterpolant(4);
+        init_solver.assertProp(system.getInit());
+        init_solver.assertProp(formula);
         auto res = init_solver.check();
-        if (res == s_False) {
+        if (res == SMTSolver::Answer::UNSAT) {
             auto itpContext = init_solver.getInterpolationContext();
             vec<PTRef> itps;
             int mask = 1;
@@ -254,17 +243,20 @@ std::tuple<bool, PTRef> ReachabilityChecker::reachable(unsigned k, PTRef formula
         }
         return std::make_tuple(true, logic.getTerm_false());
     }
+
+    TimeMachine tm{logic};
     PTRef versioned_formula = tm.sendFlaThroughTime(formula, 1); // Send the formula through time by one, so it matches the pattern init_0 transition_0-1 formula_1.
     while (true) {
         // Check if formula is reachable from r_frames[k-1] in 1 step.
-        MainSolver solver(logic, config, "Transitioned states rechability");
-        solver.insertFormula(r_frames[k-1]);
-        solver.insertFormula(system.getTransition());
-        solver.insertFormula(versioned_formula);
+        SMTSolver solver(logic, SMTSolver::WitnessProduction::MODEL_AND_INTERPOLANTS);
+        solver.getConfig().setSimplifyInterpolant(4);
+        solver.assertProp(r_frames[k-1]);
+        solver.assertProp(system.getTransition());
+        solver.assertProp(versioned_formula);
         auto res = solver.check();
 
         // If is reachable, create a generalization of such states and check if they are reachable in k-1 steps.
-        if (res == s_True) {
+        if (res == SMTSolver::Answer::SAT) {
             auto model = solver.getModel();
             PTRef g = generalize(*model,system.getTransition(), versioned_formula);
             auto reach_res = reachable(k-1, g);
@@ -283,12 +275,12 @@ std::tuple<bool, PTRef> ReachabilityChecker::reachable(unsigned k, PTRef formula
             PTRef interpolant = tm.sendFlaThroughTime(itps[0], -1);
 
             // Get interpolant for initial states. If it exists, return disjunction of both interpolants.
-            MainSolver init_solver(logic, config, "Initial states interpolant");
-            init_solver.insertFormula(system.getInit());
-            init_solver.insertFormula(formula);
+            SMTSolver init_solver(logic, SMTSolver::WitnessProduction::ONLY_INTERPOLANTS);
+            init_solver.assertProp(system.getInit());
+            init_solver.assertProp(formula);
 
             auto res = init_solver.check();
-            if (res == s_False) {
+            if (res == SMTSolver::Answer::UNSAT) {
                 auto itpContext = init_solver.getInterpolationContext();
                 vec<PTRef> itps;
                 int mask = 1;
