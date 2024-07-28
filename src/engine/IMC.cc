@@ -73,12 +73,12 @@ TransitionSystemVerificationResult IMC::finiteRun(TransitionSystem const & ts, u
         return logic.mkAnd(std::move(suffixTransitions));
     }();
     solver.assertProp(suffix);
+    solver.assertProp(ts.getTransition()); // first step, part of prefix
     PTRef movingInit = ts.getInit();
     unsigned iter = 0;
     while (true) {
         solver.push();
-        PTRef prefix = logic.mkAnd(movingInit, ts.getTransition());
-        solver.assertProp(prefix);
+        solver.assertProp(movingInit); // new initial states
         auto res = solver.check();
         // if prefix + suffix is satisfiable
         if (res == SMTSolver::Answer::SAT) {
@@ -91,7 +91,8 @@ TransitionSystemVerificationResult IMC::finiteRun(TransitionSystem const & ts, u
             }
         } else { // if prefix + suffix is unsatisfiable
             ipartitions_t mask = 0;
-            opensmt::setbit(mask, iter + 1);
+            opensmt::setbit(mask, 1);        // for the prefix part of the TR
+            opensmt::setbit(mask, iter + 2); // there are two formulas inserted at the base level: suffix + TR of prefix
             // let P = Itp(P, A, B)
             // let R' = P<W/W0>
             PTRef itp = getInterpolant(solver, mask);
