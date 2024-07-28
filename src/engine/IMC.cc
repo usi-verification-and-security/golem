@@ -48,7 +48,7 @@ TransitionSystemVerificationResult IMC::solveTransitionSystemInternal(Transition
 }
 
 namespace { // Helper method for IMC::finiteRun
-PTRef lastIterationInterpolant(MainSolver & solver, ipartitions_t const & mask) {
+PTRef getInterpolant(SMTSolver & solver, ipartitions_t const & mask) {
     auto itpContext = solver.getInterpolationContext();
     vec<PTRef> itps;
     itpContext->getSingleInterpolant(itps, mask);
@@ -94,7 +94,7 @@ TransitionSystemVerificationResult IMC::finiteRun(TransitionSystem const & ts, u
             opensmt::setbit(mask, iter + 1);
             // let P = Itp(P, A, B)
             // let R' = P<W/W0>
-            PTRef itp = lastIterationInterpolant(solver.getCoreSolver(), mask);
+            PTRef itp = getInterpolant(solver, mask);
             itp = tm.sendFlaThroughTime(itp, -1);
             // if R' => R return False(if R' /\ not R returns True)
             if (implies(itp, movingInit)) {
