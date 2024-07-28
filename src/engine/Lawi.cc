@@ -20,7 +20,7 @@ class ArtPath {
     };
     std::vector<PathSegment> segments;
 public:
-    vec<PTRef> getEdgeFormulas() const {
+    [[nodiscard]] vec<PTRef> getEdgeFormulas() const {
         vec<PTRef> edgeFlas;
         for (auto const & segment : segments) {
             edgeFlas.push(segment.fla);
@@ -28,8 +28,9 @@ public:
         return edgeFlas;
     }
 
-    std::vector<EId> getEdges() const {
+    [[nodiscard]] std::vector<EId> getEdges() const {
         std::vector<EId> edges;
+        edges.reserve(segments.size());
         for (auto const & segment : segments) {
             edges.push_back(segment.edge);
         }
@@ -40,7 +41,7 @@ public:
         segments.push_back(PathSegment{eid, fla});
     }
 
-    std::size_t size() const {
+    [[nodiscard]] std::size_t size() const {
         return segments.size();
     }
 };
@@ -60,55 +61,55 @@ private:
     std::size_t vertexCount = 0;
     VId getNewVertex() { return VId{vertexCount++}; }
 
-	std::vector<Edge> edges;
+    std::vector<Edge> edges;
     std::map<VId, std::vector<EId>> childrenOf;
     std::map<VId, EId> parentOf;
 
 
 public:
-    AbstractReachabilityTree(ChcDirectedGraph const& graph)
+    explicit AbstractReachabilityTree(ChcDirectedGraph const& graph)
         : graph(graph), graphRepresentation(AdjacencyListsGraphRepresentation::from(graph)) {
         root = getNewVertex();
         toOriginalLoc.insert({root, graph.getEntry()});
     }
 
-    bool isErrorLocation(VId vertex) const { return getOriginalLocation(vertex) == getOriginalErrorLocation(); }
-    bool sameLocation(VId v1, VId v2) const { return getOriginalLocation(v1) == getOriginalLocation(v2); }
+    [[nodiscard]] bool isErrorLocation(VId vertex) const { return getOriginalLocation(vertex) == getOriginalErrorLocation(); }
+    [[nodiscard]] bool sameLocation(VId v1, VId v2) const { return getOriginalLocation(v1) == getOriginalLocation(v2); }
 
-    bool isAncestor(VId ancestor, VId descendant) const;
+    [[nodiscard]] bool isAncestor(VId ancestor, VId descendant) const;
 
     void fillDescendantsRecusively(VId vertex, std::vector<VId> & descendants) const;
-    std::vector<VId> getDescendantsOfIncluding(VId vertex) const;
-    std::vector<VId> getAncestorsOfIncluding(VId vertex) const;
-    std::vector<VId> getAncestorsOfUntil(VId vertex, VId stop) const;
-    std::vector<VId> getAncestorsOfExcluding(VId vertex) const;
-	std::vector<EId> getAncestorPathUntil(VId vertex, VId stop) const;
-    std::vector<VId> getChildrenOf(VId vertex) const;
-	std::vector<EId> getOutEdgesOf(VId vertex) const;
-    std::vector<VId> getEarlierForSameLocationAs(VId vertex) const;
-    std::vector<VId> getEarlierForSameLocationAs(VId vertex, size_t limit) const;
-    bool isLeaf(VId vertex) const { return getChildrenOf(vertex).empty(); }
+    [[nodiscard]] std::vector<VId> getDescendantsOfIncluding(VId vertex) const;
+    [[nodiscard]] std::vector<VId> getAncestorsOfIncluding(VId vertex) const;
+    [[nodiscard]] std::vector<VId> getAncestorsOfUntil(VId vertex, VId stop) const;
+    [[nodiscard]] std::vector<VId> getAncestorsOfExcluding(VId vertex) const;
+    [[nodiscard]] std::vector<EId> getAncestorPathUntil(VId vertex, VId stop) const;
+    [[nodiscard]] std::vector<VId> getChildrenOf(VId vertex) const;
+    [[nodiscard]] std::vector<EId> getOutEdgesOf(VId vertex) const;
+    [[nodiscard]] std::vector<VId> getEarlierForSameLocationAs(VId vertex) const;
+    [[nodiscard]] std::vector<VId> getEarlierForSameLocationAs(VId vertex, size_t limit) const;
+    [[nodiscard]] bool isLeaf(VId vertex) const { return getChildrenOf(vertex).empty(); }
 
     std::vector<VId> expand(VId vertex);
 
     // Path goes in the direction from root to leaves
-    ArtPath getPathFromInit(VId vertex, Logic & logic) const;
-    ArtPath getPath(VId descendant, VId ancestor , Logic & logic) const;
-    std::vector<VId> getPathVertices(ArtPath const & path) const;
-	std::vector<VId> getPathVertices(std::vector<EId> const & path) const;
+    [[nodiscard]] ArtPath getPathFromInit(VId vertex, Logic & logic) const;
+    [[nodiscard]] ArtPath getPath(VId descendant, VId ancestor, Logic & logic) const;
+    [[nodiscard]] std::vector<VId> getPathVertices(ArtPath const & path) const;
+    [[nodiscard]] std::vector<VId> getPathVertices(std::vector<EId> const & path) const;
 
-    VId getRoot() const { return root; }
+    [[nodiscard]] VId getRoot() const { return root; }
 
-    SymRef getOriginalLocation(VId vertex) const { assert(toOriginalLoc.count(vertex) != 0); return toOriginalLoc.at(vertex); }
-	EId getOriginalEdge(EId eid) const { assert(toOriginalEdge.count(eid) != 0); return toOriginalEdge.at(eid); }
+    [[nodiscard]] SymRef getOriginalLocation(VId vertex) const { assert(toOriginalLoc.count(vertex) != 0); return toOriginalLoc.at(vertex); }
+    [[nodiscard]] EId getOriginalEdge(EId eid) const { assert(toOriginalEdge.count(eid) != 0); return toOriginalEdge.at(eid); }
 
     void traverse(std::function<void(VId)> fun) const;
 
-    VId nearestCommonAncestor(VId id, VId id1) const;
+    [[nodiscard]] VId nearestCommonAncestor(VId id, VId id1) const;
 
-	PTRef getLabel(EId eid) const;
-	VId getSource(EId eid) const;
-	VId getTarget(EId eid) const;
+    [[nodiscard]] PTRef getLabel(EId eid) const;
+    [[nodiscard]] VId getSource(EId eid) const;
+    [[nodiscard]] VId getTarget(EId eid) const;
 
 private:
     // helpers
@@ -125,7 +126,7 @@ private:
         parentOf.insert({to, eid});
     }
 
-    SymRef getOriginalErrorLocation() const { return graph.getExit(); };
+    [[nodiscard]] SymRef getOriginalErrorLocation() const { return graph.getExit(); };
 
     VId newVertexFor(SymRef originalLocation) {
         VId nv = getNewVertex();
@@ -152,25 +153,23 @@ private:
 
     AbstractReachabilityTree const & art;
 
-    std::vector<VId> getDescendantsInclusive(VId vertex) const { return art.getDescendantsOfIncluding(vertex); }
-    std::vector<VId> getAncestorsInclusive(VId vertex) const { return art.getAncestorsOfIncluding(vertex); }
+    [[nodiscard]] std::vector<VId> getDescendantsInclusive(VId vertex) const { return art.getDescendantsOfIncluding(vertex); }
+    [[nodiscard]] std::vector<VId> getAncestorsInclusive(VId vertex) const { return art.getAncestorsOfIncluding(vertex); }
 
 public:
-    CoveringRelation(AbstractReachabilityTree const & art) : art(art) {}
+    explicit CoveringRelation(AbstractReachabilityTree const & art) : art(art) {}
 
-    bool isCovered(VId vertex) const;
+    [[nodiscard]] bool isCovered(VId vertex) const;
 
     void updateWith(RelElement nElem);
 
     void vertexStrengthened(VId vertex);
-
-private:
 };
 
 class LabelingFunction {
     std::map<VId, PTRef> labels;
 public:
-    PTRef getLabel(VId vertex) const {
+    [[nodiscard]] PTRef getLabel(VId vertex) const {
         assert(labels.count(vertex) != 0);
         return labels.at(vertex);
     }
@@ -184,7 +183,6 @@ public:
         auto it = labels.find(vertex);
         assert(it != labels.end());
         it->second = label;
-
     }
 };
 
@@ -292,8 +290,8 @@ class LawiContext{
         leavesToCheck.erase(std::remove(leavesToCheck.begin(), leavesToCheck.end(), leaf), leavesToCheck.end());
     }
 
-    std::vector<VId> getAncestorsOf(VId vertex) const { return art.getAncestorsOfExcluding(vertex); }
-    std::vector<VId> getEarlierForSameLocationAs(VId vertex) const { return art.getEarlierForSameLocationAs(vertex); }
+    [[nodiscard]] std::vector<VId> getAncestorsOf(VId vertex) const { return art.getAncestorsOfExcluding(vertex); }
+    [[nodiscard]] std::vector<VId> getEarlierForSameLocationAs(VId vertex) const { return art.getEarlierForSameLocationAs(vertex); }
     void closeAllAncestors(VId vertex) {
         for (VId ancestor : getAncestorsOf(vertex)) {
             close(ancestor);
@@ -321,9 +319,9 @@ class LawiContext{
     RefinementResult refine(VId vertex);
 
     [[maybe_unused]]
-    void cover(VId v, VId w);
+    void cover(VId coveree, VId coverer);
 
-    bool coverWithHints(VId v, VId w, std::vector<std::unique_ptr<Model>>& vModels);
+    bool coverWithHints(VId coveree, VId coverer, std::vector<std::unique_ptr<Model>> & covereeModels);
 
     void close(VId vertex);
 
@@ -331,7 +329,7 @@ class LawiContext{
 
     std::optional<VId> getUncoveredLeaf();
 
-    std::unique_ptr<SMTSolver> createInterpolatingSolver() const {
+    [[nodiscard]] std::unique_ptr<SMTSolver> createInterpolatingSolver() const {
         auto solverWrapper = std::make_unique<SMTSolver>(logic, SMTSolver::WitnessProduction::ONLY_INTERPOLANTS);
         solverWrapper->getConfig().setSimplifyInterpolant(4);
         if (options.hasOption(Options::LRA_ITP_ALG)) {
@@ -341,13 +339,13 @@ class LawiContext{
         return solverWrapper;
     }
 
-    vec<PTRef> normalizeInterpolants(vec<PTRef> const & itps) const;
+    [[nodiscard]] vec<PTRef> normalizeInterpolants(vec<PTRef> const & itps) const;
 
     std::vector<VId> strengthenLabelsAlongPath(const ArtPath & path, vec<PTRef> const & itps);
 
-    bool useForcedCovering() const { return usingForcedCovering; }
+    [[nodiscard]] bool useForcedCovering() const { return usingForcedCovering; }
 
-    ErrorPath buildGraphPathFromTreePath(ArtPath const & path) const;
+    [[nodiscard]] ErrorPath buildGraphPathFromTreePath(ArtPath const & path) const;
 public:
     LawiContext(Logic & logic, ChcDirectedGraph const& graph, Options const & options)
         : logic(logic), graph(graph), options(options), art(graph), coveringRelation(art), implicationChecker(logic) {
@@ -358,7 +356,7 @@ public:
 
     VerificationResult unwind();
 
-    vec<PTRef> getPathInterpolants(MainSolver & solver, ArtPath const &) const;
+    vec<PTRef> getPathInterpolants(SMTSolver & solver, ArtPath const &) const;
 
     void applyForcedCovering(VId vertex);
 };
@@ -496,7 +494,7 @@ void LawiContext::applyForcedCovering(VId vertex) {
             auto edges = path.getEdges();
             assert(not edges.empty() && art.getSource(edges.front()) == nca && art.getTarget(edges.back()) == vertex);
             // Interpolation
-            vec<PTRef> pathInterpolants = getPathInterpolants(solver->getCoreSolver(), path);
+            vec<PTRef> pathInterpolants = getPathInterpolants(*solver, path);
             vec<PTRef> normalizedInterpolants = normalizeInterpolants(pathInterpolants);
             strengthenLabelsAlongPath(path, normalizedInterpolants);
             // Don't forget to update the label of the last vertex in the path
@@ -544,7 +542,7 @@ LawiContext::RefinementResult LawiContext::refine(VId errVertex) {
 		assert(not edges.empty() and art.getSource(edges.front()) == this->art.getRoot()
 			and art.isErrorLocation(art.getTarget(edges.back())));
         // Interpolation
-        vec<PTRef> pathInterpolants = getPathInterpolants(solver->getCoreSolver(), path);
+        vec<PTRef> pathInterpolants = getPathInterpolants(*solver, path);
         vec<PTRef> normalizedInterpolants = normalizeInterpolants(pathInterpolants);
         auto strengthened = strengthenLabelsAlongPath(path, normalizedInterpolants);
         // this vertex does not have to be considered anymore
@@ -555,7 +553,7 @@ LawiContext::RefinementResult LawiContext::refine(VId errVertex) {
     }
 }
 
-vec<PTRef> LawiContext::getPathInterpolants(MainSolver & solver, ArtPath const & path) const {
+vec<PTRef> LawiContext::getPathInterpolants(SMTSolver & solver, ArtPath const & path) const {
     auto itpContext = solver.getInterpolationContext();
     vec<PTRef> pathInterpolants;
     auto pathSize = path.size();
