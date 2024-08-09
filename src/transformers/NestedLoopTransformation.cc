@@ -141,10 +141,11 @@ std::vector<EId> NestedLoopTransformation::detectLoop(const ChcDirectedGraph & g
 void NestedLoopTransformation::simplifyLoop( ChcDirectedGraph & graph, std::vector<EId> loop) {
     Logic & logic = graph.getLogic();
     TimeMachine timeMachine(logic);
+    TermUtils utils(logic);
     std::vector<SymRef> vertices;
     assert(graph.getSource(loop[0]) == graph.getTarget(loop[loop.size()-1]));
     assert(loop.size() >= 2);
-    for(int i = 0; i < loop.size(); i++){
+    for(int i = loop.size() - 1; i >= 0; i--){
          vertices.push_back(graph.getSource(loop[i]));
     }
 
@@ -191,32 +192,62 @@ void NestedLoopTransformation::simplifyLoop( ChcDirectedGraph & graph, std::vect
     };
 
     PTRef transitionRelation = logic.mkOr(std::move(transitionRelationComponent));
-    PTRef initialStates = [&]() -> PTRef {
-        vec<PTRef> negatedLocations;
-        negatedLocations.capacity(locationVars.size());
-        for (auto && entry : locationVars) {
-            negatedLocations.push(logic.mkNot(entry.second));
-        }
-        return logic.mkAnd(std::move(negatedLocations));
-    }();
+
 
 
     for(auto edge: loop){
         graph.removeEdge(edge);
     }
 //    PTRef badStates = locationVars.at(vertices[0]);
-
+//TODO: we're not guaranteed that old and new predicate will have the same number of vars
     allEdges = graph.getEdges();
     for(auto edge: allEdges){
         if (std::find(vertices.begin(), vertices.end(), graph.getSource(edge)) != vertices.end()){
             PTRef badStates = locationVars.at(graph.getSource(edge));
+
+            auto oldEdgeVars = getVariablesFromEdge(logic, graph, edge);
             graph.updateEdgeSource(edge, vertices[0]);
-            graph.updateEdgeLabel(edge, InterpretedFla{logic.mkAnd(graph.getEdgeLabel(edge),badStates)});
+//            PTRef newLabel = edgeTranslator.translateEdge(graph.getEdge(edge));
+//            graph.updateEdgeLabel(edge, InterpretedFla{newLabel});
+            auto newEdgeVars = getVariablesFromEdge(logic, graph, edge);
+
+            std::unordered_map<PTRef, PTRef, PTRefHash> subMap;
+            std::transform(oldEdgeVars.stateVars.begin(), oldEdgeVars.stateVars.end(), newEdgeVars.stateVars.begin(),
+                           std::inserter(subMap, subMap.end()),
+                           [](PTRef key, PTRef value) { return std::make_pair(key, value); });
+            PTRef label = utils.varSubstitute(graph.getEdgeLabel(edge), subMap);
+
+            graph.updateEdgeLabel(edge, InterpretedFla{logic.mkAnd(label, badStates)});
         }
         if (std::find(vertices.begin(), vertices.end(), graph.getTarget(edge)) != vertices.end()){
-            graph.updateEdgeTarget(edge, vertices[0]);
+
+            PTRef initialStates = [&]() -> PTRef {
+                vec<PTRef> negatedLocations;
+                negatedLocations.capacity(locationVars.size());
+                for (auto && entry : locationVars) {
+                    if(std::get<0>(entry) != graph.getTarget(edge)) {
+                        negatedLocations.push(logic.mkNot(timeMachine.sendVarThroughTime(entry.second, 1)));
+                    }
+                }
+                return logic.mkAnd(std::move(negatedLocations));
+            }();
+
+            auto oldEdgeVars = getVariablesFromEdge(logic, graph, edge);
             PTRef arr = timeMachine.sendVarThroughTime(locationVars.at(graph.getTarget(edge)), 1);
-            graph.updateEdgeLabel(edge, InterpretedFla{rewriteMaxArityClassic(logic,logic.mkAnd(logic.mkAnd(initialStates, graph.getEdgeLabel(edge)), arr))});
+            PTRef conds = logic.getTerm_true();
+            for(uint i = 0; i < oldEdgeVars.nextStateVars.size(); i++){
+                conds = logic.mkAnd(conds, logic.mkEq(oldEdgeVars.nextStateVars[i], timeMachine.sendVarThroughTime(argVars[{graph.getTarget(edge), i}],1)));
+//                argVars[{graph.getTarget(edge), i}];
+            }
+            graph.updateEdgeTarget(edge, vertices[0]);
+            auto newEdgeVars = getVariablesFromEdge(logic, graph, edge);
+            std::unordered_map<PTRef, PTRef, PTRefHash> subMap;
+            std::transform(oldEdgeVars.nextStateVars.begin(), oldEdgeVars.nextStateVars.end(), newEdgeVars.nextStateVars.begin(),
+                           std::inserter(subMap, subMap.end()),
+                           [](PTRef key, PTRef value) { return std::make_pair(key, value); });
+
+            PTRef label = utils.varSubstitute(graph.getEdgeLabel(edge), subMap);
+            graph.updateEdgeLabel(edge, InterpretedFla{rewriteMaxArityClassic(logic,logic.mkAnd(logic.mkAnd(initialStates, label), logic.mkAnd(arr, conds)))});
         }
     }
 
