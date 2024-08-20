@@ -17,6 +17,7 @@
 #include "osmt_parser.h"
 
 #include <memory>
+#include <optional>
 
 class LetBinder {
     PTRef currentValue;
@@ -132,7 +133,7 @@ private:
 
     // Building CHCs and helper methods
 
-    ChClause chclauseFromPTRef(PTRef ref);
+    std::optional<ChClause> chclauseFromPTRef(PTRef ref);
 
     bool isUninterpretedPredicate(PTRef ref) const;
 };

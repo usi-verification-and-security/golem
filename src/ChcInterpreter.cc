@@ -189,7 +189,12 @@ void ChcInterpreterContext::interpretAssert(ASTNode & node) {
     //    std::cout << backgroundTheory->getLogic().printTerm(term) << std::endl;
     if (logic.getTerm_true() == term) { return; }
     auto chclause = chclauseFromPTRef(term);
-    system->addClause(std::move(chclause));
+    if (not chclause) {
+        reportError("Assertion is not a Horn clause: " + logic.printTerm(term));
+        doExit = true;
+        return;
+    }
+    system->addClause(std::move(*chclause));
     if (opts.hasOption(Options::PRINT_WITNESS)) { originalAssertions.push_back(ASTtoTerm(termNode)); }
 }
 
@@ -527,7 +532,7 @@ void ChcInterpreterContext::reportError(std::string const & msg) {
     std::cout << "(error " << '"' << msg << '"' << ")\n";
 }
 
-ChClause ChcInterpreterContext::chclauseFromPTRef(PTRef ref) {
+std::optional<ChClause> ChcInterpreterContext::chclauseFromPTRef(PTRef ref) {
     assert(ref != PTRef_Undef);
     Logic & logic = this->logic;
     PTRef disjunction = ref;
@@ -551,12 +556,10 @@ ChClause ChcInterpreterContext::chclauseFromPTRef(PTRef ref) {
                     args.push(logic.mkNot(arg));
                 }
                 disjunction = logic.mkOr(args);
-            } else {
-                throw std::logic_error(std::string("Unknown format of in parsing CHC: ") + logic.printTerm(ref));
             }
         }
     }
-    assert(logic.isOr(disjunction));
+    if (not logic.isOr(disjunction)) { return std::nullopt; }
     // identify interpreted part and uninterpreted part
     vec<PTRef> disjuncts = TermUtils(logic).getTopLevelDisjuncts(disjunction);
     // find uninterpreted predicates (positive or negative)
@@ -568,9 +571,7 @@ ChClause ChcInterpreterContext::chclauseFromPTRef(PTRef ref) {
     // find positive uninterpreted predicates
     auto positiveEnd =
         std::partition(disjuncts.begin(), uninterpretedEnd, [&logic](PTRef arg) { return not logic.isNot(arg); });
-    if (positiveEnd - disjuncts.begin() > 1) {
-        throw std::logic_error(std::string("More than one positive uninterpreted predicate in clause"));
-    }
+    if (positiveEnd - disjuncts.begin() > 1) { return std::nullopt; }
     ChcHead head = positiveEnd == disjuncts.begin() ? PTRefToCHC::constructHead(logic.getTerm_false())
                                                     : PTRefToCHC::constructHead(*disjuncts.begin());
     // Negate the body so that it represents antecedent of the implication
