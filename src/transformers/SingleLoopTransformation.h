@@ -83,8 +83,6 @@ public:
     using TransformationResult = std::pair<std::unique_ptr<TransitionSystem>, std::unique_ptr<WitnessBackTranslator>>;
 
     TransformationResult transform(ChcDirectedGraph const & graph);
-
-    void transformVertices(ChcDirectedGraph & graph, std::vector<SymRef> const & vertices);
 };
 
 #endif // GOLEM_SINGLELOOPTRANSFORMATION_H

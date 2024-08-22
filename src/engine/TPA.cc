@@ -49,7 +49,13 @@ VerificationResult TPAEngine::solve(ChcDirectedHyperGraph const & graph) {
         auto normalGraph = transformedGraph->toNormalGraph();
         if (options.hasOption(Options::SIMPLIFY_NESTED)) {
             NestedLoopTransformation transformation;
-            transformation.transform(*normalGraph);
+            auto preTranslator = transformation.transform(*normalGraph);
+            auto res = solve(*normalGraph);
+            if( shouldComputeWitness()){
+                auto prewit = preTranslator->translate(res);
+                return shouldComputeWitness() ? translator->translate(std::move(prewit)) : std::move(prewit);
+            }
+            return std::move(res);
         }
         auto res = solve(*normalGraph);
         return shouldComputeWitness() ? translator->translate(std::move(res)) : std::move(res);
@@ -58,9 +64,7 @@ VerificationResult TPAEngine::solve(ChcDirectedHyperGraph const & graph) {
 }
 
 VerificationResult TPAEngine::solve(const ChcDirectedGraph & graph) {
-    auto newGraph = graph;
     if (isTrivial(graph)) { return solveTrivial(graph); }
-
     if (isTransitionSystem(graph)) {
         auto ts = toTransitionSystem(graph);
         auto solver = mkSolver();
@@ -1589,6 +1593,7 @@ VerificationResult TransitionSystemNetworkManager::solve() && {
                     activePath.push(nextEdge);
                     current = next;
                     break; // Information has been propagated to the next node, switch to the new node
+
                 } else { // Edge cannot propagate forward
                     addRestrictions(current, logic.mkNot(edgeExplanation));
                     continue; // Repeat the query for the same TS with stronger query
@@ -1697,7 +1702,6 @@ TransitionSystemNetworkManager::QueryResult TransitionSystemNetworkManager::quer
         ModelBasedProjection mbp(logic);
         PTRef query = logic.mkAnd({sourceCondition, label, target});
         auto targetVars = getVariablesFromEdge(logic, graph, eid);
-//            TermUtils(logic).predicateArgsInOrder(graph.getNextStateVersion(graph.getTarget(eid)));
         PTRef eliminated = mbp.keepOnly(query, targetVars.nextStateVars, *model);
         getVariablesFromEdge(logic, graph, eid);
         eliminated = TimeMachine(logic).sendFlaThroughTime(eliminated, -1);

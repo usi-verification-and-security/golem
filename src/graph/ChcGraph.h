@@ -123,6 +123,19 @@ class ChcDirectedGraph {
     void mergeMultiEdges();
 
 public:
+    ChcDirectedGraph(const ChcDirectedGraph& graph) :
+          predicates(graph.predicates), logic(graph.logic),
+          simplified_vars(graph.simplified_vars){
+        for(auto el: graph.edges){
+            edges.insert(el);
+        }
+        std::size_t maxId = 0;
+        for (auto & edge : edges) {
+            maxId = std::max(maxId, std::get<1>(edge).id.id);
+        }
+        this->freeId = maxId + 1;
+    };
+
     ChcDirectedGraph(std::vector<DirectedEdge> edges, LinearCanonicalPredicateRepresentation predicates,
                      Logic & logic) :
          predicates(std::move(predicates)), logic(logic) {
@@ -142,7 +155,7 @@ public:
     ChcDirectedGraph reverse() const;
     DirectedEdge reverseEdge(DirectedEdge const & edge, TermUtils & utils) const;
 
-    LinearCanonicalPredicateRepresentation getPredicateRepresentation() const { return predicates; }
+    LinearCanonicalPredicateRepresentation & getPredicateRepresentation() { return predicates; }
 
     SymRef getEntry() const { return logic.getSym_true(); }
     SymRef getExit() const { return logic.getSym_false(); }
@@ -200,7 +213,6 @@ public:
         return edges.at(eid);
     }
 
-
     std::vector<PTRef> const & getAuxVars(SymRef sym) const {
         if(simplified_vars.find(sym.x)!=simplified_vars.end()){
             return simplified_vars.at(sym.x);
@@ -209,6 +221,7 @@ public:
             return empty;
         }
     };
+
     void addAuxVars(SymRef sym, std::vector<PTRef> & vars) {
         simplified_vars[sym.x].insert(simplified_vars[sym.x].end(), vars.begin(), vars.end());
     };
@@ -227,8 +240,6 @@ private:
     }
 
     EId freshId() const { return EId{freeId++};}
-
-
 
 };
 

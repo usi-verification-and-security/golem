@@ -113,6 +113,7 @@ InvalidityWitness InvalidityWitness::fromErrorPath(ErrorPath const & errorPath, 
 
     InvalidityWitness witness;
     witness.setDerivation(std::move(derivation));
+    witness.ep = errorPath;
     return witness;
 }
 
@@ -182,19 +183,29 @@ ValidityWitness::fromTransitionSystem(Logic & logic, ChcDirectedGraph const & gr
                                       TransitionSystem const & transitionSystem, PTRef inductiveInvariant) {
     if (not isTransitionSystem(graph)) { return {}; }
     auto vertices = graph.getVertices();
+    auto edges = graph.getEdges();
+    EId loop;
+    for(auto edge: edges) {
+        if(graph.getSource(edge) != graph.getEntry() && graph.getTarget(edge) != graph.getExit()){
+            loop = edge;
+        }
+    }
     assert(vertices.size() == 3);
     auto vertex = vertices[2];
     assert(vertex != graph.getEntry() and vertex != graph.getExit());
     TermUtils utils(logic);
     TimeMachine timeMachine(logic);
     TermUtils::substitutions_map subs;
-    auto graphVars = utils.predicateArgsInOrder(graph.getStateVersion(vertex));
+    auto graphVars = getVariablesFromEdge(logic, graph, loop).stateVars;
+    auto origVars = utils.predicateArgsInOrder(graph.getStateVersion(vertex));
     auto systemVars = transitionSystem.getStateVars();
     vec<PTRef> unversionedVars;
     assert(graphVars.size() == systemVars.size());
+    for (std::size_t i = 0; i < origVars.size(); ++i) {
+        unversionedVars.push(timeMachine.getUnversioned(origVars[i]));
+    }
     for (std::size_t i = 0; i < graphVars.size(); ++i) {
-        unversionedVars.push(timeMachine.getUnversioned(graphVars[i]));
-        subs.insert({systemVars[i], unversionedVars.last()});
+        subs.insert({systemVars[i], timeMachine.getUnversioned(graphVars[i])});
     }
     PTRef graphInvariant = utils.varSubstitute(inductiveInvariant, subs);
 //    std::cout << "Graph invariant: " << logic.printTerm(graphInvariant) << std::endl;

@@ -32,7 +32,6 @@ bool isTransitionSystem(ChcDirectedGraph const & graph) {
     return true;
 }
 
-
 std::unique_ptr<TransitionSystem> toTransitionSystem(ChcDirectedGraph const & graph) {
     Logic & logic = graph.getLogic();
     auto adjacencyRepresentation = AdjacencyListsGraphRepresentation::from(graph);
@@ -40,29 +39,12 @@ std::unique_ptr<TransitionSystem> toTransitionSystem(ChcDirectedGraph const & gr
     assert(vertices.size() == 3);
     auto loopNode = vertices[1];
     auto edges = graph.getEdges();
-    EId inputEdge;
-    EId exitEdge;
-    EId loopEdge;
-    for(auto edge: edges){
-        if (graph.getSource(edge) == graph.getEntry()){
-            inputEdge = edge;
-        } else if (graph.getTarget(edge) == graph.getExit()){
-            exitEdge = edge;
-        } else {
-            loopEdge = edge;
-        }
-    }
-//    EId loopEdge = getSelfLoopFor(loopNode, graph, adjacencyRepresentation).value();
-//    auto inputVars = getVariablesFromEdge(logic, graph, inputEdge);
+    EId loopEdge = getSelfLoopFor(loopNode, graph, adjacencyRepresentation).value();
     auto edgeVars = getVariablesFromEdge(logic, graph, loopEdge);
-//    auto exitVars = getVariablesFromEdge(logic, graph, exitEdge);
-//    assert(inputVars.nextStateVars.size() == edgeVars.stateVars.size());
-//    assert(exitVars.stateVars.size() == edgeVars.nextStateVars.size());
     // Now we can continue building the transition system
     auto systemType = systemTypeFrom(edgeVars.stateVars, edgeVars.auxiliaryVars, logic);
     auto stateVars = systemType->getStateVars();
     auto nextStateVars = systemType->getNextStateVars();
-    auto auxiliaryVars = systemType->getAuxiliaryVars();
     assert(stateVars.size() == edgeVars.stateVars.size());
     assert(nextStateVars.size() == edgeVars.nextStateVars.size());
     PTRef init = PTRef_Undef;
@@ -123,9 +105,7 @@ bool strongConnection(std::unordered_set<int> & visitedVertices, std::unordered_
             if (visitedVertices.find(nextVertex.x) == visitedVertices.end()) {
                 bool loopFound =
                     strongConnection(visitedVertices, verticesOnStack, graphRepresentation, graph, nextVertex);
-                if (loopFound) {
-                    return true;
-                }
+                if (loopFound) { return true; }
             } else if (verticesOnStack.find(nextVertex.x) != verticesOnStack.end()) {
                 return true;
             }
@@ -144,7 +124,9 @@ bool TarjanLoopDetection(ChcDirectedGraph const & graph) {
     std::unordered_set<int> verticesOnStack;
     for (uint i = 1; i < vertices.size() - 1; i++) {
         if (visitedVertices.find(vertices[i].x) == visitedVertices.end()) {
-            if (strongConnection(visitedVertices, verticesOnStack, graphRepresentation, graph, vertices[i])) {
+            bool loop_detected =
+                strongConnection(visitedVertices, verticesOnStack, graphRepresentation, graph, vertices[i]);
+            if (loop_detected) {
                 return true;
             }
         }
@@ -177,8 +159,6 @@ bool isTransitionSystemDAG(ChcDirectedGraph const & graph) {
     return not canReachExit;
 }
 
-
-// TODO: SOMETHING WEIRD WITH NEWLY INTROD VARS
 EdgeVariables getVariablesFromEdge(Logic & logic, ChcDirectedGraph const & graph, EId eid) {
     EdgeVariables res;
     TermUtils utils(logic);

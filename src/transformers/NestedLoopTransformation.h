@@ -60,34 +60,46 @@ public:
 
 
     class WitnessBackTranslator {
-        ChcDirectedGraph const & initialGraph;
+        ChcDirectedGraph initialGraph;
         ChcDirectedGraph const & graph;
         LocationVarMap locationVarMap;
         PositionVarMap positionVarMap;
+        std::vector<SymRef> loopNodes;
 
     public:
-        WitnessBackTranslator(ChcDirectedGraph const & initialGraph, ChcDirectedGraph const & graph,
-                              LocationVarMap && locationVarMap, PositionVarMap && positionVarMap)
-            : graph(graph), initialGraph(initialGraph), locationVarMap(std::move(locationVarMap)),
-              positionVarMap(std::move(positionVarMap)) {}
+//        WitnessBackTranslator(ChcDirectedGraph const & initialGraph, ChcDirectedGraph const & graph,
+//                              LocationVarMap locationVarMap, PositionVarMap positionVarMap, std::vector<SymRef> & loopNodes)
+//            : graph(graph), initialGraph(initialGraph), loopNodes(loopNodes), locationVarMap(locationVarMap), positionVarMap(positionVarMap){
+//        }
 
-        VerificationResult translate(TransitionSystemVerificationResult result);
+        WitnessBackTranslator(ChcDirectedGraph initialGraph, ChcDirectedGraph const & graph,
+                              LocationVarMap && locationVarMap, PositionVarMap && positionVarMap,
+                              std::vector<SymRef> & loopNodes)
+            : graph(graph), initialGraph(initialGraph),
+              locationVarMap(std::move(locationVarMap)),
+              positionVarMap(std::move(positionVarMap)),
+              loopNodes(loopNodes) {
+//            initialGraph = std::make_unique<ChcDirectedGraph>(initialGraph);
+        }
+
+        VerificationResult translate(VerificationResult & result);
 
     private:
+
         template<typename T> using ErrorOr = std::variant<NoWitness, T>;
 
-        ErrorOr<InvalidityWitness> translateErrorPath(std::size_t unrolling);
+        ErrorOr<InvalidityWitness> translateErrorPath(std::vector<EId> errorPath);
 
-        ErrorOr<ValidityWitness> translateInvariant(PTRef inductiveInvariant);
+        ErrorOr<ValidityWitness> translateInvariant(ValidityWitness wtns);
 
         std::unordered_set<PTRef, PTRefHash> getVarsForVertex(SymRef vertex) const;
     };
 
 
     std::vector<EId> detectLoop(ChcDirectedGraph const & graph);
-    void simplifyLoop(ChcDirectedGraph & graph, std::vector<EId> loop);
+    void simplifyLoop(ChcDirectedGraph & graph, std::vector<EId> loop, LocationVarMap& locationVars, PositionVarMap& argVars);
 
-    void transform(ChcDirectedGraph & graph);
+    std::unique_ptr<WitnessBackTranslator> transform(ChcDirectedGraph & graph);
 
 };
 

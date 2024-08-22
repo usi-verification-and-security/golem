@@ -139,69 +139,6 @@ SingleLoopTransformation::TransformationResult SingleLoopTransformation::transfo
     return {std::move(ts), std::move(backTranslator)};
 }
 
-
-void SingleLoopTransformation::transformVertices(
-    ChcDirectedGraph & graph, std::vector<SymRef> const & mergedVertices) {
-    Logic & logic = graph.getLogic();
-    TimeMachine timeMachine(logic);
-    SymRef newVertice = mergedVertices[0];
-
-    auto vertices = graph.getVertices();
-    for(int i = 1; i<mergedVertices.size();i++) {
-        vertices.erase(find(vertices.begin(), vertices.end(), mergedVertices[i]));
-    }
-    LocationVarMap locationVars;
-    locationVars.reserve(mergedVertices.size());
-    for (auto vertex : mergedVertices) {
-        auto varName = std::string(".loc_") + std::to_string(vertex.x);
-        locationVars.insert({vertex, timeMachine.getVarVersionZero(varName, logic.getSort_bool())});
-    }
-
-    PositionVarMap argVars;
-    for (auto vertex : mergedVertices) {
-        auto args_count = logic.getSym(vertex).nargs();
-        for (uint32_t i = 0; i < args_count; ++i) {
-            VarPosition pos = {vertex, i};
-            auto varName = std::string(".arg_") + std::to_string(vertex.x) + '_' + std::to_string(i);
-            PTRef var = timeMachine.getVarVersionZero(varName, logic.getSym(vertex)[i]);
-            argVars.insert({pos, var});
-        }
-    }
-
-    EdgeTranslator edgeTranslator{graph, locationVars, argVars, {}};
-    vec<PTRef> transitionRelationComponent;
-    vec<DirectedEdge> incomingTransitions;
-    vec<DirectedEdge> outgoingTransitions;
-
-    vec<PTRef> negatedLocations;
-    negatedLocations.capacity(locationVars.size());
-    for (auto && entry : locationVars) {
-        negatedLocations.push(logic.mkNot(entry.second));
-    }
-    PTRef negation = logic.mkAnd(negatedLocations);
-
-    auto edges = graph.getEdges();
-    for(int i = 0; i < edges.size(); i++) {
-        bool incoming = std::find(mergedVertices.begin(), mergedVertices.end(), graph.getTarget(edges[i])) != mergedVertices.end();
-        bool outgoing = std::find(mergedVertices.begin(), mergedVertices.end(), graph.getSource(edges[i])) != mergedVertices.end();
-        if (incoming and outgoing) {
-            transitionRelationComponent.push(edgeTranslator.translateEdge(graph.getEdge(edges[i])));
-            graph.removeEdge(edges[i]);
-        } else if (incoming) {
-            graph.newEdge(graph.getSource(edges[i]), mergedVertices[0],
-                          InterpretedFla{logic.mkAnd(graph.getEdgeLabel(edges[i]), negation)});
-            graph.removeEdge(edges[i]);
-        } else if (outgoing) {
-            graph.newEdge( mergedVertices[0], graph.getTarget(edges[i]), InterpretedFla{graph.getEdgeLabel(edges[i])});
-            graph.removeEdge(edges[i]);
-        }
-    };
-
-    PTRef transitionRelation = logic.mkOr(std::move(transitionRelationComponent));
-    graph.newEdge(newVertice, newVertice, InterpretedFla{transitionRelation});
-
-}
-
 // Witness backtranslation
 VerificationResult
 SingleLoopTransformation::WitnessBackTranslator::translate(TransitionSystemVerificationResult result) {
