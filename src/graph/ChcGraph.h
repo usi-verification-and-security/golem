@@ -109,7 +109,6 @@ struct VertexHasher {
 
 class ChcDirectedGraph {
     std::map<EId, DirectedEdge> edges;
-    std::map<uint32_t, std::vector<PTRef>> simplified_vars;
     LinearCanonicalPredicateRepresentation predicates;
     Logic & logic;
     mutable std::size_t freeId {0};
@@ -124,8 +123,7 @@ class ChcDirectedGraph {
 
 public:
     ChcDirectedGraph(const ChcDirectedGraph& graph) :
-          predicates(graph.predicates), logic(graph.logic),
-          simplified_vars(graph.simplified_vars){
+          predicates(graph.predicates), logic(graph.logic){
         for(auto el: graph.edges){
             edges.insert(el);
         }
@@ -212,19 +210,6 @@ public:
     DirectedEdge const & getEdge(EId eid) const {
         return edges.at(eid);
     }
-
-    std::vector<PTRef> const & getAuxVars(SymRef sym) const {
-        if(simplified_vars.find(sym.x)!=simplified_vars.end()){
-            return simplified_vars.at(sym.x);
-        } else {
-            std::vector<PTRef> empty;
-            return empty;
-        }
-    };
-
-    void addAuxVars(SymRef sym, std::vector<PTRef> & vars) {
-        simplified_vars[sym.x].insert(simplified_vars[sym.x].end(), vars.begin(), vars.end());
-    };
 
 private:
 

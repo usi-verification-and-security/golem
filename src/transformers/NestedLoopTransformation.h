@@ -67,20 +67,12 @@ public:
         std::vector<SymRef> loopNodes;
 
     public:
-//        WitnessBackTranslator(ChcDirectedGraph const & initialGraph, ChcDirectedGraph const & graph,
-//                              LocationVarMap locationVarMap, PositionVarMap positionVarMap, std::vector<SymRef> & loopNodes)
-//            : graph(graph), initialGraph(initialGraph), loopNodes(loopNodes), locationVarMap(locationVarMap), positionVarMap(positionVarMap){
-//        }
 
         WitnessBackTranslator(ChcDirectedGraph initialGraph, ChcDirectedGraph const & graph,
                               LocationVarMap && locationVarMap, PositionVarMap && positionVarMap,
                               std::vector<SymRef> & loopNodes)
-            : graph(graph), initialGraph(initialGraph),
-              locationVarMap(std::move(locationVarMap)),
-              positionVarMap(std::move(positionVarMap)),
-              loopNodes(loopNodes) {
-//            initialGraph = std::make_unique<ChcDirectedGraph>(initialGraph);
-        }
+            : initialGraph(initialGraph), graph(graph), locationVarMap(std::move(locationVarMap)),
+              positionVarMap(std::move(positionVarMap)), loopNodes(loopNodes) {}
 
         VerificationResult translate(VerificationResult & result);
 
@@ -88,7 +80,7 @@ public:
 
         template<typename T> using ErrorOr = std::variant<NoWitness, T>;
 
-        ErrorOr<InvalidityWitness> translateErrorPath(std::vector<EId> errorPath);
+        ErrorOr<InvalidityWitness> translateErrorPath(InvalidityWitness errorPath);
 
         ErrorOr<ValidityWitness> translateInvariant(ValidityWitness wtns);
 
@@ -97,7 +89,7 @@ public:
 
 
     std::vector<EId> detectLoop(ChcDirectedGraph const & graph);
-    void simplifyLoop(ChcDirectedGraph & graph, std::vector<EId> loop, LocationVarMap& locationVars, PositionVarMap& argVars);
+    SymRef simplifyLoop(ChcDirectedGraph & graph, std::vector<EId> loop, LocationVarMap& locationVars, PositionVarMap& argVars);
 
     std::unique_ptr<WitnessBackTranslator> transform(ChcDirectedGraph & graph);
 

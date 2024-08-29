@@ -40,6 +40,6 @@ TEST_F(TransformationUtils_Test, test_DAGWithExtraEdge) {
     ASSERT_TRUE(hypergraph->isNormalGraph());
     auto graph = hypergraph->toNormalGraph();
     EXPECT_FALSE(isTransitionSystem(*graph));
-//    EXPECT_FALSE(isTransitionSystemDAG(*graph)); // Because of the extra edge from entry to exit
+    EXPECT_FALSE(isTransitionSystemDAG(*graph)); // Because of the extra edge from entry to exit
 }
 

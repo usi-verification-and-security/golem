@@ -14,8 +14,8 @@
 #include "TransitionSystem.h"
 #include "Witnesses.h"
 #include "transformers/BasicTransformationPipelines.h"
-#include "transformers/SingleLoopTransformation.h"
 #include "transformers/NestedLoopTransformation.h"
+#include "transformers/SingleLoopTransformation.h"
 #include "utils/SmtSolver.h"
 
 #define TRACE_LEVEL 0
@@ -51,11 +51,11 @@ VerificationResult TPAEngine::solve(ChcDirectedHyperGraph const & graph) {
             NestedLoopTransformation transformation;
             auto preTranslator = transformation.transform(*normalGraph);
             auto res = solve(*normalGraph);
-            if( shouldComputeWitness()){
+            if (shouldComputeWitness()) {
                 auto prewit = preTranslator->translate(res);
                 return shouldComputeWitness() ? translator->translate(std::move(prewit)) : std::move(prewit);
             }
-            return std::move(res);
+            return res;
         }
         auto res = solve(*normalGraph);
         return shouldComputeWitness() ? translator->translate(std::move(res)) : std::move(res);

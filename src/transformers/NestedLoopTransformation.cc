@@ -89,8 +89,7 @@ std::unique_ptr<NestedLoopTransformation::WitnessBackTranslator> NestedLoopTrans
     LocationVarMap locationVars;
     PositionVarMap argVars;
     while(loop.size()>1){
-        simplifiedNodes.push_back(graph.getSource(loop[loop.size()-1]));
-        simplifyLoop(graph, loop, locationVars, argVars);
+        simplifiedNodes.push_back(simplifyLoop(graph, loop, locationVars, argVars));
         loop = detectLoop(graph);
     }
 //    auto backTranslator =
@@ -149,7 +148,7 @@ std::vector<EId> NestedLoopTransformation::detectLoop(const ChcDirectedGraph & g
     return loop;
 }
 
-void NestedLoopTransformation::simplifyLoop( ChcDirectedGraph & graph, std::vector<EId> loop, LocationVarMap& locationVars, PositionVarMap& argVars) {
+SymRef NestedLoopTransformation::simplifyLoop( ChcDirectedGraph & graph, std::vector<EId> loop, LocationVarMap& locationVars, PositionVarMap& argVars) {
     Logic & logic = graph.getLogic();
     TimeMachine timeMachine(logic);
     TermUtils utils(logic);
@@ -210,11 +209,14 @@ void NestedLoopTransformation::simplifyLoop( ChcDirectedGraph & graph, std::vect
         }
         return ret;
     }();
+    vec<SRef> args;
+    for(auto arg: stateVars){
+        args.push(logic.getSortRef(arg));
+    }
 
     PTRef transitionRelation = logic.mkOr(std::move(transitionRelationComponent));
 
-    SymRef newRef = logic.getSymRef(transitionRelation);
-
+    SymRef newRef =  logic.declareFun("hello", logic.getSort_bool(), args);
     std::vector<PTRef> vars;
     for (PTRef var : stateVars) {
         vars.push_back(timeMachine.getUnversioned(var));
@@ -240,7 +242,7 @@ void NestedLoopTransformation::simplifyLoop( ChcDirectedGraph & graph, std::vect
                 conds = logic.mkAnd(conds, logic.mkEq(oldEdgeVars.stateVars[i], argVars[{graph.getSource(edge), i}]));
                 //                argVars[{graph.getTarget(edge), i}];
             }
-            graph.updateEdgeSource(edge, vertices[0]);
+            graph.updateEdgeSource(edge, newRef);
             auto newEdgeVars = getVariablesFromEdge(logic, graph, edge);
             PTRef label = utils.varSubstitute(logic.mkAnd(graph.getEdgeLabel(edge), badStates), subMap);
             std::transform(oldEdgeVars.stateVars.begin(), oldEdgeVars.stateVars.end(), newEdgeVars.stateVars.begin(),
@@ -272,7 +274,7 @@ void NestedLoopTransformation::simplifyLoop( ChcDirectedGraph & graph, std::vect
                 conds = logic.mkAnd(conds, logic.mkEq(oldEdgeVars.nextStateVars[i], timeMachine.sendVarThroughTime(argVars[{graph.getTarget(edge), i}],1)));
 //                argVars[{graph.getTarget(edge), i}];
             }
-            graph.updateEdgeTarget(edge, vertices[0]);
+            graph.updateEdgeTarget(edge, newRef);
             auto newEdgeVars = getVariablesFromEdge(logic, graph, edge);
             PTRef label = utils.varSubstitute(graph.getEdgeLabel(edge), subMap);
             std::transform(oldEdgeVars.nextStateVars.begin(), oldEdgeVars.nextStateVars.end(), newEdgeVars.nextStateVars.begin(),
@@ -284,10 +286,8 @@ void NestedLoopTransformation::simplifyLoop( ChcDirectedGraph & graph, std::vect
         }
     }
 
-
-
-    graph.newEdge(vertices[0], vertices[0],InterpretedFla{transitionRelation});
-    graph.addAuxVars(vertices[0], stateVars);
+    graph.newEdge(newRef, newRef,InterpretedFla{transitionRelation});
+    return newRef;
 }
 
 
@@ -297,7 +297,7 @@ void NestedLoopTransformation::simplifyLoop( ChcDirectedGraph & graph, std::vect
 VerificationResult
 NestedLoopTransformation::WitnessBackTranslator::translate(VerificationResult & result) {
     if (result.getAnswer() == VerificationAnswer::UNSAFE) {
-        auto witness = translateErrorPath(result.getInvalidityWitness().ep.getEdges());
+        auto witness = translateErrorPath(result.getInvalidityWitness());
         if (std::holds_alternative<NoWitness>(witness)) {
             return {result.getAnswer(), std::get<NoWitness>(std::move(witness))};
         }
@@ -315,13 +315,13 @@ NestedLoopTransformation::WitnessBackTranslator::translate(VerificationResult & 
 
 
 NestedLoopTransformation::WitnessBackTranslator::ErrorOr<InvalidityWitness>
-NestedLoopTransformation::WitnessBackTranslator::translateErrorPath(std::vector<EId> errorPath) {
+NestedLoopTransformation::WitnessBackTranslator::translateErrorPath(InvalidityWitness wtns) {
     // We need to get the CEX path, which will define the locations in the graph
     Logic & logic = graph.getLogic();
     TimeMachine tm(logic);
-
+    auto errorPath = wtns.getDerivation();
     std::vector<SymRef> pathVertices;
-    pathVertices.push_back(graph.getEntry());
+    pathVertices.push_back(initialGraph.getEntry());
     auto newVertices = graph.getVertices();
     auto allVertices = initialGraph.getVertices();
 
@@ -329,8 +329,8 @@ NestedLoopTransformation::WitnessBackTranslator::translateErrorPath(std::vector<
     auto model = [&]() {
         SMTSolver solverWrapper(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
         auto & solver = solverWrapper.getCoreSolver();
-        for (std::size_t i = 0; i < errorPath.size(); ++i) {
-            PTRef fla = graph.getEdgeLabel(errorPath[i]);
+        for (std::size_t i = 1; i < errorPath.size(); ++i) {
+            PTRef fla = graph.getEdgeLabel(errorPath[i].clauseId);
             fla = TimeMachine(logic).sendFlaThroughTime(fla, i);
             solver.insertFormula(fla);
         }
@@ -338,11 +338,14 @@ NestedLoopTransformation::WitnessBackTranslator::translateErrorPath(std::vector<
         if (res != s_True) { throw std::logic_error("Error in computing model for the error path"); }
         return solver.getModel();
     }();
-    for (auto i = 0u; i < errorPath.size(); ++i) {
-        if(graph.getTarget(errorPath[i]) == graph.getSource(errorPath[i])){
-            if (std::find(loopNodes.begin(), loopNodes.end(), graph.getTarget(errorPath[i])) != loopNodes.end()) {
+
+    for (std::size_t i = 1; i < errorPath.size(); ++i) {
+        if(graph.getTarget(errorPath[i].clauseId) == graph.getSource(errorPath[i].clauseId)){
+            if (std::find(loopNodes.begin(), loopNodes.end(), graph.getTarget(errorPath[i].clauseId)) != loopNodes.end()) {
                 auto it = std::find_if(allVertices.begin(), allVertices.end(), [&](auto vertex) {
-                    if (vertex == graph.getEntry()) { return false; }
+                    if(locationVarMap.find(vertex) == locationVarMap.end()){
+                        return false;
+                    }
                     auto varName = ".loc_" + std::to_string(vertex.x);
                     auto vertexVar = logic.mkBoolVar(varName.c_str());
                     vertexVar = tm.getVarVersionZero(vertexVar);
@@ -352,10 +355,10 @@ NestedLoopTransformation::WitnessBackTranslator::translateErrorPath(std::vector<
                 assert(it != allVertices.end());
                 pathVertices.push_back(*it);
             } else {
-                pathVertices.push_back(graph.getTarget(errorPath[i]));
+                pathVertices.push_back(initialGraph.getTarget(errorPath[i].clauseId));
             };
         } else {
-            pathVertices.push_back(graph.getTarget(errorPath[i]));
+            pathVertices.push_back(initialGraph.getTarget(errorPath[i].clauseId));
         }
 
     }
@@ -363,7 +366,7 @@ NestedLoopTransformation::WitnessBackTranslator::translateErrorPath(std::vector<
     // Build error path from the vertices
     std::vector<EId> errorEdges;
     auto adj = AdjacencyListsGraphRepresentation::from(initialGraph);
-    for (auto i = 1u; i < pathVertices.size(); ++i) {
+    for (auto i = 1; i < pathVertices.size(); ++i) {
         auto source = pathVertices[i - 1];
         auto target = pathVertices[i];
         auto const & outgoing = adj.getOutgoingEdgesFor(source);

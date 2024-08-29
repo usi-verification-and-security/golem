@@ -126,9 +126,7 @@ bool TarjanLoopDetection(ChcDirectedGraph const & graph) {
         if (visitedVertices.find(vertices[i].x) == visitedVertices.end()) {
             bool loop_detected =
                 strongConnection(visitedVertices, verticesOnStack, graphRepresentation, graph, vertices[i]);
-            if (loop_detected) {
-                return true;
-            }
+            if (loop_detected) { return true; }
         }
     }
     return false;
@@ -165,13 +163,7 @@ EdgeVariables getVariablesFromEdge(Logic & logic, ChcDirectedGraph const & graph
     PTRef sourcePred = graph.getStateVersion(graph.getSource(eid));
     PTRef targetPred = graph.getNextStateVersion(graph.getTarget(eid));
     res.stateVars = utils.predicateArgsInOrder(sourcePred);
-    auto auxSource = graph.getAuxVars(graph.getSource(eid));
-    res.stateVars.insert(res.stateVars.end(), auxSource.begin(), auxSource.end());
-    auto auxTarget = graph.getAuxVars(graph.getTarget(eid));
     res.nextStateVars = utils.predicateArgsInOrder(targetPred);
-    for(auto var: auxTarget){
-        res.nextStateVars.push_back(TimeMachine(logic).sendFlaThroughTime(var, 1));
-    }
     PTRef edgeLabel = graph.getEdgeLabel(eid);
     auto allVars = TermUtils(logic).getVars(edgeLabel);
     for (PTRef var : allVars) {
