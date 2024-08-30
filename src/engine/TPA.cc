@@ -1701,9 +1701,8 @@ TransitionSystemNetworkManager::QueryResult TransitionSystemNetworkManager::quer
         auto model = solver.getModel();
         ModelBasedProjection mbp(logic);
         PTRef query = logic.mkAnd({sourceCondition, label, target});
-        auto targetVars = getVariablesFromEdge(logic, graph, eid);
-        PTRef eliminated = mbp.keepOnly(query, targetVars.nextStateVars, *model);
-        getVariablesFromEdge(logic, graph, eid);
+        auto targetVars = TermUtils(logic).predicateArgsInOrder(graph.getNextStateVersion(graph.getTarget(eid)));
+        PTRef eliminated = mbp.keepOnly(query, targetVars, *model);
         eliminated = TimeMachine(logic).sendFlaThroughTime(eliminated, -1);
         TRACE(1, "Propagating along the edge " << logic.pp(eliminated))
         return {ReachabilityResult::REACHABLE, eliminated};

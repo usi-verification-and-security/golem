@@ -72,7 +72,6 @@ private:
     Derivation derivation;
 
 public:
-    ErrorPath ep;
     void setDerivation(Derivation derivation_) { derivation = std::move(derivation_); }
 
     [[nodiscard]] Derivation const & getDerivation() const { return derivation; }

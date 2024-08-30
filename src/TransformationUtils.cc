@@ -38,13 +38,13 @@ std::unique_ptr<TransitionSystem> toTransitionSystem(ChcDirectedGraph const & gr
     auto vertices = reversePostOrder(graph, adjacencyRepresentation);
     assert(vertices.size() == 3);
     auto loopNode = vertices[1];
-    auto edges = graph.getEdges();
     EId loopEdge = getSelfLoopFor(loopNode, graph, adjacencyRepresentation).value();
     auto edgeVars = getVariablesFromEdge(logic, graph, loopEdge);
     // Now we can continue building the transition system
     auto systemType = systemTypeFrom(edgeVars.stateVars, edgeVars.auxiliaryVars, logic);
     auto stateVars = systemType->getStateVars();
     auto nextStateVars = systemType->getNextStateVars();
+    auto auxiliaryVars = systemType->getAuxiliaryVars();
     assert(stateVars.size() == edgeVars.stateVars.size());
     assert(nextStateVars.size() == edgeVars.nextStateVars.size());
     PTRef init = PTRef_Undef;
@@ -122,6 +122,7 @@ bool TarjanLoopDetection(ChcDirectedGraph const & graph) {
     auto vertices = reversePostOrder(graph, graphRepresentation);
     std::unordered_set<int> visitedVertices;
     std::unordered_set<int> verticesOnStack;
+
     for (uint i = 1; i < vertices.size() - 1; i++) {
         if (visitedVertices.find(vertices[i].x) == visitedVertices.end()) {
             bool loop_detected =

@@ -8,8 +8,8 @@
 
 #include "QuantifierElimination.h"
 #include "TransformationUtils.h"
-#include "utils/SmtSolver.h"
 #include "graph/ChcGraph.h"
+#include "utils/SmtSolver.h"
 
 namespace {
 using LocationVarMap = NestedLoopTransformation::LocationVarMap;
@@ -81,29 +81,25 @@ PTRef EdgeTranslator::translateEdge(DirectedEdge const & edge) const {
 
 } // namespace
 
-std::unique_ptr<NestedLoopTransformation::WitnessBackTranslator> NestedLoopTransformation::transform( ChcDirectedGraph & graph) {
+std::unique_ptr<NestedLoopTransformation::WitnessBackTranslator>
+NestedLoopTransformation::transform(ChcDirectedGraph & graph) {
     auto vertices = graph.getVertices();
     auto originalGraph = graph;
     std::vector<EId> loop = detectLoop(graph);
     std::vector<SymRef> simplifiedNodes;
     LocationVarMap locationVars;
     PositionVarMap argVars;
-    while(loop.size()>1){
+    while (loop.size() > 1) {
         simplifiedNodes.push_back(simplifyLoop(graph, loop, locationVars, argVars));
         loop = detectLoop(graph);
     }
-//    auto backTranslator =
-//        std::make_unique<WitnessBackTranslator>(originalGraph, graph, std::move(locationVars), std::move(argVars), simplifiedNodes);
-    return std::make_unique<NestedLoopTransformation::WitnessBackTranslator>(std::move(originalGraph), graph, std::move(locationVars), std::move(argVars), simplifiedNodes);
+    return std::make_unique<NestedLoopTransformation::WitnessBackTranslator>(
+        std::move(originalGraph), graph, std::move(locationVars), std::move(argVars), simplifiedNodes);
 }
-
-
-
-
 
 void strongConnection(std::unordered_set<int> & visitedVertices, std::unordered_set<int> & verticesOnStack,
                       AdjacencyListsGraphRepresentation const & graphRepresentation, ChcDirectedGraph const & graph,
-                      SymRef node, std::vector<EId>& loop) {
+                      SymRef node, std::vector<EId> & loop) {
     visitedVertices.insert(node.x);
     verticesOnStack.insert(node.x);
     auto const & outEdges = graphRepresentation.getOutgoingEdgesFor(node);
@@ -117,7 +113,8 @@ void strongConnection(std::unordered_set<int> & visitedVertices, std::unordered_
             auto nextVertex = graph.getTarget(eid);
             if (visitedVertices.find(nextVertex.x) == visitedVertices.end()) {
                 strongConnection(visitedVertices, verticesOnStack, graphRepresentation, graph, nextVertex, loop);
-                if (loop.size() > 0 && graph.getTarget(eid) != graph.getTarget(loop[0]) && graph.getTarget(eid) == graph.getSource(loop[loop.size()-1])) {
+                if (!loop.empty() && graph.getTarget(eid) != graph.getTarget(loop[0]) &&
+                    graph.getTarget(eid) == graph.getSource(loop[loop.size() - 1])) {
                     loop.push_back(eid);
                     return;
                 }
@@ -129,13 +126,11 @@ void strongConnection(std::unordered_set<int> & visitedVertices, std::unordered_
     }
 
     verticesOnStack.erase(node.x);
-
-    return;
 }
 
 std::vector<EId> NestedLoopTransformation::detectLoop(const ChcDirectedGraph & graph) {
     std::vector<EId> loop;
-    if (graph.getVertices().size() < 3) { return loop; }
+    if (graph.getVertices().size() <= 3) { return loop; }
     auto graphRepresentation = AdjacencyListsGraphRepresentation::from(graph);
     auto vertices = reversePostOrder(graph, graphRepresentation);
     std::unordered_set<int> visitedVertices;
@@ -148,17 +143,18 @@ std::vector<EId> NestedLoopTransformation::detectLoop(const ChcDirectedGraph & g
     return loop;
 }
 
-SymRef NestedLoopTransformation::simplifyLoop( ChcDirectedGraph & graph, std::vector<EId> loop, LocationVarMap& locationVars, PositionVarMap& argVars) {
+SymRef NestedLoopTransformation::simplifyLoop(ChcDirectedGraph & graph, std::vector<EId> loop,
+                                              LocationVarMap & locationVars, PositionVarMap & argVars) {
     Logic & logic = graph.getLogic();
     TimeMachine timeMachine(logic);
     TermUtils utils(logic);
     std::vector<SymRef> vertices;
-    assert(graph.getSource(loop[0]) == graph.getTarget(loop[loop.size()-1]));
+    assert(graph.getSource(loop[0]) == graph.getTarget(loop[loop.size() - 1]));
     assert(loop.size() >= 2);
-    for(int i = loop.size() - 1; i >= 0; i--){
-         vertices.push_back(graph.getSource(loop[i]));
+    for (int i = loop.size() - 1; i >= 0; i--) {
+        vertices.push_back(graph.getSource(loop[i]));
     }
-    // KB: Translation of vertices' self-loops of loop in DAG
+    // KB: creation of the location variables for nodes and argument variables (params of predicates)
     std::vector<EId> allEdges = graph.getEdges();
 
     locationVars.reserve(vertices.size());
@@ -177,28 +173,27 @@ SymRef NestedLoopTransformation::simplifyLoop( ChcDirectedGraph & graph, std::ve
         }
     }
 
-    // KB: Translation of edges between vertices of loop in DAG
     EdgeTranslator edgeTranslator{graph, locationVars, argVars, {}};
     vec<PTRef> transitionRelationComponent;
-    for(auto edge: loop) {
-        transitionRelationComponent.push(edgeTranslator.translateEdge(graph.getEdge(edge)));
 
-    }
-
-
-    for(auto edge: allEdges) {
-        if(graph.getTarget(edge) == graph.getSource(edge)){
-            for(auto check: loop){
-                if(graph.getSource(check) == graph.getSource(edge)){
-                    transitionRelationComponent.push(edgeTranslator.translateEdge(graph.getEdge(edge)));
-                    graph.removeEdge(edge);
-                    break;
-                }
-
+    // KB: Translation of self-loop edges for the loop vertices in DAG
+    for (auto edge : allEdges) {
+        if (graph.getTarget(edge) == graph.getSource(edge)) {
+            if (std::find(vertices.begin(), vertices.end(), graph.getSource(edge)) != vertices.end()) {
+                transitionRelationComponent.push(edgeTranslator.translateEdge(graph.getEdge(edge)));
+                graph.removeEdge(edge);
             }
         }
     };
 
+    // KB: Translation of edges between vertices of loop in DAG
+    for (auto edge : loop) {
+        transitionRelationComponent.push(edgeTranslator.translateEdge(graph.getEdge(edge)));
+        graph.removeEdge(edge);
+    }
+
+    // KB: Extraction of the state variables of the nested loop nodes, creation of new predicate to replace node with
+    //     nested loops
     std::vector<PTRef> stateVars = [&locationVars, &argVars]() {
         std::vector<PTRef> ret;
         for (auto && entry : locationVars) {
@@ -209,93 +204,73 @@ SymRef NestedLoopTransformation::simplifyLoop( ChcDirectedGraph & graph, std::ve
         }
         return ret;
     }();
+
     vec<SRef> args;
-    for(auto arg: stateVars){
+    std::vector<PTRef> vars;
+    for (auto arg : stateVars) {
         args.push(logic.getSortRef(arg));
+        vars.push_back(timeMachine.getUnversioned(arg));
     }
 
     PTRef transitionRelation = logic.mkOr(std::move(transitionRelationComponent));
-
-    SymRef newRef =  logic.declareFun("hello", logic.getSort_bool(), args);
-    std::vector<PTRef> vars;
-    for (PTRef var : stateVars) {
-        vars.push_back(timeMachine.getUnversioned(var));
+    std::string name;
+    for (auto vertex : vertices) {
+        name += logic.getSymName(vertex);
     }
 
+    SymRef newRef = logic.declareFun(name, logic.getSort_bool(), args);
     graph.getPredicateRepresentation().addRepresentation(newRef, std::move(vars));
 
-
-    for(auto edge: loop){
-        graph.removeEdge(edge);
-    }
-//    PTRef badStates = locationVars.at(vertices[0]);
-//TODO: we're not guaranteed that old and new predicate will have the same number of vars
+    // KB: Changing input and output edges to and from the loop in the graph with new state and loc variables
+    //     Redirecting edges to the newly created vertice
     allEdges = graph.getEdges();
-    for(auto edge: allEdges){
-        if (std::find(vertices.begin(), vertices.end(), graph.getSource(edge)) != vertices.end()){
+    for (auto edge : allEdges) {
+        if (std::find(vertices.begin(), vertices.end(), graph.getSource(edge)) != vertices.end()) {
             PTRef badStates = locationVars.at(graph.getSource(edge));
             auto oldEdgeVars = getVariablesFromEdge(logic, graph, edge);
-            PTRef conds = logic.getTerm_true();
             std::unordered_map<PTRef, PTRef, PTRefHash> subMap;
-            for(uint i = 0; i < oldEdgeVars.stateVars.size(); i++){
+            for (uint i = 0; i < oldEdgeVars.stateVars.size(); i++) {
                 subMap.insert(std::make_pair(oldEdgeVars.stateVars[i], argVars[{graph.getSource(edge), i}]));
-                conds = logic.mkAnd(conds, logic.mkEq(oldEdgeVars.stateVars[i], argVars[{graph.getSource(edge), i}]));
-                //                argVars[{graph.getTarget(edge), i}];
             }
             graph.updateEdgeSource(edge, newRef);
-            auto newEdgeVars = getVariablesFromEdge(logic, graph, edge);
             PTRef label = utils.varSubstitute(logic.mkAnd(graph.getEdgeLabel(edge), badStates), subMap);
-            std::transform(oldEdgeVars.stateVars.begin(), oldEdgeVars.stateVars.end(), newEdgeVars.stateVars.begin(),
-                           std::inserter(subMap, subMap.end()),
-                           [](PTRef key, PTRef value) { return std::make_pair(key, value); });
-            label = utils.varSubstitute(label, subMap);
 
             graph.updateEdgeLabel(edge, InterpretedFla{label});
         }
-        if (std::find(vertices.begin(), vertices.end(), graph.getTarget(edge)) != vertices.end()){
+        if (std::find(vertices.begin(), vertices.end(), graph.getTarget(edge)) != vertices.end()) {
 
             PTRef initialStates = [&]() -> PTRef {
                 vec<PTRef> negatedLocations;
                 negatedLocations.capacity(locationVars.size());
                 for (auto && entry : locationVars) {
-                    if(std::get<0>(entry) != graph.getTarget(edge)) {
+                    if (std::get<0>(entry) != graph.getTarget(edge)) {
                         negatedLocations.push(logic.mkNot(timeMachine.sendVarThroughTime(entry.second, 1)));
                     }
                 }
                 return logic.mkAnd(std::move(negatedLocations));
             }();
+            PTRef destination = timeMachine.sendVarThroughTime(locationVars.at(graph.getTarget(edge)), 1);
 
             auto oldEdgeVars = getVariablesFromEdge(logic, graph, edge);
-            PTRef arr = timeMachine.sendVarThroughTime(locationVars.at(graph.getTarget(edge)), 1);
-            PTRef conds = logic.getTerm_true();
             std::unordered_map<PTRef, PTRef, PTRefHash> subMap;
-            for(uint i = 0; i < oldEdgeVars.nextStateVars.size(); i++){
-                subMap.insert(std::make_pair(oldEdgeVars.nextStateVars[i], timeMachine.sendVarThroughTime(argVars[{graph.getTarget(edge), i}],1)));
-                conds = logic.mkAnd(conds, logic.mkEq(oldEdgeVars.nextStateVars[i], timeMachine.sendVarThroughTime(argVars[{graph.getTarget(edge), i}],1)));
-//                argVars[{graph.getTarget(edge), i}];
+            for (uint i = 0; i < oldEdgeVars.nextStateVars.size(); i++) {
+                subMap.insert(std::make_pair(oldEdgeVars.nextStateVars[i],
+                                             timeMachine.sendVarThroughTime(argVars[{graph.getTarget(edge), i}], 1)));
             }
             graph.updateEdgeTarget(edge, newRef);
-            auto newEdgeVars = getVariablesFromEdge(logic, graph, edge);
             PTRef label = utils.varSubstitute(graph.getEdgeLabel(edge), subMap);
-            std::transform(oldEdgeVars.nextStateVars.begin(), oldEdgeVars.nextStateVars.end(), newEdgeVars.nextStateVars.begin(),
-                           std::inserter(subMap, subMap.end()),
-                           [](PTRef key, PTRef value) { return std::make_pair(key, value); });
 
-            label = utils.varSubstitute(graph.getEdgeLabel(edge), subMap);
-            graph.updateEdgeLabel(edge, InterpretedFla{rewriteMaxArityClassic(logic,logic.mkAnd(logic.mkAnd(initialStates, label), arr))});
+            graph.updateEdgeLabel(edge, InterpretedFla{rewriteMaxArityClassic(
+                                            logic, logic.mkAnd(logic.mkAnd(initialStates, destination), label))});
         }
     }
 
-    graph.newEdge(newRef, newRef,InterpretedFla{transitionRelation});
+    // KB: Creating new self-looping edge (which represents all of the self-loops)
+    graph.newEdge(newRef, newRef, InterpretedFla{transitionRelation});
     return newRef;
 }
 
-
-
-
-
-VerificationResult
-NestedLoopTransformation::WitnessBackTranslator::translate(VerificationResult & result) {
+VerificationResult NestedLoopTransformation::WitnessBackTranslator::translate(VerificationResult & result) {
     if (result.getAnswer() == VerificationAnswer::UNSAFE) {
         auto witness = translateErrorPath(result.getInvalidityWitness());
         if (std::holds_alternative<NoWitness>(witness)) {
@@ -312,7 +287,6 @@ NestedLoopTransformation::WitnessBackTranslator::translate(VerificationResult & 
     }
     return std::move(result);
 }
-
 
 NestedLoopTransformation::WitnessBackTranslator::ErrorOr<InvalidityWitness>
 NestedLoopTransformation::WitnessBackTranslator::translateErrorPath(InvalidityWitness wtns) {
@@ -340,12 +314,11 @@ NestedLoopTransformation::WitnessBackTranslator::translateErrorPath(InvalidityWi
     }();
 
     for (std::size_t i = 1; i < errorPath.size(); ++i) {
-        if(graph.getTarget(errorPath[i].clauseId) == graph.getSource(errorPath[i].clauseId)){
-            if (std::find(loopNodes.begin(), loopNodes.end(), graph.getTarget(errorPath[i].clauseId)) != loopNodes.end()) {
+        if (graph.getTarget(errorPath[i].clauseId) == graph.getSource(errorPath[i].clauseId)) {
+            if (std::find(loopNodes.begin(), loopNodes.end(), graph.getTarget(errorPath[i].clauseId)) !=
+                loopNodes.end()) {
                 auto it = std::find_if(allVertices.begin(), allVertices.end(), [&](auto vertex) {
-                    if(locationVarMap.find(vertex) == locationVarMap.end()){
-                        return false;
-                    }
+                    if (locationVarMap.find(vertex) == locationVarMap.end()) { return false; }
                     auto varName = ".loc_" + std::to_string(vertex.x);
                     auto vertexVar = logic.mkBoolVar(varName.c_str());
                     vertexVar = tm.getVarVersionZero(vertexVar);
@@ -360,18 +333,17 @@ NestedLoopTransformation::WitnessBackTranslator::translateErrorPath(InvalidityWi
         } else {
             pathVertices.push_back(initialGraph.getTarget(errorPath[i].clauseId));
         }
-
     }
 
     // Build error path from the vertices
     std::vector<EId> errorEdges;
     auto adj = AdjacencyListsGraphRepresentation::from(initialGraph);
-    for (auto i = 1; i < pathVertices.size(); ++i) {
+    for (std::size_t i = 1; i < pathVertices.size(); ++i) {
         auto source = pathVertices[i - 1];
         auto target = pathVertices[i];
         auto const & outgoing = adj.getOutgoingEdgesFor(source);
-        auto it =
-            std::find_if(outgoing.begin(), outgoing.end(), [&](EId eid) { return target == initialGraph.getTarget(eid); });
+        auto it = std::find_if(outgoing.begin(), outgoing.end(),
+                               [&](EId eid) { return target == initialGraph.getTarget(eid); });
         assert(it != outgoing.end());
         errorEdges.push_back(*it);
         // TODO: deal with multiedges properly
@@ -386,12 +358,10 @@ NestedLoopTransformation::WitnessBackTranslator::translateErrorPath(InvalidityWi
     return InvalidityWitness::fromErrorPath(ep, initialGraph);
 }
 
-
 NestedLoopTransformation::WitnessBackTranslator::ErrorOr<ValidityWitness>
 NestedLoopTransformation::WitnessBackTranslator::translateInvariant(ValidityWitness wtns) {
     Logic & logic = graph.getLogic();
     TimeMachine timeMachine(logic);
-    //    std::cout << "Invariant is " << logic.pp(inductiveInvariant) << std::endl;
     auto vertices = graph.getVertices();
     auto oldVertices = initialGraph.getVertices();
     TermUtils utils(logic);
@@ -401,39 +371,23 @@ NestedLoopTransformation::WitnessBackTranslator::translateInvariant(ValidityWitn
         try {
             PTRef locationVar = this->locationVarMap.at(vertex);
             substitutions.insert({timeMachine.getUnversioned(locationVar), logic.getTerm_false()});
-        } catch (const std::out_of_range& ex) {
-            continue ;
-        }
+        } catch (const std::out_of_range & ex) { continue; }
     }
 
     ValidityWitness::definitions_t vertexInvariants;
-    for(auto inv:
-         wtns.getDefinitions()) {
+    for (auto inv : wtns.getDefinitions()) {
         vertexInvariants.insert(inv);
     }
     auto edges = graph.getEdges();
-    for(auto v: loopNodes) {
-//        vec<PTRef> unversionedVars;
-//        for (std::size_t i = 0; i < edges.size(); ++i) {
-//            if(graph.getTarget(edges[i]) == v && graph.getSource(edges[i]) == v){
-//                auto vars = getVariablesFromEdge(logic,graph,edges[i]);
-//                for(auto var: vars.stateVars){
-//                    unversionedVars.push(timeMachine.getUnversioned(var));
-//                }
-//            }
-//        }
-//        PTRef unversionedPredicate = logic.mkUninterpFun(v, std::move(unversionedVars));
-
-        PTRef unversionedPredicate = TimeMachine(logic).versionZeroToUnversioned(graph.getStateVersion(v));
+    for (auto v : loopNodes) {
+        PTRef unversionedPredicate = TimeMachine(logic).versionedFormulaToUnversioned(graph.getStateVersion(v));
         PTRef mergedInv = wtns.getDefinitions().at(unversionedPredicate);
         for (auto vertex : oldVertices) {
             if (vertex == initialGraph.getEntry() or vertex == initialGraph.getExit()) { continue; }
-            PTRef locationVar ;
+            PTRef locationVar;
             try {
                 locationVar = timeMachine.getUnversioned(this->locationVarMap.at(vertex));
-            } catch (const std::out_of_range& ex) {
-                continue;
-            }
+            } catch (const std::out_of_range & ex) { continue; }
             substitutions.at(locationVar) = logic.getTerm_true();
             auto vertexInvariant = utils.varSubstitute(mergedInv, substitutions);
             substitutions.at(locationVar) = logic.getTerm_false();
@@ -455,32 +409,34 @@ NestedLoopTransformation::WitnessBackTranslator::translateInvariant(ValidityWitn
 
             auto args_count = logic.getSym(vertex).nargs();
             std::unordered_set<PTRef, PTRefHash> changedVertexVars;
-            for(uint32_t i = 0; i < args_count; i++){
+            for (uint32_t i = 0; i < args_count; i++) {
                 changedVertexVars.insert(timeMachine.getUnversioned(positionVarMap.at(VarPosition{vertex, i})));
             }
             auto vertexVars = getVarsForVertex(vertex);
-            bool hasAlienVariable = std::any_of(allVars.begin(), allVars.end(),
-                                                [&](PTRef var) { return changedVertexVars.find(var) == changedVertexVars.end(); });
+            bool hasAlienVariable = std::any_of(allVars.begin(), allVars.end(), [&](PTRef var) {
+                return changedVertexVars.find(var) == changedVertexVars.end();
+            });
             if (hasAlienVariable) {
                 vec<PTRef> variablesToKeep;
                 for (PTRef var : changedVertexVars) {
                     variablesToKeep.push(var);
                 }
-                // Universally quantify all alien variables. QE eliminates existential quantifiers, so use double negation
+                // Universally quantify all alien variables. QE eliminates existential quantifiers, so use double
+                // negation
                 PTRef negatedInvariant = logic.mkNot(vertexInvariant);
                 PTRef cleanNegatedInvariant = QuantifierElimination(logic).keepOnly(negatedInvariant, variablesToKeep);
                 vertexInvariant = logic.mkNot(cleanNegatedInvariant);
             }
             // No alien variable, we can translate the invariant using predicate's variables
             TermUtils::substitutions_map varSubstitutions;
-            PTRef basePredicate = TimeMachine(logic).versionZeroToUnversioned(graph.getStateVersion(vertex));
+            PTRef basePredicate = TimeMachine(logic).versionedFormulaToUnversioned(graph.getStateVersion(vertex));
             auto argsNum = logic.getPterm(basePredicate).nargs();
-            for (auto i = 0u; i < argsNum; ++i) {
+            for (uint32_t i = 0u; i < argsNum; ++i) {
                 PTRef positionVar = positionVarMap.at(VarPosition{vertex, i});
                 varSubstitutions.insert({timeMachine.getUnversioned(positionVar), logic.getPterm(basePredicate)[i]});
             }
             vertexInvariant = utils.varSubstitute(vertexInvariant, varSubstitutions);
-            if(vertexInvariants.find(basePredicate) != vertexInvariants.end()){
+            if (vertexInvariants.find(basePredicate) != vertexInvariants.end()) {
                 vertexInvariants[basePredicate] = vertexInvariant;
             } else {
                 vertexInvariants.insert({basePredicate, vertexInvariant});

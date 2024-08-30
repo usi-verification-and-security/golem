@@ -37,9 +37,7 @@
  */
 class NestedLoopTransformation {
 
-
 public:
-
     // Helper types
     struct VarPosition {
         SymRef vertex;
@@ -54,10 +52,8 @@ public:
         }
     };
 
-
     using LocationVarMap = std::unordered_map<SymRef, PTRef, SymRefHash>;
     using PositionVarMap = std::unordered_map<VarPosition, PTRef, VarPositionHasher>;
-
 
     class WitnessBackTranslator {
         ChcDirectedGraph initialGraph;
@@ -67,7 +63,6 @@ public:
         std::vector<SymRef> loopNodes;
 
     public:
-
         WitnessBackTranslator(ChcDirectedGraph initialGraph, ChcDirectedGraph const & graph,
                               LocationVarMap && locationVarMap, PositionVarMap && positionVarMap,
                               std::vector<SymRef> & loopNodes)
@@ -77,7 +72,6 @@ public:
         VerificationResult translate(VerificationResult & result);
 
     private:
-
         template<typename T> using ErrorOr = std::variant<NoWitness, T>;
 
         ErrorOr<InvalidityWitness> translateErrorPath(InvalidityWitness errorPath);
@@ -87,12 +81,11 @@ public:
         std::unordered_set<PTRef, PTRefHash> getVarsForVertex(SymRef vertex) const;
     };
 
-
-    std::vector<EId> detectLoop(ChcDirectedGraph const & graph);
-    SymRef simplifyLoop(ChcDirectedGraph & graph, std::vector<EId> loop, LocationVarMap& locationVars, PositionVarMap& argVars);
+    static std::vector<EId> detectLoop(ChcDirectedGraph const & graph);
+    static SymRef simplifyLoop(ChcDirectedGraph & graph, std::vector<EId> loop, LocationVarMap & locationVars,
+                               PositionVarMap & argVars);
 
     std::unique_ptr<WitnessBackTranslator> transform(ChcDirectedGraph & graph);
-
 };
 
 #endif // GOLEM_NESTED_LOOP_TRANSFORMATION_H
