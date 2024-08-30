@@ -208,3 +208,35 @@ TEST_F(PredicateAbstractionTest, test_MultiPredicateInBody_Safe) {
     ARGBasedEngine engine(*logic, options);
     solveSystem(clauses, engine, VerificationAnswer::SAFE, true);
 }
+
+TEST_F(PredicateAbstractionTest, test_OneOfTwo_Unsafe) {
+    options.addOption(Options::COMPUTE_WITNESS, "true");
+    SymRef inv1_sym = mkPredicateSymbol("Inv1", {intSort()});
+    SymRef inv2_sym = mkPredicateSymbol("Inv2", {intSort()});
+    PTRef inv1 = instantiatePredicate(inv1_sym, {x});
+    PTRef inv2 = instantiatePredicate(inv2_sym, {x});
+    // x = 0 => Inv1(x)
+    // x = 1 => Inv1(x)
+    // Inv1(x) => Inv2(x)
+    // Inv2(x) and x = 1 => false
+    std::vector<ChClause> clauses{
+        {
+            ChcHead{UninterpretedPredicate{inv1}},
+            ChcBody{{logic->mkEq(x, zero)}, {}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{inv1}},
+            ChcBody{{logic->mkEq(x, one)}, {}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{inv2}},
+            ChcBody{{}, {UninterpretedPredicate{inv1}}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{logic->getTerm_false()}},
+            ChcBody{{logic->mkEq(x, one)}, {UninterpretedPredicate{inv2}}}
+        }
+    };
+    ARGBasedEngine engine(*logic, options);
+    solveSystem(clauses, engine, VerificationAnswer::UNSAFE, true);
+}

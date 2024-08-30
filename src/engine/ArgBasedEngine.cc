@@ -12,6 +12,11 @@
 
 #include <memory>
 
+#define TRACE_LEVEL 0
+
+#define TRACE(l, m)                                                                                                    \
+    if (TRACE_LEVEL >= l) { std::cout << m << std::endl; }
+
 class PredicateAbstractionManager {
 public:
     explicit PredicateAbstractionManager(Logic & logic) : logic(logic) {}
@@ -64,6 +69,14 @@ public:
         assert(&other.manager == &this->manager);
         return this->satisfiedPredicates == other.satisfiedPredicates;
     }
+
+    bool operator!=(CartesianPredicateAbstractionStates const & other) { return not(*this == other); }
+
+private:
+    friend class ARG;
+    void refine(PredicateAbstractionManager::Predicates const & newPredicates) {
+        satisfiedPredicates.insert(newPredicates.begin(), newPredicates.end());
+    }
 };
 
 struct ARGNode {
@@ -71,10 +84,6 @@ struct ARGNode {
     std::unique_ptr<CartesianPredicateAbstractionStates> reachedStates;
     [[nodiscard]] PTRef getReachedStates() const { return reachedStates->asSingleFormula(); };
 };
-
-inline bool operator==(ARGNode n1, ARGNode n2) {
-    return n1.predicateSymbol.x == n2.predicateSymbol.x and n1.reachedStates == n2.reachedStates;
-}
 
 class ARG {
 public:
@@ -92,6 +101,7 @@ private:
     std::vector<ARGNode> nodes;
     std::unordered_map<SymRef, std::vector<NodeId>, SymRefHash> instances;
     std::unordered_map<NodeId, std::vector<Edge>> incomingEdges;
+    std::unordered_map<NodeId, NodeId> coveredNodes; // coveree -> coverer
 
 public:
     constexpr static NodeId ENTRY = 0;
@@ -116,15 +126,16 @@ public:
     std::pair<NodeId, bool> tryInsertNode(SymRef symbol, PredicateAbstractionManager::Predicates && predicates) {
         ARGNode node{symbol,
                      std::make_unique<CartesianPredicateAbstractionStates>(predicateManager, std::move(predicates))};
-        auto const & existingInstances = instances.at(symbol);
-        bool subsumed = std::find_if(existingInstances.begin(), existingInstances.end(), [&](NodeId id) {
-                            return *nodes[id].reachedStates == *node.reachedStates;
-                        }) != existingInstances.end();
-
+        auto & existingInstances = instances.at(symbol);
+        auto it = std::find_if(existingInstances.begin(), existingInstances.end(),
+                               [&](NodeId id) { return *nodes[id].reachedStates == *node.reachedStates; });
+        bool covered = it != existingInstances.end();
         auto id = nodes.size();
         nodes.push_back(std::move(node));
-        instances.at(symbol).push_back(id);
-        return {id, subsumed};
+        TRACE(1, "Creating new node " + std::to_string(id) + " for symbol " + clauses.getLogic().printSym(symbol))
+        if (covered) { coveredNodes.emplace(id, *it); }
+        existingInstances.push_back(id);
+        return {id, covered};
     }
 
     void addEdge(Edge edge) {
@@ -138,6 +149,11 @@ public:
         return incomingEdges.at(target).front();
     }
 
+    [[nodiscard]] std::vector<Edge> const & getIncomingEdges(NodeId target) const {
+        assert(incomingEdges.count(target));
+        return incomingEdges.at(target);
+    }
+
     [[nodiscard]] auto const & getInstancesFor(SymRef symbol) const {
         auto it = instances.find(symbol);
         assert(it != instances.end());
@@ -149,12 +165,20 @@ public:
     [[nodiscard]] auto const & getClauses() const { return clauses; }
 
     void refine(std::unordered_map<SymRef, std::vector<PTRef>, SymRefHash> const & refinementInfo);
+
+    std::vector<NodeId> recheckCoveredNodes();
+
+    bool isCovered(NodeId nodeId) const { return coveredNodes.count(nodeId) > 0; }
 };
 
 struct UnprocessedEdge {
     EId eid;
     std::vector<ARG::NodeId> sources;
 };
+
+bool operator==(UnprocessedEdge const & first, UnprocessedEdge const & second) {
+    return first.eid == second.eid and first.sources == second.sources;
+}
 
 class InterpolationTree {
 public:
@@ -222,6 +246,9 @@ public:
     UnprocessedEdge pop();
     [[nodiscard]] bool isEmpty() const;
     void clear();
+    [[nodiscard]] std::size_t size() const { return queue.size(); }
+
+    [[nodiscard]] bool has(UnprocessedEdge const & edge) const; // TODO: Should not be needed!
 
 private:
     ChcDirectedHyperGraph const & clauses;
@@ -263,7 +290,7 @@ private:
 namespace {
 void increment(std::vector<std::size_t> & indices, std::vector<std::vector<ARG::NodeId>> const & allInstances) {
     assert(not indices.empty());
-    for (int i = static_cast<int>(indices.size()) - 1;; --i) {
+    for (int i = static_cast<int>(indices.size()) - 1; /* stopping condition in the body*/; --i) {
         ++indices[i];
         if (indices[i] == allInstances[i].size() and i > 0) {
             indices[i] = 0;
@@ -286,7 +313,10 @@ VerificationResult Algorithm::run() {
             continue;
         }
         auto [id, isCovered] = computeTarget(nextEdge);
+        auto before = queue.size();
         if (not isCovered) { computeNewUnprocessedEdges(id); }
+        auto after = queue.size();
+        TRACE(1, "Added " + std::to_string(after - before) + " new edges to process")
         arg.addEdge(ARG::Edge{.sources = std::move(nextEdge.sources), .target = id, .clauseId = nextEdge.eid});
     }
     if (not computeWitness) { return VerificationResult{VerificationAnswer::SAFE}; }
@@ -351,8 +381,6 @@ void Algorithm::computeNewUnprocessedEdges(ARG::NodeId nodeId) {
         // find all instances of edge sources in ARG and check feasibility
         auto sources = clauses.getSources(edge);
         std::vector<std::vector<ARG::NodeId>> allInstances;
-        // TODO: one of the sources (corresponding to the new ARGnode) should be fixed!
-        // TODO: What if we have a clause with multiple occurences of the same predicate?
         std::transform(std::begin(sources), std::end(sources), std::back_inserter(allInstances),
                        [&](auto symbol) { return arg.getInstancesFor(symbol); });
         if (std::any_of(allInstances.begin(), allInstances.end(),
@@ -366,7 +394,12 @@ void Algorithm::computeNewUnprocessedEdges(ARG::NodeId nodeId) {
             for (std::size_t i = 0; i < indices.size(); ++i) {
                 argSources.push_back(allInstances[i][indices[i]]);
             }
-            if (checker.isFeasible(argSources)) { queue.addEdge({.eid = edge, .sources = std::move(argSources)}); }
+            if (std::find(argSources.begin(), argSources.end(), nodeId) == argSources.end()) { continue; }
+            if (std::any_of(argSources.begin(), argSources.end(), [&](auto nodeId) { return arg.isCovered(nodeId); })) {
+                continue;
+            }
+            UnprocessedEdge newEdge{.eid = edge, .sources = std::move(argSources)};
+            if (not queue.has(newEdge) and checker.isFeasible(argSources)) { queue.addEdge(std::move(newEdge)); }
         }
     }
 }
@@ -419,11 +452,12 @@ bool Algorithm::isRealProof(UnprocessedEdge const & edge) {
 }
 
 void Algorithm::refine() {
+    TRACE(1, "Refining")
     arg.refine(lastRefinementInfo);
-    queue.clear();
-    auto facts = representation.getOutgoingEdgesFor(clauses.getEntry());
-    for (EId fact : facts) {
-        queue.addEdge({.eid = fact, .sources = {ARG::ENTRY}});
+    // Nodes that were previously subsumed/covered might no longer be covered
+    auto uncoveredNodes = arg.recheckCoveredNodes();
+    for (auto nodeId : uncoveredNodes) {
+        computeNewUnprocessedEdges(nodeId);
     }
 }
 
@@ -668,6 +702,7 @@ bool EdgeQueue::isEmpty() const {
 }
 
 void EdgeQueue::addEdge(UnprocessedEdge e) {
+    TRACE(1, "Adding new edge to queue, with clause ID " + std::to_string(e.eid.id))
     if (clauses.getExit() == clauses.getTarget(e.eid)) {
         queue.push_front(std::move(e));
     } else {
@@ -686,6 +721,10 @@ void EdgeQueue::clear() {
     queue.clear();
 }
 
+bool EdgeQueue::has(const UnprocessedEdge & edge) const {
+    return std::find(queue.begin(), queue.end(), edge) != queue.end();
+}
+
 void ARG::refine(std::unordered_map<SymRef, std::vector<PTRef>, SymRefHash> const & refinementInfo) {
     for (auto && [predicateSymbol, newPredicates] : refinementInfo) {
         for (PTRef newPredicate : newPredicates) {
@@ -693,11 +732,61 @@ void ARG::refine(std::unordered_map<SymRef, std::vector<PTRef>, SymRefHash> cons
         }
     }
     // Regenerate ARG
-    // For now, we clear it completely
-    this->incomingEdges.clear();
-    this->nodes.clear();
-    for (auto && [_, symbolInstances] : instances) {
-        symbolInstances.clear();
+    // We check the nodes in order such that all predecessors are checked before the successor.
+    // Since we add nodes as they are created, this condition is guaranteed in ARG::nodes
+    for (NodeId nid = 0; nid != nodes.size(); ++nid) {
+        auto const & node = nodes[nid];
+        if (refinementInfo.count(node.predicateSymbol) == 0) { continue; }
+        auto const & edges = getIncomingEdges(nid);
+        if (edges.size() != 1) { throw std::logic_error{"This approach works only for single incoming edge!"}; }
+        // TODO: Unify with ARG::computeTarget
+        auto const & edge = edges[0];
+        Logic & logic = clauses.getLogic();
+        VersionManager versionManager{logic};
+        std::unordered_map<SymRef, int, SymRefHash> sourcesCount;
+        SMTSolver solver(logic, SMTSolver::WitnessProduction::NONE);
+        solver.assertProp(clauses.getEdgeLabel(edge.clauseId));
+        for (auto sourceId : edge.sources) {
+            PTRef reachedStates = getReachedStates(sourceId);
+            PTRef versioned =
+                versionManager.baseFormulaToSource(reachedStates, sourcesCount[getPredicateSymbol(sourceId)]++);
+            solver.assertProp(versioned);
+        }
+        auto target = clauses.getEdge(edge.clauseId).to;
+        assert(target == node.predicateSymbol);
+        std::set<PTRef> impliedPredicates;
+        for (PTRef predicate : refinementInfo.at(target)) {
+            solver.push();
+            PTRef versionedPredicate = versionManager.baseFormulaToTarget(predicate);
+            solver.assertProp(logic.mkNot(versionedPredicate));
+            auto res = solver.check();
+            if (res == SMTSolver::Answer::UNSAT) { impliedPredicates.insert(predicate); }
+            solver.pop();
+        }
+        node.reachedStates->refine(impliedPredicates);
     }
-    tryInsertNode(clauses.getEntry(), {});
+}
+
+std::vector<ARG::NodeId> ARG::recheckCoveredNodes() {
+    std::vector<ARG::NodeId> uncoveredNodes;
+    for (auto & nodePair : coveredNodes) {
+        auto & coveree = nodePair.first;
+        auto & coverer = nodePair.second;
+        if (*nodes[coveree].reachedStates == *nodes[coverer].reachedStates) { continue; }
+        auto const & symbolInstances = instances.at(nodes[coveree].predicateSymbol);
+        auto it = std::find_if(symbolInstances.begin(), symbolInstances.end(), [&](NodeId other) {
+            return other != coveree and coveredNodes.count(other) == 0 and
+                   *nodes[other].reachedStates == *nodes[coveree].reachedStates;
+        });
+        if (it != symbolInstances.end()) {
+            TRACE(1, "Found other coverer")
+            coverer = *it;
+            continue;
+        }
+        uncoveredNodes.push_back(coveree);
+    }
+    for (auto nodeId : uncoveredNodes) {
+        coveredNodes.erase(nodeId);
+    }
+    return uncoveredNodes;
 }
