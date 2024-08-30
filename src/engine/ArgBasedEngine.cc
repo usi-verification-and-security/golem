@@ -8,6 +8,7 @@
 
 #include "transformers/Transformer.h"
 #include "utils/SmtSolver.h"
+#include "utils/StdUtils.h"
 
 #include <memory>
 
@@ -660,7 +661,6 @@ InterpolationTree InterpolationTree::make(ARG const & arg, UnprocessedEdge const
 
 void Algorithm::computeInvalidityWitness(InterpolationTree const & itpTree, Model & model) {
     Logic & logic = clauses.getLogic();
-    TermUtils utils(logic);
     std::unordered_map<InterpolationTree::NodeId, std::vector<std::size_t>> premiseMap;
     InvalidityWitness::Derivation derivation;
     using DerivationStep = InvalidityWitness::Derivation::DerivationStep;
@@ -674,16 +674,17 @@ void Algorithm::computeInvalidityWitness(InterpolationTree const & itpTree, Mode
     auto const & nodes = itpTree.getNodes();
     for (auto it = nodes.rbegin(); it != nodes.rend(); ++it) {
         auto const & node = *it;
-        PTRef nodeInstance = itpTree.getInstanceFor(node.id);
-        auto vars = utils.predicateArgsInOrder(nodeInstance);
-        vec<PTRef> varValues(static_cast<int>(vars.size()), PTRef_Undef);
-        std::transform(vars.begin(), vars.end(), varValues.begin(), [&](PTRef var) { return model.evaluate(var); });
         DerivationStep step;
-        step.derivedFact = logic.insertTerm(logic.getSymRef(nodeInstance), std::move(varValues));
+        step.derivedFact = [&]() {
+            PTRef nodeInstance = itpTree.getInstanceFor(node.id);
+            auto vars = TermUtils(logic).predicateArgsInOrder(nodeInstance);
+            vec<PTRef> varValues(static_cast<int>(vars.size()), PTRef_Undef);
+            std::transform(vars.begin(), vars.end(), varValues.begin(), [&](PTRef var) { return model.evaluate(var); });
+            return logic.insertTerm(logic.getSymRef(nodeInstance), std::move(varValues));
+        }();
         step.index = stepIndex++;
         step.clauseId = node.clauseId;
-        auto premisesIt = premiseMap.find(node.id);
-        step.premises = premisesIt == premiseMap.end() ? std::vector<std::size_t>{0} : premisesIt->second;
+        step.premises = tryGetValue(premiseMap, node.id).value_or(std::vector<std::size_t>{0});
         if (node.parent != InterpolationTree::NO_ID) {
             auto & parentPremises = premiseMap[node.parent];
             parentPremises.insert(parentPremises.begin(), step.index);
