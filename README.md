@@ -25,41 +25,64 @@ $ golem -h
 At the moment, you should specified the SMT theory used in the CHC encoding with `-l` option. The supported theories are `QF_LRA` and `QF_LIA`, i.e., the linear arithmetic over reals or integers.
 Golem now has limited support to automatically detect the theory from the script, so the option is no longer mandatory, but still recommended.
 
-### Backend engines
-Golem currently supports 6 different backend algorithms for solving CHCs.
-- spacer [default]
-- bmc
-- imc
-- kind
-- lawi
-- tpa
-- split-tpa
+## Backend engines
+Golem supports several different backend algorithms for solving CHCs.
 
-Spacer engine is the default one.
-It represents our own implementation of the algorithm from [this paper](https://link.springer.com/article/10.1007/s10703-016-0249-4). You might be familiar with the original implementation of Spacer inside [Z3](https://github.com/z3Prover/z3/).
+### Spacer (default)
+Spacer engine represents our own implementation of the Spacer algorithm from [this paper](https://link.springer.com/article/10.1007/s10703-016-0249-4). You might be familiar with the original implementation of Spacer inside [Z3](https://github.com/z3Prover/z3/).
 
-BMC engine implements the simple bounded model checking algorithm which checks for existence of increasingly longer counterexample paths in a given transition system.
+
+### Bounded model checking
+
+BMC engine implements the simple bounded model checking algorithm which checks for existence of increasingly longer counterexample paths.
 It uses incremental capibilities of the underlying SMT solver to speed up the process.
+Works only for linear systems of Horn clauses.
+
+### McMillan's Interpolation-based model checking
 
 IMC engine implements the original McMillan's interpolation-based model-checking algorithm from [this paper](https://link.springer.com/chapter/10.1007/978-3-540-45069-6_1).
-Currently, it only supports transition systems.
+It works on transition system, but it can handle linear systems of Horn clauses by first transforming them into a simple transition system.
+
+### k-induction
 
 KIND engine implements very basic k-induction algorithm from [this paper](https://link.springer.com/chapter/10.1007/3-540-40922-X_8).
-Currently, it only supports transition systems.
+It only supports transition systems.
 
-LAWI stands for Lazy Abstraction With Interpolants. The algorithm is described in [this paper](https://link.springer.com/chapter/10.1007/11817963_14).
-It is also known as `Impact`, which was the first tool where the algorithm was implemented.
-LAWI engine supports only linear systems of Horn clauses.
 
-TPA stands for Transition Power Abstraction. It is an algorithm we have developed recently with the goal to detect long counterexample quickly. The description of the algorithm can be found in [this paper](https://link.springer.com/chapter/10.1007/978-3-030-99524-9_29).
-TPA supports a subset of linear CHC systems that represent DAGs of transition systems.
+### Lazy Abstraction With Interpolants (Impact)
 
-split-TPA is a different instantiation of the TPA paradigm and is typically more powerful than TPA on satisfiable (safe) CHC systems.
+The implementation of LAWI follows the description of the algorithm in [this paper](https://link.springer.com/chapter/10.1007/11817963_14).
+The algorithm is also known as `Impact`, which was the first tool where the algorithm was implemented.
+Works only for linear systems of Horn clauses.
 
-Golem also supports multiprocessing run of the few engine simultaneously. For example, to run split-tpa, spacer and lawi in parralel golem should be called like this:
+### Predicate Abstraction and CEGAR
+
+The PA engine is a simple prototype of a [predicate abstraction](https://link.springer.com/chapter/10.1007/3-540-63166-6_10) with [CEGAR](https://link.springer.com/chapter/10.1007/10722167_15).
+The implementation is still rather naive, but the algorithm can handle all (even nonlinear) CHC systems.
+
+
+### Property-directed k-induction
+
+The implementation of PDKIND follows the description of the algorithm in [this paper](https://ieeexplore.ieee.org/document/7886665).
+It works on transition system, but it can handle linear systems of Horn clauses by first transforming them into a simple transition system.
+
+### Transition Power Abstraction
+
+TPA is an algorithm we have developed recently with the goal to detect long counterexample quickly. The description of the algorithm can be found in [this paper](https://link.springer.com/chapter/10.1007/978-3-030-99524-9_29).
+TPA directly supports a subset of linear CHC systems which can be mapped to DAGs of transition systems.
+Transitions that do not fall into this category are handled by transformation into a simple transition system.
+
+[split-TPA](https://ieeexplore.ieee.org/document/10026590) is a different instantiation of the TPA paradigm and is typically more powerful than basic TPA on satisfiable (safe) CHC systems.
+
+
+#### Running multiple engines in parallel
+
+Golem also supports multiprocess run of several engines simultaneously.
+You can pass comma-separated list of engines to `--engine` options.
+For example, the following invocation will run split-TPA, Spacer and LAWI in parallel
 
 ```sh
-golem -l {Logic} -e split-tpa,spacer,lawi {File}
+golem --engine split-tpa,spacer,lawi --input <file>
 ```
 
 ### Witness validation and printing
