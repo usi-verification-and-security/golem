@@ -588,6 +588,22 @@ std::unique_ptr<Model> extendModel(Model & model, ModelBasedProjection::implican
     return builder.build();
 }
 
+template<class ForwardIt, class Funct>
+ForwardIt maxElementWithProjection(ForwardIt first, ForwardIt last, Funct f) {
+    if (first == last) return last;
+
+    ForwardIt largest = first;
+    auto valLargest = f(*first);
+    ++first;
+    for (; first != last; ++first) {
+        if (auto val = f(*first); val > valLargest) {
+            largest = first;
+            valLargest = std::move(val);
+        }
+    }
+    return largest;
+}
+
 }
 
 /*
@@ -749,39 +765,30 @@ void ModelBasedProjection::processClassicLiterals(PTRef var, div_constraints_t &
             return;
         }
         // pick greatest lower bound in the model
-        auto getValue = [&](LIABoundLower const& bound) {
+        auto greatestLowerBoundIt = maxElementWithProjection(lower.begin(), lower.end(), [&](LIABoundLower const& bound) {
             assert(lialogic.getNumConst(bound.coeff) >= 1);
             return lialogic.getNumConst(model.evaluate(bound.term)) / lialogic.getNumConst(bound.coeff);
-        };
-        LIABoundLower const * greatestLowerBound = &lower[0];
-        FastRational value = getValue(*greatestLowerBound);
-        for (auto it = lower.begin() + 1; it != lower.end(); ++it) {
-            auto const& bound = *it;
-            auto otherVal = getValue(bound);
-            if (otherVal > value) {
-                greatestLowerBound = &bound;
-                value = std::move(otherVal);
-            }
-        }
+        });
         implicant_t newLiterals;
-        FastRational const& glbCoeff = lialogic.getNumConst(greatestLowerBound->coeff);
+        FastRational const& glbCoeff = lialogic.getNumConst(greatestLowerBoundIt->coeff);
         // handle lower bounds
-        for (auto const& bound : lower) {
-            if (&bound == greatestLowerBound) { continue; }
-            PTRef lhs = glbCoeff.isOne() ? bound.term : lialogic.mkTimes(bound.term, greatestLowerBound->coeff);
-            PTRef rhs = lialogic.getNumConst(bound.coeff).isOne() ? greatestLowerBound->term : lialogic.mkTimes(greatestLowerBound->term, bound.coeff);
+        for (auto it = lower.begin(); it != lower.end(); ++it) {
+            if (it == greatestLowerBoundIt) { continue; }
+            auto const & bound = *it;
+            PTRef lhs = glbCoeff.isOne() ? bound.term : lialogic.mkTimes(bound.term, greatestLowerBoundIt->coeff);
+            PTRef rhs = lialogic.getNumConst(bound.coeff).isOne() ? greatestLowerBoundIt->term : lialogic.mkTimes(greatestLowerBoundIt->term, bound.coeff);
             PTRef nBound = lialogic.mkLeq(lhs, rhs);
             if (nBound != lialogic.getTerm_true()) { // This can happen when we have a stronger and weaker bound on the same term
-                newLiterals.push_back(PtAsgn(nBound, l_True));
+                newLiterals.emplace_back(nBound, l_True);
             }
         }
         // handle upper bounds
         for (auto const& bound : upper) {
-            auto res = resolve(*greatestLowerBound, bound, model, lialogic);
+            auto res = resolve(*greatestLowerBoundIt, bound, model, lialogic);
             assert(res.bounds.size() <= 2);
             for (PTRef nBound : res.bounds) {
                 assert(nBound != lialogic.getTerm_true());
-                newLiterals.push_back(PtAsgn(nBound, l_True));
+                newLiterals.emplace_back(nBound, l_True);
             }
             if (res.hasDivConstraint) {
                 divConstraints.push_back(res.constraint);
@@ -804,7 +811,7 @@ void ModelBasedProjection::processClassicLiterals(PTRef var, div_constraints_t &
             PTRef rhs = lialogic.mkTimes(eqBound.term, otherBound.coeff);
             PTRef newLit = lialogic.mkEq(lhs, rhs);
             if (newLit != lialogic.getTerm_true()) {
-                newLiterals.push_back(PtAsgn(newLit, l_True));
+                newLiterals.emplace_back(newLit, l_True);
             }
         }
         // lower bounds
@@ -815,7 +822,7 @@ void ModelBasedProjection::processClassicLiterals(PTRef var, div_constraints_t &
             PTRef rhs = lialogic.mkTimes(eqBound.term, lowerBound.coeff);
             PTRef newLit = lialogic.mkLeq(lhs, rhs);
             if (newLit != lialogic.getTerm_true()) {
-                newLiterals.push_back(PtAsgn(newLit, l_True));
+                newLiterals.emplace_back(newLit, l_True);
             }
         }
         // upper bounds
@@ -826,7 +833,7 @@ void ModelBasedProjection::processClassicLiterals(PTRef var, div_constraints_t &
             PTRef rhs = lialogic.mkTimes(eqBound.term, upperBound.coeff);
             PTRef newLit = lialogic.mkGeq(lhs, rhs);
             if (newLit != lialogic.getTerm_true()) {
-                newLiterals.push_back(PtAsgn(newLit, l_True));
+                newLiterals.emplace_back(newLit, l_True);
             }
         }
         // From the equality ax = t it also follows that t must be divisible by a
