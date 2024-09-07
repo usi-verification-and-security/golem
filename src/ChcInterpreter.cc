@@ -563,14 +563,14 @@ std::optional<ChClause> ChcInterpreterContext::chclauseFromPTRef(PTRef ref) {
     // identify interpreted part and uninterpreted part
     vec<PTRef> disjuncts = TermUtils(logic).getTopLevelDisjuncts(disjunction);
     // find uninterpreted predicates (positive or negative)
-    auto uninterpretedEnd = std::partition(disjuncts.begin(), disjuncts.end(), [this, &logic](PTRef arg) {
+    auto uninterpretedEnd = std::stable_partition(disjuncts.begin(), disjuncts.end(), [this, &logic](PTRef arg) {
         return this->isUninterpretedPredicate(arg) ||
                (logic.isNot(arg) && this->isUninterpretedPredicate(logic.getPterm(arg)[0]));
     });
 
     // find positive uninterpreted predicates
-    auto positiveEnd =
-        std::partition(disjuncts.begin(), uninterpretedEnd, [&logic](PTRef arg) { return not logic.isNot(arg); });
+    auto positiveEnd = std::stable_partition(disjuncts.begin(), uninterpretedEnd,
+                                             [&logic](PTRef arg) { return not logic.isNot(arg); });
     if (positiveEnd - disjuncts.begin() > 1) { return std::nullopt; }
     ChcHead head = positiveEnd == disjuncts.begin() ? PTRefToCHC::constructHead(logic.getTerm_false())
                                                     : PTRefToCHC::constructHead(*disjuncts.begin());
