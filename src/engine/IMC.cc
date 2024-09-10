@@ -32,7 +32,6 @@ VerificationResult IMC::solveTransitionSystem(ChcDirectedGraph const & graph) {
 TransitionSystemVerificationResult IMC::solveTransitionSystemInternal(TransitionSystem const & system) {
     { // if I /\ F is Satisfiable, return true
         SMTSolver solver(logic, SMTSolver::WitnessProduction::NONE);
-        solver.getConfig().setSimplifyInterpolant(4);
         solver.assertProp(system.getInit());
         solver.assertProp(system.getQuery());
         if (solver.check() == SMTSolver::Answer::SAT) {
