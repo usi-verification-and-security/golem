@@ -47,16 +47,6 @@ VerificationResult TPAEngine::solve(ChcDirectedHyperGraph const & graph) {
     auto translator = std::move(transformationResult.second);
     if (transformedGraph->isNormalGraph()) {
         auto normalGraph = transformedGraph->toNormalGraph();
-        if (options.hasOption(Options::SIMPLIFY_NESTED)) {
-            NestedLoopTransformation transformation;
-            auto preTranslator = transformation.transform(*normalGraph);
-            auto res = solve(*normalGraph);
-            if (shouldComputeWitness()) {
-                auto prewit = preTranslator->translate(res);
-                return shouldComputeWitness() ? translator->translate(std::move(prewit)) : std::move(prewit);
-            }
-            return res;
-        }
         auto res = solve(*normalGraph);
         return shouldComputeWitness() ? translator->translate(std::move(res)) : std::move(res);
     }
@@ -84,8 +74,17 @@ VerificationResult TPAEngine::solve(const ChcDirectedGraph & graph) {
                 assert(false);
                 throw std::logic_error("Unreachable!");
         }
-    } else if (isTransitionSystemDAG(graph) && not options.hasOption(Options::FORCE_TS)) {
-        return solveTransitionSystemGraph(graph);
+    } else if ((isTransitionSystemDAG(graph) && not options.hasOption(Options::FORCE_TS)) ||
+               options.hasOption(Options::SIMPLIFY_NESTED)) {
+        if (options.hasOption(Options::SIMPLIFY_NESTED)) {
+            NestedLoopTransformation transformation;
+            auto normalGraph = graph;
+            auto preTranslator = transformation.transform(normalGraph);
+            auto res = solveTransitionSystemGraph(normalGraph);
+            return preTranslator->translate(res);
+        } else {
+            return solveTransitionSystemGraph(graph);
+        }
     }
     // Translate CHCGraph into transition system
     SingleLoopTransformation transformation;

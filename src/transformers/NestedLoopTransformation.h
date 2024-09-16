@@ -6,6 +6,7 @@
 #ifndef GOLEM_NESTED_LOOP_TRANSFORMATION_H
 #define GOLEM_NESTED_LOOP_TRANSFORMATION_H
 
+#include "LoopTransformation.h"
 #include "TransitionSystem.h"
 #include "Witnesses.h"
 #include "graph/ChcGraph.h"
@@ -35,26 +36,9 @@
  * values for location variables. This may still leave some undesired variables in the invariant. We currently make
  * best effort to eliminate these variables by simplifying the formula.
  */
-class NestedLoopTransformation {
+class NestedLoopTransformation : LoopTransformation {
 
 public:
-    // Helper types
-    struct VarPosition {
-        SymRef vertex;
-        uint32_t pos;
-
-        inline bool operator==(VarPosition other) const { return vertex == other.vertex and pos == other.pos; }
-    };
-    struct VarPositionHasher {
-        std::size_t operator()(VarPosition pos) const {
-            std::hash<std::uint32_t> hasher;
-            return hasher(pos.vertex.x) ^ hasher(pos.pos);
-        }
-    };
-
-    using LocationVarMap = std::unordered_map<SymRef, PTRef, SymRefHash>;
-    using PositionVarMap = std::unordered_map<VarPosition, PTRef, VarPositionHasher>;
-
     class WitnessBackTranslator {
         ChcDirectedGraph initialGraph;
         ChcDirectedGraph const & graph;
@@ -81,7 +65,6 @@ public:
         std::unordered_set<PTRef, PTRefHash> getVarsForVertex(SymRef vertex) const;
     };
 
-    static std::vector<EId> detectLoop(ChcDirectedGraph const & graph);
     static SymRef simplifyLoop(ChcDirectedGraph & graph, std::vector<EId> loop, LocationVarMap & locationVars,
                                PositionVarMap & argVars);
 
