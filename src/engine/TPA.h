@@ -103,6 +103,9 @@ protected:
     PTRef identity{PTRef_Undef};
 
 public:
+
+    std::vector<ReachedStates> reachedStatesVec;
+
     TPABase(Logic & logic, Options const & options) : logic(logic), options(options) {
         verbosity = std::stoi(options.getOrDefault(Options::VERBOSE, "0"));
         if (options.hasOption(Options::TPA_USE_QE)) { useQE = true; }
@@ -131,7 +134,7 @@ public:
      */
     PTRef getSafetyExplanation() const;
     PTRef getReachedStates() const;
-    unsigned getTransitionStepCount() const;
+    unsigned getTransitionStepCount();
     PTRef getInductiveInvariant() const;
     vec<PTRef> getStateVars(int version) const;
 

@@ -62,6 +62,7 @@ InvalidityWitness InvalidityWitness::fromErrorPath(ErrorPath const & errorPath, 
             solver.assertProp(fla);
         }
         auto res = solver.check();
+
         if (res != SMTSolver::Answer::SAT) { throw std::logic_error("Error in computing model for the error path"); }
         return solver.getModel();
     }();
