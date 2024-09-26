@@ -127,6 +127,7 @@ private:
 
     SRef sortFromASTNode(ASTNode const & node) const;
 
+    PTRef parseTopLevelAssertion(ASTNode const & node);
     PTRef parseTerm(ASTNode const & node);
 
     std::shared_ptr<Term> ASTtoTerm(ASTNode const & node);

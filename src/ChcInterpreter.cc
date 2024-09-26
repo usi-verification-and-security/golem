@@ -182,20 +182,32 @@ void ChcInterpreterContext::interpretDeclareFun(ASTNode & node) {
     system->addUninterpretedPredicate(rval);
 }
 
+namespace {
+class QuantifiedConstraintException : public std::runtime_error {
+public:
+    QuantifiedConstraintException()
+        : std::runtime_error("Encountered quantified constraint, these are not supported!") {}
+};
+} // namespace
+
 void ChcInterpreterContext::interpretAssert(ASTNode & node) {
     ASTNode & termNode = **(node.children->begin());
-    PTRef term = parseTerm(termNode);
-    assert(term != PTRef_Undef);
-    //    std::cout << backgroundTheory->getLogic().printTerm(term) << std::endl;
-    if (logic.getTerm_true() == term) { return; }
-    auto chclause = chclauseFromPTRef(term);
-    if (not chclause) {
-        reportError("Assertion is not a Horn clause: " + logic.printTerm(term));
+    try {
+        PTRef term = parseTopLevelAssertion(termNode);
+        assert(term != PTRef_Undef);
+        if (logic.getTerm_true() == term) { return; }
+        auto chclause = chclauseFromPTRef(term);
+        if (not chclause) {
+            reportError("Assertion is not a Horn clause: " + logic.printTerm(term));
+            doExit = true;
+            return;
+        }
+        system->addClause(std::move(*chclause));
+        if (opts.hasOption(Options::PRINT_WITNESS)) { originalAssertions.push_back(ASTtoTerm(termNode)); }
+    } catch (QuantifiedConstraintException const & e) {
+        reportError(e.what());
         doExit = true;
-        return;
     }
-    system->addClause(std::move(*chclause));
-    if (opts.hasOption(Options::PRINT_WITNESS)) { originalAssertions.push_back(ASTtoTerm(termNode)); }
 }
 
 std::shared_ptr<Term> ChcInterpreterContext::ASTtoTerm(const ASTNode & node) {
@@ -275,13 +287,8 @@ std::shared_ptr<Term> ChcInterpreterContext::ASTtoTerm(const ASTNode & node) {
 
     throw std::logic_error("Unknown term encountered!");
 }
-
-PTRef ChcInterpreterContext::parseTerm(const ASTNode & termNode) {
-    ASTType t = termNode.getType();
-    if (t == TERM_T) {
-        const char * name = (**(termNode.children->begin())).getValue();
-        return logic.mkConst(name);
-    } else if (t == FORALL_T) { // Forall has two children: sorted_var_list and term
+PTRef ChcInterpreterContext::parseTopLevelAssertion(const ASTNode & termNode) {
+    if (termNode.getType() == FORALL_T) { // Forall has two children: sorted_var_list and term
         auto it = termNode.children->begin();
         ASTNode & qvars = **it;
         assert(qvars.getType() == SVL_T);
@@ -292,7 +299,7 @@ PTRef ChcInterpreterContext::parseTerm(const ASTNode & termNode) {
             LetRecords & rec;
 
         public:
-            QuantifierHack(LetRecords & rec) : rec(rec) {}
+            explicit QuantifierHack(LetRecords & rec) : rec(rec) {}
             ~QuantifierHack() {
                 for (std::size_t i = 0; i < counter; ++i) {
                     rec.popFrame();
@@ -312,13 +319,19 @@ PTRef ChcInterpreterContext::parseTerm(const ASTNode & termNode) {
             SRef sort = sortFromASTNode(**var->children->begin());
             PTRef varTerm = logic.mkVar(sort, name);
             quantifierHack.addBinding(name, varTerm);
-            //            std::cout << var->getValue() << std::endl; // name of the variable
-            //            std::cout << backgroundTheory->getLogic().getSortName(getSort(**var->children->begin())) <<
-            //            std::endl; // sort of th variable
         }
         ++it;
         ASTNode & innerTerm = **it;
         return parseTerm(innerTerm);
+    }
+    return parseTerm(termNode);
+}
+
+PTRef ChcInterpreterContext::parseTerm(const ASTNode & termNode) {
+    ASTType t = termNode.getType();
+    if (t == TERM_T) {
+        const char * name = (**(termNode.children->begin())).getValue();
+        return logic.mkConst(name);
     } else if (t == QID_T) {
         const char * name = (**(termNode.children->begin())).getValue();
         PTRef tr = letRecords.getOrUndef(name);
@@ -381,6 +394,8 @@ PTRef ChcInterpreterContext::parseTerm(const ASTNode & termNode) {
         PTRef tr = parseTerm(**(ch));
         if (tr == PTRef_Undef) { return PTRef_Undef; }
         return tr;
+    } else if (t == FORALL_T) {
+        throw QuantifiedConstraintException{};
     } else {
         std::cout << "Unknown type: " << termNode.typeToStr() << std::endl;
         throw std::logic_error("Type not handled in parsing!\n");
