@@ -131,7 +131,6 @@ void InvalidityWitness::print(std::ostream & out, Logic & logic) const {
             for (auto index : step.premises) {
                 out << ' ' << index;
             }
-            out << '\n';
         }
         out << '\n';
     }
