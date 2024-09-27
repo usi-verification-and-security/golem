@@ -322,7 +322,7 @@ PTRef ChcInterpreterContext::parseTopLevelAssertion(const ASTNode & termNode) {
         }
         ++it;
         ASTNode & innerTerm = **it;
-        return parseTerm(innerTerm);
+        return parseTopLevelAssertion(innerTerm);
     }
     return parseTerm(termNode);
 }
