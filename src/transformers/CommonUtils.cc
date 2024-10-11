@@ -49,13 +49,11 @@ InvalidityWitness::Derivation replaceSummarizingStep(
     const PTRef targetPredicate = LinearPredicateVersioning(logic).sendPredicateThroughTime(versionPredicate(replacingEdge.to),simpleChain.size());
     utils.mapFromPredicate(targetPredicate, summarizedStep.derivedFact, subst);
     utils.mapFromPredicate(sourcePredicate, derivation[summarizedStep.premises.front()].derivedFact, subst);
-
+    assert(std::all_of(subst.begin(), subst.end(), [&](auto const & pair) { return logic.isVar(pair.first) and logic.isConstant(pair.second); }));
+    PTRef chainConstraint = logic.mkAnd(std::move(edgeConstraints));
+    chainConstraint = TermUtils(logic).varSubstitute(chainConstraint, subst);
     SMTSolver solver(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
-    solver.assertProp(logic.mkAnd(std::move(edgeConstraints)));
-    for (auto const & [var,value] : subst) {
-        assert(logic.isVar(var) and logic.isConstant(value));
-        solver.assertProp(logic.mkEq(var, value));
-    }
+    solver.assertProp(chainConstraint);
     // 2ac Compute values for summarized predicates from model
     auto res = solver.check();
     if (res != SMTSolver::Answer::SAT) { throw std::logic_error("Summarized chain should have been satisfiable!"); }
