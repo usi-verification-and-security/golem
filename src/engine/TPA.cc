@@ -1403,6 +1403,8 @@ private:
         PTRef accumulatedRestrictions;
         vec<EId> children;
         int blocked_children;
+        std::vector<std::vector<EId>> loops;
+        std::set<EId> loopEdges;
         std::vector<int> blocked_children_vec;
         vec<EId> parents;
     };
@@ -1460,6 +1462,8 @@ private:
     QueryResult queryTransitionSystem(NetworkNode & node);
 
     InvalidityWitness computeInvalidityWitness() const;
+
+    PTRef produceUnrolling(int depth, PTRef vars) const;
 
     witness_t computeValidityWitness();
 
@@ -1536,6 +1540,7 @@ VerificationResult TransitionSystemNetworkManager::solve() && {
     auto current = graph.getEntry();
     activePath.clear();
     getNode(current).blocked_children_vec = {0};
+    bool nestedLoop = false;
     while (true) {
 //        if (getNode(current).blocked_children == getNode(current).children.size()) {
         if (getNode(current).blocked_children_vec[getNode(current).blocked_children_vec.size() - 1] == getNode(current).children.size()) {
@@ -1562,7 +1567,7 @@ VerificationResult TransitionSystemNetworkManager::solve() && {
                     nextConditions = logic.mkNot(getNode(graph.getTarget(nextEdge)).trulySafe);
                 }
                 auto [edgeRes, edgeExplanation] = queryEdge(nextEdge, logic.getTerm_true(), nextConditions);
-//                getNode(current).blocked_children++;
+                getNode(current).blocked_children++;
                 getNode(current).blocked_children_vec[getNode(current).blocked_children_vec.size() - 1]++;
                 if (reachable(edgeRes)) { // Edge propagates forward
                     if (graph.getTarget(nextEdge) == graph.getExit()) {
@@ -1582,6 +1587,21 @@ VerificationResult TransitionSystemNetworkManager::solve() && {
             }
             continue;
         }
+    // TODO: RUN detected loop on a bigger circuit
+
+//        if(std::find(loop.begin(), loop.end(), current) != loop.end() && nestedLoop && getNode(current).children.size() > 1){
+//            PTRef l = graph.getStateVersion(current);
+//            PTRef transition = produceUnrolling(loop.size(), l);
+////            while (getNode(current).blocked_children_vec[getNode(current).blocked_children_vec.size() - 1] < getNode(current).children.size()) {
+////
+////            }
+//        } else if (nestedLoop) {
+//            nestedLoop = false;
+//            loop.resize(0);
+//        }
+////        else {
+//
+////        }
         auto [res, explanation] = queryTransitionSystem(networkMap.at(current));
         if (reachable(res)) {
 //            getNode(current).trulyReached = explanation;
@@ -1590,6 +1610,10 @@ VerificationResult TransitionSystemNetworkManager::solve() && {
             while (getNode(current).blocked_children_vec[getNode(current).blocked_children_vec.size() - 1] < getNode(current).children.size()) {
 //                EId nextEdge = getOutgoingEdge(current, getNode(current).blocked_children);
                 EId nextEdge = getOutgoingEdge(current, getNode(current).blocked_children_vec[getNode(current).blocked_children_vec.size() - 1]);
+
+                if (getNode(current).loopEdges.find(nextEdge) != getNode(current).loopEdges.end()) {
+                    continue;
+                }
                 PTRef nextConditions = logic.getTerm_true();
                 if (graph.getTarget(nextEdge) != graph.getExit()) {
                     nextConditions = logic.mkNot(getNode(graph.getTarget(nextEdge)).trulySafe);
@@ -1598,12 +1622,35 @@ VerificationResult TransitionSystemNetworkManager::solve() && {
 //                getNode(current).blocked_children++;
                 getNode(current).blocked_children_vec[getNode(current).blocked_children_vec.size() - 1]++;
                 if (reachable(edgeRes)) { // Edge propagates forward
+                    auto it = std::find(activePath.begin(), activePath.end(), nextEdge);
+                    if(it != activePath.end()){
+                        getNode(current).loops.emplace_back();
+                        while(it != activePath.end()){
+                            getNode(graph.getSource(*it)).loopEdges.insert(*it);
+                            getNode(current).loops.back().push_back(*it);
+                            it++;
+                        }
+                        nestedLoop = true;
+                        continue;
+                    }
                     if (graph.getTarget(nextEdge) == graph.getExit()) {
                         return {VerificationAnswer::UNSAFE, computeInvalidityWitness()};
                     }
                     auto next = graph.getTarget(nextEdge);
                     networkMap.at(next).solver->resetInitialStates(edgeExplanation);
                     activePath.push(nextEdge);
+                    //TODO: LOOP DETECTION
+//                    for(auto edge: activePath){
+//                        if(graph.getSource(edge) == next){
+//                            nestedLoop = true;
+//                            for (int i = activePath.size() - 1; i > 0; i--){
+//                                loop.push_back(graph.getSource(activePath[i]));
+//                                if (graph.getSource(activePath[i]) == next) {
+//                                    break;
+//                                }
+//                            }
+//                        }
+//                    }
                     current = next;
                     getNode(current).blocked_children_vec.push_back(0);
                     break; // Information has been propagated to the next node, switch to the new node
@@ -1614,6 +1661,30 @@ VerificationResult TransitionSystemNetworkManager::solve() && {
                 }
             }
         } else { // TS cannot propagate forward
+            if(getNode(current).loops.size() > 0){
+                bool checkLoops = true;
+                for(auto edge: getNode(current).loopEdges){
+                    if(std::find(activePath.begin(), activePath.end(), edge)!=activePath.end()){
+                        checkLoops = false;
+                        break ;
+                    }
+                }
+                if (checkLoops) {
+                    // TODO: COOLASS TPA PROCEDURE ON TrInvs.
+                    for(auto loop: getNode(current).loops){
+                        vec<PTRef> trInvs;
+                        for(auto node: loop){
+                            PTRef trInv = getNode(graph.getSource(node)).solver->getTransitionInvariant();
+                            if(trInv == logic.getTerm_true())
+                                trInv = getNode(graph.getSource(node)).solver->getLRInvariant();
+                            trInvs.push(trInv);
+                            assert(trInv != logic.getTerm_true());
+                            logic.pp(trInv);
+                        }
+                    }
+//                    logic.pp(trInv);
+                }
+            }
             assert(getNode(current).trulySafe != PTRef_Undef);
             getNode(current).trulySafe = logic.mkOr(getNode(current).trulySafe, explanation);
             auto previousEdge = activePath.last();
@@ -1627,6 +1698,17 @@ VerificationResult TransitionSystemNetworkManager::solve() && {
                 continue; // Repeat the query for the same TS with new initial states
             } else {      // Cannot continue from currently computed truly reached states
 //                previousNode.trulyReached = PTRef_Undef;
+                if(nestedLoop){
+                    if(std::find(getNode(current).loops.back().begin(), getNode(current).loops.back().end(),
+                                  *(activePath.end()-1)) == getNode(current).loops.back().end()){
+
+                    }
+                    previousNode.loops.emplace_back();
+                    previousNode.loops.back().push_back(*(getNode(current).loops.back().end() - 1));
+                    for(auto it = getNode(current).loops.back().begin(); it != getNode(current).loops.back().end() - 1; it++) {
+                        previousNode.loops.back().push_back(*it);
+                    }
+                }
                 previousNode.trulyReachedVec.pop_back();
                 getNode(current).blocked_children_vec.pop_back();
                 addRestrictions(graph.getSource(previousEdge), logic.mkNot(edgeExplanation));
@@ -1637,6 +1719,42 @@ VerificationResult TransitionSystemNetworkManager::solve() && {
         }
     }
     throw std::logic_error("Unreachable!");
+}
+
+PTRef TransitionSystemNetworkManager::produceUnrolling(int depth, PTRef vars) const {
+    std::vector<EId> errorPath;
+    TimeMachine timeMachine(logic);
+    SymRef current;
+    PTRef res = logic.getTerm_true();
+    for(int i = activePath.size() - depth; i < activePath.size(); i++){
+        EId next = activePath[i];
+        current = graph.getSource(next);
+        auto steps = getNode(current).solver->getTransitionStepCountS();
+        errorPath.insert(errorPath.end(), steps, getSelfLoopFor(current, graph, adjacencyRepresentation).value());
+        errorPath.push_back(next);
+    }
+    for (std::size_t i = 0; i < errorPath.size(); ++i) {
+        PTRef fla = graph.getEdgeLabel(errorPath[i]);
+        fla = TimeMachine(logic).sendFlaThroughTime(fla, i);
+        res = logic.mkAnd(res, fla);
+    }
+    vec<PTRef> uniqueVars;
+    vec<PTRef> verticeVars;
+    int add;
+//    verticeVars = TermUtils(logic).getVars(logic.mkAnd(graph.getEdgeLabel(errorPath[0]),
+//                                                       TimeMachine(logic).sendFlaThroughTime(graph.getEdgeLabel(errorPath[errorPath.size()-1]), errorPath.size()-1)));
+    verticeVars = TermUtils(logic).getVars(logic.mkAnd(vars,
+                                                       TimeMachine(logic).sendFlaThroughTime(vars, errorPath.size())));
+//    for(auto var: verticeVars) {
+//        for (auto params : TermUtils(logic).getVars(vars)) {
+//            if (timeMachine.getUnversioned(var) == timeMachine.getUnversioned(params)) {
+//                uniqueVars.push(var);
+//                break;
+//            }
+//        }
+//    }
+    res = QuantifierElimination(logic).keepOnly(res, verticeVars);
+    return res;
 }
 
 InvalidityWitness TransitionSystemNetworkManager::computeInvalidityWitness() const {
@@ -1783,6 +1901,12 @@ unsigned TPABase::getTransitionStepCount() {
     return steps;
 }
 
+unsigned TPABase::getTransitionStepCountS() {
+    //    return reachedStates.steps;
+    int steps = reachedStatesVec[0].steps;
+    return steps;
+}
+
 /*
  * Returns superset of init that are still safe
  */
@@ -1798,6 +1922,15 @@ PTRef TPABase::getSafetyExplanation() const {
     return safeSupersetOfInitialStates(
         getInit(), transitionInvariant,
         getNextVersion(getQuery(), explanation.relationType == TPAType::LESS_THAN ? 1 : 2));
+}
+
+PTRef TPABase::getTransitionInvariant() const {
+    return explanation.safeTransitionInvariant;
+}
+
+
+PTRef TPABase::getLRInvariant() const {
+    return logic.mkOr(logic.mkAnd(leftInvariants), logic.mkAnd(rightInvariants));
 }
 
 PTRef TPABase::getInductiveInvariant() const {

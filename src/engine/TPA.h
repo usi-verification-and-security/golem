@@ -135,6 +135,9 @@ public:
     PTRef getSafetyExplanation() const;
     PTRef getReachedStates() const;
     unsigned getTransitionStepCount();
+    unsigned getTransitionStepCountS();
+    PTRef getTransitionInvariant() const;
+    PTRef getLRInvariant() const;
     PTRef getInductiveInvariant() const;
     vec<PTRef> getStateVars(int version) const;
 
