@@ -120,6 +120,7 @@ public:
     VerificationAnswer solve();
 
     void resetInitialStates(PTRef);
+    void resetQueryStates(PTRef fla);
 
     void updateQueryStates(PTRef);
 

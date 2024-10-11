@@ -344,7 +344,15 @@ void TPABase::resetInitialStates(PTRef fla) {
     resetExplanation();
 }
 
+void TPABase::resetQueryStates(PTRef fla) {
+    assert(isPureStateFormula(fla));
+    this->query = fla;
+    queryCache.clear();
+    resetExplanation();
+}
+
 void TPABase::updateQueryStates(PTRef fla) {
+    //TODO: Think about query states
     assert(isPureStateFormula(fla));
     this->query = logic.mkAnd(fla, this->query);
     queryCache.clear();
@@ -1410,6 +1418,7 @@ private:
     };
 
     vec<EId> activePath;
+    vec<PTRef> query;
 
     std::unordered_map<SymRef, NetworkNode, SymRefHash> networkMap;
 
@@ -1553,6 +1562,7 @@ VerificationResult TransitionSystemNetworkManager::solve() && {
             getNode(current).blocked_children = 0;
             getNode(current).blocked_children_vec[getNode(current).blocked_children_vec.size() - 1] = 0;
             networkMap.at(current).solver->reachedStatesVec.pop_back();
+            // TODO: REMOVE THIS SHT AND DO IT PROPPERLY
             updateRestrictions(current);
         }
         if (current == graph.getEntry()) {
@@ -1611,7 +1621,8 @@ VerificationResult TransitionSystemNetworkManager::solve() && {
 //                EId nextEdge = getOutgoingEdge(current, getNode(current).blocked_children);
                 EId nextEdge = getOutgoingEdge(current, getNode(current).blocked_children_vec[getNode(current).blocked_children_vec.size() - 1]);
 
-                if (getNode(current).loopEdges.find(nextEdge) != getNode(current).loopEdges.end()) {
+                if (getNode(current).loopEdges.find(nextEdge) != getNode(current).loopEdges.end() &&
+                    std::find(activePath.begin(), activePath.end(), nextEdge) != activePath.end()) {
                     continue;
                 }
                 PTRef nextConditions = logic.getTerm_true();
@@ -1639,6 +1650,7 @@ VerificationResult TransitionSystemNetworkManager::solve() && {
                     auto next = graph.getTarget(nextEdge);
                     networkMap.at(next).solver->resetInitialStates(edgeExplanation);
                     activePath.push(nextEdge);
+                    query.push(getNode(current).solver->getQuery());
                     //TODO: LOOP DETECTION
 //                    for(auto edge: activePath){
 //                        if(graph.getSource(edge) == next){
@@ -1663,26 +1675,48 @@ VerificationResult TransitionSystemNetworkManager::solve() && {
         } else { // TS cannot propagate forward
             if(getNode(current).loops.size() > 0){
                 bool checkLoops = true;
-                for(auto edge: getNode(current).loopEdges){
-                    if(std::find(activePath.begin(), activePath.end(), edge)!=activePath.end()){
-                        checkLoops = false;
-                        break ;
+                for(auto loop: getNode(current).loops) {
+                    for (auto edge : loop) {
+                        if (std::find(activePath.begin(), activePath.end(), edge) != activePath.end()) {
+                            checkLoops = false;
+                            break;
+                        }
                     }
                 }
+//                for(auto edge: getNode(current).loopEdges){
+//                    if(std::find(activePath.begin(), activePath.end(), edge)!=activePath.end()){
+//                        checkLoops = false;
+//                        break ;
+//                    }
+//                }
                 if (checkLoops) {
                     // TODO: COOLASS TPA PROCEDURE ON TrInvs.
                     for(auto loop: getNode(current).loops){
                         vec<PTRef> trInvs;
-                        for(auto node: loop){
-                            PTRef trInv = getNode(graph.getSource(node)).solver->getTransitionInvariant();
-                            if(trInv == logic.getTerm_true())
-                                trInv = getNode(graph.getSource(node)).solver->getLRInvariant();
+                        PTRef MTr = logic.getTerm_true();
+                        int time = 0;
+                        TimeMachine tm(logic);
+                        for(auto edge: loop){
+                            PTRef trInv = getNode(graph.getSource(edge)).solver->getTransitionInvariant();
                             trInvs.push(trInv);
-                            assert(trInv != logic.getTerm_true());
+                            MTr = logic.mkAnd(MTr,
+                                              tm.sendFlaThroughTime(trInv, time));
+                            time++;
+                            MTr = logic.mkAnd(MTr, tm.sendFlaThroughTime(graph.getEdgeLabel(edge), time));
+                            time++;
+                            PTRef updatedConditions = logic.mkNot(logic.mkOr(getNode(current).trulySafe, explanation));
                             logic.pp(trInv);
                         }
+                        logic.pp(MTr);
+                        PTRef l = graph.getStateVersion(current);
+
+                        vec<PTRef> verticeVars = TermUtils(logic).getVars(logic.mkAnd(l, tm.sendFlaThroughTime(l, time)));
+                        MTr = QuantifierElimination(logic).keepOnly(MTr, verticeVars);
+//                        auto [edgeRes, edgeExplanation] = queryEdge(getNode(current).solver->getInit(),
+//                                                                    explanation,
+//                                                                    getNode(current).solver->getQuery());
+                        logic.pp(MTr);
                     }
-//                    logic.pp(trInv);
                 }
             }
             assert(getNode(current).trulySafe != PTRef_Undef);
@@ -1712,7 +1746,11 @@ VerificationResult TransitionSystemNetworkManager::solve() && {
                 previousNode.trulyReachedVec.pop_back();
                 getNode(current).blocked_children_vec.pop_back();
                 addRestrictions(graph.getSource(previousEdge), logic.mkNot(edgeExplanation));
+                if(previousNode.loopEdges.find(activePath.last()) != previousNode.loopEdges.end()) {
+                    previousNode.solver->resetQueryStates(query.last());
+                }
                 activePath.pop();
+                query.pop();
                 current = graph.getSource(previousEdge);
                 continue; // Blocked states have been propagated to the previous node, repeat the query there.
             }
