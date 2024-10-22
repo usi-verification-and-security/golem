@@ -581,6 +581,22 @@ bool isNonLoopNode(
     return std::none_of(outgoing.begin(), outgoing.end(), [&](EId eid){ return graph.getTarget(eid) == vertex; });
 }
 
+bool isNonNestedLoopNode(SymRef vertex, AdjacencyListsGraphRepresentation const & adjacencyRepresentation,
+                         ChcDirectedHyperGraph const & graph, SymRef toCheck) {
+    auto const & outgoing = adjacencyRepresentation.getOutgoingEdgesFor(vertex);
+    for (auto edge : outgoing) {
+        SymRef target = graph.getTarget(edge);
+        if (target == toCheck) {
+            return true;
+        } else if (target == vertex || target == graph.getExit()) {
+            continue;
+        } else {
+            if (isNonNestedLoopNode(target, adjacencyRepresentation, graph, toCheck)) break;
+        }
+    }
+    return false;
+}
+
 bool isSimpleNode(
     SymRef vertex,
     AdjacencyListsGraphRepresentation const & adjacencyRepresentation
