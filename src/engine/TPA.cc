@@ -726,7 +726,7 @@ TPASplit::QueryResult TPASplit::reachabilityQueryLessThan(PTRef from, PTRef to, 
         }
     }
 }
-
+// BRITIK@USI.CH
 PTRef TPABase::simplifyInterpolant(PTRef itp) {
     auto & laLogic = dynamic_cast<ArithLogic &>(logic);
     LATermUtils utils(laLogic);
@@ -1470,6 +1470,9 @@ private:
 
     QueryResult queryTransitionSystem(NetworkNode & node);
 
+    QueryResult queryLoop(PTRef init, PTRef Tr, PTRef safe);
+
+
     InvalidityWitness computeInvalidityWitness() const;
 
     PTRef produceUnrolling(int depth, PTRef vars) const;
@@ -1623,6 +1626,7 @@ VerificationResult TransitionSystemNetworkManager::solve() && {
 
                 if (getNode(current).loopEdges.find(nextEdge) != getNode(current).loopEdges.end() &&
                     std::find(activePath.begin(), activePath.end(), nextEdge) != activePath.end()) {
+                    getNode(current).blocked_children_vec[getNode(current).blocked_children_vec.size() - 1]++;
                     continue;
                 }
                 PTRef nextConditions = logic.getTerm_true();
@@ -1690,6 +1694,8 @@ VerificationResult TransitionSystemNetworkManager::solve() && {
 //                    }
 //                }
                 if (checkLoops) {
+
+                    TermUtils utils(logic);
                     // TODO: COOLASS TPA PROCEDURE ON TrInvs.
                     for(auto loop: getNode(current).loops){
                         vec<PTRef> trInvs;
@@ -1712,9 +1718,23 @@ VerificationResult TransitionSystemNetworkManager::solve() && {
 
                         vec<PTRef> verticeVars = TermUtils(logic).getVars(logic.mkAnd(l, tm.sendFlaThroughTime(l, time)));
                         MTr = QuantifierElimination(logic).keepOnly(MTr, verticeVars);
+                        TermUtils::substitutions_map subst;
+                        vec<PTRef> loopVarsOld = TermUtils(logic).getVars(tm.sendFlaThroughTime(l, time));
+                        vec<PTRef> loopVarsNew = TermUtils(logic).getVars(tm.sendFlaThroughTime(l, 1));
+                        for(int i = 0; i < loopVarsOld.size(); i++) {
+                            subst.insert({loopVarsOld[i], loopVarsNew[i]});
+                        }
+                        MTr = utils.varSubstitute(MTr, subst);
+                        auto [res, expl] = queryLoop(getNode(current).solver->getInit(),MTr,explanation);
 //                        auto [edgeRes, edgeExplanation] = queryEdge(getNode(current).solver->getInit(),
 //                                                                    explanation,
-//                                                                    getNode(current).solver->getQuery());
+//                                                                   getNode(current).solver->getQuery());
+                        if(reachable(res)) {
+//                            int iterations = expl;
+                        } else {
+
+                        }
+
                         logic.pp(MTr);
                     }
                 }
@@ -1905,6 +1925,39 @@ TransitionSystemNetworkManager::QueryResult TransitionSystemNetworkManager::quer
         }
         case VerificationAnswer::SAFE: {
             PTRef explanation = node.solver->getSafetyExplanation();
+            assert(explanation != PTRef_Undef);
+            TRACE(1, "TS blocks " << logic.pp(explanation))
+            return {ReachabilityResult::UNREACHABLE, explanation};
+        }
+        default:
+            assert(false);
+            throw std::logic_error("Unreachable");
+    }
+}
+
+TransitionSystemNetworkManager::QueryResult TransitionSystemNetworkManager::queryLoop(PTRef init, PTRef Tr, PTRef safe) {
+
+    std::unique_ptr<TPABase> solver{nullptr};
+    solver = owner.mkSolver();
+    TermUtils(logic).getVars(Tr);
+    auto edgeVars = getVariablesFromEdge(logic, graph,getSelfLoopFor(graph.getTarget(activePath.last()), graph,
+                                                                      adjacencyRepresentation).value());
+    auto systemType = std::make_unique<SystemType>(edgeVars.stateVars, edgeVars.auxiliaryVars, logic);
+    PTRef loopLabel = Tr;
+    PTRef transitionFla = transitionFormulaInSystemType(*systemType, edgeVars, loopLabel, logic);
+    solver->resetTransitionSystem(TransitionSystem(logic, std::move(systemType), init, transitionFla, logic.mkNot(safe)));
+    auto res = solver->solve();
+    assert(res != VerificationAnswer::UNKNOWN);
+    switch (res) {
+        case VerificationAnswer::UNSAFE: {
+            int steps = solver->getTransitionStepCount();
+            PTRef explanation = solver->getReachedStates();
+            assert(explanation != PTRef_Undef);
+            TRACE(1, "TS propagates reachable states to " << logic.pp(explanation))
+            return {ReachabilityResult::REACHABLE, explanation};
+        }
+        case VerificationAnswer::SAFE: {
+            PTRef explanation = solver->getSafetyExplanation();
             assert(explanation != PTRef_Undef);
             TRACE(1, "TS blocks " << logic.pp(explanation))
             return {ReachabilityResult::UNREACHABLE, explanation};
