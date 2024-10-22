@@ -17,13 +17,15 @@ void NodeEliminator::BackTranslator::notifyRemovedVertex(SymRef sym, Contraction
 
 Transformer::TransformationResult NodeEliminator::transform(std::unique_ptr<ChcDirectedHyperGraph> graph) {
     auto backTranslator = std::make_unique<BackTranslator>(graph->getLogic(), graph->predicateRepresentation());
-    while(true) {
+    while (true) {
         auto adjancencyRepresentation = AdjacencyListsGraphRepresentation::from(*graph);
         auto vertices = adjancencyRepresentation.getNodes();
         // ignore entry and exit, those should never be removed
-        vertices.erase(std::remove_if(vertices.begin(), vertices.end(),[&graph](SymRef vertex) {
-            return vertex == graph->getEntry() or vertex == graph->getExit();
-        }), vertices.end());
+        vertices.erase(std::remove_if(vertices.begin(), vertices.end(),
+                                      [&graph](SymRef vertex) {
+                                          return vertex == graph->getEntry() or vertex == graph->getExit();
+                                      }),
+                       vertices.end());
         auto predicateWrapper = [&](SymRef vertex) {
             return this->shouldEliminateNode(vertex, adjancencyRepresentation, *graph);
         };
@@ -36,23 +38,26 @@ Transformer::TransformationResult NodeEliminator::transform(std::unique_ptr<ChcD
     return {std::move(graph), std::move(backTranslator)};
 }
 
-bool NonLoopEliminatorPredicate::operator()(
-    SymRef vertex,
-    AdjacencyListsGraphRepresentation const & ar,
-    ChcDirectedHyperGraph const & graph) const {
+bool NonLoopEliminatorPredicate::operator()(SymRef vertex, AdjacencyListsGraphRepresentation const & ar,
+                                            ChcDirectedHyperGraph const & graph) const {
     // TODO: Remove the constraint about hyperEdge
     return not hasHyperEdge(vertex, ar, graph) and isNonLoopNode(vertex, ar, graph);
 }
 
-bool SimpleNodeEliminatorPredicate::operator()(
-    SymRef vertex,
-    AdjacencyListsGraphRepresentation const & ar,
-    ChcDirectedHyperGraph const & graph) const {
+bool NonLoopNestedEliminatorPredicate::operator()(SymRef vertex, AdjacencyListsGraphRepresentation const & ar,
+                                                  ChcDirectedHyperGraph const & graph) const {
+    // TODO: Remove the constraint about hyperEdge
+    return not hasHyperEdge(vertex, ar, graph) and isNonLoopNode(vertex, ar, graph) and
+           isNonNestedLoopNode(vertex, ar, graph, vertex);
+}
+
+bool SimpleNodeEliminatorPredicate::operator()(SymRef vertex, AdjacencyListsGraphRepresentation const & ar,
+                                               ChcDirectedHyperGraph const & graph) const {
     if (isSimpleNode(vertex, ar) and isNonLoopNode(vertex, ar, graph)) {
         if (not hasHyperEdge(vertex, ar, graph)) { return true; }
         // We eliminate the node also if it has outgoing hyperedges, but only if it has single normal incoming edge
         auto const & incoming = ar.getIncomingEdgesFor(vertex);
-        if (not (incoming.size() == 1 and graph.getSources(incoming[0]).size() == 1)) { return false; }
+        if (not(incoming.size() == 1 and graph.getSources(incoming[0]).size() == 1)) { return false; }
         // And these additional constraints hold
         // 1. Candidate vertex must not be the target
         // 2. Candidate vertex must be present exactly once in the sources.
@@ -61,9 +66,8 @@ bool SimpleNodeEliminatorPredicate::operator()(
         auto const & outgoing = ar.getOutgoingEdgesFor(vertex);
         return std::all_of(outgoing.begin(), outgoing.end(), [&](EId edge) {
             auto const & sources = graph.getSources(edge);
-            return vertex != graph.getTarget(edge)
-                    and std::count(sources.begin(), sources.end(), vertex) == 1
-                    and std::find(sources.begin(), sources.end(), incomingSource) == sources.end();
+            return vertex != graph.getTarget(edge) and std::count(sources.begin(), sources.end(), vertex) == 1 and
+                   std::find(sources.begin(), sources.end(), incomingSource) == sources.end();
         });
     }
     return false;
@@ -76,16 +80,14 @@ InvalidityWitness NodeEliminator::BackTranslator::translate(InvalidityWitness wi
         for (auto && [node, contractionResult] : nodeInfo) {
             for (auto const & [replacing, inout] : contractionResult.replacing) {
                 if (replacing.id == eid) {
-                    return std::make_pair(replacing,
-                                          std::make_pair(contractionResult.incoming[inout.first],
-                                                         contractionResult.outgoing[inout.second])
-                                         );
+                    return std::make_pair(replacing, std::make_pair(contractionResult.incoming[inout.first],
+                                                                    contractionResult.outgoing[inout.second]));
                 }
             }
         }
         return std::nullopt;
     };
-    while(true) {
+    while (true) {
         auto & derivation = witness.getDerivation();
         // For each step, check if it uses one of the newly created edges
         bool stepReplaced = false;
@@ -114,14 +116,16 @@ InvalidityWitness NodeEliminator::BackTranslator::translate(InvalidityWitness wi
                 break;
             }
         }
-        if (not stepReplaced) {
-            break;
-        }
+        if (not stepReplaced) { break; }
     }
     return witness;
 }
 
-#define SANITY_CHECK(cond) if (not (cond)) { assert(false); return ValidityWitness{}; }
+#define SANITY_CHECK(cond)                                                                                             \
+    if (not(cond)) {                                                                                                   \
+        assert(false);                                                                                                 \
+        return ValidityWitness{};                                                                                      \
+    }
 ValidityWitness NodeEliminator::BackTranslator::translate(ValidityWitness witness) {
     if (this->removedNodes.empty()) { return witness; }
     auto definitions = witness.getDefinitions();
@@ -129,9 +133,8 @@ ValidityWitness NodeEliminator::BackTranslator::translate(ValidityWitness witnes
     auto definitionFor = [&](SymRef vertex) {
         if (vertex == logic.getSym_false()) { return logic.getTerm_false(); }
         if (vertex == logic.getSym_true()) { return logic.getTerm_true(); }
-        auto it = std::find_if(definitions.begin(), definitions.end(), [&](auto const & entry){
-            return logic.getSymRef(entry.first) == vertex;
-        });
+        auto it = std::find_if(definitions.begin(), definitions.end(),
+                               [&](auto const & entry) { return logic.getSymRef(entry.first) == vertex; });
         return it != definitions.end() ? it->second : PTRef_Undef;
     };
     VersionManager manager(logic);
@@ -142,7 +145,9 @@ ValidityWitness NodeEliminator::BackTranslator::translate(ValidityWitness witnes
         auto const & info = nodeInfo.at(vertex);
         vec<PTRef> incomingFormulas;
         for (auto const & edge : info.incoming) {
-            if (edge.from.size() != 1) { throw std::logic_error("NonLoopEliminator should not have processed hyperEdges!"); }
+            if (edge.from.size() != 1) {
+                throw std::logic_error("NonLoopEliminator should not have processed hyperEdges!");
+            }
             PTRef sourceDef = definitionFor(edge.from[0]);
             SANITY_CHECK(sourceDef != PTRef_Undef); // Missing definition, cannot backtranslate
             sourceDef = manager.baseFormulaToSource(sourceDef);
@@ -173,7 +178,8 @@ ValidityWitness NodeEliminator::BackTranslator::translate(ValidityWitness witnes
             outgoingFormulas.push(logic.mkAnd(std::move(components)));
         }
         TermUtils::substitutions_map substitutionsMap;
-        utils.mapFromPredicate(predicateRepresentation.getSourceTermFor(vertex), predicateRepresentation.getTargetTermFor(vertex), substitutionsMap);
+        utils.mapFromPredicate(predicateRepresentation.getSourceTermFor(vertex),
+                               predicateRepresentation.getTargetTermFor(vertex), substitutionsMap);
         PTRef incomingPart = logic.mkOr(std::move(incomingFormulas));
         PTRef outgoingPart = logic.mkOr(std::move(outgoingFormulas));
         outgoingPart = utils.varSubstitute(outgoingPart, substitutionsMap);
@@ -191,7 +197,9 @@ ValidityWitness NodeEliminator::BackTranslator::translate(ValidityWitness witnes
         PTRef vertexSolution = manager.targetFormulaToBase(itps[0]);
         PTRef predicateSourceRepresentation = predicateRepresentation.getSourceTermFor(vertex);
         // TODO: Fix handling of 0-ary predicates
-        PTRef predicate = logic.isVar(predicateSourceRepresentation) ? predicateSourceRepresentation : manager.sourceFormulaToBase(predicateSourceRepresentation);
+        PTRef predicate = logic.isVar(predicateSourceRepresentation)
+                              ? predicateSourceRepresentation
+                              : manager.sourceFormulaToBase(predicateSourceRepresentation);
         assert(definitions.count(predicate) == 0);
         definitions.insert({predicate, vertexSolution});
     }

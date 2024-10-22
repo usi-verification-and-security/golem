@@ -27,6 +27,9 @@ src/transformers/SingleLoopTransformation.cc
 src/transformers/SingleLoopTransformation.h
 src/transformers/TrivialEdgePruner.cc
 src/transformers/TrivialEdgePruner.h
+src/transformers/NodeEliminator.h
+src/transformers/NodeEliminator.cc
+src/transformers/BasicTransformationPipelines.h
 
 src/utils/SmtSolver.h
 src/utils/SmtSolver.cc

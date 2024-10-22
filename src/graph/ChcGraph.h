@@ -352,6 +352,8 @@ public:
 
 bool isNonLoopNode(SymRef, AdjacencyListsGraphRepresentation const &, ChcDirectedHyperGraph const & graph);
 
+bool isNonNestedLoopNode(SymRef, AdjacencyListsGraphRepresentation const &, ChcDirectedHyperGraph const &, SymRef);
+
 bool hasHyperEdge(SymRef, AdjacencyListsGraphRepresentation const &, ChcDirectedHyperGraph const & graph);
 
 bool isSimpleNode(SymRef, AdjacencyListsGraphRepresentation const &);
