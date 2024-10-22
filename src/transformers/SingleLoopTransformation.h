@@ -37,7 +37,7 @@
  * values for location variables. This may still leave some undesired variables in the invariant. We currently make
  * best effort to eliminate these variables by simplifying the formula.
  */
-class SingleLoopTransformation : LoopTransformation {
+class SingleLoopTransformation  {
 public:
     class WitnessBackTranslator {
         ChcDirectedGraph const & graph;

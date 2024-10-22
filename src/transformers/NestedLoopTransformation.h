@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2024, Konstantin Britikov <britikovki@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
@@ -36,7 +36,7 @@
  * values for location variables. This may still leave some undesired variables in the invariant. We currently make
  * best effort to eliminate these variables by simplifying the formula.
  */
-class NestedLoopTransformation : LoopTransformation {
+class NestedLoopTransformation {
 
 public:
     class WitnessBackTranslator {

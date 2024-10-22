@@ -136,12 +136,11 @@ std::vector<EId> FindFirstLoop::detectLoop(const ChcDirectedGraph & graph) {
 }
 
 bool isTransitionSystemDAG(ChcDirectedGraph const & graph) {
-    FindFirstLoop loopDetector;
     if (graph.getVertices().size() < 3) { return false; }
     auto graphRepresentation = AdjacencyListsGraphRepresentation::from(graph);
     auto vertices = reversePostOrder(graph, graphRepresentation);
     assert(graph.getEntry() == vertices[0]);
-    bool hasLoop = loopDetector.detectLoop(graph).size() > 0;
+    bool hasLoop = FindFirstLoop{}.detectLoop(graph).size() > 0;
     if (hasLoop) { return false; }
     for (unsigned i = 1; i < vertices.size() - 1; ++i) {
         auto current = vertices[i];

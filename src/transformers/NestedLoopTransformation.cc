@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2024, Konstantin Britikov <britikovki@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
@@ -30,17 +30,15 @@ NestedLoopTransformation::transform(ChcDirectedGraph & graph) {
 
 SymRef NestedLoopTransformation::simplifyLoop(ChcDirectedGraph & graph, std::vector<EId> loop,
                                               LocationVarMap & locationVars, PositionVarMap & argVars) {
+    assert(graph.getSource(loop[0]) == graph.getTarget(loop[loop.size() - 1]));
+    assert(loop.size() >= 2);
     Logic & logic = graph.getLogic();
     TimeMachine timeMachine(logic);
     TermUtils utils(logic);
     std::vector<SymRef> vertices;
-    assert(graph.getSource(loop[0]) == graph.getTarget(loop[loop.size() - 1]));
-    assert(loop.size() >= 2);
     for (int i = loop.size() - 1; i >= 0; i--) {
         vertices.push_back(graph.getSource(loop[i]));
     }
-    // KB: creation of the location variables for nodes and argument variables (params of predicates)
-    std::vector<EId> allEdges = graph.getEdges();
 
     locationVars.reserve(vertices.size());
     for (auto vertex : vertices) {
@@ -60,6 +58,10 @@ SymRef NestedLoopTransformation::simplifyLoop(ChcDirectedGraph & graph, std::vec
 
     EdgeTranslator edgeTranslator{graph, locationVars, argVars, {}};
     vec<PTRef> transitionRelationComponent;
+
+
+    // KB: creation of the location variables for nodes and argument variables (params of predicates)
+    std::vector<EId> allEdges = graph.getEdges();
 
     // KB: Translation of self-loop edges for the loop vertices in DAG
     for (auto edge : allEdges) {

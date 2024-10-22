@@ -114,7 +114,7 @@ class ChcDirectedGraph {
     mutable std::size_t freeId {0};
 
     // graph transformations
-    friend class GraphTransformations;
+    friend class NestedLoopTransformation;
     void contractVertex(SymRef sym);
     void mergeEdges(EId incoming, EId outgoing);
     void deleteNode(SymRef sym);
@@ -183,6 +183,23 @@ public:
         }
     }
 
+    DirectedEdge const & getEdge(EId eid) const {
+        return edges.at(eid);
+    }
+
+private:
+
+    template<typename TPred>
+    void deleteMatchingEdges(TPred predicate) {
+        for (auto it = edges.cbegin(); it != edges.cend(); /* no increment */) {
+            if (predicate(it->second)) {
+                it = edges.erase(it);
+            } else {
+                ++it;
+            }
+        }
+    }
+
     void newEdge(SymRef from, SymRef to, InterpretedFla label) {
         EId eid = freshId();
         edges.emplace(eid, DirectedEdge{.from = from, .to = to, .fla = label, .id = eid});
@@ -206,23 +223,6 @@ public:
             edges.erase(it);
     }
 
-
-    DirectedEdge const & getEdge(EId eid) const {
-        return edges.at(eid);
-    }
-
-private:
-
-    template<typename TPred>
-    void deleteMatchingEdges(TPred predicate) {
-        for (auto it = edges.cbegin(); it != edges.cend(); /* no increment */) {
-            if (predicate(it->second)) {
-                it = edges.erase(it);
-            } else {
-                ++it;
-            }
-        }
-    }
 
     EId freshId() const { return EId{freeId++};}
 
