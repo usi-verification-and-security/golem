@@ -114,7 +114,7 @@ class ChcDirectedGraph {
     mutable std::size_t freeId {0};
 
     // graph transformations
-    friend class GraphTransformations;
+    friend class NestedLoopTransformation;
     void contractVertex(SymRef sym);
     void mergeEdges(EId incoming, EId outgoing);
     void deleteNode(SymRef sym);
@@ -141,7 +141,21 @@ public:
     ChcDirectedGraph reverse() const;
     DirectedEdge reverseEdge(DirectedEdge const & edge, TermUtils & utils) const;
 
-    LinearCanonicalPredicateRepresentation getPredicateRepresentation() const { return predicates; }
+    ChcDirectedGraph copy(const ChcDirectedGraph& graph)
+    {
+        std::vector<DirectedEdge> loc_edges;
+        for(auto el: graph.edges){
+            loc_edges.push_back(std::get<1>(el));
+        }
+        std::size_t maxId = 0;
+        for (auto & edge : edges) {
+            maxId = std::max(maxId, std::get<1>(edge).id.id);
+        }
+        this->freeId = maxId + 1;
+        return {loc_edges, graph.predicates, graph.logic};
+    };
+
+    LinearCanonicalPredicateRepresentation & getPredicateRepresentation() { return predicates; }
 
     SymRef getEntry() const { return logic.getSym_true(); }
     SymRef getExit() const { return logic.getSym_false(); }
@@ -158,9 +172,9 @@ public:
         return getEdge(eid).from;
     }
 
-	SymRef getTarget(EId eid) const {
-		return getEdge(eid).to;
-	}
+    SymRef getTarget(EId eid) const {
+            return getEdge(eid).to;
+    }
 
     std::unique_ptr<ChcDirectedHyperGraph> toHyperGraph() const;
 
@@ -171,10 +185,11 @@ public:
         }
     }
 
-private:
     DirectedEdge const & getEdge(EId eid) const {
         return edges.at(eid);
     }
+
+private:
 
     template<typename TPred>
     void deleteMatchingEdges(TPred predicate) {
@@ -187,12 +202,31 @@ private:
         }
     }
 
-    EId freshId() const { return EId{freeId++};}
-
     void newEdge(SymRef from, SymRef to, InterpretedFla label) {
         EId eid = freshId();
         edges.emplace(eid, DirectedEdge{.from = from, .to = to, .fla = label, .id = eid});
     }
+
+    void updateEdgeLabel(EId edge, InterpretedFla label) {
+        edges[edge].fla  = label;
+    }
+
+    void updateEdgeSource(EId edge, SymRef source) {
+        edges[edge].from  = source;
+    }
+
+    void updateEdgeTarget(EId edge, SymRef target) {
+        edges[edge].to  = target;
+    }
+
+    void removeEdge(EId edge){
+        const auto it = edges.find(edge);
+        if (it != edges.end())
+            edges.erase(it);
+    }
+
+
+    EId freshId() const { return EId{freeId++};}
 
 };
 
@@ -289,12 +323,14 @@ public:
     void deleteEdges(std::vector<EId> const & edgesToDelete);
     void deleteNode(SymRef sym);
 
-private:
     EId newEdge(std::vector<SymRef> && from, SymRef to, InterpretedFla label) {
         EId eid = freshId();
         edges.emplace(eid, DirectedHyperEdge{.from = std::move(from), .to = to, .fla = label, .id = eid});
         return eid;
     }
+
+private:
+
 
     template<typename TPred>
     void deleteMatchingEdges(TPred predicate) {
