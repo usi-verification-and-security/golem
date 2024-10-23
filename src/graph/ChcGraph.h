@@ -122,18 +122,6 @@ class ChcDirectedGraph {
     void mergeMultiEdges();
 
 public:
-    ChcDirectedGraph(const ChcDirectedGraph& graph) :
-          predicates(graph.predicates), logic(graph.logic){
-        for(auto el: graph.edges){
-            edges.insert(el);
-        }
-        std::size_t maxId = 0;
-        for (auto & edge : edges) {
-            maxId = std::max(maxId, std::get<1>(edge).id.id);
-        }
-        this->freeId = maxId + 1;
-    };
-
     ChcDirectedGraph(std::vector<DirectedEdge> edges, LinearCanonicalPredicateRepresentation predicates,
                      Logic & logic) :
          predicates(std::move(predicates)), logic(logic) {
@@ -152,6 +140,20 @@ public:
     void toDot(std::ostream& out, bool full = false) const;
     ChcDirectedGraph reverse() const;
     DirectedEdge reverseEdge(DirectedEdge const & edge, TermUtils & utils) const;
+
+    ChcDirectedGraph copy(const ChcDirectedGraph& graph)
+    {
+        std::vector<DirectedEdge> loc_edges;
+        for(auto el: graph.edges){
+            loc_edges.push_back(std::get<1>(el));
+        }
+        std::size_t maxId = 0;
+        for (auto & edge : edges) {
+            maxId = std::max(maxId, std::get<1>(edge).id.id);
+        }
+        this->freeId = maxId + 1;
+        return {loc_edges, graph.predicates, graph.logic};
+    };
 
     LinearCanonicalPredicateRepresentation & getPredicateRepresentation() { return predicates; }
 
