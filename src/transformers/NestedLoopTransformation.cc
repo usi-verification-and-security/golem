@@ -59,7 +59,6 @@ SymRef NestedLoopTransformation::simplifyLoop(ChcDirectedGraph & graph, std::vec
     EdgeTranslator edgeTranslator{graph, locationVars, argVars, {}};
     vec<PTRef> transitionRelationComponent;
 
-
     // KB: creation of the location variables for nodes and argument variables (params of predicates)
     std::vector<EId> allEdges = graph.getEdges();
 
