@@ -93,10 +93,10 @@ std::unique_ptr<TransitionSystem> toTransitionSystem(ChcDirectedGraph const & gr
 // If some vertice is added on stack and it was already visited, then the strong connection is detected
 // It was updated to remember the nodes which participate in the loop (lines 113, 119)
 // Algorithm terminates as soon as it can find the first loop
-void FindFirstLoop::visit(std::unordered_set<SymRef, SymRefHash> & visitedVertices,
-                          std::unordered_set<SymRef, SymRefHash> & verticesOnStack,
-                          AdjacencyListsGraphRepresentation const & graphRepresentation, ChcDirectedGraph const & graph,
-                          SymRef node, std::vector<EId> & loop) {
+void visit(std::unordered_set<SymRef, SymRefHash> & visitedVertices,
+           std::unordered_set<SymRef, SymRefHash> & verticesOnStack,
+           AdjacencyListsGraphRepresentation const & graphRepresentation, ChcDirectedGraph const & graph, SymRef node,
+           std::vector<EId> & loop) {
     visitedVertices.insert(node);
     verticesOnStack.insert(node);
     auto const & outEdges = graphRepresentation.getOutgoingEdgesFor(node);
@@ -124,7 +124,8 @@ void FindFirstLoop::visit(std::unordered_set<SymRef, SymRefHash> & visitedVertic
     verticesOnStack.erase(node);
 }
 
-std::vector<EId> FindFirstLoop::detectLoop(const ChcDirectedGraph & graph) {
+// Returns the first loop it can find via depth-first search (Tarjan's algorithm)
+std::vector<EId> detectLoop(const ChcDirectedGraph & graph) {
     std::vector<EId> loop;
     if (graph.getVertices().size() <= 3) { return loop; }
     auto graphRepresentation = AdjacencyListsGraphRepresentation::from(graph);
@@ -140,7 +141,7 @@ bool isTransitionSystemDAG(ChcDirectedGraph const & graph) {
     auto graphRepresentation = AdjacencyListsGraphRepresentation::from(graph);
     auto vertices = reversePostOrder(graph, graphRepresentation);
     assert(graph.getEntry() == vertices[0]);
-    bool hasLoop = FindFirstLoop{}.detectLoop(graph).size() > 0;
+    bool hasLoop = detectLoop(graph).size() > 0;
     if (hasLoop) { return false; }
     for (unsigned i = 1; i < vertices.size() - 1; ++i) {
         auto current = vertices[i];
