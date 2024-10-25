@@ -88,10 +88,11 @@ std::unique_ptr<TransitionSystem> toTransitionSystem(ChcDirectedGraph const & gr
     return ts;
 }
 
-// This function follows a Tarjan's strong connection detection algorithm:
+namespace {
+// This function follows a Tarjan's strongly connected component detection algorithm:
 // https://en.wikipedia.org/wiki/Tarjan's_strongly_connected_components_algorithm
 // If some vertice is added on stack and it was already visited, then the strong connection is detected
-// It was updated to remember the nodes which participate in the loop (lines 113, 119)
+// It was updated to remember the nodes which participate in the loop
 // Algorithm terminates as soon as it can find the first loop
 void visit(std::unordered_set<SymRef, SymRefHash> & visitedVertices,
            std::unordered_set<SymRef, SymRefHash> & verticesOnStack,
@@ -123,7 +124,7 @@ void visit(std::unordered_set<SymRef, SymRefHash> & visitedVertices,
 
     verticesOnStack.erase(node);
 }
-
+} // namespace
 // Returns the first loop it can find via depth-first search (Tarjan's algorithm)
 std::vector<EId> detectLoop(const ChcDirectedGraph & graph) {
     std::vector<EId> loop;

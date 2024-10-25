@@ -1,5 +1,4 @@
 build
-build-static
 
 ## idea
 cmake-build-*
