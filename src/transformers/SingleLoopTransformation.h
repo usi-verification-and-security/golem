@@ -6,6 +6,7 @@
 #ifndef GOLEM_SINGLELOOPTRANSFORMATION_H
 #define GOLEM_SINGLELOOPTRANSFORMATION_H
 
+#include "CommonUtils.h"
 #include "TransitionSystem.h"
 #include "Witnesses.h"
 #include "graph/ChcGraph.h"
@@ -38,23 +39,6 @@
  */
 class SingleLoopTransformation {
 public:
-    // Helper types
-    struct VarPosition {
-        SymRef vertex;
-        uint32_t pos;
-
-        inline bool operator==(VarPosition other) const { return vertex == other.vertex and pos == other.pos; }
-    };
-    struct VarPositionHasher {
-        std::size_t operator()(VarPosition pos) const {
-            std::hash<std::uint32_t> hasher;
-            return hasher(pos.vertex.x) ^ hasher(pos.pos);
-        }
-    };
-
-    using LocationVarMap = std::unordered_map<SymRef, PTRef, SymRefHash>;
-    using PositionVarMap = std::unordered_map<VarPosition, PTRef, VarPositionHasher>;
-
     class WitnessBackTranslator {
         ChcDirectedGraph const & graph;
         TransitionSystem const & transitionSystem;

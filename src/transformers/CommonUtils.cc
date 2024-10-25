@@ -5,6 +5,7 @@
  */
 
 #include "CommonUtils.h"
+#include "TransformationUtils.h"
 
 #include "utils/SmtSolver.h"
 
@@ -229,4 +230,57 @@ InvalidityWitness::Derivation expandStepWithHyperEdge(
     // 4. Return the derivation
     InvalidityWitness::Derivation newDerivation(std::move(newSteps));
     return newDerivation;
+}
+
+PTRef EdgeTranslator::translateEdge(DirectedEdge const & edge) const {
+    TermUtils::substitutions_map substitutionsMap;
+    Logic & logic = graph.getLogic();
+    auto source = edge.from;
+    auto target = edge.to;
+    TimeMachine timeMachine(logic);
+
+    auto edgeVariables = getVariablesFromEdge(logic, graph, edge.id);
+    for (PTRef auxVar : edgeVariables.auxiliaryVars) {
+        this->auxiliaryVariablesSeen.push(auxVar);
+    }
+
+    // TODO: prepare the substitution map in advance!
+    auto const & stateVars = edgeVariables.stateVars;
+    for (unsigned int i = 0; i < stateVars.size(); ++i) {
+        VarPosition varPosition{source, i};
+        auto it = positionVarMap.find(varPosition);
+        assert(it != positionVarMap.end());
+        substitutionsMap.insert({stateVars[i], it->second});
+    }
+
+    auto const & nextStateVars = edgeVariables.nextStateVars;
+    for (unsigned int i = 0; i < nextStateVars.size(); ++i) {
+        VarPosition varPosition{target, i};
+        auto it = positionVarMap.find(varPosition);
+        assert(it != positionVarMap.end());
+        substitutionsMap.insert({nextStateVars[i], timeMachine.sendVarThroughTime(it->second, 1)});
+    }
+
+    // Translate the constraint
+    PTRef translatedConstraint = TermUtils(logic).varSubstitute(edge.fla.fla, substitutionsMap);
+    PTRef sourceLocationVar = source == graph.getEntry() ? logic.getTerm_true() : locationVarMap.at(source);
+    PTRef targetLocationVar = locationVarMap.at(target);
+    PTRef updatedLocation = [&]() {
+        vec<PTRef> args;
+        args.capacity(locationVarMap.size() * 2);
+        for (auto && entry : locationVarMap) {
+            if (entry.second != targetLocationVar) {
+                args.push(logic.mkNot(timeMachine.sendVarThroughTime(entry.second, 1)));
+            }
+            if (entry.second != sourceLocationVar) { args.push(logic.mkNot(entry.second)); }
+        }
+        return logic.mkAnd(std::move(args));
+    }();
+    // We used to add equalities that restricted the values of all variables other than target ones to their default
+    // values. The paper uses frame equalities that keep the values from previous step. Now, we do not restrict
+    // the values of these variables in any way.
+    // This is sound because we still force the right variables to be considered using the location variables.
+    vec<PTRef> components{sourceLocationVar, translatedConstraint, timeMachine.sendVarThroughTime(targetLocationVar, 1),
+                          updatedLocation};
+    return logic.mkAnd(std::move(components));
 }
