@@ -88,49 +88,53 @@ std::unique_ptr<TransitionSystem> toTransitionSystem(ChcDirectedGraph const & gr
     return ts;
 }
 
-bool strongConnection(std::unordered_set<int> & visitedVertices, std::unordered_set<int> & verticesOnStack,
-                      AdjacencyListsGraphRepresentation const & graphRepresentation, ChcDirectedGraph const & graph,
-                      SymRef node) {
-    visitedVertices.insert(node.x);
-    verticesOnStack.insert(node.x);
+namespace {
+// This function follows a Tarjan's strongly connected component detection algorithm:
+// https://en.wikipedia.org/wiki/Tarjan's_strongly_connected_components_algorithm
+// If some vertice is added on stack and it was already visited, then the strong connection is detected
+// It was updated to remember the nodes which participate in the loop
+// Algorithm terminates as soon as it can find the first loop
+void visit(std::unordered_set<SymRef, SymRefHash> & visitedVertices,
+           std::unordered_set<SymRef, SymRefHash> & verticesOnStack,
+           AdjacencyListsGraphRepresentation const & graphRepresentation, ChcDirectedGraph const & graph, SymRef node,
+           std::vector<EId> & loop) {
+    visitedVertices.insert(node);
+    verticesOnStack.insert(node);
     auto const & outEdges = graphRepresentation.getOutgoingEdgesFor(node);
-    if (size(outEdges) <= 1) {
-        verticesOnStack.erase(node.x);
-        return false;
-    }
 
     for (EId eid : outEdges) {
         if (graph.getTarget(eid) != node) {
             auto nextVertex = graph.getTarget(eid);
-            if (visitedVertices.find(nextVertex.x) == visitedVertices.end()) {
-                bool loopFound =
-                    strongConnection(visitedVertices, verticesOnStack, graphRepresentation, graph, nextVertex);
-                if (loopFound) { return true; }
-            } else if (verticesOnStack.find(nextVertex.x) != verticesOnStack.end()) {
-                return true;
+            if (visitedVertices.find(nextVertex) == visitedVertices.end()) {
+                visit(visitedVertices, verticesOnStack, graphRepresentation, graph, nextVertex, loop);
+                if (!loop.empty()) {
+                    // Condition checks that algorithm still unrolls the loop and is still not past the loophead
+                    if (graph.getTarget(eid) != graph.getTarget(loop[0]) &&
+                        graph.getTarget(eid) == graph.getSource(loop.back())) {
+                        loop.push_back(eid);
+                    }
+                    break;
+                }
+            } else if (verticesOnStack.find(nextVertex) != verticesOnStack.end()) {
+                loop.push_back(eid);
+                break;
             }
         }
     }
 
-    verticesOnStack.erase(node.x);
-
-    return false;
+    verticesOnStack.erase(node);
 }
-
-bool TarjanLoopDetection(ChcDirectedGraph const & graph) {
+} // namespace
+// Returns the first loop it can find via depth-first search (Tarjan's algorithm)
+std::vector<EId> detectLoop(const ChcDirectedGraph & graph) {
+    std::vector<EId> loop;
+    if (graph.getVertices().size() <= 3) { return loop; }
     auto graphRepresentation = AdjacencyListsGraphRepresentation::from(graph);
     auto vertices = reversePostOrder(graph, graphRepresentation);
-    std::unordered_set<int> visitedVertices;
-    std::unordered_set<int> verticesOnStack;
-
-    for (uint i = 1; i < vertices.size() - 1; i++) {
-        if (visitedVertices.find(vertices[i].x) == visitedVertices.end()) {
-            bool loop_detected =
-                strongConnection(visitedVertices, verticesOnStack, graphRepresentation, graph, vertices[i]);
-            if (loop_detected) { return true; }
-        }
-    }
-    return false;
+    std::unordered_set<SymRef, SymRefHash> visitedVertices;
+    std::unordered_set<SymRef, SymRefHash> verticesOnStack;
+    visit(visitedVertices, verticesOnStack, graphRepresentation, graph, graph.getEntry(), loop);
+    return loop;
 }
 
 bool isTransitionSystemDAG(ChcDirectedGraph const & graph) {
@@ -138,7 +142,7 @@ bool isTransitionSystemDAG(ChcDirectedGraph const & graph) {
     auto graphRepresentation = AdjacencyListsGraphRepresentation::from(graph);
     auto vertices = reversePostOrder(graph, graphRepresentation);
     assert(graph.getEntry() == vertices[0]);
-    bool hasLoop = TarjanLoopDetection(graph);
+    bool hasLoop = detectLoop(graph).size() > 0;
     if (hasLoop) { return false; }
     for (unsigned i = 1; i < vertices.size() - 1; ++i) {
         auto current = vertices[i];

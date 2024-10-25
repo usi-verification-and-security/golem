@@ -34,4 +34,6 @@ std::unique_ptr<SystemType> systemTypeFrom(vec<PTRef> const & stateVars, vec<PTR
 PTRef transitionFormulaInSystemType(SystemType const & systemType, EdgeVariables const & edgeVariables, PTRef edgeLabel,
                                     Logic & logic);
 
+std::vector<EId> detectLoop(const ChcDirectedGraph & graph);
+
 #endif // OPENSMT_TRANSFORMATIONUTILS_H
