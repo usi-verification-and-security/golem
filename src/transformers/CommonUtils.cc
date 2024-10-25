@@ -5,6 +5,7 @@
  */
 
 #include "CommonUtils.h"
+#include "TransformationUtils.h"
 
 #include "utils/SmtSolver.h"
 

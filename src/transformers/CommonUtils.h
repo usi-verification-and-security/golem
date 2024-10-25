@@ -9,7 +9,6 @@
 
 #include "graph/ChcGraph.h"
 #include "Witnesses.h"
-#include "TransformationUtils.h"
 
 class EdgeConverter {
     Logic & logic;
