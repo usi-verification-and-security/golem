@@ -33,6 +33,7 @@ target_sources(golem_lib
     PRIVATE ChcInterpreter.cc
     PRIVATE engine/Bmc.cc
     PRIVATE engine/Common.cc
+    PRIVATE engine/DAR.cc
     PRIVATE engine/EngineFactory.cc
     PRIVATE engine/IMC.cc
     PRIVATE engine/Kind.cc

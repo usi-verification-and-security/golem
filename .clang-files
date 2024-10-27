@@ -5,6 +5,8 @@ src/ChcInterpreter.h
 
 src/engine/Bmc.cc
 src/engine/Bmc.h
+src/engine/DAR.cc
+src/engine/DAR.h
 src/engine/IMC.cc
 src/engine/IMC.h
 src/engine/TPA.cc

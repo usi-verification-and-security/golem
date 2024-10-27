@@ -13,6 +13,7 @@ add_executable(GolemTest)
 
 target_sources(GolemTest
     PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/test_BMC.cc"
+    PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/test_DAR.cc"
     PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/test_KIND.cc"
     PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/test_LAWI.cc"
     PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/test_MBP.cc"
