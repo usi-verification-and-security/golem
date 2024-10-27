@@ -8,6 +8,7 @@
 
 #include "ArgBasedEngine.h"
 #include "Bmc.h"
+#include "DAR.h"
 #include "IMC.h"
 #include "Kind.h"
 #include "Lawi.h"
@@ -24,6 +25,8 @@ std::unique_ptr<Engine> EngineFactory::getEngine(std::string_view engine) && {
         return std::make_unique<TPAEngine>(logic, options, TPACore::SPLIT);
     } else if (engine == "bmc") {
         return std::make_unique<BMC>(logic, options);
+    } else if (engine == "dar") {
+        return std::make_unique<DAR>(logic, options);
     } else if (engine == "lawi") {
         return std::make_unique<Lawi>(logic, options);
     } else if (engine == "kind") {
