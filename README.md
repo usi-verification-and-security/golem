@@ -38,22 +38,26 @@ BMC engine implements the simple bounded model checking algorithm which checks f
 It uses incremental capibilities of the underlying SMT solver to speed up the process.
 Works only for linear systems of Horn clauses.
 
-### McMillan's Interpolation-based model checking
+### Dual Approximated Reachability
 
-IMC engine implements the original McMillan's interpolation-based model-checking algorithm from [this paper](https://link.springer.com/chapter/10.1007/978-3-540-45069-6_1).
-It works on transition system, but it can handle linear systems of Horn clauses by first transforming them into a simple transition system.
+DAR engine implements the algorithm Dual Approximated Reachability described in [this paper](https://link.springer.com/chapter/10.1007/978-3-642-36742-7_22).
+It works only for linear systems of Horn clauses. 
 
 ### k-induction
 
 KIND engine implements very basic k-induction algorithm from [this paper](https://link.springer.com/chapter/10.1007/3-540-40922-X_8).
 It only supports transition systems.
 
-
 ### Lazy Abstraction With Interpolants (Impact)
 
 The implementation of LAWI follows the description of the algorithm in [this paper](https://link.springer.com/chapter/10.1007/11817963_14).
 The algorithm is also known as `Impact`, which was the first tool where the algorithm was implemented.
 Works only for linear systems of Horn clauses.
+
+### McMillan's Interpolation-based model checking
+
+IMC engine implements the original McMillan's interpolation-based model-checking algorithm from [this paper](https://link.springer.com/chapter/10.1007/978-3-540-45069-6_1).
+It works on transition system, but it can handle linear systems of Horn clauses by first transforming them into a simple transition system.
 
 ### Predicate Abstraction and CEGAR
 
