@@ -11,7 +11,9 @@ jobs:
         - checkout
         - run:
             name: run clang formatter
-            command: cat .clang-files | xargs clang-format --Werror --dry-run
+            command: |
+              clang-format --version
+              cat .clang-files | xargs clang-format --Werror --dry-run
 
     build-recent-gcc-debug:
         docker:
