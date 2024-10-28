@@ -36,6 +36,7 @@ void printUsage() {
         "-l,--logic <name>          SMT-LIB logic to use (required); possible values: QF_LRA, QF_LIA\n"
         "-e,--engine <name>         Select engine to use; supported engines:\n"
         "                               bmc - Bounded Model Checking (only linear systems)\n"
+        "                               dar - Dual Approximated Reachability (only linear systems)\n"
         "                               imc - McMillan's original Interpolation-based model checking (only linear systems)\n"
         "                               kind - basic k-induction algorithm (only transition systems)\n"
         "                               lawi - Lazy Abstraction with Interpolants (only linear systems)\n"
