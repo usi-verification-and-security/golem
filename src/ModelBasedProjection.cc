@@ -614,31 +614,25 @@ ForwardIt maxElementWithProjection(ForwardIt first, ForwardIt last, Funct f) {
 void ModelBasedProjection::processDivConstraints(PTRef var, div_constraints_t & divConstraints, implicant_t & implicant, Model & model) {
     auto & lialogic = dynamic_cast<ArithLogic&>(logic);
     assert(lialogic.hasIntegers());
-    LATermUtils utils(lialogic);
     auto itInterestingEnd = std::partition(divConstraints.begin(), divConstraints.end(), [&](DivisibilityConstraint const& c) {
-        return utils.termContainsVar(c.term, var);
+        return LATermUtils(lialogic).termContainsVar(c.term, var);
     });
     if (itInterestingEnd != divConstraints.begin()) {
         // there are some div constraints for this variable
         auto beg = divConstraints.begin();
         auto end = itInterestingEnd;
-        std::vector<FastRational> divisors;
-        std::transform(beg, end, std::back_inserter(divisors), [&lialogic](DivisibilityConstraint const& constraint) {
-            auto const& val = lialogic.getNumConst(constraint.constant);
-            assert(val.isInteger() and val.sign() > 0);
-            return val;
+        assert(std::all_of(beg, end, [&](DivisibilityConstraint const& constraint) {
+            auto const & val = lialogic.getNumConst(constraint.constant);
+            return val.isInteger() and val.sign() > 0;
+        }));
+        FastRational d = std::accumulate(beg + 1, end, lialogic.getNumConst(beg->constant),
+            [&](auto const & acc, DivisibilityConstraint const & next) {
+            return lcm(acc, lialogic.getNumConst(next.constant));
         });
-        FastRational d = divisors[0];
-        // TODO: std::accumulate?
-        std::for_each(beg + 1, end, [&](DivisibilityConstraint const & next) {
-            d = lcm(d, lialogic.getNumConst(next.constant));
-        });
-        // TODO: add fastrat_fdiv_r
-        FastRational const& val = lialogic.getNumConst(model.evaluate(var));
-        FastRational u = mbp_fastrat_fdiv_r(val,d);
+        FastRational u = mbp_fastrat_fdiv_r(lialogic.getNumConst(model.evaluate(var)),d);
         assert(u.sign() >= 0 and u.isInteger());
 
-        // update divisibility constraints by substituting u for x
+        // update divisibility constraints by substituting u for v (var)
         // TODO: make this more efficient
         TermUtils::substitutions_map subst;
         subst.insert({var, lialogic.mkIntConst(u)});
@@ -683,9 +677,8 @@ void ModelBasedProjection::processClassicLiterals(PTRef var, div_constraints_t &
     // This could be done on OpenSMT level
     normalizeEqualities(implicant.begin(), implicant.end(), lialogic);
 
-    LATermUtils utils(lialogic);
-    auto containsVar = [var, &utils](PtAsgn lit) {
-        return utils.atomContainsVar(lit.tr, var);
+    auto containsVar = [var, &lialogic](PtAsgn lit) {
+        return LATermUtils(lialogic).atomContainsVar(lit.tr, var);
     };
     // split the literals to those containing var and those not containing var
     auto interestingEnd = std::partition(implicant.begin(), implicant.end(), containsVar);
