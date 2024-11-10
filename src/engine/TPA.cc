@@ -1383,7 +1383,6 @@ PTRef TPABase::safeSupersetOfInitialStates(PTRef start, PTRef transitionInvarian
 /*
  * Extension for DAG of transition systems
  */
-
 class TransitionSystemNetworkManager {
     TPAEngine & owner;
     Logic & logic;
@@ -1404,11 +1403,8 @@ private:
         PTRef trulySafe{PTRef_Undef};
         PTRef accumulatedRestrictions;
         vec<EId> children;
-        int blocked_children;
-        vec<EId> parents;
+        int blocked_children{0};
     };
-
-    vec<EId> activePath;
 
     std::unordered_map<SymRef, NetworkNode, SymRefHash> networkMap;
 
@@ -1417,18 +1413,18 @@ private:
         PTRef explanation;
     };
 
-    bool reachable(ReachabilityResult res) { return res == ReachabilityResult::REACHABLE; }
+    [[nodiscard]] static bool reachable(ReachabilityResult res) { return res == ReachabilityResult::REACHABLE; }
 
     void initNetwork();
 
-    std::unique_ptr<TPABase> mkSolver() const { return owner.mkSolver(); }
+    [[nodiscard]] std::unique_ptr<TPABase> mkSolver() const { return owner.mkSolver(); }
 
-    TransitionSystem constructTransitionSystemFor(SymRef vid) const;
+    [[nodiscard]] TransitionSystem constructTransitionSystemFor(SymRef vid) const;
 
-    NetworkNode & getNode(SymRef vid) { return networkMap.at(vid); }
-    NetworkNode const & getNode(SymRef vid) const { return networkMap.at(vid); }
+    [[nodiscard]] NetworkNode & getNode(SymRef vid) { return networkMap.at(vid); }
+    [[nodiscard]] NetworkNode const & getNode(SymRef vid) const { return networkMap.at(vid); }
 
-    vec<SymRef> getGraphStarts() const {
+    [[nodiscard]] vec<SymRef> getGraphStarts() const {
         vec<SymRef> graphStarts;
         for (auto outgoingEdge : adjacencyRepresentation.getOutgoingEdgesFor(graph.getEntry())) {
             graphStarts.push(graph.getTarget(outgoingEdge));
@@ -1436,7 +1432,7 @@ private:
         return graphStarts;
     }
 
-    vec<SymRef> getGraphEnds() const {
+    [[nodiscard]] vec<SymRef> getGraphEnds() const {
         vec<SymRef> graphEnds;
         for (auto incomingEdge : adjacencyRepresentation.getIncomingEdgesFor(graph.getExit())) {
             graphEnds.push(graph.getSource(incomingEdge));
@@ -1444,25 +1440,21 @@ private:
         return graphEnds;
     }
 
-    EId getIncomingEdge(SymRef vid, int id) const { return getNode(vid).parents[id]; }
+    [[nodiscard]] EId getOutgoingEdge(SymRef vid, int id) const { return getNode(vid).children[id]; }
 
-    const vec<EId> & getIncomingEdges(SymRef vid) const { return getNode(vid).parents; }
+    [[nodiscard]] const vec<EId> & getOutgoingEdges(SymRef vid) const { return getNode(vid).children; }
 
-    EId getOutgoingEdge(SymRef vid, int id) const { return getNode(vid).children[id]; }
+    [[nodiscard]] PTRef getInitialStates(SymRef vid) const { return networkMap.at(vid).solver->getInit(); }
 
-    const vec<EId> & getOutgoingEdges(SymRef vid) const { return getNode(vid).children; }
+    [[nodiscard]] PTRef getQueryStates(SymRef vid) const { return networkMap.at(vid).solver->getQuery(); }
 
-    PTRef getInitialStates(SymRef vid) const { return networkMap.at(vid).solver->getInit(); }
+    [[nodiscard]] QueryResult queryEdge(EId eid, PTRef sourceCondition, PTRef targetCondition) const;
 
-    PTRef getQueryStates(SymRef vid) const { return networkMap.at(vid).solver->getQuery(); }
+    [[nodiscard]] QueryResult queryTransitionSystem(NetworkNode const & node) const;
 
-    QueryResult queryEdge(EId eid, PTRef sourceCondition, PTRef targetCondition);
+    [[nodiscard]] InvalidityWitness computeInvalidityWitness(std::vector<EId> const & activePath) const;
 
-    QueryResult queryTransitionSystem(NetworkNode & node);
-
-    InvalidityWitness computeInvalidityWitness() const;
-
-    witness_t computeValidityWitness();
+    [[nodiscard]] witness_t computeValidityWitness() const;
 
     void addRestrictions(SymRef node, PTRef fla);
 
@@ -1485,12 +1477,9 @@ VerificationResult TPAEngine::solveTransitionSystemGraph(const ChcDirectedGraph 
 void TransitionSystemNetworkManager::initNetwork() {
     assert(networkMap.empty());
     for (auto vid : graph.getVertices()) {
-        if (vid == graph.getEntry() or vid == graph.getExit()) {
-            networkMap.insert({vid, NetworkNode()});
-            continue;
-        }
-        networkMap.insert({vid, NetworkNode()});
-        auto & node = networkMap.at(vid);
+        auto [it, _] = networkMap.insert({vid, NetworkNode()});
+        if (vid == graph.getEntry() or vid == graph.getExit()) { continue; }
+        auto & node = it->second;
         node.solver = mkSolver();
         node.blocked_children = 0;
         TransitionSystem ts = constructTransitionSystemFor(vid);
@@ -1507,24 +1496,12 @@ void TransitionSystemNetworkManager::initNetwork() {
         networkMap.at(source).solver->updateQueryStates(logic.getTerm_true());
     }
     // Connect the network
+    auto isSelfLoop = [this](EId eid) { return graph.getSource(eid) == graph.getTarget(eid); };
     for (auto vid : reversePostOrder(graph, adjacencyRepresentation)) {
-        if (vid != graph.getExit()) {
-            auto outGoingEdges = adjacencyRepresentation.getOutgoingEdgesFor(vid);
-            outGoingEdges.erase(
-                std::remove_if(outGoingEdges.begin(), outGoingEdges.end(),
-                               [this](EId eid) { return graph.getSource(eid) == graph.getTarget(eid); }),
-                outGoingEdges.end());
-            for (auto edge : outGoingEdges) {
-                getNode(graph.getTarget(edge)).parents.push(edge);
-            }
-        }
         if (vid != graph.getEntry()) {
             auto incomingEdges = adjacencyRepresentation.getIncomingEdgesFor(vid);
-            incomingEdges.erase(
-                std::remove_if(incomingEdges.begin(), incomingEdges.end(),
-                               [this](EId eid) { return graph.getSource(eid) == graph.getTarget(eid); }),
-                incomingEdges.end());
             for (auto edge : incomingEdges) {
+                if (isSelfLoop(edge)) { continue; }
                 getNode(graph.getSource(edge)).children.push(edge);
             }
         }
@@ -1534,7 +1511,7 @@ void TransitionSystemNetworkManager::initNetwork() {
 VerificationResult TransitionSystemNetworkManager::solve() && {
     initNetwork();
     auto current = graph.getEntry();
-    activePath.clear();
+    std::vector<EId> activePath;
     while (true) {
         if (getNode(current).blocked_children == getNode(current).children.size()) {
             if (current == graph.getEntry()) {
@@ -1557,11 +1534,11 @@ VerificationResult TransitionSystemNetworkManager::solve() && {
                 getNode(current).blocked_children++;
                 if (reachable(edgeRes)) { // Edge propagates forward
                     if (graph.getTarget(nextEdge) == graph.getExit()) {
-                        return {VerificationAnswer::UNSAFE, computeInvalidityWitness()};
+                        return {VerificationAnswer::UNSAFE, computeInvalidityWitness(activePath)};
                     }
                     auto next = graph.getTarget(nextEdge);
                     networkMap.at(next).solver->resetInitialStates(edgeExplanation);
-                    activePath.push(nextEdge);
+                    activePath.push_back(nextEdge);
                     current = next;
                     break; // Information has been propagated to the next node, switch to the new node
 
@@ -1585,11 +1562,11 @@ VerificationResult TransitionSystemNetworkManager::solve() && {
                 getNode(current).blocked_children++;
                 if (reachable(edgeRes)) { // Edge propagates forward
                     if (graph.getTarget(nextEdge) == graph.getExit()) {
-                        return {VerificationAnswer::UNSAFE, computeInvalidityWitness()};
+                        return {VerificationAnswer::UNSAFE, computeInvalidityWitness(activePath)};
                     }
                     auto next = graph.getTarget(nextEdge);
                     networkMap.at(next).solver->resetInitialStates(edgeExplanation);
-                    activePath.push(nextEdge);
+                    activePath.push_back(nextEdge);
                     current = next;
                     break; // Information has been propagated to the next node, switch to the new node
 
@@ -1601,7 +1578,7 @@ VerificationResult TransitionSystemNetworkManager::solve() && {
         } else { // TS cannot propagate forward
             assert(getNode(current).trulySafe != PTRef_Undef);
             getNode(current).trulySafe = logic.mkOr(getNode(current).trulySafe, explanation);
-            auto previousEdge = activePath.last();
+            auto previousEdge = activePath.back();
             auto & previousNode = getNode(graph.getSource(previousEdge));
             assert(previousNode.trulyReached != PTRef_Undef);
             PTRef updatedConditions = logic.mkNot(getNode(current).trulySafe);
@@ -1612,7 +1589,7 @@ VerificationResult TransitionSystemNetworkManager::solve() && {
             } else {      // Cannot continue from currently computed truly reached states
                 previousNode.trulyReached = PTRef_Undef;
                 addRestrictions(graph.getSource(previousEdge), logic.mkNot(edgeExplanation));
-                activePath.pop();
+                activePath.pop_back();
                 current = graph.getSource(previousEdge);
                 continue; // Blocked states have been propagated to the previous node, repeat the query there.
             }
@@ -1621,26 +1598,22 @@ VerificationResult TransitionSystemNetworkManager::solve() && {
     throw std::logic_error("Unreachable!");
 }
 
-InvalidityWitness TransitionSystemNetworkManager::computeInvalidityWitness() const {
+InvalidityWitness TransitionSystemNetworkManager::computeInvalidityWitness(std::vector<EId> const & dagErrorPath) const {
     std::vector<EId> errorPath;
-    SymRef current;
-    auto graphEnds = getGraphEnds();
-    for (int i = 0; i < activePath.size(); i++) {
-        EId next = activePath[i];
-        errorPath.push_back(next);
-        current = graph.getTarget(next);
-        auto steps = getNode(current).solver->getTransitionStepCount();
-        errorPath.insert(errorPath.end(), steps, getSelfLoopFor(current, graph, adjacencyRepresentation).value());
+    for (EId edge : dagErrorPath) {
+        errorPath.push_back(edge);
+        SymRef target = graph.getTarget(edge);
+        auto steps = getNode(target).solver->getTransitionStepCount();
+        errorPath.insert(errorPath.end(), steps, getSelfLoopFor(target, graph, adjacencyRepresentation).value());
     }
-    for (auto node : getNode(current).children) {
+    for (auto node : getNode(graph.getTarget(dagErrorPath.back())).children) {
         if (graph.getTarget(node) == graph.getExit()) { errorPath.push_back(node); }
     }
-    InvalidityWitness witness;
     ErrorPath path(std::move(errorPath));
     return InvalidityWitness::fromErrorPath(path, graph);
 }
 
-witness_t TransitionSystemNetworkManager::computeValidityWitness() {
+witness_t TransitionSystemNetworkManager::computeValidityWitness() const {
     assert(isTransitionSystemDAG(graph));
     auto vertices = graph.getVertices();
     TermUtils utils(logic);
@@ -1684,7 +1657,7 @@ TransitionSystem TransitionSystemNetworkManager::constructTransitionSystemFor(Sy
 }
 
 TransitionSystemNetworkManager::QueryResult TransitionSystemNetworkManager::queryEdge(EId eid, PTRef sourceCondition,
-                                                                                      PTRef targetCondition) {
+                                                                                      PTRef targetCondition) const {
     SMTSolver solver(logic, SMTSolver::WitnessProduction::MODEL_AND_INTERPOLANTS);
     solver.getConfig().setLRAInterpolationAlgorithm(itp_lra_alg_decomposing_strong);
     solver.getConfig().setSimplifyInterpolant(4);
@@ -1719,7 +1692,7 @@ TransitionSystemNetworkManager::QueryResult TransitionSystemNetworkManager::quer
     throw std::logic_error("Error in the underlying SMT solver");
 }
 
-TransitionSystemNetworkManager::QueryResult TransitionSystemNetworkManager::queryTransitionSystem(NetworkNode & node) {
+TransitionSystemNetworkManager::QueryResult TransitionSystemNetworkManager::queryTransitionSystem(NetworkNode const & node) const {
     auto res = node.solver->solve();
     assert(res != VerificationAnswer::UNKNOWN);
     switch (res) {
