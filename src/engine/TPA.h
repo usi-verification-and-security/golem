@@ -117,8 +117,7 @@ public:
     VerificationAnswer solve();
 
     void resetInitialStates(PTRef);
-
-    void updateQueryStates(PTRef);
+    void resetQueryStates(PTRef);
 
     PTRef getInit() const;
     PTRef getTransitionRelation() const;
