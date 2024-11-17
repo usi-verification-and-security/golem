@@ -9,6 +9,8 @@
 
 #include "TermUtils.h"
 #include "QuantifierElimination.h"
+#include "utils/SmtSolver.h"
+#include "utils/Timer.h"
 
 bool TransitionSystem::isWellFormed() {
 //    return systemType->isStateFormula(init) && systemType->isStateFormula(query) && systemType->isTransitionFormula(transition);
@@ -177,8 +179,16 @@ PTRef TransitionSystem::reverseTransitionRelation(TransitionSystem const & trans
     return transition;
 }
 
+PTRef KTo1Inductive::kinductiveToInductive(PTRef invariant, unsigned k, TransitionSystem const & system) const {
+    switch (mode) {
+        case Mode::UNFOLD:
+            return unfold(invariant, k, system);
+        case Mode::LEGACY:
+            return legacy(invariant, k, system);
+    }
+}
 
-PTRef kinductiveToInductive(PTRef invariant, unsigned long k, TransitionSystem const & system) {
+PTRef KTo1Inductive::legacy(PTRef invariant, unsigned k, TransitionSystem const & system) const {
     /*
      * If P(x) is k-inductive invariant then the following formula is 1-inductive invariant:
      * P(x_0)
@@ -223,7 +233,7 @@ PTRef kinductiveToInductive(PTRef invariant, unsigned long k, TransitionSystem c
     resArgs.push(logic.mkNot(afterElimination));
     helpers.push(transition);
     // steps 2 to k-1
-    for (unsigned long i = 2; i < k; ++i) {
+    for (unsigned i = 2; i < k; ++i) {
 //        std::cout << "Step " << i << " out of " << k << std::endl;
         PTRef helper = logic.mkAnd({helpers[i-1], getNextVersion(invariant, i-1), getNextVersion(transition, i-1)});
         helper = QuantifierElimination(logic).eliminate(helper, getStateVars(i-1));
@@ -232,4 +242,58 @@ PTRef kinductiveToInductive(PTRef invariant, unsigned long k, TransitionSystem c
         resArgs.push(logic.mkNot(afterElimination));
     }
     return logic.mkAnd(std::move(resArgs));
+}
+
+namespace {
+
+PTRef buildFormula(unsigned index, PTRef invariant, TransitionSystem const & system) {
+    if (index == 0) { return system.getLogic().getTerm_true(); }
+    Logic & logic = system.getLogic();
+    TimeMachine timeMachine(logic);
+    PTRef previous = buildFormula(index - 1, invariant, system);
+    PTRef invariantShifted = timeMachine.sendFlaThroughTime(invariant, index - 1);
+    PTRef stepShifted = timeMachine.sendFlaThroughTime(system.getTransition(), index - 1);
+    PTRef initShifted = timeMachine.sendFlaThroughTime(system.getInit(), index);
+    return logic.mkOr(initShifted, logic.mkAnd({previous, invariantShifted, stepShifted}));
+}
+}
+
+PTRef KTo1Inductive::unfold(PTRef invariant, unsigned k, TransitionSystem const & system) const {
+    Logic & logic = system.getLogic();
+    TimeMachine tm(logic);
+    while (k > 1) {
+        // Split k into i + j such that i >= j
+        unsigned j = k / 2;
+        unsigned i = k - j;
+        // Build the two formulas
+        PTRef ipart = buildFormula(i, invariant, system);
+        PTRef jpart = i == j ? ipart : buildFormula(j, invariant, system);
+        PTRef shifted = tm.sendFlaThroughTime(jpart, i);
+        PTRef negatedInvariant = logic.mkNot(tm.sendFlaThroughTime(invariant, k));
+        SMTSolver solver(logic, SMTSolver::WitnessProduction::ONLY_INTERPOLANTS);
+        solver.assertProp(ipart);
+        solver.assertProp(logic.mkAnd(shifted, negatedInvariant));
+        auto res = solver.check();
+        if (res != SMTSolver::Answer::UNSAT) {
+            throw std::logic_error("Error in reducing k-inductive invariant to 1-inductive: Query must be UNSAT!");
+        }
+        auto itpContext = solver.getInterpolationContext();
+        vec<PTRef> itps;
+        ipartitions_t partitions = 1;
+        itpContext->getSingleInterpolant(itps, partitions);
+        assert(itps.size() == 1);
+        PTRef itp = tm.sendFlaThroughTime(itps[0], -static_cast<int>(i));
+        invariant = TermUtils(logic).conjoin(invariant, itp);
+        assert(i < k);
+        k = i;
+    }
+    return invariant;
+}
+
+PTRef kinductiveToInductive(PTRef invariant, unsigned k, TransitionSystem const & system) {
+    // std::cout << "Reducing k-inductive invariant with k=" << k << std::endl;
+    // Timer timer;
+    PTRef res = KTo1Inductive{KTo1Inductive::Mode::UNFOLD}.kinductiveToInductive(invariant, k, system);
+    // std::cout << timer.elapsedMilliseconds() << " ms" << std::endl;
+    return res;
 }
