@@ -1,6 +1,7 @@
 # Golem
 
-[![Join the chat at https://gitter.im/usi-verification-and-security/golem](https://badges.gitter.im/usi-verification-and-security/golem.svg)](https://gitter.im/usi-verification-and-security/golem?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
+[![CircleCI](https://dl.circleci.com/status-badge/img/gh/usi-verification-and-security/golem/tree/master.svg?style=shield)](https://dl.circleci.com/status-badge/redirect/gh/usi-verification-and-security/golem/tree/master)
+
 
 Golem is a solver for Constrained Horn Clauses (CHCs).
 It accepts the input in the format of (extended) SMT-LIB 2.6, as defined by [CHC-COMP](https://chc-comp.github.io/format.html).
