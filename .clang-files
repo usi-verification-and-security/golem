@@ -35,3 +35,4 @@ src/transformers/TrivialEdgePruner.h
 src/utils/SmtSolver.h
 src/utils/SmtSolver.cc
 src/utils/StdUtils.h
+src/utils/Timer.h
