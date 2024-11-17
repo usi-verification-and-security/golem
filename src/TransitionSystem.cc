@@ -9,6 +9,8 @@
 
 #include "TermUtils.h"
 #include "QuantifierElimination.h"
+#include "utils/SmtSolver.h"
+#include "utils/Timer.h"
 
 bool TransitionSystem::isWellFormed() {
 //    return systemType->isStateFormula(init) && systemType->isStateFormula(query) && systemType->isTransitionFormula(transition);
@@ -177,8 +179,16 @@ PTRef TransitionSystem::reverseTransitionRelation(TransitionSystem const & trans
     return transition;
 }
 
+PTRef KTo1Inductive::kinductiveToInductive(PTRef invariant, unsigned long k, TransitionSystem const & system) const {
+    switch (mode) {
+        case Mode::UNFOLD:
+            return unfold(invariant, k, system);
+        case Mode::LEGACY:
+            return legacy(invariant, k, system);
+    }
+}
 
-PTRef kinductiveToInductive(PTRef invariant, unsigned long k, TransitionSystem const & system) {
+PTRef KTo1Inductive::legacy(PTRef invariant, unsigned long k, TransitionSystem const & system) const {
     /*
      * If P(x) is k-inductive invariant then the following formula is 1-inductive invariant:
      * P(x_0)
@@ -232,4 +242,67 @@ PTRef kinductiveToInductive(PTRef invariant, unsigned long k, TransitionSystem c
         resArgs.push(logic.mkNot(afterElimination));
     }
     return logic.mkAnd(std::move(resArgs));
+}
+
+namespace {
+// TODO: Just look at the bits?
+unsigned logarithm(unsigned long k) {
+    unsigned long power = 1;
+    unsigned long exponent = 0;
+    while (k > power) {
+        power *= 2;
+        ++exponent;
+    }
+    return exponent;
+}
+
+PTRef buildFormula(unsigned index, PTRef invariant, TransitionSystem const & system) {
+    if (index == 0) { return system.getLogic().getTerm_true(); }
+    Logic & logic = system.getLogic();
+    TimeMachine timeMachine(logic);
+    PTRef previous = buildFormula(index - 1, invariant, system);
+    PTRef invariantShifted = timeMachine.sendFlaThroughTime(invariant, index - 1);
+    PTRef stepShifted = timeMachine.sendFlaThroughTime(system.getTransition(), index - 1);
+    PTRef initShifted = timeMachine.sendFlaThroughTime(system.getInit(), index);
+    return logic.mkOr(initShifted, logic.mkAnd({previous, invariantShifted, stepShifted}));
+}
+}
+
+PTRef KTo1Inductive::unfold(PTRef invariant, unsigned long k, TransitionSystem const & system) const {
+    // TODO: Put some boundary on k
+    auto exponent = logarithm(k);
+    assert(exponent < 32);
+    Logic & logic = system.getLogic();
+    TimeMachine tm(logic);
+    while (exponent > 0) {
+        // Build the two formulas
+        unsigned long power = 1 << (exponent - 1);
+        PTRef A = buildFormula(power, invariant, system);
+        PTRef shifted = tm.sendFlaThroughTime(A, power);
+        PTRef B = logic.mkAnd(shifted, logic.mkNot(tm.sendFlaThroughTime(invariant, 2*power)));
+        SMTSolver solver(logic, SMTSolver::WitnessProduction::ONLY_INTERPOLANTS);
+        solver.assertProp(A);
+        solver.assertProp(B);
+        auto res = solver.check();
+        if (res != SMTSolver::Answer::UNSAT) {
+            throw std::logic_error("Error in reducing k-inductive invariant to 1-inductive: Query must be UNSAT!");
+        }
+        auto itpContext = solver.getInterpolationContext();
+        vec<PTRef> itps;
+        ipartitions_t partitions = 1;
+        itpContext->getSingleInterpolant(itps, partitions);
+        assert(itps.size() == 1);
+        PTRef itp = tm.sendFlaThroughTime(itps[0], -static_cast<long>(power));
+        invariant = TermUtils(logic).conjoin(invariant, itp);
+        exponent--;
+    }
+    return invariant;
+}
+
+PTRef kinductiveToInductive(PTRef invariant, unsigned long k, TransitionSystem const & system) {
+    // std::cout << "Reducing k-inductive invariant with k=" << k << std::endl;
+    // Timer timer;
+    PTRef res = KTo1Inductive{KTo1Inductive::Mode::UNFOLD}.kinductiveToInductive(invariant, k, system);
+    // std::cout << timer.elapsedMilliseconds() << " ms" << std::endl;
+    return res;
 }

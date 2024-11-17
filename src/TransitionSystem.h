@@ -82,6 +82,18 @@ private:
     PTRef toNextStateVar(PTRef var) const;
 };
 
+struct KTo1Inductive {
+    enum class Mode { UNFOLD, LEGACY };
+    explicit KTo1Inductive(Mode mode) : mode(mode) {}
+    PTRef kinductiveToInductive(PTRef invariant, unsigned long k, TransitionSystem const & system) const;
+private:
+    Mode mode;
+
+    PTRef legacy(PTRef invariant, unsigned long k, TransitionSystem const & system) const;
+    PTRef unfold(PTRef invariant, unsigned long k, TransitionSystem const & system) const;
+
+};
+
 PTRef kinductiveToInductive(PTRef invariant, unsigned long k, TransitionSystem const & system);
 
 
