@@ -15,15 +15,15 @@ std::string Step::printStepAlethe() const {
     std::stringstream ss;
     ss << "(";
 
-    if (type == ASSUME) {
+    if (type == StepType::ASSUME) {
         ss << "assume t";
-    } else if (type == STEP) {
+    } else if (type == StepType::STEP) {
         ss << "step t";
     }
 
     ss << stepId;
 
-    if (type != ASSUME) { ss << " (cl"; }
+    if (type != StepType::ASSUME) { ss << " (cl"; }
 
     if (not clause.empty()) {
         ss << " ";
@@ -33,15 +33,16 @@ std::string Step::printStepAlethe() const {
         }
     }
 
-    if (type != ASSUME) { ss << ")"; }
+    if (type != StepType::ASSUME) { ss << ")"; }
 
     if (rule != " ") { ss << " :rule " << rule; }
 
-    if (not premises.empty()) {
+    auto const & premiseNumbers = premises.premises;
+    if (not premiseNumbers.empty()) {
         ss << " :premises (";
-        for (std::size_t i = 0; i < premises.size(); i++) {
-            ss << "t" << premises[i];
-            if (i != premises.size() - 1) { ss << " "; }
+        for (std::size_t i = 0; i < premiseNumbers.size(); i++) {
+            ss << "t" << premiseNumbers[i];
+            if (i != premiseNumbers.size() - 1) { ss << " "; }
         }
         ss << ")";
     }
@@ -84,9 +85,9 @@ std::string Step::printStepIntermediate() const {
         ss << ")";
     }
 
-    if (not premises.empty()) {
+    if (not premises.premises.empty()) {
         ss << " :premises ";
-        for (auto premise : premises) {
+        for (auto premise : premises.premises) {
             ss << premise << " ";
         }
     }
@@ -96,297 +97,541 @@ std::string Step::printStepIntermediate() const {
     return ss.str();
 }
 
-std::vector<std::shared_ptr<Term>> packClause(std::shared_ptr<Term> const & term) {
-    return std::vector<std::shared_ptr<Term>>{term};
+namespace {
+std::vector<std::shared_ptr<Term>> literals(std::shared_ptr<Term> const & term) {
+    return std::vector{term};
 }
 
-std::vector<std::shared_ptr<Term>> packClause(std::shared_ptr<Term> const & term1,
-                                              std::shared_ptr<Term> const & term2) {
-    return std::vector<std::shared_ptr<Term>>{term1, term2};
+std::vector<std::shared_ptr<Term>> literals(std::shared_ptr<Term> const & term1, std::shared_ptr<Term> const & term2) {
+    return std::vector{term1, term2};
 }
 
-std::vector<std::shared_ptr<Term>> packClause(std::shared_ptr<Term> const & term1, std::shared_ptr<Term> const & term2,
-                                              std::shared_ptr<Term> const & term3) {
-    return std::vector<std::shared_ptr<Term>>{term1, term2, term3};
+std::vector<std::shared_ptr<Term>> args(std::shared_ptr<Term> const & term1, std::shared_ptr<Term> const & term2) {
+    return std::vector{term1, term2};
+}
+
+std::shared_ptr<Term> negate(std::shared_ptr<Term> const & arg) {
+    return std::make_shared<Op>("not", std::vector{arg});
+}
+
+std::shared_ptr<Terminal> makeName(std::string name) {
+    return std::make_shared<Terminal>(std::move(name), Terminal::UNDECLARED);
+}
+} // namespace
+
+void StepHandler::recordStep(std::vector<TermPtr> && clause, std::string rule, Step::Premises && premises) {
+    notifyObservers(Step{currentStep++, Step::StepType::STEP, std::move(clause), std::move(rule), std::move(premises)});
+}
+
+void StepHandler::recordForallInstStep(std::vector<TermPtr> && clause, InstantiationPairs && instantiationPairs) {
+    notifyObservers(
+        Step{currentStep++, Step::StepType::STEP, std::move(clause), "forall_inst", std::move(instantiationPairs)});
+}
+
+void StepHandler::recordAssumption(std::vector<std::shared_ptr<Term>> && clause) {
+    notifyObservers(Step{currentStep++, Step::StepType::ASSUME, std::move(clause)});
 }
 
 void StepHandler::buildIntermediateProof() {
-
+    std::unordered_map<std::size_t, std::size_t> coarseStepToIntermediateStep;
     auto derivationSize = derivation.size();
 
     for (std::size_t i = 0; i < derivationSize; ++i) {
-
         auto const & step = derivation[i];
 
         if (step.premises.empty()) { continue; }
 
+        auto clause = originalAssertions[step.clauseId.id];
         auto instPairs = getInstPairs(i, normalizingEqualities[step.clauseId.id]);
-        currTerm = originalAssertions[step.clauseId.id];
 
+        auto instantiated = clause;
         if (not instPairs.empty()) {
-            InstantiateVisitor instantiateVisitor(instPairs);
-            notifyObservers(Step(currentStep, Step::STEP, packClause(currTerm), "forall_inst", instPairs));
+            notifyObservers(Step(currentStep, Step::StepType::STEP, literals(clause), "forall_inst", instPairs));
             currentStep++;
-
-            currTerm = currTerm->accept(&instantiateVisitor);
+            InstantiateVisitor instantiateVisitor(instPairs);
+            instantiated = clause->accept(&instantiateVisitor);
         }
-
-        notifyObservers(Step(currentStep, Step::STEP, packClause(currTerm)));
+        notifyObservers(Step(currentStep, Step::StepType::STEP, literals(instantiated)));
         currentStep++;
 
         std::stringstream premises;
-
         for (std::size_t j = 0; j < step.premises.size(); j++) {
             premises << logic.printTerm(derivation[step.premises[j]].derivedFact);
             if (j < step.premises.size() - 1) { premises << ' '; }
         }
 
         notifyObservers(
-            Step(currentStep, Step::STEP,
-                 packClause(std::make_shared<Op>(
-                     "=>", packClause(std::make_shared<Terminal>(premises.str(), Term::VAR),
-                                      std::make_shared<Terminal>(logic.printTerm(step.derivedFact), Term::VAR))))));
+            Step(currentStep, Step::StepType::STEP,
+                 literals(std::make_shared<Op>(
+                     "=>", literals(std::make_shared<Terminal>(premises.str(), Term::VAR),
+                                    std::make_shared<Terminal>(logic.printTerm(step.derivedFact), Term::VAR))))));
         currentStep++;
 
         std::vector<std::size_t> requiredMP;
-
-        if (!modusPonensSteps.empty()) {
-            // Get the necessary steps for modus ponens
-            for (std::size_t premise : step.premises) {
-                requiredMP.push_back(modusPonensSteps[premise - 1]);
-            }
+        for (std::size_t premise : step.premises) {
+            if (premise == 0) { continue; } // This is the helper fact "true", we do not include it in the proof
+            assert(coarseStepToIntermediateStep.find(premise) != coarseStepToIntermediateStep.end());
+            requiredMP.push_back(coarseStepToIntermediateStep.at(premise));
         }
 
-        notifyObservers(Step(currentStep, Step::STEP,
-                             packClause(std::make_shared<Terminal>(logic.printTerm(step.derivedFact), Term::VAR)),
-                             "resolution", requiredMP));
+        notifyObservers(Step(currentStep, Step::StepType::STEP,
+                             literals(std::make_shared<Terminal>(logic.printTerm(step.derivedFact), Term::VAR)),
+                             "resolution", Step::Premises{std::move(requiredMP)}));
 
-        modusPonensSteps.push_back(currentStep);
-
+        coarseStepToIntermediateStep.insert({i, currentStep});
         currentStep++;
     }
 }
 
-std::shared_ptr<Term> negate(std::shared_ptr<Term> const & arg) {
-    return std::make_shared<Op>("not", std::vector<std::shared_ptr<Term>>{arg});
-}
-
+/**
+ * Constructs Alethe proof from the coarse derivation.
+ * Each step of the coarse derivation knows what fact it derived, what were the premises and what clause was used.
+ *
+ * Prelude: Construct the assumption steps. These are just copied original assertions (we currently inline lets)
+ * Main proof: Expand each step from the coarse proof in the following way:
+ *  1. Insert steps to derive required instance of the used clause (this may require removing unused quantifiers first)
+ *  2. Turn the implication into a clause with "implies" rule. TODO: What if it is not an implication?
+ *  3. Add steps to prove that "LHS = LHS simplified"
+ *  4. Add a step to derive LHS simplified (with already derived premises recorded in the coarse-proof step)
+ *  5. Add a step to derive LHS
+ *  6. Add a step to derive RHS from 5. and 2.
+ *  7. Add steps to prove that "RHS = RHS simplified"
+ *  8. Derive RHS simplified from 6. and 7. (this a the derived fact of the coarse-proof step)
+ */
 void StepHandler::buildAletheProof() {
 
-    // Building assumptions
-    assumptionSteps();
+    buildAssumptionSteps();
 
     auto derivationSize = derivation.size();
+    // MB: This could be a vector, but we have extra step in the coarse proof, so we would have to be careful about -1
+    std::unordered_map<std::size_t, std::size_t> coarseStepToAletheStep;
 
-    // Iteration through derivations
     for (std::size_t i = 0; i < derivationSize; ++i) {
         auto const & step = derivation[i];
+        assert(step.index == i);
 
-        if (step.premises.empty()) { continue; }
-
-        std::vector<std::size_t> requiredMP;
-
-        if (!modusPonensSteps.empty()) {
-            // Get the necessary steps for modus ponens
-            for (auto premise : step.premises) {
-                requiredMP.push_back(modusPonensSteps[premise - 1]);
-            }
+        // Skip the helper step of deriving "true"
+        if (step.premises.empty()) {
+            assert(step.derivedFact == logic.getTerm_true());
+            continue;
         }
 
-        currTerm = originalAssertions[step.clauseId.id];
-
-        // Variable instantiation
-        instantiationSteps(i); // pass the currTerm as an argument
-
-        std::shared_ptr<Op> implication = std::dynamic_pointer_cast<Op>(currTerm);
-
+        auto instantiatedClause = instantiationSteps(i, originalAssertions[step.clauseId.id]);
+        auto implication = std::dynamic_pointer_cast<Op>(instantiatedClause);
         auto implicationLHS = implication->getArgs()[0];
         auto implicationRHS = implication->getArgs()[1];
 
-        // Implication rule
-        auto implicationStep = currentStep;
-        notifyObservers(
-            Step(currentStep, Step::STEP,
-                 packClause(std::make_shared<Op>(
-                                "not", packClause(std::make_shared<Op>(
-                                           "!", packClause(implicationLHS, std::make_shared<Terminal>(
-                                                                               ":named @impLHS" + std::to_string(i - 1),
-                                                                               Terminal::UNDECLARED))))),
+        recordStep(literals(negate(std::make_shared<Op>(
+                                "!", literals(implicationLHS, makeName(":named @LHS" + std::to_string(i - 1))))),
                             implicationRHS),
-                 "implies", std::vector<std::size_t>{currentStep - 1}));
+                   "implies", Step::Premises{lastStep()});
+        auto implicationStep = lastStep();
 
-        currentStep++;
+        std::shared_ptr<Term> renamedImpLHS = makeName("@LHS" + std::to_string(i - 1));
 
-        std::shared_ptr<Term> renamedImpLHS =
-            std::make_shared<Terminal>("@impLHS" + std::to_string(i - 1), Terminal::UNDECLARED);
-        CongChainVisitor congChainVisitor(currentStep);
-
-        // Casting implication to an operation, getting the LHS and calling the simplification visitor
-        implicationLHS->accept(&congChainVisitor);
-        // If it is empty, it means that the LHS was either a terminal or an application
-        auto const & congruenceChainSteps = congChainVisitor.getSteps();
+        std::vector<std::size_t> requiredMP;
+        for (auto premise : step.premises) {
+            if (premise == 0) { continue; } // This is the helper fact "true", we do not include it in the proof
+            assert(coarseStepToAletheStep.find(premise) != coarseStepToAletheStep.end());
+            requiredMP.push_back(coarseStepToAletheStep.at(premise));
+        }
+        auto simplificationResult = simplify(implicationLHS, renamedImpLHS);
         std::size_t LHSderivationStep = 0;
-        if (not congruenceChainSteps.empty()) {
-            for (std::size_t j = 0; j < congruenceChainSteps.size() - 1; j++) {
-                auto const & simpleStep = congruenceChainSteps[j];
-                notifyObservers(Step(simpleStep.stepId, Step::STEP, packClause(simpleStep.clause), simpleStep.rule,
-                                     simpleStep.premises));
-            }
-
-            // We deal with the last step separately, se we can use our name for LHS
-            auto const & lastChainStep = congruenceChainSteps.back();
-            auto const & simplifiedLHS = std::dynamic_pointer_cast<Op>(lastChainStep.clause)->getArgs()[1];
-            auto originalSimplifiedEquality = std::make_shared<Op>("=", packClause(renamedImpLHS, simplifiedLHS));
-            auto equalityStep = lastChainStep.stepId;
-            notifyObservers(Step(lastChainStep.stepId, Step::STEP, packClause(originalSimplifiedEquality),
-                                 lastChainStep.rule, lastChainStep.premises));
-            currentStep = lastChainStep.stepId + 1;
-
-            // now derive the original LHS
+        if (simplificationResult) { // LHS has been simplified
+            auto simplifiedLHS = simplificationResult->first;
+            auto equivStep = lastStep();
             auto simplifiedLHSderivationStep = deriveLHSWithoutConstraint(simplifiedLHS, std::move(requiredMP));
-            // Now we have that LHS = simplifiedLHS and we have derived simplified LHS, from these we can derive the
-            // original LHS
-            notifyObservers(Step(currentStep, Step::STEP, packClause(renamedImpLHS, negate(simplifiedLHS)), "equiv2",
-                                 std::vector<std::size_t>{equalityStep}));
-            ++currentStep;
-            notifyObservers(Step(currentStep, Step::STEP, packClause(renamedImpLHS), "resolution",
-                                 std::vector<std::size_t>{simplifiedLHSderivationStep, currentStep - 1}));
-            ++currentStep;
-            LHSderivationStep = currentStep - 1;
-
+            recordStep(literals(renamedImpLHS, negate(simplifiedLHS)), "equiv2", Step::Premises{equivStep});
+            recordStep(literals(renamedImpLHS), "resolution", Step::Premises{simplifiedLHSderivationStep, lastStep()});
+            LHSderivationStep = lastStep();
         } else {
+            // TODO: Use name whenever possible
             LHSderivationStep = deriveLHSWithoutConstraint(implicationLHS, std::move(requiredMP));
         }
 
-        // derive RHS
-        auto RHSderivationStep = currentStep;
-        notifyObservers(Step(currentStep, Step::STEP, packClause(implicationRHS), "resolution",
-                             std::vector<std::size_t>{implicationStep, LHSderivationStep}));
-        ++currentStep;
-        CongChainVisitor rhsVisitor(currentStep);
-        implicationRHS->accept(&rhsVisitor);
-        auto const & simplificationStepsRHS = rhsVisitor.getSteps();
-        if (not simplificationStepsRHS.empty()) {
-            for (auto const & simpleStep : simplificationStepsRHS) {
-                notifyObservers(Step(simpleStep.stepId, Step::STEP, packClause(simpleStep.clause), simpleStep.rule,
-                                     simpleStep.premises));
-                currentStep++;
-            }
-            auto equivalence = std::dynamic_pointer_cast<Op>(simplificationStepsRHS.back().clause);
-            assert(equivalence->getArgs().size() == 2);
-            auto simplifiedRHS = equivalence->getArgs()[1];
+        // We have derived LHS, now derive RHS with resolution
+        recordStep(literals(implicationRHS), "resolution", Step::Premises{implicationStep, LHSderivationStep});
+        auto RHSderivationStep = lastStep();
+        // Now derive simplified RHS, which is the fact of the coarse-proof step
+        auto rhsSimplificationResult = simplify(implicationRHS);
+        if (rhsSimplificationResult) {
+            auto simplifiedRHS = rhsSimplificationResult->first;
             assert(simplifiedRHS->printTerm() == logic.printTerm(step.derivedFact));
-            // The last step is that RHS is equivalent to the simplified RHS. From that we can derive the simplified RHS
-            notifyObservers(Step(currentStep, Step::STEP, packClause(negate(implicationRHS), simplifiedRHS), "equiv1",
-                                 std::vector<std::size_t>{currentStep - 1}));
-            ++currentStep;
-            notifyObservers(Step(currentStep, Step::STEP, packClause(simplifiedRHS), "resolution",
-                                 std::vector<std::size_t>{currentStep - 1, RHSderivationStep}));
-            ++currentStep;
+            recordStep(literals(negate(implicationRHS), simplifiedRHS), "equiv1", Step::Premises{lastStep()});
+            recordStep(literals(simplifiedRHS), "resolution", Step::Premises{lastStep(), RHSderivationStep});
         }
-
-        modusPonensSteps.push_back(currentStep - 1);
+        coarseStepToAletheStep.insert({i, lastStep()});
     }
 
-    notifyObservers(Step(currentStep, Step::STEP,
-                         packClause(std::make_shared<Terminal>("(not false)", Term::UNDECLARED)), "false"));
-
-    currentStep++;
-    // Get empty clause
-    notifyObservers(
-        Step(currentStep, Step::STEP, "resolution", std::vector<std::size_t>{currentStep - 2, currentStep - 1}));
+    recordStep(literals(std::make_shared<Terminal>("(not false)", Term::UNDECLARED)), "false", {});
+    // Final step deriving empty clause
+    recordStep({}, "resolution", Step::Premises{currentStep - 2, currentStep - 1});
 }
 
-void StepHandler::instantiationSteps(std::size_t i) {
+StepHandler::SimplifyResult StepHandler::simplify(TermPtr const & term, std::optional<TermPtr> name) {
+    auto type = term->getTermType();
+    if (type == Term::LET or type == Term::QUANT) {
+        throw std::logic_error("Let and quantified term should not occur here anymore!");
+    }
+    if (type == Term::TERMINAL) { return std::nullopt; }
+    assert(type == Term::APP or type == Term::OP);
+    // Recursively simplify all arguments
+    auto simplifyArgs = [this](std::vector<TermPtr> const & args) {
+        std::vector<SimplifyResult> results;
+        for (auto const & arg : args) {
+            auto res = simplify(arg);
+            results.push_back(std::move(res));
+        }
+        return results;
+    };
+
+    // Create simplified
+    auto processResults = [this](TermPtr const & term, std::optional<TermPtr> name, std::vector<SimplifyResult> const & results) {
+        bool isApp = term->getTermType() == Term::APP;
+        auto const & args = isApp ? std::dynamic_pointer_cast<App>(term)->getArgs() : std::dynamic_pointer_cast<Op>(term)->getArgs();
+        std::vector<TermPtr> newArgs;
+        Step::Premises premises;
+        for (std::size_t i = 0; i < results.size(); ++i) {
+            auto const & res = results[i];
+            if (res) {
+                premises.premises.push_back(res->second);
+                newArgs.push_back(res->first);
+            } else {
+                newArgs.push_back(args[i]);
+            }
+        }
+        TermPtr simplifiedTerm = term->getTermType() == Term::APP
+            ? std::static_pointer_cast<Term>(std::make_shared<App>(std::dynamic_pointer_cast<App>(term)->getFun(), std::move(newArgs)))
+            : std::static_pointer_cast<Term>(std::make_shared<Op>(std::dynamic_pointer_cast<Op>(term)->getOp(), std::move(newArgs)));
+        auto congruenceTerm = std::make_shared<Op>("=", std::vector<TermPtr>{(name.has_value() ? name.value() : term), simplifiedTerm});
+        recordStep(literals(congruenceTerm), "cong", std::move(premises));
+        return simplifiedTerm;
+    };
+    if (type == Term::APP) { // Uninterpreted predicate
+        auto app = std::dynamic_pointer_cast<App>(term);
+        auto const & args = app->getArgs();
+        auto results = simplifyArgs(args);
+        if (std::none_of(results.begin(), results.end(), [](auto const & result) { return result.has_value(); })) {
+            return std::nullopt;
+        }
+        auto simplifiedTerm = processResults(term, std::move(name), results);
+        return std::make_pair(simplifiedTerm, lastStep());
+    }
+    if (type == Term::OP) {
+        // First recursively simplify arguments
+        auto op = std::dynamic_pointer_cast<Op>(term);
+        auto const & args = op->getArgs();
+        auto results = simplifyArgs(args);
+        bool changed =
+            std::any_of(results.begin(), results.end(), [](auto const & result) { return result.has_value(); });
+        TermPtr opWithArgsSimplified = op;
+        std::size_t firstEquivStep = -1;
+        if (changed) {
+            opWithArgsSimplified = processResults(term, name, results);
+            firstEquivStep = lastStep();
+        }
+        auto evaluatedTerm = simplifyOpDirect(std::dynamic_pointer_cast<Op>(opWithArgsSimplified));
+        if (changed) { // Derive that the original op is equiv to evaluatedTerm by transitivity
+            assert(firstEquivStep != -1);
+            recordStep(literals(std::make_shared<Op>("=", std::vector<TermPtr>{name.has_value() ? name.value() : op, evaluatedTerm})), "trans", {firstEquivStep, lastStep()});
+        }
+        return std::make_pair(evaluatedTerm, lastStep());
+    }
+    assert(false);
+    throw std::logic_error("Unreachable!");
+}
+
+namespace {
+// NOTE: The semantics of div and modulo operation in OpenSMT's FastRationals is different from the semantics defined by
+// SMT-LIB. We must use the computation according to SMT-LIB.
+// See notes in // https://smtlib.cs.uiowa.edu/theories-Ints.shtml
+
+// "Regardless of sign of m,
+//  when n is positive, (div m n) is the floor of the rational number m/n;
+//  when n is negative, (div m n) is the ceiling of m/n."
+//  Remainder is then always a positive number r such that m = n * q + r, r < abs(n)
+
+struct DivModPair {
+    FastRational div;
+    FastRational mod;
+};
+auto smtlib_divmod(FastRational const & m, FastRational const & n) -> DivModPair {
+    auto ratio = m / n;
+    auto q = n > 0 ? ratio.floor() : ratio.ceil();
+    auto r = m - n * q;
+    assert(r.isInteger() and r.sign() >= 0 and r < abs(n));
+    return {q, r};
+}
+
+} // namespace
+
+StepHandler::TermPtr StepHandler::simplifyOpDirect(std::shared_ptr<Op> const & opTerm) {
+    auto const & op = opTerm->getOp();
+    auto const & args = opTerm->getArgs();
+
+    auto argAsNumber = [](auto const & arg) -> FastRational {
+        assert(arg->getTerminalType() == Term::REAL or arg->getTerminalType() == Term::INT);
+        auto const & str = std::dynamic_pointer_cast<Terminal>(arg)->getVal();
+        // We have negated numbers represented in SMT-LIB format :(
+        if (str.rfind("(-", 0) == 0) {
+            auto positive = str.substr(3);
+            assert(positive.size() > 0);
+            positive.pop_back();
+            return -FastRational(positive.c_str());
+        }
+        return FastRational(str.c_str());
+    };
+    auto argsAsNumbers = [&]() -> std::pair<FastRational, FastRational> {
+        assert(args.size() == 2);
+        return std::make_pair(argAsNumber(args[0]), argAsNumber(args[1]));
+    };
+
+    auto boolToString = [](bool b) { return b ? "true" : "false"; };
+
+    auto numberAsTerminal = [](FastRational && num, Term::terminalType type) {
+        if (isNegative(num)) {
+            num.negate();
+            return std::make_shared<Terminal>("(- " + num.get_str() + ")", type);
+        }
+        return std::make_shared<Terminal>(num.get_str(), type);
+    };
+
+    TermPtr simplified;
+    std::string rule;
+
+    if (op == "=") {
+        assert(args[0]->getTermType() == Term::TERMINAL and args[0]->getTerminalType() != Term::VAR);
+        assert(args[1]->getTermType() == Term::TERMINAL and args[1]->getTerminalType() != Term::VAR);
+        bool equal = args[0]->printTerm() == args[1]->printTerm();
+        simplified = std::make_shared<Terminal>(boolToString(equal), Term::BOOL);
+        rule = args[0]->getTerminalType() == Term::BOOL ? "equiv_simplify" : "eq_simplify";
+    } else if (op == "<" or op == "<=") {
+        auto [lhs, rhs] = argsAsNumbers();
+        bool isTrue = lhs < rhs or (op == "<=" and lhs == rhs);
+        simplified = std::make_shared<Terminal>(boolToString(isTrue), Term::BOOL);
+        rule = "comp_simplify";
+    } else if (op == ">") {
+        auto inner = std::make_shared<Op>("<=", args);
+        auto negated = std::make_shared<Op>("not", std::vector<std::shared_ptr<Term>>{inner});
+        recordStep(literals(std::make_shared<Op>("=", std::vector<TermPtr>{opTerm, negated})), "comp_simplify", {});
+        auto firstEq = lastStep();
+        auto innerSimplified = simplifyOpDirect(inner);
+        auto innerSimplifiedNegated = std::make_shared<Op>("not", std::vector<std::shared_ptr<Term>>{innerSimplified});
+        recordStep(literals(std::make_shared<Op>("=", std::vector<TermPtr>{negated, innerSimplifiedNegated})), "cong",
+                   {lastStep()});
+        auto secondEq = lastStep();
+        simplified = simplifyOpDirect(innerSimplifiedNegated);
+        recordStep(literals(std::make_shared<Op>("=", std::vector<TermPtr>{opTerm, simplified})), "trans",
+                   {firstEq, secondEq, lastStep()});
+        return simplified;
+    } else if (op == ">=") {
+        assert(args.size() == 2);
+        auto swapped = std::make_shared<Op>("<=", std::vector{args[1], args[0]});
+        recordStep(literals(std::make_shared<Op>("=", std::vector<TermPtr>{opTerm, swapped})), "comp_simplify", {});
+        auto firstEq = lastStep();
+        simplified = simplifyOpDirect(swapped);
+        recordStep(literals(std::make_shared<Op>("=", std::vector<TermPtr>{opTerm, simplified})), "trans",
+                   Step::Premises{firstEq, lastStep()});
+        return simplified;
+    } else if (op == "and") {
+        std::vector<std::shared_ptr<Term>> newArgs;
+        for (auto const & arg : args) {
+            if (arg->getTermType() == Term::TERMINAL and arg->getTerminalType() != Term::VAR) {
+                assert(arg->getTerminalType() == Term::BOOL);
+                auto const & val = std::dynamic_pointer_cast<Terminal>(arg)->getVal();
+                assert(val == "true" or val == "false");
+                if (val == "false") {
+                    recordStep(literals(std::make_shared<Op>("=", ::args(opTerm, arg))), "and_simplify", {});
+                    return arg;
+                }
+                // We skip "true" argument
+            } else {
+                newArgs.push_back(arg);
+            }
+        }
+        if (newArgs.empty()) {
+            simplified = std::make_shared<Terminal>("true", Term::BOOL);
+        } else if (newArgs.size() == 1) {
+            simplified = newArgs[0];
+        } else {
+            simplified = std::make_shared<Op>("and", std::move(newArgs));
+        }
+        rule = "and_simplify";
+    } else if (op == "or") {
+        bool isTrue = std::any_of(args.begin(), args.end(), [](auto const & arg) {
+            return arg->getTerminalType() == Term::BOOL and
+                   std::dynamic_pointer_cast<Terminal>(arg)->getVal() == "true";
+        });
+        if (not isTrue) {
+            assert(std::all_of(args.begin(), args.end(), [](auto const & arg) {
+                return arg->getTerminalType() == Term::BOOL and
+                       std::dynamic_pointer_cast<Terminal>(arg)->getVal() == "false";
+            }));
+        }
+        simplified = std::make_shared<Terminal>(boolToString(isTrue), Term::BOOL);
+        rule = "or_simplify";
+    } else if (op == "not") {
+        assert(args[0]->getTermType() == Term::TERMINAL and args[0]->getTerminalType() == Term::BOOL);
+        auto const & val = std::dynamic_pointer_cast<Terminal>(args[0])->getVal();
+        assert(val == "true" or val == "false");
+        simplified = std::make_shared<Terminal>(val == "false" ? "true" : "false", Term::BOOL);
+        rule = "not_simplify";
+    } else if (op == "ite") {
+        assert(args[0]->getTermType() == Term::TERMINAL and args[0]->getTerminalType() == Term::BOOL);
+        auto const & val = std::dynamic_pointer_cast<Terminal>(args[0])->getVal();
+        simplified = val == "true" ? args[1] : args[2];
+        rule = "ite_simplify";
+    } else if (op == "+") {
+        FastRational result = 0;
+        for (auto const & arg : args) {
+            result += argAsNumber(arg);
+        }
+        Term::terminalType type = args[0]->getTerminalType();
+        simplified = numberAsTerminal(std::move(result), type);
+        rule = "sum_simplify";
+    } else if (op == "-") {
+        auto [lhs, rhs] = argsAsNumbers();
+        Term::terminalType type = args[0]->getTerminalType();
+        FastRational result = lhs - rhs;
+        simplified = numberAsTerminal(std::move(result), type);
+        rule = "minus_simplify";
+    } else if (op == "/") {
+        auto [lhs, rhs] = argsAsNumbers();
+        FastRational result = lhs / rhs;
+        simplified = numberAsTerminal(std::move(result), Term::REAL);
+        rule = "div_simplify";
+    } else if (op == "*") {
+        auto [lhs, rhs] = argsAsNumbers();
+        Term::terminalType type = args[0]->getTerminalType();
+        FastRational result = lhs * rhs;
+        simplified = numberAsTerminal(std::move(result), type);
+        rule = "prod_simplify";
+    } else if (op == "mod") {
+        auto [lhs, rhs] = argsAsNumbers();
+        FastRational result = smtlib_divmod(lhs, rhs).mod;
+        simplified = std::make_shared<Terminal>(result.get_str(), Term::INT);
+        rule = "mod_simplify";
+    } else if (op == "div") {
+        auto [lhs, rhs] = argsAsNumbers();
+        FastRational result = smtlib_divmod(lhs, rhs).div;
+        simplified = numberAsTerminal(std::move(result), Term::INT);
+        rule = "div_simplify";
+    } else {
+        throw std::logic_error("Unhandled case in simplifying Op");
+    }
+    recordStep(literals(std::make_shared<Op>("=", std::vector<TermPtr>{opTerm, simplified})), std::move(rule), {});
+    return simplified;
+}
+
+namespace {
+class CollectVariables : public VoidVisitor {
+public:
+    std::unordered_set<std::string> varsInUse;
+
+    void visit(Terminal * term) override {
+        if (term->getTerminalType() == Term::VAR) {
+            auto termStr = term->printTerm();
+            varsInUse.insert(termStr);
+        }
+    }
+
+    void visit(Op * term) override {
+        for (auto const & arg : term->getArgs()) {
+            arg->accept(this);
+        }
+    }
+
+    void visit(App * term) override {
+        for (auto const & arg : term->getArgs()) {
+            arg->accept(this);
+        }
+    }
+    void visit(Quant *) override { throw std::logic_error("Should not encounter quantifier at this point!"); };
+    void visit(Let *) override { throw std::logic_error("Should not encounter let terms here!"); }
+};
+
+std::pair<std::shared_ptr<Term>, bool> removeUnusedQuantifiers(std::shared_ptr<Term> const & term) {
+    if (term->getTermType() != Term::QUANT) { return {term, false}; }
+    auto quantifiedTerm = std::dynamic_pointer_cast<Quant>(term);
+    CollectVariables collector;
+    quantifiedTerm->getCoreTerm()->accept(&collector);
+    auto const & varsInUse = collector.varsInUse;
+
+    std::vector<std::shared_ptr<Term>> newVars;
+    std::vector<std::shared_ptr<Term>> newSorts;
+    auto const & vars = quantifiedTerm->getVars();
+    auto const & sorts = quantifiedTerm->getSorts();
+    for (std::size_t i = 0; i < vars.size(); ++i) {
+        auto varStr = vars[i]->printTerm();
+        auto it = varsInUse.find(varStr);
+        if (it != varsInUse.end()) {
+            newVars.push_back(vars[i]);
+            newSorts.push_back(sorts[i]);
+        }
+    }
+    if (newVars.empty()) { return {quantifiedTerm->getCoreTerm(), true}; }
+    if (newVars.size() == vars.size()) { return {term, false}; }
+    return {std::make_shared<Quant>(quantifiedTerm->getQuant(), std::move(newVars), std::move(newSorts),
+                                    quantifiedTerm->getCoreTerm()),
+            true};
+}
+
+} // namespace
+
+StepHandler::TermPtr StepHandler::instantiationSteps(std::size_t i, TermPtr quantifiedTerm) {
 
     auto const & step = derivation[i];
 
-    std::shared_ptr<Term> assumptionReNamedTerm =
-        std::make_shared<Terminal>("@a" + std::to_string(step.clauseId.id), Terminal::UNDECLARED);
-    std::shared_ptr<Term> instantiationReNamedTerm =
-        std::make_shared<Terminal>("@i" + std::to_string(i - 1), Terminal::UNDECLARED);
+    std::shared_ptr<Term> namedAssumption = makeName("@a" + std::to_string(step.clauseId.id));
+    std::shared_ptr<Term> instantiationReNamedTerm = makeName("@i" + std::to_string(i - 1));
 
-    std::shared_ptr<Term> unusedRem = currTerm->accept(&removeUnusedVisitor);
-
+    auto [clearedTerm, hasChanged] = removeUnusedQuantifiers(quantifiedTerm);
     std::size_t quantStep = step.clauseId.id;
 
-    if (unusedRem->printTerm() != currTerm->printTerm()) {
+    if (hasChanged) {
+        recordStep(literals(std::make_shared<Op>("=", std::vector{namedAssumption, clearedTerm})), "qnt_rm_unused", {});
+        recordStep(literals(negate(namedAssumption), clearedTerm), "equiv1", Step::Premises{currentStep - 1});
+        recordStep(literals(clearedTerm), "resolution", Step::Premises{quantStep, currentStep - 1});
 
-        notifyObservers(Step(currentStep, Step::STEP,
-                             packClause(std::make_shared<Op>("=", packClause(assumptionReNamedTerm, unusedRem))),
-                             "qnt_rm_unused"));
-
-        currentStep++;
-
-        notifyObservers(Step(currentStep, Step::STEP,
-                             packClause(std::make_shared<Op>("not", packClause(assumptionReNamedTerm)), unusedRem),
-                             "equiv1", std::vector<std::size_t>{currentStep - 1}));
-
-        currentStep++;
-
-        notifyObservers(Step(currentStep, Step::STEP, packClause(unusedRem), "resolution",
-                             std::vector<std::size_t>{quantStep, currentStep - 1}));
-
-        currentStep++;
-
-        currTerm = unusedRem;
-        assumptionReNamedTerm = unusedRem;
+        namedAssumption = clearedTerm;
         quantStep = currentStep - 1;
     }
 
     // Getting the instantiated variable-value pairs
-    std::vector<std::pair<std::string, std::string>> instPairs =
-        getInstPairs(i, normalizingEqualities[step.clauseId.id]);
+    auto instPairs = getInstPairs(i, normalizingEqualities[step.clauseId.id]);
 
-    if (not instPairs.empty()) {
-        InstantiateVisitor instantiateVisitor(instPairs);
+    if (instPairs.empty()) { return clearedTerm; }
 
-        notifyObservers(Step(
-            currentStep, Step::STEP,
-            packClause(std::make_shared<Op>(
-                "or",
-                packClause(std::make_shared<Op>("not", packClause(assumptionReNamedTerm)),
-                           std::make_shared<Op>("!", packClause(currTerm->accept(&instantiateVisitor),
-                                                                std::make_shared<Terminal>(
-                                                                    ":named " + instantiationReNamedTerm->printTerm(),
-                                                                    Terminal::UNDECLARED)))))),
-            "forall_inst", instPairs));
+    InstantiateVisitor instantiateVisitor(instPairs);
+    auto instantiatedTerm = clearedTerm->accept(&instantiateVisitor);
+    recordForallInstStep(
+        literals(std::make_shared<Op>(
+            "or", literals(negate(namedAssumption),
+                           std::make_shared<Op>(
+                               "!", literals(instantiatedTerm,
+                                             makeName(":named " + instantiationReNamedTerm->printTerm())))))),
+        std::move(instPairs));
 
-        currentStep++;
-
-        notifyObservers(
-            Step(currentStep, Step::STEP,
-                 packClause(std::make_shared<Op>("not", packClause(assumptionReNamedTerm)), instantiationReNamedTerm),
-                 "or", std::vector<std::size_t>{currentStep - 1}));
-
-        currentStep++;
-
-        currTerm = currTerm->accept(&instantiateVisitor);
-
-        notifyObservers(Step(currentStep, Step::STEP, packClause(instantiationReNamedTerm), "resolution",
-                             std::vector<std::size_t>{currentStep - 1, quantStep}));
-
-        currentStep++;
-    }
+    recordStep(literals(negate(namedAssumption), instantiationReNamedTerm), "or", Step::Premises{currentStep - 1});
+    recordStep(literals(instantiationReNamedTerm), "resolution", Step::Premises{currentStep - 1, quantStep});
+    return instantiatedTerm;
 }
 
-void StepHandler::assumptionSteps() {
-
+void StepHandler::buildAssumptionSteps() {
     for (auto & assertion : originalAssertions) {
+        // We eliminate all let terms (and rely on Carcara's option --expand-let-bindings for proof checking)
+        // TODO: simplify!
+        LetLocatorVisitor letLocatorVisitor;
         Term * potentialLet = assertion->accept(&letLocatorVisitor);
         while (potentialLet != nullptr) {
+            OperateLetTermVisitor operateLetTermVisitor;
             auto simplifiedLet = potentialLet->accept(&operateLetTermVisitor);
             SimplifyVisitor simplifyLetTermVisitor(simplifiedLet, potentialLet);
             assertion = assertion->accept(&simplifyLetTermVisitor);
             potentialLet = assertion->accept(&letLocatorVisitor);
         }
-        notifyObservers(
-            Step(currentStep, Step::ASSUME,
-                 packClause(std::make_shared<Op>(
-                     "!", packClause(assertion, std::make_shared<Terminal>(":named @a" + std::to_string(currentStep),
-                                                                           Terminal::UNDECLARED))))));
-
-        currentStep++;
+        recordAssumption(
+            literals(std::make_shared<Op>("!", args(assertion, makeName(":named @a" + std::to_string(currentStep))))));
     }
 }
 
@@ -403,13 +648,11 @@ std::size_t StepHandler::deriveLHSWithoutConstraint(std::shared_ptr<Term> const 
         for (auto const & arg : predicateConjunction->getArgs()) {
             andNegArgs.push_back(negate(arg));
         }
-        notifyObservers(Step(currentStep, Step::STEP, std::move(andNegArgs), "and_neg", std::vector<std::size_t>{}));
-        currentStep++;
+        recordStep(std::move(andNegArgs), "and_neg", Step::Premises{});
 
         predicatePremises.push_back(currentStep - 1);
-        notifyObservers(
-            Step(currentStep, Step::STEP, packClause(simplifiedLHS), "resolution", std::move(predicatePremises)));
-        return currentStep++;
+        recordStep(literals(simplifiedLHS), "resolution", Step::Premises{std::move(predicatePremises)});
+        return currentStep - 1;
     } else if (simplifiedLHS->getTermType() == Term::APP or
                (simplifiedLHS->getTermType() == Term::TERMINAL and simplifiedLHS->getTerminalType() == Term::VAR)) {
         // single predicate, including 0-ary predicate as a special case
@@ -530,10 +773,8 @@ StepHandler::getInstPairs(std::size_t stepIndex, vec<Normalizer::Equality> const
 
 std::size_t StepHandler::getOrCreateTrueStep() {
     if (trueRuleStep == 0) {
-        notifyObservers(Step(currentStep, Step::STEP,
-                             packClause(std::make_shared<Terminal>("true", Terminal::terminalType::BOOL)), "true"));
         trueRuleStep = currentStep;
-        ++currentStep;
+        recordStep(literals(std::make_shared<Terminal>("true", Terminal::terminalType::BOOL)), "true", {});
     }
     return trueRuleStep;
 }

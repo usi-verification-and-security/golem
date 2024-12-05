@@ -56,8 +56,6 @@ public:
     std::vector<std::shared_ptr<Term>> const & getArgs() const { return args; }
     termType getTermType() const override { return OP; }
     terminalType getTerminalType() const override { return UNDECLARED; }
-    std::string simplifyRule() const;
-    std::shared_ptr<Term> operate() const;
 
     std::shared_ptr<Term> accept(LogicVisitor *) override;
     Term * accept(PointerVisitor *) override;
@@ -131,6 +129,7 @@ public:
     virtual std::shared_ptr<Term> visit(Op *) = 0;
     virtual std::shared_ptr<Term> visit(App *) = 0;
     virtual std::shared_ptr<Term> visit(Let *) = 0;
+    virtual ~LogicVisitor() = default;
 };
 
 class InstantiateVisitor : public LogicVisitor {
@@ -148,24 +147,13 @@ public:
     std::shared_ptr<Term> visit(Let *) override;
 };
 
-class RemoveUnusedVisitor : public LogicVisitor {
-    std::unordered_set<std::string> varsInUse;
-
-public:
-    std::shared_ptr<Term> visit(Terminal *) override;
-    std::shared_ptr<Term> visit(Quant *) override;
-    std::shared_ptr<Term> visit(Op *) override;
-    std::shared_ptr<Term> visit(App *) override;
-    std::shared_ptr<Term> visit(Let *) override { return nullptr; }; // because we have already got rid of the let terms
-};
-
 class OperateLetTermVisitor : public LogicVisitor {
     std::vector<std::string> terms;
     std::vector<std::shared_ptr<Term>> substitutions;
 
 public:
     std::shared_ptr<Term> visit(Terminal *) override;
-    std::shared_ptr<Term> visit(Quant *) override { return std::make_shared<Terminal>("Error", Term::UNDECLARED); };
+    std::shared_ptr<Term> visit(Quant *) override;
     std::shared_ptr<Term> visit(Op *) override;
     std::shared_ptr<Term> visit(App *) override;
     std::shared_ptr<Term> visit(Let *) override;
@@ -192,6 +180,7 @@ public:
     virtual void visit(Op *) = 0;
     virtual void visit(App *) = 0;
     virtual void visit(Let *) = 0;
+    virtual ~VoidVisitor() = default;
 };
 
 class PrintVisitor : public VoidVisitor {
@@ -206,32 +195,6 @@ public:
     std::string getString() { return ss.str(); }
 };
 
-class CongChainVisitor : public LogicVisitor {
-    int transCase = 0; // 0 for regular case, 1 for trans after ">="
-    std::size_t currentStep;
-    class SimpleStep {
-    public:
-        std::size_t stepId;
-        std::shared_ptr<Term> clause;
-        std::vector<std::size_t> premises;
-        std::string rule;
-        SimpleStep(std::size_t stepId, std::shared_ptr<Term> clause, std::vector<std::size_t> premises,
-                   std::string rule)
-            : stepId(stepId), clause(std::move(clause)), premises(std::move(premises)), rule(std::move(rule)) {}
-    };
-    std::vector<SimpleStep> steps;
-
-public:
-    explicit CongChainVisitor(std::size_t currStep) : currentStep(currStep) {}
-    std::shared_ptr<Term> visit(Terminal *) override;
-    std::shared_ptr<Term> visit(Quant *) override { throw std::logic_error("This should not have happened!"); };
-    std::shared_ptr<Term> visit(Op *) override;
-    std::shared_ptr<Term> visit(App *) override;
-    std::shared_ptr<Term> visit(Let *) override { throw std::logic_error("This should not have happened!"); };
-
-    std::vector<SimpleStep> const & getSteps() { return steps; };
-};
-
 class PointerVisitor {
 public:
     virtual Term * visit(Terminal *) = 0;
@@ -239,6 +202,7 @@ public:
     virtual Term * visit(Op *) = 0;
     virtual Term * visit(App *) = 0;
     virtual Term * visit(Let *) = 0;
+    virtual ~PointerVisitor() = default;
 };
 
 class LetLocatorVisitor : public PointerVisitor {
