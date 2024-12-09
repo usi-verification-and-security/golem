@@ -139,6 +139,7 @@ private:
     /** Simplifies term by evaluating operations on constants, records the simplification steps */
     using SimplifyResult = std::optional<std::pair<TermPtr, std::size_t>>; // Simplified term + congruence step id
     SimplifyResult simplify(TermPtr const & term, std::optional<TermPtr> name = std::nullopt);
+    SimplifyResult shortCircuitSimplifyITE(std::shared_ptr<Op> const & ite);
     // Assumes that arguments are already simplified
     TermPtr simplifyOpDirect(std::shared_ptr<Op> const & op);
 };

@@ -320,6 +320,7 @@ StepHandler::SimplifyResult StepHandler::simplify(TermPtr const & term, std::opt
     if (type == Term::OP) {
         // First recursively simplify arguments
         auto op = std::dynamic_pointer_cast<Op>(term);
+        if (op->getOp() == "ite") { return shortCircuitSimplifyITE(op); }
         auto const & args = op->getArgs();
         auto results = simplifyArgs(args);
         bool changed =
@@ -339,6 +340,43 @@ StepHandler::SimplifyResult StepHandler::simplify(TermPtr const & term, std::opt
     }
     assert(false);
     throw std::logic_error("Unreachable!");
+}
+
+StepHandler::SimplifyResult StepHandler::shortCircuitSimplifyITE(std::shared_ptr<Op> const & ite) {
+    assert(ite->getOp() == "ite");
+    auto const & args = ite->getArgs();
+    assert(args.size() == 3);
+    Step::Premises finalPremises;
+    // First evaluate the condition
+    auto res = simplify(args[0]);
+    auto conditionSimplified = args[0];
+    auto iteSimplified = ite;
+    if (res) {
+        conditionSimplified = res->first;
+        iteSimplified = std::make_shared<Op>("ite", std::vector{conditionSimplified, args[1], args[2]});
+        recordStep(literals(std::make_shared<Op>("=", std::vector<TermPtr>{ite, iteSimplified})), "cong",
+                   Step::Premises{res->second});
+        finalPremises.premises.push_back(lastStep());
+    }
+    assert(conditionSimplified->getTermType() == Term::TERMINAL and
+           conditionSimplified->getTerminalType() == Term::BOOL);
+    auto const & val = std::dynamic_pointer_cast<Terminal>(conditionSimplified)->getVal();
+    assert(val == "true" or val == "false");
+    auto branch = val == "true" ? args[1] : args[2];
+    recordStep(literals(std::make_shared<Op>("=", std::vector<TermPtr>{iteSimplified, branch})), "ite_simplify", {});
+    finalPremises.premises.push_back(lastStep());
+    auto branchSimplificationResult = simplify(branch);
+    auto simplified = branch;
+    if (branchSimplificationResult) {
+        simplified = branchSimplificationResult->first;
+        finalPremises.premises.push_back(branchSimplificationResult->second);
+    }
+    if (branchSimplificationResult or res) {
+        assert(finalPremises.premises.size() >= 2);
+        recordStep(literals(std::make_shared<Op>("=", std::vector<TermPtr>{ite, simplified})), "trans",
+                   std::move(finalPremises));
+    }
+    return std::make_pair(simplified, lastStep());
 }
 
 namespace {
