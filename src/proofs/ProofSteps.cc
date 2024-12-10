@@ -286,9 +286,11 @@ StepHandler::SimplifyResult StepHandler::simplify(TermPtr const & term, std::opt
     };
 
     // Create simplified
-    auto processResults = [this](TermPtr const & term, std::optional<TermPtr> name, std::vector<SimplifyResult> const & results) {
+    auto processResults = [this](TermPtr const & term, std::optional<TermPtr> & name,
+                                 std::vector<SimplifyResult> const & results) {
         bool isApp = term->getTermType() == Term::APP;
-        auto const & args = isApp ? std::dynamic_pointer_cast<App>(term)->getArgs() : std::dynamic_pointer_cast<Op>(term)->getArgs();
+        auto const & args =
+            isApp ? std::dynamic_pointer_cast<App>(term)->getArgs() : std::dynamic_pointer_cast<Op>(term)->getArgs();
         std::vector<TermPtr> newArgs;
         Step::Premises premises;
         for (std::size_t i = 0; i < results.size(); ++i) {
@@ -300,10 +302,18 @@ StepHandler::SimplifyResult StepHandler::simplify(TermPtr const & term, std::opt
                 newArgs.push_back(args[i]);
             }
         }
-        TermPtr simplifiedTerm = term->getTermType() == Term::APP
-            ? std::static_pointer_cast<Term>(std::make_shared<App>(std::dynamic_pointer_cast<App>(term)->getFun(), std::move(newArgs)))
-            : std::static_pointer_cast<Term>(std::make_shared<Op>(std::dynamic_pointer_cast<Op>(term)->getOp(), std::move(newArgs)));
-        auto congruenceTerm = std::make_shared<Op>("=", std::vector<TermPtr>{(name.has_value() ? name.value() : term), simplifiedTerm});
+        TermPtr simplifiedTerm =
+            term->getTermType() == Term::APP
+                ? std::static_pointer_cast<Term>(
+                      std::make_shared<App>(std::dynamic_pointer_cast<App>(term)->getFun(), std::move(newArgs)))
+                : std::static_pointer_cast<Term>(
+                      std::make_shared<Op>(std::dynamic_pointer_cast<Op>(term)->getOp(), std::move(newArgs)));
+        auto namedTerm = name.has_value()
+                             ? name.value()
+                             : std::make_shared<Op>(
+                                   "!", std::vector<TermPtr>{term, makeName(":named @T" + std::to_string(nameIndex))});
+        if (not name.has_value()) { name = makeName("@T" + std::to_string(nameIndex++)); }
+        auto congruenceTerm = std::make_shared<Op>("=", std::vector<TermPtr>{namedTerm, simplifiedTerm});
         recordStep(literals(congruenceTerm), "cong", std::move(premises));
         return simplifiedTerm;
     };
@@ -314,7 +324,7 @@ StepHandler::SimplifyResult StepHandler::simplify(TermPtr const & term, std::opt
         if (std::none_of(results.begin(), results.end(), [](auto const & result) { return result.has_value(); })) {
             return std::nullopt;
         }
-        auto simplifiedTerm = processResults(term, std::move(name), results);
+        auto simplifiedTerm = processResults(term, name, results);
         return std::make_pair(simplifiedTerm, lastStep());
     }
     if (type == Term::OP) {
@@ -333,8 +343,10 @@ StepHandler::SimplifyResult StepHandler::simplify(TermPtr const & term, std::opt
         }
         auto evaluatedTerm = simplifyOpDirect(std::dynamic_pointer_cast<Op>(opWithArgsSimplified));
         if (changed) { // Derive that the original op is equiv to evaluatedTerm by transitivity
-            assert(firstEquivStep != -1);
-            recordStep(literals(std::make_shared<Op>("=", std::vector<TermPtr>{name.has_value() ? name.value() : op, evaluatedTerm})), "trans", {firstEquivStep, lastStep()});
+            assert(firstEquivStep != static_cast<std::size_t>(-1));
+            assert(name.has_value());
+            recordStep(literals(std::make_shared<Op>("=", std::vector<TermPtr>{name.value(), evaluatedTerm})), "trans",
+                       {firstEquivStep, lastStep()});
         }
         return std::make_pair(evaluatedTerm, lastStep());
     }
