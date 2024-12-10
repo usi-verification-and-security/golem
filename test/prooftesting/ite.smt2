@@ -1,0 +1,6 @@
+(set-logic HORN)
+(declare-fun Q (Int) Bool)
+(assert (forall ((x Int)) (=> (= x 0) (Q x))))
+(assert (forall ((x Int) (c Bool) (d Bool)) (=> (Q x) (Q (ite (and c d) (+ x 1) (- x 1))))))
+(assert (forall ((x Int)) (=> (Q 2) false)))
+(check-sat)
