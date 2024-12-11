@@ -74,6 +74,7 @@ TransitionSystemVerificationResult IMC::finiteRun(TransitionSystem const & ts, u
     solver.assertProp(suffix);
     solver.assertProp(ts.getTransition()); // first step, part of prefix
     PTRef movingInit = ts.getInit();
+    PTRef reachedStates = ts.getInit();
     unsigned iter = 0;
     while (true) {
         solver.push();
@@ -97,14 +98,14 @@ TransitionSystemVerificationResult IMC::finiteRun(TransitionSystem const & ts, u
             PTRef itp = getInterpolant(solver, mask);
             itp = tm.sendFlaThroughTime(itp, -1);
             // if R' => R return False(if R' /\ not R returns True)
-            if (implies(itp, movingInit)) {
+            if (implies(itp, reachedStates)) {
                 if (not computeWitness) { return {VerificationAnswer::SAFE, PTRef_Undef}; }
-                PTRef inductiveInvariant = movingInit;
+                PTRef inductiveInvariant = reachedStates;
                 PTRef finalInductiveInvariant = computeFinalInductiveInvariant(inductiveInvariant, k, ts);
                 return {VerificationAnswer::SAFE, finalInductiveInvariant};
             }
-            // let R = R\/R'
-            movingInit = logic.mkOr(movingInit, itp);
+            movingInit = itp;
+            reachedStates = logic.mkOr(reachedStates, itp);
         }
         iter++;
         solver.pop();
