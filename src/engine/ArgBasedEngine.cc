@@ -29,7 +29,7 @@ public:
         }
     }
 
-    Logic & getLogic() { return logic; }
+    [[nodiscard]] Logic & getLogic() const { return logic; }
 
     [[nodiscard]] auto const & predicatesFor(SymRef symbol) const {
         auto it = symbolsToPredicates.find(symbol);
@@ -65,12 +65,12 @@ public:
         return logic.mkAnd(std::move(args));
     }
 
-    bool operator==(CartesianPredicateAbstractionStates const & other) {
+    bool operator==(CartesianPredicateAbstractionStates const & other) const {
         assert(&other.manager == &this->manager);
         return this->satisfiedPredicates == other.satisfiedPredicates;
     }
 
-    bool operator!=(CartesianPredicateAbstractionStates const & other) { return not(*this == other); }
+    bool operator!=(CartesianPredicateAbstractionStates const & other) const { return not(*this == other); }
 
 private:
     friend class ARG;
@@ -168,7 +168,7 @@ public:
 
     std::vector<NodeId> recheckCoveredNodes();
 
-    bool isCovered(NodeId nodeId) const { return coveredNodes.count(nodeId) > 0; }
+    [[nodiscard]] bool isCovered(NodeId nodeId) const { return coveredNodes.count(nodeId) > 0; }
 };
 
 struct UnprocessedEdge {
@@ -236,7 +236,7 @@ public:
 
     Result solve(Logic & logic) const;
 
-    [[nodiscard]] std::vector<Node> getNodes() const { return nodes; }
+    [[nodiscard]] std::vector<Node> const & getNodes() const { return nodes; }
 };
 
 class EdgeQueue {
@@ -379,7 +379,7 @@ void Algorithm::computeNewUnprocessedEdges(ARG::NodeId nodeId) {
     // TODO: We may get the same edge multiple times if the predicate symbol appears multiple times in the body
     for (EId edge : candidateClauses) {
         // find all instances of edge sources in ARG and check feasibility
-        auto sources = clauses.getSources(edge);
+        auto const & sources = clauses.getSources(edge);
         std::vector<std::vector<ARG::NodeId>> allInstances;
         std::transform(std::begin(sources), std::end(sources), std::back_inserter(allInstances),
                        [&](auto symbol) { return arg.getInstancesFor(symbol); });
