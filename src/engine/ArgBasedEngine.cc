@@ -256,14 +256,6 @@ private:
 };
 
 class Algorithm {
-    ChcDirectedHyperGraph const & clauses;
-    bool computeWitness;
-    AdjacencyListsGraphRepresentation representation;
-    EdgeQueue queue;
-    ARG arg;
-    std::unordered_map<SymRef, std::vector<PTRef>, SymRefHash> lastRefinementInfo;
-    InvalidityWitness witness;
-
 public:
     explicit Algorithm(ChcDirectedHyperGraph const & clauses, bool computeWitness = false)
         : clauses(clauses), computeWitness(computeWitness),
@@ -280,11 +272,19 @@ public:
     VerificationResult run();
 
 private:
+    using RefinementInfo = std::unordered_map<SymRef, std::vector<PTRef>, SymRefHash>;
+    using CEXCheckingResult = std::pair<bool, std::variant<RefinementInfo, std::optional<InvalidityWitness>>>;
+    ChcDirectedHyperGraph const & clauses;
+    bool computeWitness;
+    AdjacencyListsGraphRepresentation representation;
+    EdgeQueue queue;
+    ARG arg;
+
     void computeNewUnprocessedEdges(ARG::NodeId);
     std::pair<ARG::NodeId, bool> computeTarget(UnprocessedEdge const & edge);
-    bool isRealProof(UnprocessedEdge const & edge);
-    void refine();
-    void computeInvalidityWitness(InterpolationTree const & itpTree, Model & model);
+    CEXCheckingResult isRealProof(UnprocessedEdge const & edge);
+    void refine(RefinementInfo &&);
+    InvalidityWitness computeInvalidityWitness(InterpolationTree const & itpTree, Model & model);
 };
 
 namespace {
@@ -308,8 +308,14 @@ VerificationResult Algorithm::run() {
         auto nextEdge = queue.pop();
         EId originalEdge = nextEdge.eid;
         if (clauses.getEdge(originalEdge).to == clauses.getExit()) {
-            if (isRealProof(nextEdge)) { return VerificationResult{VerificationAnswer::UNSAFE, witness}; }
-            refine();
+            auto res = isRealProof(nextEdge);
+            if (res.first) {
+                auto & maybeWitness = std::get<std::optional<InvalidityWitness>>(res.second);
+                return VerificationResult{VerificationAnswer::UNSAFE, maybeWitness.has_value()
+                                                                          ? witness_t{std::move(maybeWitness).value()}
+                                                                          : witness_t{NoWitness{}}};
+            }
+            refine(std::get<RefinementInfo>(std::move(res.second)));
             continue;
         }
         auto [id, isCovered] = computeTarget(nextEdge);
@@ -429,31 +435,33 @@ std::pair<ARG::NodeId, bool> Algorithm::computeTarget(const UnprocessedEdge & ed
     return arg.tryInsertNode(target, std::move(impliedPredicates));
 }
 
-bool Algorithm::isRealProof(UnprocessedEdge const & edge) {
+Algorithm::CEXCheckingResult Algorithm::isRealProof(UnprocessedEdge const & edge) {
     assert(clauses.getEdge(edge.eid).to == clauses.getExit());
     // build the formula/interpolation tree (DAG?)
     auto interpolationTree = InterpolationTree::make(arg, edge);
     auto itpResult = interpolationTree.solve(clauses.getLogic());
-    lastRefinementInfo.clear();
     if (itpResult.isFeasible()) {
-        if (computeWitness) { computeInvalidityWitness(interpolationTree, *itpResult.model); }
+        return std::make_pair(
+            true, computeWitness ? std::make_optional(computeInvalidityWitness(interpolationTree, *itpResult.model))
+                                 : std::nullopt);
     } else {
         TimeMachine timeMachine(clauses.getLogic());
+        RefinementInfo refinementInfo;
         for (auto const & node : interpolationTree.getNodes()) {
             if (node.parent == InterpolationTree::NO_ID) { continue; }
             assert(itpResult.interpolant.count(node.id) > 0);
             PTRef interpolant = itpResult.interpolant.at(node.id);
             PTRef clearedInterpolant = timeMachine.versionedFormulaToUnversioned(interpolant);
             auto symbol = clauses.getTarget(node.clauseId);
-            lastRefinementInfo[symbol].push_back(clearedInterpolant);
+            refinementInfo[symbol].push_back(clearedInterpolant);
         }
+        return std::make_pair(false, std::move(refinementInfo));
     }
-    return itpResult.isFeasible();
 }
 
-void Algorithm::refine() {
+void Algorithm::refine(RefinementInfo && refinementInfo) {
     TRACE(1, "Refining")
-    arg.refine(lastRefinementInfo);
+    arg.refine(refinementInfo);
     // Nodes that were previously subsumed/covered might no longer be covered
     auto uncoveredNodes = arg.recheckCoveredNodes();
     for (auto nodeId : uncoveredNodes) {
@@ -461,7 +469,7 @@ void Algorithm::refine() {
     }
 }
 
-void Algorithm::computeInvalidityWitness(InterpolationTree const & itpTree, Model & model) {
+InvalidityWitness Algorithm::computeInvalidityWitness(InterpolationTree const & itpTree, Model & model) {
     Logic & logic = clauses.getLogic();
     std::unordered_map<InterpolationTree::NodeId, std::vector<std::size_t>> premiseMap;
     InvalidityWitness::Derivation derivation;
@@ -493,7 +501,9 @@ void Algorithm::computeInvalidityWitness(InterpolationTree const & itpTree, Mode
         }
         derivation.addDerivationStep(std::move(step));
     }
+    InvalidityWitness witness;
     witness.setDerivation(std::move(derivation));
+    return witness;
 }
 
 /*********** END of MAIN algorithm ****************/
