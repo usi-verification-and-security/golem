@@ -281,10 +281,10 @@ private:
     ARG arg;
 
     void computeNewUnprocessedEdges(ARG::NodeId);
-    std::pair<ARG::NodeId, bool> computeTarget(UnprocessedEdge const & edge);
-    CEXCheckingResult isRealProof(UnprocessedEdge const & edge);
+    [[nodiscard]] std::pair<ARG::NodeId, bool> computeTarget(UnprocessedEdge const & edge);
+    [[nodiscard]] CEXCheckingResult isRealProof(UnprocessedEdge const & edge) const;
     void refine(RefinementInfo &&);
-    InvalidityWitness computeInvalidityWitness(InterpolationTree const & itpTree, Model & model);
+    [[nodiscard]] InvalidityWitness computeInvalidityWitness(InterpolationTree const & itpTree, Model & model) const;
 };
 
 namespace {
@@ -435,7 +435,7 @@ std::pair<ARG::NodeId, bool> Algorithm::computeTarget(const UnprocessedEdge & ed
     return arg.tryInsertNode(target, std::move(impliedPredicates));
 }
 
-Algorithm::CEXCheckingResult Algorithm::isRealProof(UnprocessedEdge const & edge) {
+Algorithm::CEXCheckingResult Algorithm::isRealProof(UnprocessedEdge const & edge) const {
     assert(clauses.getEdge(edge.eid).to == clauses.getExit());
     // build the formula/interpolation tree (DAG?)
     auto interpolationTree = InterpolationTree::make(arg, edge);
@@ -469,7 +469,7 @@ void Algorithm::refine(RefinementInfo && refinementInfo) {
     }
 }
 
-InvalidityWitness Algorithm::computeInvalidityWitness(InterpolationTree const & itpTree, Model & model) {
+InvalidityWitness Algorithm::computeInvalidityWitness(InterpolationTree const & itpTree, Model & model) const {
     Logic & logic = clauses.getLogic();
     std::unordered_map<InterpolationTree::NodeId, std::vector<std::size_t>> premiseMap;
     InvalidityWitness::Derivation derivation;
