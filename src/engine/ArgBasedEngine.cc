@@ -388,6 +388,11 @@ void Algorithm::computeNewUnprocessedEdges(ARG::NodeId nodeId) {
         std::vector<std::vector<ARG::NodeId>> allInstances;
         std::transform(std::begin(sources), std::end(sources), std::back_inserter(allInstances),
                        [&](auto symbol) { return arg.getInstancesFor(symbol); });
+        for (auto & nodeInstances : allInstances) {
+            nodeInstances.erase(std::remove_if(nodeInstances.begin(), nodeInstances.end(),
+                                               [this](ARG::NodeId nodeId) { return arg.isCovered(nodeId); }),
+                                nodeInstances.end());
+        }
         if (std::any_of(allInstances.begin(), allInstances.end(),
                         [](auto const & nodeInstances) { return nodeInstances.empty(); })) {
             continue;
@@ -402,9 +407,8 @@ void Algorithm::computeNewUnprocessedEdges(ARG::NodeId nodeId) {
                 argSources.push_back(allInstances[i][indices[i]]);
             }
             if (std::find(argSources.begin(), argSources.end(), nodeId) == argSources.end()) { continue; }
-            if (std::any_of(argSources.begin(), argSources.end(), [this](auto sourceId) { return arg.isCovered(sourceId); })) {
-                continue;
-            }
+            assert(std::none_of(argSources.begin(), argSources.end(),
+                                [this](auto sourceId) { return arg.isCovered(sourceId); }));
             UnprocessedEdge newEdge{.eid = edge, .sources = std::move(argSources)};
             if (not queue.has(newEdge) and checker.isFeasible(argSources)) { queue.addEdge(std::move(newEdge)); }
         }
@@ -465,6 +469,7 @@ void Algorithm::refine(RefinementInfo && refinementInfo) {
     arg.refine(refinementInfo);
     // Nodes that were previously subsumed/covered might no longer be covered
     auto uncoveredNodes = arg.recheckCoveredNodes();
+    TRACE(1, "Number of uncovered nodes: " + std::to_string(uncoveredNodes.size()));
     for (auto nodeId : uncoveredNodes) {
         computeNewUnprocessedEdges(nodeId);
     }
