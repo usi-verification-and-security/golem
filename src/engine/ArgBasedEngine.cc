@@ -474,6 +474,7 @@ InvalidityWitness Algorithm::computeInvalidityWitness(InterpolationTree const & 
     std::unordered_map<InterpolationTree::NodeId, std::vector<std::size_t>> premiseMap;
     InvalidityWitness::Derivation derivation;
     using DerivationStep = InvalidityWitness::Derivation::DerivationStep;
+    std::unordered_map<PTRef, std::size_t, PTRefHash> factToStepIndex;
     std::size_t stepIndex = 0;
     // First step is just true
     derivation.addDerivationStep({.index = stepIndex++,
@@ -481,25 +482,33 @@ InvalidityWitness Algorithm::computeInvalidityWitness(InterpolationTree const & 
                                   .derivedFact = logic.getTerm_true(),
                                   .clauseId = {static_cast<id_t>(-1)}});
 
+    factToStepIndex.insert({derivation.last().derivedFact, derivation.last().index});
     auto const & nodes = itpTree.getNodes();
     for (auto it = nodes.rbegin(); it != nodes.rend(); ++it) {
         auto const & node = *it;
-        DerivationStep step;
-        step.derivedFact = [&]() {
+        PTRef derivedFact = [&]() {
             PTRef nodeInstance = itpTree.getInstanceFor(node.id);
             auto vars = TermUtils(logic).predicateArgsInOrder(nodeInstance);
             vec<PTRef> varValues(static_cast<int>(vars.size()), PTRef_Undef);
             std::transform(vars.begin(), vars.end(), varValues.begin(), [&](PTRef var) { return model.evaluate(var); });
             return logic.insertTerm(logic.getSymRef(nodeInstance), std::move(varValues));
         }();
-        step.index = stepIndex++;
-        step.clauseId = node.clauseId;
-        step.premises = tryGetValue(premiseMap, node.id).value_or(std::vector<std::size_t>{0});
+
+        auto mit = factToStepIndex.find(derivedFact);
+        if (mit == factToStepIndex.end()) {
+            DerivationStep step;
+            step.derivedFact = derivedFact;
+            step.index = stepIndex++;
+            step.clauseId = node.clauseId;
+            step.premises = tryGetValue(premiseMap, node.id).value_or(std::vector<std::size_t>{0});
+
+            std::tie(mit, std::ignore) = factToStepIndex.insert({derivedFact, step.index});
+            derivation.addDerivationStep(std::move(step));
+        }
         if (node.parent != InterpolationTree::NO_ID) {
             auto & parentPremises = premiseMap[node.parent];
-            parentPremises.insert(parentPremises.begin(), step.index);
+            parentPremises.insert(parentPremises.begin(), mit->second);
         }
-        derivation.addDerivationStep(std::move(step));
     }
     InvalidityWitness witness;
     witness.setDerivation(std::move(derivation));
