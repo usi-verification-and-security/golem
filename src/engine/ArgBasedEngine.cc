@@ -382,7 +382,6 @@ void Algorithm::computeNewUnprocessedEdges(ARG::NodeId nodeId) {
     };
 
     auto const & candidateClauses = representation.getOutgoingEdgesFor(arg.getPredicateSymbol(nodeId));
-    // TODO: We may get the same edge multiple times if the predicate symbol appears multiple times in the body
     for (EId edge : candidateClauses) {
         // find all instances of edge sources in ARG and check feasibility
         auto const & sources = clauses.getSources(edge);
@@ -395,13 +394,15 @@ void Algorithm::computeNewUnprocessedEdges(ARG::NodeId nodeId) {
         }
         std::vector<std::size_t> indices(sources.size(), 0u);
         Checker checker(clauses.getEdgeLabel(edge), clauses.getLogic(), arg);
+        std::vector<ARG::NodeId> argSources;
+        argSources.reserve(sources.size());
         for (; indices[0] != allInstances[0].size(); increment(indices, allInstances)) {
-            std::vector<ARG::NodeId> argSources;
+            argSources.clear();
             for (std::size_t i = 0; i < indices.size(); ++i) {
                 argSources.push_back(allInstances[i][indices[i]]);
             }
             if (std::find(argSources.begin(), argSources.end(), nodeId) == argSources.end()) { continue; }
-            if (std::any_of(argSources.begin(), argSources.end(), [&](auto nodeId) { return arg.isCovered(nodeId); })) {
+            if (std::any_of(argSources.begin(), argSources.end(), [this](auto sourceId) { return arg.isCovered(sourceId); })) {
                 continue;
             }
             UnprocessedEdge newEdge{.eid = edge, .sources = std::move(argSources)};
