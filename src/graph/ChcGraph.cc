@@ -259,7 +259,9 @@ AdjacencyListsGraphRepresentation AdjacencyListsGraphRepresentation::from(const 
         incoming[edge.to].push_back(edge.id);
         for (SymRef sym : edge.from) {
             incoming[sym];
-            outgoing[sym].push_back(edge.id);
+            auto & out = outgoing[sym];
+            // We do not want to add this edge more than once (if the same source node is present more than once)
+            if (out.empty() or out.back() != edge.id) { out.push_back(edge.id); }
         }
         outgoing[edge.to];
     });
