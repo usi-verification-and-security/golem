@@ -65,18 +65,18 @@ class AdjacencyListsGraphRepresentation {
 public:
     static AdjacencyListsGraphRepresentation from(ChcDirectedGraph const& graph);
     static AdjacencyListsGraphRepresentation from(ChcDirectedHyperGraph const& graph);
-    std::vector<EId> const & getIncomingEdgesFor(SymRef sym) const {
+    [[nodiscard]] std::vector<EId> const & getIncomingEdgesFor(SymRef sym) const {
         assert(incomingEdges.count(sym) > 0);
         return incomingEdges.at(sym);
     }
-    std::vector<EId> const & getOutgoingEdgesFor(SymRef sym) const {
+    [[nodiscard]] std::vector<EId> const & getOutgoingEdgesFor(SymRef sym) const {
         assert(outgoingEdges.count(sym) > 0);
         return outgoingEdges.at(sym);
     }
 
-    std::size_t getVertexNum() const { return incomingEdges.size(); }
+    [[nodiscard]] std::size_t getVertexNum() const { return incomingEdges.size(); }
 
-    std::vector<Node> getNodes() const {
+    [[nodiscard]] std::vector<Node> getNodes() const {
         std::vector<Node> res;
         res.reserve(incomingEdges.size());
         for (auto const & entry : incomingEdges) {
@@ -142,11 +142,11 @@ class ChcDirectedGraph {
     WitnessInfo contractConnectedVertices(std::vector<EId> edges);
     void mergeEdges(EId incoming, EId outgoing);
     void deleteNode(SymRef sym);
-    PTRef mergeLabels(DirectedEdge const & incoming, DirectedEdge const & outgoing);
+    PTRef mergeLabels(DirectedEdge const & incoming, DirectedEdge const & outgoing) const;
     void mergeMultiEdges();
 
 public:
-    ChcDirectedGraph(std::vector<DirectedEdge> edges, LinearCanonicalPredicateRepresentation predicates,
+    ChcDirectedGraph(std::vector<DirectedEdge> const & edges, LinearCanonicalPredicateRepresentation predicates,
                      Logic & logic) :
          predicates(std::move(predicates)), logic(logic) {
         std::size_t maxId = 0;
@@ -163,7 +163,7 @@ public:
     Logic & getLogic() const { return logic; }
     void toDot(std::ostream& out, bool full = false) const;
     ChcDirectedGraph reverse() const;
-    DirectedEdge reverseEdge(DirectedEdge const & edge, TermUtils & utils) const;
+    DirectedEdge reverseEdge(DirectedEdge const & edge, TermUtils const & utils) const;
 
     LinearCanonicalPredicateRepresentation getPredicateRepresentation() const { return predicates; }
 
@@ -253,7 +253,7 @@ public:
     public:
         explicit VertexInstances(ChcDirectedHyperGraph const & graph);
 
-        unsigned getInstanceNumber(EId eid, unsigned sourceIndex) const {
+        [[nodiscard]] unsigned getInstanceNumber(EId eid, unsigned sourceIndex) const {
             return instanceCounter.at(eid)[sourceIndex];
         }
     };
@@ -351,7 +351,7 @@ private:
 
     DirectedHyperEdge mergeEdgePair(EId first, EId second, bool requiresRenamingAuxiliaryVars = false);
     DirectedHyperEdge mergeEdges(std::vector<EId> const & chain);
-    PTRef mergeLabels(std::vector<EId> const & chain);
+    PTRef mergeLabels(std::vector<EId> const & chain) const;
 };
 
 std::optional<EId> getSelfLoopFor(SymRef, ChcDirectedGraph const & graph, AdjacencyListsGraphRepresentation const & adjacencyRepresentation);
@@ -364,7 +364,7 @@ class ReverseDFS {
     AdjacencyListsGraphRepresentation const & adjacencyRepresentation;
     std::unordered_set<SymRef, SymRefHash> marked;
 
-    bool isMarked(SymRef sym) const { return marked.find(sym) != marked.end(); }
+    [[nodiscard]] bool isMarked(SymRef sym) const { return marked.find(sym) != marked.end(); }
     void mark(SymRef sym) { marked.insert(sym); }
 
     template<typename TPreorderAction, typename TPostorderAction>
