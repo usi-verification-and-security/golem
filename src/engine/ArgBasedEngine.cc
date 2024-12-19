@@ -169,6 +169,10 @@ public:
     std::vector<NodeId> recheckCoveredNodes();
 
     [[nodiscard]] bool isCovered(NodeId nodeId) const { return coveredNodes.count(nodeId) > 0; }
+
+    template<typename C>
+    [[nodiscard]] std::set<PTRef> computePropagatedPredicates(C const & candidates, std::vector<NodeId> const & sources,
+                                                              PTRef edgeConstraint) const;
 };
 
 struct UnprocessedEdge {
@@ -416,27 +420,9 @@ void Algorithm::computeNewUnprocessedEdges(ARG::NodeId nodeId) {
 }
 
 std::pair<ARG::NodeId, bool> Algorithm::computeTarget(const UnprocessedEdge & edge) {
-    Logic & logic = clauses.getLogic();
-    VersionManager versionManager{logic};
-    std::unordered_map<SymRef, int, SymRefHash> sourcesCount;
-    SMTSolver solver(logic, SMTSolver::WitnessProduction::NONE);
-    solver.assertProp(clauses.getEdgeLabel(edge.eid));
-    for (auto sourceId : edge.sources) {
-        PTRef reachedStates = arg.getReachedStates(sourceId);
-        PTRef versioned =
-            versionManager.baseFormulaToSource(reachedStates, sourcesCount[arg.getPredicateSymbol(sourceId)]++);
-        solver.assertProp(versioned);
-    }
     auto target = clauses.getEdge(edge.eid).to;
-    std::set<PTRef> impliedPredicates;
-    for (PTRef predicate : arg.getPredicatesFor(target)) {
-        solver.push();
-        PTRef versionedPredicate = versionManager.baseFormulaToTarget(predicate);
-        solver.assertProp(logic.mkNot(versionedPredicate));
-        auto res = solver.check();
-        if (res == SMTSolver::Answer::UNSAT) { impliedPredicates.insert(predicate); }
-        solver.pop();
-    }
+    auto const & candidates = arg.getPredicatesFor(target);
+    auto impliedPredicates = arg.computePropagatedPredicates(candidates, edge.sources, clauses.getEdgeLabel(edge.eid));
     return arg.tryInsertNode(target, std::move(impliedPredicates));
 }
 
@@ -764,30 +750,11 @@ void ARG::refine(std::unordered_map<SymRef, std::vector<PTRef>, SymRefHash> cons
         if (refinementInfo.count(node.predicateSymbol) == 0) { continue; }
         auto const & edges = getIncomingEdges(nid);
         if (edges.size() != 1) { throw std::logic_error{"This approach works only for single incoming edge!"}; }
-        // TODO: Unify with ARG::computeTarget
         auto const & edge = edges[0];
-        Logic & logic = clauses.getLogic();
-        VersionManager versionManager{logic};
-        std::unordered_map<SymRef, int, SymRefHash> sourcesCount;
-        SMTSolver solver(logic, SMTSolver::WitnessProduction::NONE);
-        solver.assertProp(clauses.getEdgeLabel(edge.clauseId));
-        for (auto sourceId : edge.sources) {
-            PTRef reachedStates = getReachedStates(sourceId);
-            PTRef versioned =
-                versionManager.baseFormulaToSource(reachedStates, sourcesCount[getPredicateSymbol(sourceId)]++);
-            solver.assertProp(versioned);
-        }
-        auto target = clauses.getEdge(edge.clauseId).to;
-        assert(target == node.predicateSymbol);
-        std::set<PTRef> impliedPredicates;
-        for (PTRef predicate : refinementInfo.at(target)) {
-            solver.push();
-            PTRef versionedPredicate = versionManager.baseFormulaToTarget(predicate);
-            solver.assertProp(logic.mkNot(versionedPredicate));
-            auto res = solver.check();
-            if (res == SMTSolver::Answer::UNSAT) { impliedPredicates.insert(predicate); }
-            solver.pop();
-        }
+        assert(clauses.getEdge(edge.clauseId).to == node.predicateSymbol);
+        auto const & candidates = refinementInfo.at(node.predicateSymbol);
+        auto impliedPredicates =
+            computePropagatedPredicates(candidates, edge.sources, clauses.getEdgeLabel(edge.clauseId));
         node.reachedStates->refine(impliedPredicates);
     }
 }
@@ -814,4 +781,30 @@ std::vector<ARG::NodeId> ARG::recheckCoveredNodes() {
         coveredNodes.erase(nodeId);
     }
     return uncoveredNodes;
+}
+
+template<typename C>
+std::set<PTRef> ARG::computePropagatedPredicates(C const & candidates, std::vector<NodeId> const & sources,
+                                                 PTRef edgeConstraint) const {
+    Logic & logic = clauses.getLogic();
+    VersionManager versionManager{logic};
+    std::unordered_map<SymRef, int, SymRefHash> sourcesCount;
+    SMTSolver solver(logic, SMTSolver::WitnessProduction::NONE);
+    solver.assertProp(edgeConstraint);
+    for (auto sourceId : sources) {
+        PTRef reachedStates = getReachedStates(sourceId);
+        PTRef versioned =
+            versionManager.baseFormulaToSource(reachedStates, sourcesCount[getPredicateSymbol(sourceId)]++);
+        solver.assertProp(versioned);
+    }
+    std::set<PTRef> impliedPredicates;
+    for (PTRef predicate : candidates) {
+        solver.push();
+        PTRef versionedPredicate = versionManager.baseFormulaToTarget(predicate);
+        solver.assertProp(logic.mkNot(versionedPredicate));
+        auto res = solver.check();
+        if (res == SMTSolver::Answer::UNSAT) { impliedPredicates.insert(predicate); }
+        solver.pop();
+    }
+    return impliedPredicates;
 }
