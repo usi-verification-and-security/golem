@@ -77,6 +77,8 @@ private:
     void refine(PredicateAbstractionManager::Predicates const & newPredicates) {
         satisfiedPredicates.insert(newPredicates.begin(), newPredicates.end());
     }
+
+    [[nodiscard]] PredicateAbstractionManager::Predicates const & getPredicates() const { return satisfiedPredicates; }
 };
 
 struct ARGNode {
@@ -94,6 +96,8 @@ public:
         NodeId target;
         EId clauseId;
     };
+
+    using RefinementInfo = std::unordered_map<SymRef, std::set<PTRef>, SymRefHash>;
 
 private:
     ChcDirectedHyperGraph const & clauses;
@@ -164,7 +168,7 @@ public:
 
     [[nodiscard]] auto const & getClauses() const { return clauses; }
 
-    void refine(std::unordered_map<SymRef, std::vector<PTRef>, SymRefHash> const & refinementInfo);
+    void refine(RefinementInfo const & refinementInfo);
 
     std::vector<NodeId> recheckCoveredNodes();
 
@@ -276,7 +280,7 @@ public:
     VerificationResult run();
 
 private:
-    using RefinementInfo = std::unordered_map<SymRef, std::vector<PTRef>, SymRefHash>;
+    using RefinementInfo = ARG::RefinementInfo;
     using CEXCheckingResult = std::pair<bool, std::variant<RefinementInfo, std::optional<InvalidityWitness>>>;
     ChcDirectedHyperGraph const & clauses;
     bool computeWitness;
@@ -444,7 +448,7 @@ Algorithm::CEXCheckingResult Algorithm::isRealProof(UnprocessedEdge const & edge
             PTRef interpolant = itpResult.interpolant.at(node.id);
             PTRef clearedInterpolant = timeMachine.versionedFormulaToUnversioned(interpolant);
             auto symbol = clauses.getTarget(node.clauseId);
-            refinementInfo[symbol].push_back(clearedInterpolant);
+            refinementInfo[symbol].insert(clearedInterpolant);
         }
         return std::make_pair(false, std::move(refinementInfo));
     }
@@ -736,15 +740,11 @@ bool EdgeQueue::has(const UnprocessedEdge & edge) const {
     return std::find(queue.begin(), queue.end(), edge) != queue.end();
 }
 
-void ARG::refine(std::unordered_map<SymRef, std::vector<PTRef>, SymRefHash> const & refinementInfo) {
-    for (auto && [predicateSymbol, newPredicates] : refinementInfo) {
-        for (PTRef newPredicate : newPredicates) {
-            predicateManager.addPredicate(predicateSymbol, newPredicate);
-        }
-    }
+void ARG::refine(RefinementInfo const & refinementInfo) {
     // Regenerate ARG
     // We check the nodes in order such that all predecessors are checked before the successor.
     // Since we add nodes as they are created, this condition is guaranteed in ARG::nodes
+    std::vector<bool> changed(nodes.size(), false);
     for (NodeId nid = 0; nid != nodes.size(); ++nid) {
         auto const & node = nodes[nid];
         if (refinementInfo.count(node.predicateSymbol) == 0) { continue; }
@@ -752,10 +752,27 @@ void ARG::refine(std::unordered_map<SymRef, std::vector<PTRef>, SymRefHash> cons
         if (edges.size() != 1) { throw std::logic_error{"This approach works only for single incoming edge!"}; }
         auto const & edge = edges[0];
         assert(clauses.getEdge(edge.clauseId).to == node.predicateSymbol);
-        auto const & candidates = refinementInfo.at(node.predicateSymbol);
+        bool sourceChanged = std::any_of(edge.sources.begin(), edge.sources.end(), [&changed](NodeId nodeId) {
+            return changed[nodeId];
+        });
+
+        RefinementInfo::mapped_type candidates;
+        for (PTRef candidate : refinementInfo.at(node.predicateSymbol)) {
+            bool newPredicate = predicateManager.predicatesFor(node.predicateSymbol).count(candidate) == 0;
+            if (newPredicate or (sourceChanged and node.reachedStates->satisfiedPredicates.count(candidate) == 0)) {
+                candidates.insert(candidate);
+            }
+        }
         auto impliedPredicates =
             computePropagatedPredicates(candidates, edge.sources, clauses.getEdgeLabel(edge.clauseId));
+        changed[nid] = not impliedPredicates.empty();
         node.reachedStates->refine(impliedPredicates);
+    }
+
+    for (auto && [predicateSymbol, newPredicates] : refinementInfo) {
+        for (PTRef newPredicate : newPredicates) {
+            predicateManager.addPredicate(predicateSymbol, newPredicate);
+        }
     }
 }
 
