@@ -440,13 +440,14 @@ Algorithm::CEXCheckingResult Algorithm::isRealProof(UnprocessedEdge const & edge
             true, computeWitness ? std::make_optional(computeInvalidityWitness(interpolationTree, *itpResult.model))
                                  : std::nullopt);
     } else {
-        TimeMachine timeMachine(clauses.getLogic());
+        TimeMachine const timeMachine(clauses.getLogic());
         RefinementInfo refinementInfo;
         for (auto const & node : interpolationTree.getNodes()) {
             if (node.parent == InterpolationTree::NO_ID) { continue; }
             assert(itpResult.interpolant.count(node.id) > 0);
-            PTRef interpolant = itpResult.interpolant.at(node.id);
-            PTRef clearedInterpolant = timeMachine.versionedFormulaToUnversioned(interpolant);
+            PTRef const interpolant = itpResult.interpolant.at(node.id);
+            if (interpolant == clauses.getLogic().getTerm_true()) { continue; }
+            PTRef const clearedInterpolant = timeMachine.versionedFormulaToUnversioned(interpolant);
             auto symbol = clauses.getTarget(node.clauseId);
             refinementInfo[symbol].insert(clearedInterpolant);
         }
