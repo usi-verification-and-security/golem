@@ -613,6 +613,7 @@ void InterpolationTree::computeLabels(ARG const & arg) {
 
 InterpolationTree::Result InterpolationTree::solve(Logic & logic) const {
     SMTSolver solver(logic, SMTSolver::WitnessProduction::MODEL_AND_INTERPOLANTS);
+    solver.getConfig().setSimplifyInterpolant(4);
     for (auto const & node : nodes) {
         assert(node.parent == InterpolationTree::NO_ID or node.id > node.parent);
         solver.assertProp(node.label);
