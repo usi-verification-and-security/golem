@@ -745,9 +745,8 @@ void ARG::refine(RefinementInfo const & refinementInfo) {
     // We check the nodes in order such that all predecessors are checked before the successor.
     // Since we add nodes as they are created, this condition is guaranteed in ARG::nodes
     std::vector<bool> changed(nodes.size(), false);
-    for (NodeId nid = 0; nid != nodes.size(); ++nid) {
+    for (NodeId nid = 1; nid != nodes.size(); ++nid) {
         auto const & node = nodes[nid];
-        if (refinementInfo.count(node.predicateSymbol) == 0) { continue; }
         auto const & edges = getIncomingEdges(nid);
         if (edges.size() != 1) { throw std::logic_error{"This approach works only for single incoming edge!"}; }
         auto const & edge = edges[0];
@@ -755,14 +754,26 @@ void ARG::refine(RefinementInfo const & refinementInfo) {
         bool sourceChanged = std::any_of(edge.sources.begin(), edge.sources.end(), [&changed](NodeId nodeId) {
             return changed[nodeId];
         });
-
+        auto it = refinementInfo.find(node.predicateSymbol);
+        bool hasPotentiallyNewPredicates = it != refinementInfo.end();
+        if (not sourceChanged and not hasPotentiallyNewPredicates) { continue; }
+        auto const & existingPredicates = predicateManager.predicatesFor(node.predicateSymbol);
         RefinementInfo::mapped_type candidates;
-        for (PTRef candidate : refinementInfo.at(node.predicateSymbol)) {
-            bool newPredicate = predicateManager.predicatesFor(node.predicateSymbol).count(candidate) == 0;
-            if (newPredicate or (sourceChanged and node.reachedStates->satisfiedPredicates.count(candidate) == 0)) {
-                candidates.insert(candidate);
+        if (hasPotentiallyNewPredicates) {
+            for (PTRef candidate : it->second) {
+                if (existingPredicates.count(candidate) == 0) {
+                    candidates.insert(candidate);
+                }
             }
         }
+        if (sourceChanged) { // We need to recheck all existing predicates that have not held already
+            for (PTRef candidate : existingPredicates) {
+                if (node.reachedStates->satisfiedPredicates.count(candidate) == 0) {
+                    candidates.insert(candidate);
+                }
+            }
+        }
+        if (candidates.empty()) { continue; }
         auto impliedPredicates =
             computePropagatedPredicates(candidates, edge.sources, clauses.getEdgeLabel(edge.clauseId));
         changed[nid] = not impliedPredicates.empty();

@@ -240,3 +240,56 @@ TEST_F(PredicateAbstractionTest, test_OneOfTwo_Unsafe) {
     ARGBasedEngine engine(*logic, options);
     solveSystem(clauses, engine, VerificationAnswer::UNSAFE, true);
 }
+
+
+TEST_F(PredicateAbstractionTest, test_Regression_Unsafe) {
+    options.addOption(Options::COMPUTE_WITNESS, "true");
+    SymRef S1 = mkPredicateSymbol("S1", {intSort()});
+    SymRef S2 = mkPredicateSymbol("S2", {intSort()});
+    SymRef S3 = mkPredicateSymbol("S3", {intSort()});
+    // true => S1(0)
+    // S1(0) => S1(1)
+    // S1(1) => S2(0)
+    // S2(1) => false
+    // S2(0) => S3(0)
+    // false => S3(x)
+    // S2(0) => S2(1)
+    // S3(0) => S2(1)
+
+    std::vector<ChClause> clauses{
+        {// true => S1(0)
+            ChcHead{UninterpretedPredicate{instantiatePredicate(S1, {zero})}},
+            ChcBody{{logic->getTerm_true()}, {}}
+        },
+        {// S1(0) => S1(1)
+            ChcHead{UninterpretedPredicate{instantiatePredicate(S1, {one})}},
+            ChcBody{{logic->getTerm_true()}, {UninterpretedPredicate{instantiatePredicate(S1, {zero})}}}
+        },
+        {// S1(1) => S2(0)
+            ChcHead{UninterpretedPredicate{instantiatePredicate(S2, {zero})}},
+            ChcBody{{logic->getTerm_true()}, {UninterpretedPredicate{instantiatePredicate(S1, {one})}}}
+        },
+        {// S2(1) => false
+            ChcHead{UninterpretedPredicate{logic->getTerm_false()}},
+            ChcBody{{logic->getTerm_true()}, {UninterpretedPredicate{instantiatePredicate(S2, {one})}}}
+        },
+        {// S2(0) => S3(0)
+            ChcHead{UninterpretedPredicate{instantiatePredicate(S3, {zero})}},
+            ChcBody{{logic->getTerm_true()}, {UninterpretedPredicate{instantiatePredicate(S2, {zero})}}}
+        },
+        {// false => S3(x)
+            ChcHead{UninterpretedPredicate{instantiatePredicate(S3, {x})}},
+            ChcBody{{logic->getTerm_false()}, {}}
+        },
+        {// S2(0) => S2(1)
+            ChcHead{UninterpretedPredicate{instantiatePredicate(S2, {one})}},
+            ChcBody{{logic->getTerm_true()}, {UninterpretedPredicate{instantiatePredicate(S2, {zero})}}}
+        },
+        {// S3(0) => S2(1)
+            ChcHead{UninterpretedPredicate{instantiatePredicate(S2, {one})}},
+            ChcBody{{logic->getTerm_true()}, {UninterpretedPredicate{instantiatePredicate(S3, {zero})}}}
+        }
+    };
+    ARGBasedEngine engine(*logic, options);
+    solveSystem(clauses, engine, VerificationAnswer::UNSAFE, true);
+}
