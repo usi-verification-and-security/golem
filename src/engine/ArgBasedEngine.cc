@@ -126,13 +126,12 @@ public:
 
     /// Returns the ID of the new node with the given symbol and predicates and bool flag indicating if this new node
     /// is covered (subsumed) by an existing node in ARG
-    /// NOTE: Currently we check exact match, this can be improved with subsumption
     std::pair<NodeId, bool> tryInsertNode(SymRef symbol, PredicateAbstractionManager::Predicates && predicates) {
         ARGNode node{symbol,
                      std::make_unique<CartesianPredicateAbstractionStates>(predicateManager, std::move(predicates))};
         auto & existingInstances = instances.at(symbol);
-        auto it = std::find_if(existingInstances.begin(), existingInstances.end(),
-                               [&](NodeId id) { return *nodes[id].reachedStates == *node.reachedStates; });
+        auto const it = std::find_if(existingInstances.begin(), existingInstances.end(),
+                               [&](NodeId id) { return isCoveredByExistingInstance(*node.reachedStates, *nodes[id].reachedStates); });
         bool covered = it != existingInstances.end();
         auto id = nodes.size();
         nodes.push_back(std::move(node));
@@ -177,6 +176,12 @@ public:
     template<typename C>
     [[nodiscard]] std::set<PTRef> computePropagatedPredicates(C const & candidates, std::vector<NodeId> const & sources,
                                                               PTRef edgeConstraint) const;
+private:
+    /// NOTE: Currently we check exact match, or if the existing instance have no satisfied predicates.
+    /// This can be improved with proper subsumption
+    static bool isCoveredByExistingInstance(CartesianPredicateAbstractionStates const & candidate, CartesianPredicateAbstractionStates const & existingInstance) {
+        return existingInstance.getPredicates().empty() or candidate == existingInstance;
+    }
 };
 
 struct UnprocessedEdge {
@@ -792,15 +797,16 @@ void ARG::refine(RefinementInfo const & refinementInfo) {
 }
 
 std::vector<ARG::NodeId> ARG::recheckCoveredNodes() {
-    std::vector<ARG::NodeId> uncoveredNodes;
+    std::vector<NodeId> uncoveredNodes;
     for (auto & nodePair : coveredNodes) {
-        auto & coveree = nodePair.first;
+        auto const & coveree = nodePair.first;
         auto & coverer = nodePair.second;
-        if (*nodes[coveree].reachedStates == *nodes[coverer].reachedStates) { continue; }
+        auto const & covereeReachedStates = *nodes[coveree].reachedStates;
+        if (isCoveredByExistingInstance(covereeReachedStates, *nodes[coverer].reachedStates)) { continue; }
         auto const & symbolInstances = instances.at(nodes[coveree].predicateSymbol);
         auto it = std::find_if(symbolInstances.begin(), symbolInstances.end(), [&](NodeId other) {
             return other != coveree and coveredNodes.count(other) == 0 and
-                   *nodes[other].reachedStates == *nodes[coveree].reachedStates;
+                   isCoveredByExistingInstance(covereeReachedStates, *nodes[other].reachedStates);
         });
         if (it != symbolInstances.end()) {
             TRACE(1, "Found other coverer")
