@@ -307,6 +307,33 @@ void increment(std::vector<std::size_t> & indices, std::vector<std::vector<ARG::
         }
     }
 }
+
+struct Checker {
+    Logic & logic;
+    SMTSolver solver;
+    ARG const & arg;
+
+    Checker(PTRef edgeConstraint, Logic & logic, ARG const & arg)
+        : logic(logic), solver(logic, SMTSolver::WitnessProduction::NONE), arg(arg) {
+        solver.assertProp(edgeConstraint);
+    }
+
+    bool isFeasible(std::vector<ARG::NodeId> const & sources) {
+        solver.push();
+        std::unordered_map<SymRef, int, SymRefHash> sourceCounts;
+        VersionManager versionManager{logic};
+        for (auto sourceId : sources) {
+            PTRef reachedStates = arg.getReachedStates(sourceId);
+            PTRef versionedStates =
+                versionManager.baseFormulaToSource(reachedStates, sourceCounts[arg.getPredicateSymbol(sourceId)]++);
+            solver.assertProp(versionedStates);
+        }
+        auto res = solver.check();
+        bool infeasible = res == SMTSolver::Answer::UNSAT;
+        solver.pop();
+        return not infeasible;
+    }
+};
 } // namespace
 
 /*********** MAIN algorithm ****************/
@@ -315,6 +342,9 @@ VerificationResult Algorithm::run() {
     while (not queue.isEmpty()) {
         auto nextEdge = queue.pop();
         EId originalEdge = nextEdge.eid;
+        if (not Checker(clauses.getEdgeLabel(originalEdge), clauses.getLogic(), arg).isFeasible(nextEdge.sources)) {
+            continue;
+        }
         if (clauses.getEdge(originalEdge).to == clauses.getExit()) {
             auto res = isRealProof(nextEdge);
             if (res.first) {
@@ -362,33 +392,6 @@ VerificationResult Algorithm::run() {
 }
 
 void Algorithm::computeNewUnprocessedEdges(ARG::NodeId nodeId) {
-    struct Checker {
-        Logic & logic;
-        SMTSolver solver;
-        ARG const & arg;
-
-        Checker(PTRef edgeConstraint, Logic & logic, ARG const & arg)
-            : logic(logic), solver(logic, SMTSolver::WitnessProduction::NONE), arg(arg) {
-            solver.assertProp(edgeConstraint);
-        }
-
-        bool isFeasible(std::vector<ARG::NodeId> const & sources) {
-            solver.push();
-            std::unordered_map<SymRef, int, SymRefHash> sourceCounts;
-            VersionManager versionManager{logic};
-            for (auto sourceId : sources) {
-                PTRef reachedStates = arg.getReachedStates(sourceId);
-                PTRef versionedStates =
-                    versionManager.baseFormulaToSource(reachedStates, sourceCounts[arg.getPredicateSymbol(sourceId)]++);
-                solver.assertProp(versionedStates);
-            }
-            auto res = solver.check();
-            bool infeasible = res == SMTSolver::Answer::UNSAT;
-            solver.pop();
-            return not infeasible;
-        }
-    };
-
     auto const & candidateClauses = representation.getOutgoingEdgesFor(arg.getPredicateSymbol(nodeId));
     for (EId edge : candidateClauses) {
         // find all instances of edge sources in ARG and check feasibility
@@ -406,7 +409,6 @@ void Algorithm::computeNewUnprocessedEdges(ARG::NodeId nodeId) {
             continue;
         }
         std::vector<std::size_t> indices(sources.size(), 0u);
-        Checker checker(clauses.getEdgeLabel(edge), clauses.getLogic(), arg);
         std::vector<ARG::NodeId> argSources;
         argSources.reserve(sources.size());
         for (; indices[0] != allInstances[0].size(); increment(indices, allInstances)) {
@@ -418,7 +420,7 @@ void Algorithm::computeNewUnprocessedEdges(ARG::NodeId nodeId) {
             assert(std::none_of(argSources.begin(), argSources.end(),
                                 [this](auto sourceId) { return arg.isCovered(sourceId); }));
             UnprocessedEdge newEdge{.eid = edge, .sources = std::move(argSources)};
-            if (not queue.has(newEdge) and checker.isFeasible(argSources)) { queue.addEdge(std::move(newEdge)); }
+            if (not queue.has(newEdge)) { queue.addEdge(std::move(newEdge)); }
         }
     }
 }
