@@ -130,8 +130,9 @@ public:
         ARGNode node{symbol,
                      std::make_unique<CartesianPredicateAbstractionStates>(predicateManager, std::move(predicates))};
         auto & existingInstances = instances.at(symbol);
-        auto const it = std::find_if(existingInstances.begin(), existingInstances.end(),
-                               [&](NodeId id) { return isCoveredByExistingInstance(*node.reachedStates, *nodes[id].reachedStates); });
+        auto const it = std::find_if(existingInstances.begin(), existingInstances.end(), [&](NodeId id) {
+            return isCoveredByExistingInstance(*node.reachedStates, *nodes[id].reachedStates);
+        });
         bool covered = it != existingInstances.end();
         auto id = nodes.size();
         nodes.push_back(std::move(node));
@@ -176,8 +177,10 @@ public:
     template<typename C>
     [[nodiscard]] std::set<PTRef> computePropagatedPredicates(C const & candidates, std::vector<NodeId> const & sources,
                                                               PTRef edgeConstraint) const;
+
 private:
-    static bool isCoveredByExistingInstance(CartesianPredicateAbstractionStates const & candidate, CartesianPredicateAbstractionStates const & existingInstance) {
+    static bool isCoveredByExistingInstance(CartesianPredicateAbstractionStates const & candidate,
+                                            CartesianPredicateAbstractionStates const & existingInstance) {
         auto const & existingPredicates = existingInstance.getPredicates();
         if (existingPredicates.empty()) { return true; }
         auto const & candidatePredicates = candidate.getPredicates();
@@ -763,9 +766,8 @@ void ARG::refine(RefinementInfo const & refinementInfo) {
         if (edges.size() != 1) { throw std::logic_error{"This approach works only for single incoming edge!"}; }
         auto const & edge = edges[0];
         assert(clauses.getEdge(edge.clauseId).to == node.predicateSymbol);
-        bool sourceChanged = std::any_of(edge.sources.begin(), edge.sources.end(), [&changed](NodeId nodeId) {
-            return changed[nodeId];
-        });
+        bool sourceChanged = std::any_of(edge.sources.begin(), edge.sources.end(),
+                                         [&changed](NodeId nodeId) { return changed[nodeId]; });
         auto it = refinementInfo.find(node.predicateSymbol);
         bool hasPotentiallyNewPredicates = it != refinementInfo.end();
         if (not sourceChanged and not hasPotentiallyNewPredicates) { continue; }
@@ -773,16 +775,12 @@ void ARG::refine(RefinementInfo const & refinementInfo) {
         RefinementInfo::mapped_type candidates;
         if (hasPotentiallyNewPredicates) {
             for (PTRef candidate : it->second) {
-                if (existingPredicates.count(candidate) == 0) {
-                    candidates.insert(candidate);
-                }
+                if (existingPredicates.count(candidate) == 0) { candidates.insert(candidate); }
             }
         }
         if (sourceChanged) { // We need to recheck all existing predicates that have not held already
             for (PTRef candidate : existingPredicates) {
-                if (node.reachedStates->satisfiedPredicates.count(candidate) == 0) {
-                    candidates.insert(candidate);
-                }
+                if (node.reachedStates->satisfiedPredicates.count(candidate) == 0) { candidates.insert(candidate); }
             }
         }
         if (candidates.empty()) { continue; }
