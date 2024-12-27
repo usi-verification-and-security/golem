@@ -177,10 +177,13 @@ public:
     [[nodiscard]] std::set<PTRef> computePropagatedPredicates(C const & candidates, std::vector<NodeId> const & sources,
                                                               PTRef edgeConstraint) const;
 private:
-    /// NOTE: Currently we check exact match, or if the existing instance have no satisfied predicates.
-    /// This can be improved with proper subsumption
     static bool isCoveredByExistingInstance(CartesianPredicateAbstractionStates const & candidate, CartesianPredicateAbstractionStates const & existingInstance) {
-        return existingInstance.getPredicates().empty() or candidate == existingInstance;
+        auto const & existingPredicates = existingInstance.getPredicates();
+        if (existingPredicates.empty()) { return true; }
+        auto const & candidatePredicates = candidate.getPredicates();
+        if (candidatePredicates.size() < existingPredicates.size()) { return false; }
+        return std::includes(candidate.getPredicates().begin(), candidate.getPredicates().end(),
+                             existingPredicates.begin(), existingPredicates.end());
     }
 };
 
