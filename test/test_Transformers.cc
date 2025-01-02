@@ -324,6 +324,23 @@ TEST_F(Transformer_test, test_ChainSummarizer_SameChainTwice_DifferentFact_Unsaf
     ASSERT_EQ(validator.validate(originalGraph, result), Validator::Result::VALIDATED);
 }
 
+TEST_F(Transformer_test, test_ChainSummarizer_UnreachableLoop) {
+    ChcSystem system;
+    system.addUninterpretedPredicate(s1);
+    system.addClause( // S1(x) and x' = x + 1 => S1(x')
+        ChcHead{UninterpretedPredicate{nextS1}},
+        ChcBody{{logic.mkEq(xp, logic.mkPlus(x, one))}, {UninterpretedPredicate{currentS1}}}
+    );
+    system.addClause( // true => false
+        ChcHead{UninterpretedPredicate{logic.getTerm_false()}},
+        ChcBody{{logic.getTerm_true()}, {}}
+    );
+    auto hyperGraph = systemToGraph(system);
+    auto originalGraph = *hyperGraph;
+    auto [summarizedGraph, translator] = SimpleChainSummarizer().transform(std::move(hyperGraph));
+    ASSERT_EQ(summarizedGraph->getEdges().size(), 2);
+}
+
 TEST_F(Transformer_test, test_NonLoopEliminator_SuccessfulElimination) {
     ChcSystem system;
     system.addUninterpretedPredicate(s1);
