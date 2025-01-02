@@ -12,6 +12,7 @@
 #include "graph/ChcGraphBuilder.h"
 #include "proofs/Term.h"
 #include "transformers/ConstraintSimplifier.h"
+#include "transformers/EdgeInliner.h"
 #include "transformers/MultiEdgeMerger.h"
 #include "transformers/NodeEliminator.h"
 #include "transformers/RemoveUnreachableNodes.h"
@@ -23,6 +24,7 @@
 
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <transformers/FalseClauseRemoval.h>
 #include <unistd.h>
 
 using namespace osmttokens;
@@ -481,15 +483,26 @@ void ChcInterpreterContext::interpretCheckSat() {
         originalGraph = std::make_unique<ChcDirectedHyperGraph>(*hypergraph);
     }
 
+    // std::cout << "Before preprocessing:\n"
+    //     << "Edges: " << hypergraph->getEdges().size() << '\n'
+    //     << "Vertices: " << hypergraph->getVertices().size() << std::endl;
     TransformationPipeline::pipeline_t transformations;
     transformations.push_back(std::make_unique<ConstraintSimplifier>());
     transformations.push_back(std::make_unique<SimpleChainSummarizer>());
     transformations.push_back(std::make_unique<RemoveUnreachableNodes>());
     transformations.push_back(std::make_unique<SimpleNodeEliminator>());
+    transformations.push_back(std::make_unique<EdgeInliner>());
+    transformations.push_back(std::make_unique<FalseClauseRemoval>());
+    transformations.push_back(std::make_unique<RemoveUnreachableNodes>());
     transformations.push_back(std::make_unique<MultiEdgeMerger>());
     // TODO: Try following MultiEdgeMerger by another round of SimpleChainSummarizer and/or SimpleNodeEliminator?
     auto [newGraph, translator] = TransformationPipeline(std::move(transformations)).transform(std::move(hypergraph));
     hypergraph = std::move(newGraph);
+    // std::cout << "After preprocessing:\n"
+    //     << "Edges: " << hypergraph->getEdges().size() << '\n'
+    //     << "Vertices: " << hypergraph->getVertices().size() << std::endl;
+    // hypergraph->toNormalGraph()->toDot(std::cout, true);
+    // exit(1);
     // This if is needed to run the portfolio of multiple engines
     auto engineName = opts.getOrDefault(Options::ENGINE, "spacer");
     if (engineName.find(',') != std::string::npos) {
