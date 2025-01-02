@@ -482,6 +482,14 @@ ChcDirectedHyperGraph::VertexContractionResult ChcDirectedHyperGraph::contractVe
     return result;
 }
 
+DirectedHyperEdge ChcDirectedHyperGraph::inlineEdge(EId edge, EId predecessor) {
+    if (getSources(predecessor).size() > 1) { throw std::logic_error("TODO: Implement this also for hyperedge"); }
+    assert(getSources(predecessor).front() != getTarget(predecessor));
+    auto replacingEdge = mergeEdgePair(predecessor, edge);
+    deleteEdges({edge});
+    return replacingEdge;
+}
+
 ChcDirectedHyperGraph::MergedEdges ChcDirectedHyperGraph::mergeMultiEdges() {
     ChcDirectedHyperGraph::MergedEdges mergedEdges;
     std::unordered_map<std::pair<SymRef, SymRef>, std::vector<EId>, EdgeHasher> buckets;

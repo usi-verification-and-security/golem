@@ -305,6 +305,8 @@ public:
     DirectedHyperEdge contractTrivialChain(std::vector<EId> const & trivialChain);
     VertexContractionResult contractVertex(SymRef sym);
 
+    DirectedHyperEdge inlineEdge(EId edge, EId predecessor);
+
     using MergedEdges = std::vector<std::pair<std::vector<DirectedHyperEdge>, DirectedHyperEdge>>;
     MergedEdges mergeMultiEdges();
 

@@ -59,6 +59,7 @@ target_sources(golem_lib
     PRIVATE graph/ChcGraphBuilder.cc
     PRIVATE transformers/CommonUtils.cc
     PRIVATE transformers/ConstraintSimplifier.cc
+    PRIVATE transformers/EdgeInliner.cc
     PRIVATE transformers/SimpleChainSummarizer.cc
     PRIVATE transformers/NodeEliminator.cc
     PRIVATE transformers/MultiEdgeMerger.cc

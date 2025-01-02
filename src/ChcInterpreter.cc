@@ -12,6 +12,8 @@
 #include "graph/ChcGraphBuilder.h"
 #include "proofs/Term.h"
 #include "transformers/ConstraintSimplifier.h"
+#include "transformers/EdgeInliner.h"
+#include "transformers/FalseClauseRemoval.h"
 #include "transformers/MultiEdgeMerger.h"
 #include "transformers/NodeEliminator.h"
 #include "transformers/RemoveUnreachableNodes.h"
@@ -486,6 +488,9 @@ void ChcInterpreterContext::interpretCheckSat() {
     transformations.push_back(std::make_unique<SimpleChainSummarizer>());
     transformations.push_back(std::make_unique<RemoveUnreachableNodes>());
     transformations.push_back(std::make_unique<SimpleNodeEliminator>());
+    transformations.push_back(std::make_unique<EdgeInliner>());
+    transformations.push_back(std::make_unique<FalseClauseRemoval>());
+    transformations.push_back(std::make_unique<RemoveUnreachableNodes>());
     transformations.push_back(std::make_unique<MultiEdgeMerger>());
     // TODO: Try following MultiEdgeMerger by another round of SimpleChainSummarizer and/or SimpleNodeEliminator?
     auto [newGraph, translator] = TransformationPipeline(std::move(transformations)).transform(std::move(hypergraph));
