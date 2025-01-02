@@ -320,7 +320,11 @@ PTRef renameAuxiliaries(ChcDirectedHyperGraph const & graph, EId incoming) {
 
 DirectedHyperEdge ChcDirectedHyperGraph::mergeEdgePair(EId incoming, EId outgoing) {
     assert(getSources(incoming).size() == 1); // Incoming must be a simple edge
-    if (getSources(outgoing).size() == 1) { // Outgoing is a simple edge
+    auto source = getSources(incoming)[0];
+    auto common = getTarget(incoming);
+    assert(source != common);
+    auto target = getTarget(outgoing);
+    if (getSources(outgoing).size() == 1 and target != common) { // Outgoing is a simple edge
         auto edge = mergeEdges({incoming, outgoing});
         auto eid = edge.id;
         PTRef cleanedLabel = renameAuxiliaries(*this, eid);
@@ -328,9 +332,6 @@ DirectedHyperEdge ChcDirectedHyperGraph::mergeEdgePair(EId incoming, EId outgoin
         return getEdge(eid);
     }
     TermUtils utils(logic);
-    auto common = getTarget(incoming);
-    auto source = getSources(incoming)[0];
-    auto target = getTarget(outgoing);
     // Special handling of outgoing hyperedge
     auto sources = getSources(outgoing);
     assert(std::count(sources.begin(), sources.end(), common) == 1);
@@ -351,6 +352,14 @@ DirectedHyperEdge ChcDirectedHyperGraph::mergeEdgePair(EId incoming, EId outgoin
     if (source == getEntry()) {
         sources.erase(std::remove(sources.begin(), sources.end(), getEntry()), sources.end());
         if (sources.empty()) { sources.push_back(getEntry()); }
+    }
+    if (target == common) { // outgoing is self loop, we need to make former state variables auxiliary (if any are left after QE)
+        substitutionsMap.clear();
+        for (PTRef stateVar : utils.predicateArgsInOrder(getStateVersion(common))) {
+            PTRef auxVar = createAuxiliaryVariable(logic.getSortRef(stateVar));
+            substitutionsMap.insert({stateVar, auxVar});
+        }
+        simplifiedLabel = utils.varSubstitute(simplifiedLabel, substitutionsMap);
     }
     auto eid = newEdge(std::move(sources), target, InterpretedFla{simplifiedLabel});
     PTRef cleanedLabel = renameAuxiliaries(*this, eid);
@@ -384,7 +393,7 @@ PTRef ChcDirectedHyperGraph::mergeLabels(std::vector<EId> const & chain) const {
         EId incoming = *incomingIt;
         EId outgoing = *outgoingIt; (void)outgoing;
         auto common = getTarget(incoming);
-        assert(getSources(outgoing).size() == 1 and getSources(outgoing).front() == common);
+        assert(getSources(outgoing).size() == 1 and getSources(outgoing).front() == common and getTarget(outgoing) != common);
         // MB: Simply casting the target variables to current state from next state is only possible because this is trivial chain
         utils.mapFromPredicate(getNextStateVersion(common), getStateVersion(common), subMap);
     }
