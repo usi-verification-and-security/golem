@@ -406,6 +406,14 @@ DirectedHyperEdge ChcDirectedHyperGraph::mergeEdgePair(EId incoming, EId outgoin
         sources.erase(std::remove(sources.begin(), sources.end(), getEntry()), sources.end());
         if (sources.empty()) { sources.push_back(getEntry()); }
     }
+    if (target == common) { // outgoing is self loop, we need to make former state variables auxiliary (if any are left after QE)
+        substitutionsMap.clear();
+        for (PTRef stateVar : utils.predicateArgsInOrder(getStateVersion(common))) {
+            PTRef auxVar = createAuxiliaryVariable(logic.getSortRef(stateVar));
+            substitutionsMap.insert({stateVar, auxVar});
+        }
+        simplifiedLabel = utils.varSubstitute(simplifiedLabel, substitutionsMap);
+    }
     auto eid = newEdge(std::move(sources), target, InterpretedFla{simplifiedLabel});
     return getEdge(eid);
 
