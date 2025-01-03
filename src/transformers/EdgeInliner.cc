@@ -6,6 +6,8 @@
 
 #include "EdgeInliner.h"
 
+#include "transformers/CommonUtils.h"
+
 namespace {
 using KnownValues = std::vector<PTRef>;
 using IndexMap = std::unordered_map<PTRef, unsigned, PTRefHash>;
@@ -91,6 +93,7 @@ std::vector<EId> computeFeasibleTransitions(ChcDirectedHyperGraph const & graph,
 }
 
 Transformer::TransformationResult EdgeInliner::transform(std::unique_ptr<ChcDirectedHyperGraph> graph) {
+    auto backtranslator = std::make_unique<BackTranslator>(graph->getLogic(), graph->predicateRepresentation());
     bool somethingChanged = true;
     while (somethingChanged) {
         somethingChanged = false;
@@ -112,13 +115,13 @@ Transformer::TransformationResult EdgeInliner::transform(std::unique_ptr<ChcDire
                     graph->deleteEdges({edge.id});
                 } else if (feasibleTransitions.size() == 1) {
                     auto predecessor = feasibleTransitions[0];
-                    // TODO: See if we can remove this restriction
                     if (graph->getSources(predecessor).size() != 1 or graph->getSources(predecessor).front() == graph->getTarget(predecessor)) { continue; }
                     // Only one way how to get here, combine the two edge and remove this one
                     // std::cout << "Only one feasible input! This edge can be removed!" << std::endl;
                     // std::cout << "Inlining edge " << edge.id.id << ": " << edge.from.front().x << " -> " << edge.to.x << '\n';
                     // std::cout << "Predecessor is " << feasibleTransitions[0].id << ": " << (graph->getSources(feasibleTransitions[0]).empty() ? " " : std::to_string(graph->getSources(feasibleTransitions[0]).front().x)) << " -> " << graph->getTarget(feasibleTransitions[0]).x << '\n';
-                    graph->inlineEdge(edge.id, predecessor);
+                    auto newEdge = graph->inlineEdge(edge.id, predecessor);
+                    backtranslator->replacementInfo.emplace_back(std::move(newEdge), std::make_pair(graph->getEdge(predecessor), edge));
                 }
                 somethingChanged = true;
                 // recompute necessary information
@@ -126,5 +129,28 @@ Transformer::TransformationResult EdgeInliner::transform(std::unique_ptr<ChcDire
             }
         }
     }
-    return std::make_pair(std::move(graph), std::make_unique<BackTranslator>());
+    return std::make_pair(std::move(graph), std::move(backtranslator));
 }
+
+InvalidityWitness EdgeInliner::BackTranslator::translate(InvalidityWitness witness) {
+    for (auto rit = replacementInfo.rbegin(); rit != replacementInfo.rend(); ++rit) {
+        auto const & entry = *rit;
+        bool replacementUsed = true;
+        while(replacementUsed) {
+            replacementUsed = false;
+            auto & derivation = witness.getDerivation();
+            for (auto it = derivation.begin(); it != derivation.end(); ++it) {
+                if (it->clauseId == entry.first.id) {
+                    assert(entry.second.second.from.size() == 1);
+                    std::size_t index = it - derivation.begin();
+                    auto newDerivation = replaceSummarizingStep(derivation, index, {entry.second.first, entry.second.second}, entry.first, predicateRepresentation, logic);
+                    witness.setDerivation(std::move(newDerivation));
+                    replacementUsed = true;
+                    break;
+                }
+            }
+        }
+    }
+    return witness;
+}
+
