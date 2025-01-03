@@ -326,7 +326,20 @@ public:
     void deleteEdges(std::vector<EId> const & edgesToDelete);
     void deleteNode(SymRef sym);
 
+    bool isHyperEdge(EId eid) const { return getSources(eid).size() > 1; }
+    bool isSimpleLoopEdge(EId eid) const {
+        assert(not isHyperEdge(eid));
+        auto const & edge = getEdge(eid);
+        return edge.from.front() == edge.to;
+    }
+
 private:
+    PTRef createAuxiliaryVariable(SRef ref) const {
+        static long long counter = 0;
+        std::string name = "aux#g#" + std::to_string(counter++);
+        return TimeMachine(logic).getVarVersionZero(name, ref);
+    }
+
     EId newEdge(std::vector<SymRef> && from, SymRef to, InterpretedFla label) {
         EId eid = freshId();
         edges.emplace(eid, DirectedHyperEdge{.from = std::move(from), .to = to, .fla = label, .id = eid});
