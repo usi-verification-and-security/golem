@@ -91,33 +91,39 @@ std::vector<EId> computeFeasibleTransitions(ChcDirectedHyperGraph const & graph,
 }
 
 Transformer::TransformationResult EdgeInliner::transform(std::unique_ptr<ChcDirectedHyperGraph> graph) {
-    auto adjacencyLists = AdjacencyListsGraphRepresentation::from(*graph);
-    auto edges = graph->getEdges();
-    for (auto i = 0u; i < edges.size(); ++i) {
-        auto const & edge = edges[i];
-        auto const & sources = edge.from;
-        if (sources.size() == 1 and sources.front() != graph->getEntry()) {
-            auto source = sources.front();
-            // std::cout << "Checking edge " << edge.id.id << std::endl;
-            auto const & incoming = adjacencyLists.getIncomingEdgesFor(source);
-            auto feasibleTransitions = computeFeasibleTransitions(*graph, incoming, edge.id);
-            if (feasibleTransitions.size() >= 2) { continue; }
-            if (feasibleTransitions.empty()) {
-                // This edge can never be taken
-                // std::cout << "This edge can never be taken!" << std::endl;
-                graph->deleteEdges({edge.id});
-            } else if (feasibleTransitions.size() == 1) {
-                auto predecessor = feasibleTransitions[0];
-                // TODO: See if we can remove this restriction
-                if (graph->getSources(predecessor).size() != 1 or graph->getSources(predecessor).front() == graph->getTarget(predecessor)) { continue; }
-                // Only one way how to get here, combine the two edge and remove this one
-                // std::cout << "Only one feasible input! This edge can be removed!" << std::endl;
-                // std::cout << "Inlining edge " << edge.id.id << ": " << edge.from.front().x << " -> " << edge.to.x << '\n';
-                // std::cout << "Predecessor is " << feasibleTransitions[0].id << ": " << (graph->getSources(feasibleTransitions[0]).empty() ? " " : std::to_string(graph->getSources(feasibleTransitions[0]).front().x)) << " -> " << graph->getTarget(feasibleTransitions[0]).x << '\n';
-                graph->inlineEdge(edge.id, predecessor);
+    bool somethingChanged = true;
+    while (somethingChanged) {
+        somethingChanged = false;
+        auto adjacencyLists = AdjacencyListsGraphRepresentation::from(*graph);
+        auto edges = graph->getEdges();
+        for (auto i = 0u; i < edges.size(); ++i) {
+            auto const & edge = edges[i];
+            auto const & sources = edge.from;
+            if (sources.size() == 1 and sources.front() != graph->getEntry()) {
+                auto source = sources.front();
+                // std::cout << "Checking edge " << edge.id.id << std::endl;
+                auto const & incoming = adjacencyLists.getIncomingEdgesFor(source);
+                auto feasibleTransitions = computeFeasibleTransitions(*graph, incoming, edge.id);
+                // std::cout << "Number of feasible transitions: " << feasibleTransitions.size() << std::endl;
+                if (feasibleTransitions.size() >= 2) { continue; }
+                if (feasibleTransitions.empty()) {
+                    // This edge can never be taken
+                    // std::cout << "This edge can never be taken!" << std::endl;
+                    graph->deleteEdges({edge.id});
+                } else if (feasibleTransitions.size() == 1) {
+                    auto predecessor = feasibleTransitions[0];
+                    // TODO: See if we can remove this restriction
+                    if (graph->getSources(predecessor).size() != 1 or graph->getSources(predecessor).front() == graph->getTarget(predecessor)) { continue; }
+                    // Only one way how to get here, combine the two edge and remove this one
+                    // std::cout << "Only one feasible input! This edge can be removed!" << std::endl;
+                    // std::cout << "Inlining edge " << edge.id.id << ": " << edge.from.front().x << " -> " << edge.to.x << '\n';
+                    // std::cout << "Predecessor is " << feasibleTransitions[0].id << ": " << (graph->getSources(feasibleTransitions[0]).empty() ? " " : std::to_string(graph->getSources(feasibleTransitions[0]).front().x)) << " -> " << graph->getTarget(feasibleTransitions[0]).x << '\n';
+                    graph->inlineEdge(edge.id, predecessor);
+                }
+                somethingChanged = true;
+                // recompute necessary information
+                adjacencyLists = AdjacencyListsGraphRepresentation::from(*graph);
             }
-            // recompute necessary information
-            adjacencyLists = AdjacencyListsGraphRepresentation::from(*graph);
         }
     }
     return std::make_pair(std::move(graph), std::make_unique<BackTranslator>());
