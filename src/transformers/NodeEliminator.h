@@ -15,7 +15,9 @@
  * The predicate determining the nodes to eliminate is passed to the constructor.
  */
 class NodeEliminator : public Transformer {
-    using predicate_t = std::function<bool(SymRef,AdjacencyListsGraphRepresentation const &, ChcDirectedHyperGraph const &)>;
+    using predicate_t =
+        std::function<bool(SymRef, AdjacencyListsGraphRepresentation const &, ChcDirectedHyperGraph const &)>;
+
 public:
     NodeEliminator(predicate_t shouldEliminateNode) : shouldEliminateNode(std::move(shouldEliminateNode)) {}
 
@@ -26,13 +28,14 @@ public:
         using ContractionResult = ChcDirectedHyperGraph::VertexContractionResult;
 
         BackTranslator(Logic & logic, NonlinearCanonicalPredicateRepresentation predicateRepresentation)
-        : logic(logic), predicateRepresentation(std::move(predicateRepresentation)) {}
+            : logic(logic), predicateRepresentation(std::move(predicateRepresentation)) {}
 
         InvalidityWitness translate(InvalidityWitness witness) override;
 
         ValidityWitness translate(ValidityWitness witness) override;
 
         void notifyRemovedVertex(SymRef sym, ContractionResult && edges);
+
     private:
         std::unordered_map<SymRef, ContractionResult, SymRefHash> nodeInfo;
         std::vector<SymRef> removedNodes;
@@ -52,6 +55,15 @@ public:
     NonLoopEliminator() : NodeEliminator(NonLoopEliminatorPredicate{}) {}
 };
 
+struct NonLoopNestedEliminatorPredicate {
+    bool operator()(SymRef, AdjacencyListsGraphRepresentation const &, ChcDirectedHyperGraph const & graph) const;
+};
+
+class NonLoopNestedEliminator : public NodeEliminator {
+public:
+    NonLoopNestedEliminator() : NodeEliminator(NonLoopNestedEliminatorPredicate{}) {}
+};
+
 struct SimpleNodeEliminatorPredicate {
     bool operator()(SymRef, AdjacencyListsGraphRepresentation const &, ChcDirectedHyperGraph const & graph) const;
 };
@@ -61,4 +73,4 @@ public:
     SimpleNodeEliminator() : NodeEliminator(SimpleNodeEliminatorPredicate()) {}
 };
 
-#endif //GOLEM_NODEELIMINATOR_H
+#endif // GOLEM_NODEELIMINATOR_H
