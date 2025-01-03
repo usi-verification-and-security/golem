@@ -15,8 +15,16 @@ public:
     TransformationResult transform(std::unique_ptr<ChcDirectedHyperGraph> graph) override;
 
     class BackTranslator : public WitnessBackTranslator {
+        using ReplacementInfo = std::vector<std::pair<DirectedHyperEdge, std::pair<DirectedHyperEdge, DirectedHyperEdge>>>;
+        Logic & logic;
+        NonlinearCanonicalPredicateRepresentation predicateRepresentation;
     public:
-        InvalidityWitness translate(InvalidityWitness witness) override { return witness; }
+        ReplacementInfo replacementInfo;
+
+        BackTranslator(Logic & logic, NonlinearCanonicalPredicateRepresentation predicateRepresentation)
+        : logic(logic), predicateRepresentation(std::move(predicateRepresentation)) {}
+
+        InvalidityWitness translate(InvalidityWitness witness) override;
         ValidityWitness translate(ValidityWitness witness) override { return witness; }
     };
 };
