@@ -138,6 +138,7 @@ class ChcDirectedGraph {
     // graph transformations
     friend class NestedLoopTransformation;
     friend class SingleLoopTransformation;
+    friend class TransitionSystemNetworkManager;
     void contractVertex(SymRef sym);
     WitnessInfo contractConnectedVertices(std::vector<EId> edges);
     void mergeEdges(EId incoming, EId outgoing);
