@@ -1715,7 +1715,7 @@ TransitionSystem TransitionSystemNetworkManager::constructTransitionSystemFor(Sy
         assert(loop.size() > 1);
         PTRef loopMTr = logic.getTerm_true();
         int n = 0;
-        for (int i = 0; i < loop.size(); i++)
+        for (int i = 0; i < loop.size(); i++) {
             auto const & source = getNode(graph.getSource(loop[i]));
             PTRef nestedLoopTrInv = source.loopInvariant == PTRef_Undef ? logic.getTerm_false() : timeMachine.sendFlaThroughTime(source.loopInvariant, n);
             PTRef loopTrInv = timeMachine.sendFlaThroughTime(source.solver->getTransitionInvariant(), n++);
