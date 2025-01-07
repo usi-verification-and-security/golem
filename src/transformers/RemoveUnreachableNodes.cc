@@ -14,16 +14,10 @@ Transformer::TransformationResult RemoveUnreachableNodes::transform(std::unique_
     if (std::find(allNodes.begin(), allNodes.end(), graph->getExit()) == allNodes.end()) {
         // There is no edge to exit, all edges can be removed
         // We return empty graph, and remember all removed vertices for backtranslation
-
-
-        return Transformer::TransformationResult(
+        return {
             ChcDirectedHyperGraph::makeEmpty(logic),
-            std::make_unique<RemoveUnreachableNodes::BackTranslator>(
-                graph->getLogic(),
-                graph->predicateRepresentation(),
-                std::move(allNodes)
-            )
-        );
+            std::make_unique<BackTranslator>(graph->getLogic(), std::move(allNodes))
+        };
     }
 
     std::unordered_set<SymRef, SymRefHash> backwardReachable;
@@ -55,24 +49,15 @@ Transformer::TransformationResult RemoveUnreachableNodes::transform(std::unique_
         }
     }
 
-    return Transformer::TransformationResult(
-        std::move(graph),
-        std::make_unique<RemoveUnreachableNodes::BackTranslator>(
-            graph->getLogic(),
-            graph->predicateRepresentation(),
-            std::move(removedNodes)
-        )
-    );
+    return {std::move(graph), std::make_unique<BackTranslator>(graph->getLogic(), std::move(removedNodes))};
 }
 
 ValidityWitness RemoveUnreachableNodes::BackTranslator::translate(ValidityWitness witness) {
     if (this->removedNodes.empty()) { return witness; }
     auto definitions = witness.getDefinitions();
-    VersionManager versionManager(logic);
     for (auto node : removedNodes) {
-        PTRef predicate = versionManager.sourceFormulaToBase(predicateRepresentation.getSourceTermFor(node));
-        assert(definitions.find(predicate) == definitions.end());
-        definitions.insert({predicate, logic.getTerm_true()});
+        assert(definitions.find(node) == definitions.end());
+        definitions.insert({node, logic.getTerm_true()});
     }
     return ValidityWitness(std::move(definitions));
 }

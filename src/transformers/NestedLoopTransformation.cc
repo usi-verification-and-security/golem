@@ -132,17 +132,11 @@ NestedLoopTransformation::WitnessBackTranslator::translateInvariant(ValidityWitn
         vertexInvariants.insert(inv);
     }
     for (auto v : loopContractionInfos) {
-        PTRef unversionedPredicate =
-            TimeMachine(logic).versionedFormulaToUnversioned(graph.getStateVersion(v.loopVertex));
-        PTRef mergedInv = wtns.getDefinitions().at(unversionedPredicate);
+        PTRef mergedInv = wtns.getDefinitions().at(v.loopVertex);
         for (auto vertex : oldVertices) {
             if (vertex == initialGraph.getEntry() or vertex == initialGraph.getExit()) { continue; }
-            PTRef locationVar;
-            if (v.locations.find(vertex) != v.locations.end()) {
-                locationVar = timeMachine.getUnversioned(v.locations.at(vertex));
-            } else {
-                continue;
-            }
+            if (v.locations.find(vertex) == v.locations.end()) { continue; }
+            PTRef locationVar = timeMachine.getUnversioned(v.locations.at(vertex));
             substitutions.at(locationVar) = logic.getTerm_true();
             auto vertexInvariant = utils.varSubstitute(mergedInv, substitutions);
             substitutions.at(locationVar) = logic.getTerm_false();
@@ -191,10 +185,10 @@ NestedLoopTransformation::WitnessBackTranslator::translateInvariant(ValidityWitn
                 varSubstitutions.insert({timeMachine.getUnversioned(positionVar), logic.getPterm(basePredicate)[i]});
             }
             vertexInvariant = utils.varSubstitute(vertexInvariant, varSubstitutions);
-            if (vertexInvariants.find(basePredicate) != vertexInvariants.end()) {
-                vertexInvariants[basePredicate] = vertexInvariant;
+            if (vertexInvariants.find(vertex) != vertexInvariants.end()) {
+                vertexInvariants[vertex] = vertexInvariant;
             } else {
-                vertexInvariants.insert({basePredicate, vertexInvariant});
+                vertexInvariants.insert({vertex, vertexInvariant});
             }
             // std::cout << logic.printSym(vertex) << " -> " << logic.pp(vertexInvariant) << std::endl;
         }

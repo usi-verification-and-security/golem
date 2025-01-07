@@ -21,33 +21,24 @@ Validator::Result Validator::validate(ChcDirectedHyperGraph const & graph, Verif
     return Validator::Result::NOT_VALIDATED;
 }
 
-Validator::Result Validator::validateValidityWitness(ChcDirectedHyperGraph const & graph, ValidityWitness const & witness) {
+Validator::Result Validator::validateValidityWitness(ChcDirectedHyperGraph const & graph, ValidityWitness const & witness) const {
     auto definitions = witness.getDefinitions();
-    if (definitions.find(logic.getTerm_false()) == definitions.end()) {
-        definitions.insert({logic.getTerm_false(), logic.getTerm_false()});
-        definitions.insert({logic.getTerm_true(), logic.getTerm_true()});
+    if (definitions.find(graph.getExit()) == definitions.end()) {
+        definitions.insert({graph.getExit(), logic.getTerm_false()});
+        definitions.insert({graph.getEntry(), logic.getTerm_true()});
     }
-    TermUtils utils(logic);
-    ChcDirectedHyperGraph::VertexInstances vertexInstances(graph);
     // get correct interpretation for each node
-    auto getInterpretation = [&](PTRef nodePredicate) -> PTRef {
-        auto symbol = logic.getSymRef(nodePredicate);
-        auto it = std::find_if(definitions.begin(), definitions.end(),
-                               [this,symbol](auto const & entry) {
-                                   return logic.getSymRef(entry.first) == symbol;
-                               });
+    auto getInterpretation = [&](SymRef symbol) -> PTRef {
+        auto const it = definitions.find(symbol);
         if (it == definitions.end()) {
             std::cerr << ";Missing definition of a predicate " << logic.printSym(symbol) << std::endl;
             return PTRef_Undef;
         }
-        // we need to substitute real arguments in the definition of the predicate
-        PTRef definitionTemplate = it->second;
-        // build the substitution map
-        std::unordered_map<PTRef, PTRef, PTRefHash> subst;
-        utils.mapFromPredicate(it->first, nodePredicate, subst);
-        return utils.varSubstitute(definitionTemplate, subst);
+        return it->second;
     };
 
+    ChcDirectedHyperGraph::VertexInstances vertexInstances(graph);
+    VersionManager versionManager(logic);
     auto edges = graph.getEdges();
     for (auto const & edge : edges) {
         vec<PTRef> bodyComponents;
@@ -55,15 +46,16 @@ Validator::Result Validator::validateValidityWitness(ChcDirectedHyperGraph const
         bodyComponents.push(constraint);
         for (std::size_t i = 0; i < edge.from.size(); ++i) {
             auto source = edge.from[i];
-            PTRef predicate = graph.getStateVersion(source, vertexInstances.getInstanceNumber(edge.id, i));
-            PTRef interpreted = getInterpretation(predicate);
-            if (interpreted == PTRef_Undef) { return Result::NOT_VALIDATED; }
-            bodyComponents.push(interpreted);
+            PTRef interpretation = getInterpretation(source);
+            if (interpretation == PTRef_Undef) { return Result::NOT_VALIDATED; }
+            PTRef versioned = versionManager.baseFormulaToSource(interpretation, vertexInstances.getInstanceNumber(edge.id, i));
+            bodyComponents.push(versioned);
         }
         PTRef interpretedBody = logic.mkAnd(std::move(bodyComponents));
-        PTRef interpretedHead = getInterpretation(graph.getNextStateVersion(edge.to));
+        PTRef interpretedHead = getInterpretation(edge.to);
         if (interpretedHead == PTRef_Undef) { return Result::NOT_VALIDATED; }
-        PTRef query = logic.mkAnd(interpretedBody, logic.mkNot(interpretedHead));
+        PTRef versionedInterpretedHead = versionManager.baseFormulaToTarget(interpretedHead);
+        PTRef query = logic.mkAnd(interpretedBody, logic.mkNot(versionedInterpretedHead));
         {
             SMTSolver solver(logic, SMTSolver::WitnessProduction::NONE);
             solver.assertProp(query);
@@ -71,11 +63,11 @@ Validator::Result Validator::validateValidityWitness(ChcDirectedHyperGraph const
             if (res != SMTSolver::Answer::UNSAT) {
                 std::cerr << ";Edge not validated!";
                 // TODO: print edge
-                return Validator::Result::NOT_VALIDATED;
+                return Result::NOT_VALIDATED;
             }
         }
     }
-    return Validator::Result::VALIDATED;
+    return Result::VALIDATED;
 }
 
 
@@ -97,7 +89,7 @@ Validator::Result validateStep(
         utils.mapFromPredicate(normalizedPredicate, derivedFact, subst);
     };
     // get values for the variables from predicates
-    auto sourceNodes = graph.getSources(edge);
+    auto const & sourceNodes = graph.getSources(edge);
     assert(sourceNodes.size() == step.premises.size());
     for (std::size_t i = 0; i < sourceNodes.size(); ++i) {
         auto source = sourceNodes[i];
@@ -117,7 +109,7 @@ Validator::Result validateStep(
 }
 
 Validator::Result
-Validator::validateInvalidityWitness(ChcDirectedHyperGraph const & graph, InvalidityWitness const & witness) {
+Validator::validateInvalidityWitness(ChcDirectedHyperGraph const & graph, InvalidityWitness const & witness) const {
     auto const & derivation = witness.getDerivation();
     auto derivationSize = derivation.size();
     if (derivationSize == 0) { return Result::NOT_VALIDATED; }

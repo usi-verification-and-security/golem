@@ -17,7 +17,7 @@ void VerificationResult::printWitness(std::ostream & out, Logic & logic, const C
     if (not hasWitness()) { return; }
     switch (answer) {
         case VerificationAnswer::SAFE: {
-            getValidityWitness().print(out, logic);
+            getValidityWitness().print(out, originalGraph);
             return;
         }
         case VerificationAnswer::UNSAFE: {
@@ -137,17 +137,19 @@ void InvalidityWitness::print(std::ostream & out, Logic & logic) const {
     out << std::endl;
 }
 
-void ValidityWitness::print(std::ostream & out, Logic & logic) const {
-    for (auto && [predicate, definition] : interpretations) {
-        if (predicate == logic.getTerm_true() or predicate == logic.getTerm_false()) { continue; }
-        out << "  (define-fun " << logic.protectName(logic.getSymRef(predicate)) << " (";
+void ValidityWitness::print(std::ostream & out, ChcDirectedHyperGraph const & graph) const {
+    Logic & logic = graph.getLogic();
+    for (auto && [symbol, definition] : interpretations) {
+        if (logic.isTrue(symbol) or logic.isFalse(symbol)) { continue; }
+        out << "  (define-fun " << logic.protectName(symbol) << " (";
+        PTRef predicate = VersionManager(logic).sourceFormulaToBase(graph.getStateVersion(symbol));
         const auto & args = TermUtils(logic).predicateArgsInOrder(predicate);
         for (std::size_t i = 0; i < args.size(); ++i) {
             auto sortString = logic.printSort(logic.getSortRef(args[i]));
             out << "(" << logic.protectName(logic.getSymRef(args[i])) << " " << sortString << ")" << (i == args.size()-1 ? "" : " ");
         }
-        assert(logic.getSortRef(predicate) == logic.getSort_bool());
-        out << ")" << " " << logic.printSort(logic.getSortRef(predicate)) << "\n";
+        assert(logic.getSortRef(symbol) == logic.getSort_bool());
+        out << ")" << " " << logic.printSort(logic.getSortRef(symbol)) << "\n";
         out << "    ";
         TermUtils(logic).printTermWithLets(out, definition);
         out << ")\n";
@@ -197,8 +199,7 @@ ValidityWitness::fromTransitionSystem(Logic & logic, ChcDirectedGraph const & gr
     }
     PTRef graphInvariant = utils.varSubstitute(inductiveInvariant, subs);
 //    std::cout << "Graph invariant: " << logic.printTerm(graphInvariant) << std::endl;
-    PTRef unversionedPredicate = logic.mkUninterpFun(vertex, std::move(unversionedVars));
-    ValidityWitness::definitions_t definitions{{unversionedPredicate, graphInvariant}};
+    ValidityWitness::definitions_t definitions{{vertex, graphInvariant}};
     return ValidityWitness(std::move(definitions));
 }
 

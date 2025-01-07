@@ -84,7 +84,7 @@ public:
 };
 
 class ValidityWitness {
-    std::unordered_map<PTRef, PTRef, PTRefHash> interpretations;
+    std::unordered_map<SymRef, PTRef, SymRefHash> interpretations;
 public:
     using definitions_t = decltype(interpretations);
 
@@ -100,9 +100,9 @@ public:
         }
     }
 
-    definitions_t getDefinitions() const { return interpretations; }
+    [[nodiscard]] definitions_t const & getDefinitions() const { return interpretations; }
 
-    void print(std::ostream & out, Logic & logic) const;
+    void print(std::ostream & out, ChcDirectedHyperGraph const & graph) const;
 
     static ValidityWitness fromTransitionSystem(Logic & logic, ChcDirectedGraph const & graph,
                                                 TransitionSystem const & transitionSystem, PTRef invariant);

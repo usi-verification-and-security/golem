@@ -15,13 +15,11 @@ public:
 
     class BackTranslator : public WitnessBackTranslator {
         Logic & logic;
-        NonlinearCanonicalPredicateRepresentation predicateRepresentation;
         std::vector<SymRef> removedNodes;
 
     public:
-        BackTranslator(Logic & logic, NonlinearCanonicalPredicateRepresentation predicateRepresentation, std::vector<SymRef> && removedNodes) :
+        BackTranslator(Logic & logic, std::vector<SymRef> && removedNodes) :
             logic(logic),
-            predicateRepresentation(std::move(predicateRepresentation)),
             removedNodes(std::move(removedNodes))
             {}
 

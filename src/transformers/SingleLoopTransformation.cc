@@ -201,7 +201,7 @@ SingleLoopTransformation::WitnessBackTranslator::translateInvariant(PTRef induct
             varSubstitutions.insert({positionVar, logic.getPterm(basePredicate)[i]});
         }
         vertexInvariant = utils.varSubstitute(vertexInvariant, varSubstitutions);
-        vertexInvariants.insert({basePredicate, vertexInvariant});
+        vertexInvariants.insert({vertex, vertexInvariant});
         // std::cout << logic.printSym(vertex) << " -> " << logic.pp(vertexInvariant) << std::endl;
     }
     return ValidityWitness(std::move(vertexInvariants));

@@ -129,9 +129,7 @@ ValidityWitness NodeEliminator::BackTranslator::translate(ValidityWitness witnes
     auto definitionFor = [&](SymRef vertex) {
         if (vertex == logic.getSym_false()) { return logic.getTerm_false(); }
         if (vertex == logic.getSym_true()) { return logic.getTerm_true(); }
-        auto it = std::find_if(definitions.begin(), definitions.end(), [&](auto const & entry){
-            return logic.getSymRef(entry.first) == vertex;
-        });
+        auto it = definitions.find(vertex);
         return it != definitions.end() ? it->second : PTRef_Undef;
     };
     VersionManager manager(logic);
@@ -189,11 +187,8 @@ ValidityWitness NodeEliminator::BackTranslator::translate(ValidityWitness witnes
         ipartitions_t Amask = 1;
         itpContext->getSingleInterpolant(itps, Amask);
         PTRef vertexSolution = manager.targetFormulaToBase(itps[0]);
-        PTRef predicateSourceRepresentation = predicateRepresentation.getSourceTermFor(vertex);
-        // TODO: Fix handling of 0-ary predicates
-        PTRef predicate = logic.isVar(predicateSourceRepresentation) ? predicateSourceRepresentation : manager.sourceFormulaToBase(predicateSourceRepresentation);
-        assert(definitions.count(predicate) == 0);
-        definitions.insert({predicate, vertexSolution});
+        assert(definitions.count(vertex) == 0);
+        definitions.insert({vertex, vertexSolution});
     }
     return ValidityWitness(std::move(definitions));
 }

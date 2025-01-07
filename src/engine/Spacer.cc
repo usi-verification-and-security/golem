@@ -263,22 +263,21 @@ VerificationResult SpacerContext::run() {
         auto boundedResult = boundSafety(currentBound);
         switch (boundedResult) {
             case BoundedSafetyResult::UNSAFE:
-                return VerificationResult(VerificationAnswer::UNSAFE, reconstructInvalidityWitness());
+                return {VerificationAnswer::UNSAFE, reconstructInvalidityWitness()};
             case BoundedSafetyResult::SAFE: {
                 auto inductiveResult = isInductive(currentBound);
                 if (inductiveResult.answer == InductiveCheckAnswer::INDUCTIVE) {
-                    std::unordered_map<PTRef, PTRef, PTRefHash> solution;
+                    ValidityWitness::definitions_t solution{
+                        {graph.getEntry(), logic.getTerm_true()}, {graph.getExit(), logic.getTerm_false()}
+                    };
                     auto inductiveLevel = inductiveResult.inductiveLevel;
                     for (auto vid : graph.getVertices()) {
-                        PTRef statePredicate = graph.getStateVersion(vid);
                         if (vid == graph.getEntry() or vid == graph.getExit()) { continue; }
-                        // MB: 0-ary predicate would be treated as variables in VersionManager, not what we want
-                        PTRef predicate = logic.getPterm(statePredicate).size() > 0 ? VersionManager(logic).sourceFormulaToBase(statePredicate) : statePredicate;
                         PTRef invariantSummary = logic.mkAnd(over.getComponents(vid, inductiveLevel));
                         if (logic.isOr(invariantSummary) or logic.isAnd(invariantSummary)) {
                             invariantSummary = simplifyUnderAssignment_Aggressive(invariantSummary, logic);
                         }
-                        auto insertRes = solution.insert(std::make_pair(predicate, invariantSummary));
+                        auto insertRes = solution.insert(std::make_pair(vid, invariantSummary));
                         assert(insertRes.second);
                         if (not insertRes.second) {
                             throw std::logic_error("Duplicate definition for a predicate encountered!");

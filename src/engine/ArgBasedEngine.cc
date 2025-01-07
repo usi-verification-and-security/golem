@@ -380,11 +380,11 @@ VerificationResult Algorithm::run() {
     Logic & logic = clauses.getLogic();
     for (SymRef symbol : clauses.getVertices()) {
         if (symbol == logic.getSym_true()) {
-            definitions.emplace(logic.getTerm_true(), logic.getTerm_true());
+            definitions.emplace(symbol, logic.getTerm_true());
             continue;
         }
         if (symbol == logic.getSym_false()) {
-            definitions.emplace(logic.getTerm_false(), logic.getTerm_false());
+            definitions.emplace(symbol, logic.getTerm_false());
             continue;
         }
         auto const & argNodeIds = arg.getInstancesFor(symbol);
@@ -393,11 +393,7 @@ VerificationResult Algorithm::run() {
             reachedStates.push(arg.getReachedStates(nodeId));
         }
         PTRef definition = logic.mkOr(std::move(reachedStates));
-        PTRef sourcePredicate = clauses.getStateVersion(symbol);
-        PTRef predicate = logic.getPterm(sourcePredicate).size() > 0
-                              ? VersionManager(logic).sourceFormulaToBase(sourcePredicate)
-                              : sourcePredicate;
-        definitions.emplace(predicate, definition);
+        definitions.emplace(symbol, definition);
     }
     return VerificationResult{VerificationAnswer::SAFE, ValidityWitness(std::move(definitions))};
 }

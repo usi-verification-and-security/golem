@@ -80,9 +80,6 @@ InvalidityWitness SimpleChainSummarizer::BackTranslator::translate(InvalidityWit
 ValidityWitness SimpleChainSummarizer::BackTranslator::translate(ValidityWitness witness) {
     if (summarizedChains.empty()) { return witness; }
     auto definitions = witness.getDefinitions();
-    // TODO: assert that we have true and false already
-    definitions.insert({logic.getTerm_true(), logic.getTerm_true()});
-    definitions.insert({logic.getTerm_false(), logic.getTerm_false()});
     std::reverse(summarizedChains.begin(), summarizedChains.end());
     TermUtils utils(logic);
     VersionManager manager(logic);
@@ -90,9 +87,8 @@ ValidityWitness SimpleChainSummarizer::BackTranslator::translate(ValidityWitness
         // Compute definitions for vertices on the chain using path interpolants
         SMTSolver solver(logic, SMTSolver::WitnessProduction::ONLY_INTERPOLANTS);
         assert(summary.from.size() == 1);
-        PTRef sourceInterpretation = manager.baseFormulaToSource(
-            definitions.at(manager.sourceFormulaToBase(predicateRepresentation.getSourceTermFor(summary.from.front())))
-        );
+        assert(definitions.find(summary.from.front()) != definitions.end());
+        PTRef sourceInterpretation = manager.baseFormulaToSource(definitions.at(summary.from.front()));
         solver.assertProp(sourceInterpretation);
         for (auto const & edge : chain) {
             TermUtils::substitutions_map substitutionsMap;
@@ -101,11 +97,8 @@ ValidityWitness SimpleChainSummarizer::BackTranslator::translate(ValidityWitness
             PTRef updatedLabel = utils.varSubstitute(edge.fla.fla, substitutionsMap);
             solver.assertProp(updatedLabel);
         }
-        PTRef predicate = predicateRepresentation.getSourceTermFor(summary.to);
-        // MB: We cannot try to rewrite 0-ary predicates
-        PTRef targetInterpretation = logic.isVar(predicate) ? definitions.at(predicate) : manager.baseFormulaToSource(
-            definitions.at(manager.sourceFormulaToBase(predicate))
-        );
+        assert(definitions.find(summary.to) != definitions.end());
+        PTRef targetInterpretation = manager.baseFormulaToSource(definitions.at(summary.to));
         solver.assertProp(logic.mkNot(targetInterpretation));
         auto res = solver.check();
         if (res != SMTSolver::Answer::UNSAT) {
@@ -124,13 +117,11 @@ ValidityWitness SimpleChainSummarizer::BackTranslator::translate(ValidityWitness
         itpCtx->getPathInterpolants(itps, partitionings);
         for (auto i = 0u; i < chain.size() - 1; ++i) {
             auto target = chain[i].to;
-            PTRef predicate = predicateRepresentation.getSourceTermFor(target);
-            predicate = logic.getPterm(predicate).size() > 0 ? VersionManager(logic).sourceFormulaToBase(predicate) : predicate;
-            if (definitions.count(predicate) > 0) {
+            if (definitions.count(target) > 0) {
                 std::cerr << "; Unexpected situation in SimpleChainBackTranslator: Predicate already has a solution!" << std::endl;
                 return ValidityWitness();
             }
-            definitions.insert({predicate, VersionManager(logic).sourceFormulaToBase(itps[i])});
+            definitions.insert({target, VersionManager(logic).sourceFormulaToBase(itps[i])});
         }
     }
     return ValidityWitness(std::move(definitions));

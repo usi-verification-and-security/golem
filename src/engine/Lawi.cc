@@ -406,11 +406,11 @@ VerificationResult LawiContext::unwind() {
         }
     });
     // computed interpretations
-    std::unordered_map<PTRef, PTRef, PTRefHash> solution;
+    std::unordered_map<SymRef, PTRef, SymRefHash> solution;
+    solution.insert({graph.getEntry(), logic.getTerm_true()});
+    solution.insert({graph.getExit(), logic.getTerm_false()});
     for (auto vid : graph.getVertices()) {
-        PTRef statePredicate = graph.getStateVersion(vid);
-        if (logic.isTrue(statePredicate) or logic.isFalse(statePredicate)) { continue; }
-        PTRef predicate = logic.getPterm(statePredicate).size() > 0 ? TimeMachine(logic).versionedFormulaToUnversioned(statePredicate) : statePredicate;
+        if (vid == graph.getEntry() or vid == graph.getExit()) { continue;}
         auto it = finalLabels.find(vid);
         const PTRef definition = [&]() {
             if (it == finalLabels.end()) {
@@ -422,13 +422,13 @@ VerificationResult LawiContext::unwind() {
             }
             return TimeMachine(logic).versionedFormulaToUnversioned(definition);
         }();
-        auto insertRes = solution.insert(std::make_pair(predicate, definition));
+        auto insertRes = solution.insert(std::make_pair(vid, definition));
         assert(insertRes.second);
         if (not insertRes.second) {
             throw std::logic_error("Duplicate definition for a predicate encountered!");
         }
     }
-    return VerificationResult(VerificationAnswer::SAFE, ValidityWitness(std::move(solution)));
+    return {VerificationAnswer::SAFE, ValidityWitness(std::move(solution))};
 }
 
 // Processing of a single leaf

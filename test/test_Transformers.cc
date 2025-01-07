@@ -82,7 +82,9 @@ TEST_F(Transformer_test, test_SingleChain_NoLoop) {
     auto hyperGraph = systemToGraph(system);
     auto originalGraph = *hyperGraph;
     auto [summarizedGraph, translator] = SimpleChainSummarizer().transform(std::move(hyperGraph));
-    ValidityWitness witness{};
+    ValidityWitness witness{
+        {{summarizedGraph->getEntry(), logic.getTerm_true()}, {summarizedGraph->getExit(), logic.getTerm_false()}}
+    };
     auto translatedWitness = translator->translate(witness);
     Validator validator(logic);
     VerificationResult result(VerificationAnswer::SAFE, translatedWitness);
@@ -123,7 +125,12 @@ TEST_F(Transformer_test, test_TwoChains_WithLoop) {
     VersionManager manager{logic};
     PTRef predicate = manager.sourceFormulaToBase(newGraph->getStateVersion(s2));
     PTRef var = logic.getPterm(predicate)[0];
-    ValidityWitness witness{{{predicate, logic.mkGeq(var,zero)}}};
+    ValidityWitness witness{
+        {
+            {newGraph->getEntry(), logic.getTerm_true()}, {s2, logic.mkGeq(var, zero)},
+            {newGraph->getExit(), logic.getTerm_false()}
+        }
+    };
     auto translatedWitness = translator->translate(witness);
     Validator validator(logic);
     VerificationResult result(VerificationAnswer::SAFE, translatedWitness);

@@ -1596,8 +1596,7 @@ witness_t TransitionSystemNetworkManager::computeValidityWitness() const {
         assert(res == ReachabilityResult::UNREACHABLE);
         if (res == ReachabilityResult::UNREACHABLE) {
             PTRef graphInvariant = utils.varSubstitute(node.solver->getInductiveInvariant(), subs);
-            PTRef unversionedPredicate = logic.mkUninterpFun(vertex, std::move(unversionedVars));
-            definitions[unversionedPredicate] = graphInvariant;
+            definitions[vertex] = graphInvariant;
         } else {
             return NoWitness("Unexpected situation occurred during witness computation in TPA engine");
         }
