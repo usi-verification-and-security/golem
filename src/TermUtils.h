@@ -452,12 +452,17 @@ class NonlinearCanonicalPredicateRepresentation {
     mutable std::vector<TermRepresentation> sourceTermsByInstance {{}};
     Logic & logic;
 public:
-    NonlinearCanonicalPredicateRepresentation(Logic & logic) : logic(logic) {}
+    explicit NonlinearCanonicalPredicateRepresentation(Logic & logic) : logic(logic) {}
 
     void addRepresentation(SymRef sym, std::vector<PTRef> vars);
 
     bool hasRepresentationFor(SymRef sym) const {
         return representation.count(sym) > 0;
+    }
+
+    std::vector<PTRef> const & getRepresentation(SymRef sym) const {
+        assert(hasRepresentationFor(sym));
+        return representation.at(sym);
     }
 
     PTRef getTargetTermFor(SymRef sym) const;
