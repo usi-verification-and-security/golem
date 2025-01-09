@@ -15,6 +15,7 @@
 #include "graph/ChcGraphBuilder.h"
 #include "transformers/BasicTransformationPipelines.h"
 #include "transformers/ConstraintSimplifier.h"
+#include "transformers/EdgeInliner.h"
 #include "transformers/MultiEdgeMerger.h"
 #include "transformers/NestedLoopTransformation.h"
 #include "transformers/NodeEliminator.h"
@@ -1100,4 +1101,40 @@ TEST_F(Transformer_New_Test, test_NestedLoopMerger_SimpleUnsafe) {
     ASSERT_EQ(answer, VerificationAnswer::UNSAFE);
     Validator validator(logic);
     EXPECT_EQ(validator.validate(*hyperGraph, res), Validator::Result::VALIDATED);
+}
+
+TEST_F(Transformer_New_Test, test_EdgeInliner_OutgoingLoop) {
+    SymRef s1 = mkPredicateSymbol("s1", {intSort(), intSort()});
+    PTRef dz = instantiatePredicate(s1, {zero,zero});
+    PTRef current = instantiatePredicate(s1, {x,y});
+    PTRef next = instantiatePredicate(s1, {xp,yp});
+    // x = 1 => S1(x,y)
+    // S1(x,y) and x = 1 and y != 0 => S1(0,0)
+    // S1(0,0) => false
+    std::vector<ChClause> clauses{
+        {
+            ChcHead{UninterpretedPredicate{next}},
+            ChcBody{{logic->mkEq(xp, one)}, {}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{dz}},
+            ChcBody{{logic->mkAnd(logic->mkEq(x, one), logic->mkNot(logic->mkEq(y, zero)))}, {UninterpretedPredicate{current}}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{logic->getTerm_false()}},
+            ChcBody{{logic->getTerm_true()}, {UninterpretedPredicate{dz}}}
+        }};
+
+    for (auto const & clause : clauses) { system.addClause(clause); }
+
+    Logic & logic = *this->logic;
+    auto normalizedSystem = Normalizer(logic).normalize(system);
+    auto hyperGraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
+    auto originalGraph = *hyperGraph;
+    TransformationPipeline::pipeline_t stages;
+    stages.push_back(std::make_unique<EdgeInliner>());
+    stages.push_back(std::make_unique<FalseClauseRemoval>());
+    stages.push_back(std::make_unique<RemoveUnreachableNodes>());
+    auto [transformedGraph, translator] = TransformationPipeline(std::move(stages)).transform(std::move(hyperGraph));
+    ASSERT_EQ(transformedGraph->getEdges().size(), 1);
 }
