@@ -363,8 +363,12 @@ private:
     }
 
     DirectedHyperEdge mergeEdgePair(EId first, EId second, bool requiresRenamingAuxiliaryVars = false);
-    DirectedHyperEdge mergeEdges(std::vector<EId> const & chain);
-    PTRef mergeLabels(std::vector<EId> const & chain) const;
+
+    /** Merges a chaing of simple non-looping edges into a single edge */
+    DirectedHyperEdge mergeTrivialChain(std::vector<EId> const & chain);
+
+    /** Computes a merged label of a chain of simple non-looping edges */
+    PTRef mergeTrivialChainLabels(std::vector<EId> const & chain) const;
 };
 
 std::optional<EId> getSelfLoopFor(SymRef, ChcDirectedGraph const & graph, AdjacencyListsGraphRepresentation const & adjacencyRepresentation);
