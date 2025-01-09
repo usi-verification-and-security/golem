@@ -8,6 +8,8 @@
 
 #include "transformers/CommonUtils.h"
 #include "TransformationUtils.h"
+
+#include <algorithm>
 #include <iostream>
 #include <map>
 #include <set>
@@ -253,7 +255,7 @@ std::optional<EId> getSelfLoopFor(SymRef sym, ChcDirectedGraph const & graph, Ad
 
 DirectedHyperEdge ChcDirectedHyperGraph::contractTrivialChain(std::vector<EId> const & trivialChain) {
     assert(trivialChain.size() >= 2);
-    auto summaryEdge = mergeEdges(trivialChain);
+    auto summaryEdge = mergeTrivialChain(trivialChain);
     std::vector<SymRef> vertices;
     vertices.reserve(trivialChain.size());
     for (EId eid : trivialChain) {
@@ -325,7 +327,7 @@ DirectedHyperEdge ChcDirectedHyperGraph::mergeEdgePair(EId incoming, EId outgoin
     assert(source != common);
     auto target = getTarget(outgoing);
     if (getSources(outgoing).size() == 1 and target != common) { // Outgoing is a simple edge
-        auto edge = mergeEdges({incoming, outgoing});
+        auto edge = mergeTrivialChain({incoming, outgoing});
         auto eid = edge.id;
         PTRef cleanedLabel = renameAuxiliaries(*this, eid);
         edges.at(eid).fla.fla = cleanedLabel;
@@ -368,16 +370,24 @@ DirectedHyperEdge ChcDirectedHyperGraph::mergeEdgePair(EId incoming, EId outgoin
 
 }
 
-DirectedHyperEdge ChcDirectedHyperGraph::mergeEdges(std::vector<EId> const & chain) {
-    assert(getSources(chain.front()).size() == 1);
+DirectedHyperEdge ChcDirectedHyperGraph::mergeTrivialChain(std::vector<EId> const & chain) {
+    assert(std::all_of(chain.begin(), chain.end(), [this](EId eid) { return not isHyperEdge(eid); }));
     auto source = getSources(chain.front()).front();
     auto target = getTarget(chain.back());
-    PTRef mergedLabel = mergeLabels(chain);
+    PTRef mergedLabel = mergeTrivialChainLabels(chain);
     auto eid = newEdge({source}, target, InterpretedFla{mergedLabel});
     return getEdge(eid);
 }
 
-PTRef ChcDirectedHyperGraph::mergeLabels(std::vector<EId> const & chain) const {
+/**
+ * Computes a merged label of a chain of simple non-looping edges.
+ * It relies on the fact that the edges are simple and non-looping to avoid introducing new auxiliary variables.
+ * Instead, it just renames the source variables from successor to the target variables of predecessor.
+ *
+ * TODO: Is it sound to keep the intermediate variables without renaming them?
+ * Probably only if there are no other edges related to the intermediate nodes.
+ */
+PTRef ChcDirectedHyperGraph::mergeTrivialChainLabels(std::vector<EId> const & chain) const {
     // MB: We can rely on the fact that every predicate has unique variables in its canonical representation
     // This is guaranteed by Normalizer
     assert(chain.size() >= 2);
