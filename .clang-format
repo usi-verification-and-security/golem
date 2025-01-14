@@ -9,4 +9,6 @@ AllowShortFunctionsOnASingleLine: Inline
 AllowShortBlocksOnASingleLine: Always
 AllowShortIfStatementsOnASingleLine: WithoutElse
 IndentCaseLabels: True
+PackConstructorInitializers: NextLine
+ReflowComments: False
 SpaceAfterTemplateKeyword: False

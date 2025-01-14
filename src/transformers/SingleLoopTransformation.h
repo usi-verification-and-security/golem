@@ -48,7 +48,9 @@ public:
     public:
         WitnessBackTranslator(ChcDirectedGraph const & graph, TransitionSystem const & transitionSystem,
                               LocationVarMap && locationVarMap, PositionVarMap && positionVarMap)
-            : graph(graph), transitionSystem(transitionSystem), locationVarMap(std::move(locationVarMap)),
+            : graph(graph),
+              transitionSystem(transitionSystem),
+              locationVarMap(std::move(locationVarMap)),
               positionVarMap(std::move(positionVarMap)) {}
 
         VerificationResult translate(TransitionSystemVerificationResult result);

@@ -1391,7 +1391,9 @@ class TransitionSystemNetworkManager {
 
 public:
     TransitionSystemNetworkManager(TPAEngine & owner, ChcDirectedGraph const & graph)
-        : owner(owner), logic(owner.logic), graph(graph),
+        : owner(owner),
+          logic(owner.logic),
+          graph(graph),
           adjacencyRepresentation(AdjacencyListsGraphRepresentation::from(graph)) {}
 
     VerificationResult solve() &&;

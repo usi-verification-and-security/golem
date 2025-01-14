@@ -99,8 +99,11 @@ public:
     StepHandler(InvalidityWitness::Derivation derivation, std::vector<std::shared_ptr<Term>> originalAssertions,
                 Normalizer::Equalities const & normalizingEqualities, Logic & logic,
                 ChcDirectedHyperGraph originalGraph)
-        : derivation(std::move(derivation)), originalAssertions(std::move(originalAssertions)),
-          normalizingEqualities(normalizingEqualities), logic(logic), originalGraph(std::move(originalGraph)) {}
+        : derivation(std::move(derivation)),
+          originalAssertions(std::move(originalAssertions)),
+          normalizingEqualities(normalizingEqualities),
+          logic(logic),
+          originalGraph(std::move(originalGraph)) {}
 
     void buildAletheProof();
     void buildIntermediateProof();

@@ -4,16 +4,15 @@
  * SPDX-License-Identifier: MIT
  */
 
-
 #include "TransitionSystem.h"
 
-#include "TermUtils.h"
 #include "QuantifierElimination.h"
+#include "TermUtils.h"
 #include "utils/SmtSolver.h"
 #include "utils/Timer.h"
 
 bool TransitionSystem::isWellFormed() {
-//    return systemType->isStateFormula(init) && systemType->isStateFormula(query) && systemType->isTransitionFormula(transition);
+    // return systemType->isStateFormula(init) && systemType->isStateFormula(query) && systemType->isTransitionFormula(transition);
     bool ok = systemType->isStateFormula(init);
     if (not ok) {
         std::stringstream ss;
@@ -38,7 +37,6 @@ bool TransitionSystem::isWellFormed() {
     return true;
 }
 
-
 PTRef TransitionSystem::toNextStateVar(PTRef var) const {
     assert(logic.isVar(var));
     static std::string suffix = "#p";
@@ -47,7 +45,8 @@ PTRef TransitionSystem::toNextStateVar(PTRef var) const {
     return logic.mkVar(logic.getSortRef(var), newName.c_str());
 }
 
-SystemType::SystemType(std::vector<SRef> stateVarTypes, std::vector<SRef> auxiliaryVarTypes, Logic & logic) : logic(logic) {
+SystemType::SystemType(std::vector<SRef> stateVarTypes, std::vector<SRef> auxiliaryVarTypes, Logic & logic)
+    : logic(logic) {
     struct Helper {
         Helper(Logic & logic, std::string varNamePrefix) : logic(logic), varNamePrefix(std::move(varNamePrefix)) {}
         Logic & logic;
@@ -55,34 +54,31 @@ SystemType::SystemType(std::vector<SRef> stateVarTypes, std::vector<SRef> auxili
         std::string varNamePrefix;
         std::size_t counter = 0;
 
-        PTRef operator()(SRef sref) { return logic.mkVar(sref, std::string(prefix + varNamePrefix + std::to_string(counter++)).c_str());}
+        PTRef operator()(SRef sref) {
+            return logic.mkVar(sref, std::string(prefix + varNamePrefix + std::to_string(counter++)).c_str());
+        }
     };
     TimeMachine tm(logic);
     Helper helper{logic, "x"};
-    std::transform(stateVarTypes.begin(), stateVarTypes.end(), std::back_inserter(stateVars), [&](SRef sref) {
-        return tm.getVarVersionZero(helper(sref));
-    });
-    std::transform(stateVars.begin(), stateVars.end(), std::back_inserter(nextStateVars), [&](PTRef var) {
-        return tm.sendVarThroughTime(var,1);
-    });
+    std::transform(stateVarTypes.begin(), stateVarTypes.end(), std::back_inserter(stateVars),
+                   [&](SRef sref) { return tm.getVarVersionZero(helper(sref)); });
+    std::transform(stateVars.begin(), stateVars.end(), std::back_inserter(nextStateVars),
+                   [&](PTRef var) { return tm.sendVarThroughTime(var, 1); });
     helper.varNamePrefix = "aux";
-    std::transform(auxiliaryVarTypes.begin(), auxiliaryVarTypes.end(), std::back_inserter(auxiliaryVars), [&](SRef sref) {
-        return tm.getVarVersionZero(helper(sref));
-    });
+    std::transform(auxiliaryVarTypes.begin(), auxiliaryVarTypes.end(), std::back_inserter(auxiliaryVars),
+                   [&](SRef sref) { return tm.getVarVersionZero(helper(sref)); });
 }
 
 SystemType::SystemType(std::vector<PTRef> stateVars, std::vector<PTRef> auxiliaryVars, Logic & logic) : logic(logic) {
-    std::transform(stateVars.begin(), stateVars.end(), std::back_inserter(nextStateVars), [&logic](PTRef var) {
-        return TimeMachine(logic).sendVarThroughTime(var, 1);
-    });
+    std::transform(stateVars.begin(), stateVars.end(), std::back_inserter(nextStateVars),
+                   [&logic](PTRef var) { return TimeMachine(logic).sendVarThroughTime(var, 1); });
     this->stateVars = std::move(stateVars);
     this->auxiliaryVars = std::move(auxiliaryVars);
 }
 
 SystemType::SystemType(vec<PTRef> const & stateVars, vec<PTRef> const & auxiliaryVars, Logic & logic) : logic(logic) {
-    std::transform(stateVars.begin(), stateVars.end(), std::back_inserter(nextStateVars), [&logic](PTRef var) {
-        return TimeMachine(logic).sendVarThroughTime(var, 1);
-    });
+    std::transform(stateVars.begin(), stateVars.end(), std::back_inserter(nextStateVars),
+                   [&logic](PTRef var) { return TimeMachine(logic).sendVarThroughTime(var, 1); });
     std::copy(stateVars.begin(), stateVars.end(), std::back_inserter(this->stateVars));
     std::copy(auxiliaryVars.begin(), auxiliaryVars.end(), std::back_inserter(this->auxiliaryVars));
 }
@@ -105,7 +101,7 @@ bool SystemType::isTransitionFormula(PTRef fla) const {
     allVars.insert(allVars.end(), nextStateVars.begin(), nextStateVars.end());
     allVars.insert(allVars.end(), auxiliaryVars.begin(), auxiliaryVars.end());
     vec<PTRef> vars = TermUtils(logic).getVars(fla);
-    return std::all_of(vars.begin(), vars.end(), [&allVars](PTRef var){
+    return std::all_of(vars.begin(), vars.end(), [&allVars](PTRef var) {
         return std::find(std::begin(allVars), std::end(allVars), var) != std::end(allVars);
     });
 }
@@ -153,9 +149,8 @@ PTRef TransitionSystem::reverseTransitionRelation(TransitionSystem const & trans
     auto const & nextStateVars = transitionSystem.getNextStateVars();
     std::vector<PTRef> helperVars;
     helperVars.reserve(stateVars.size());
-    std::transform(stateVars.begin(), stateVars.end(), std::back_inserter(helperVars), [&](PTRef var) {
-        return tm.sendVarThroughTime(var,2);
-    });
+    std::transform(stateVars.begin(), stateVars.end(), std::back_inserter(helperVars),
+                   [&](PTRef var) { return tm.sendVarThroughTime(var, 2); });
     TermUtils utils(transitionSystem.logic);
     TermUtils::substitutions_map subst;
     std::size_t varCount = stateVars.size();
@@ -224,13 +219,11 @@ PTRef KTo1Inductive::qe(PTRef invariant, unsigned k, TransitionSystem const & sy
     Logic & logic = system.getLogic();
     PTRef transition = system.getTransition();
     auto stateVars = system.getStateVars();
-    auto getNextVersion = [&logic](PTRef fla, int shift) {
-        return TimeMachine(logic).sendFlaThroughTime(fla, shift);
-    };
+    auto getNextVersion = [&logic](PTRef fla, int shift) { return TimeMachine(logic).sendFlaThroughTime(fla, shift); };
     PTRef acc = logic.getTerm_false();
     for (unsigned i = k - 1; i > 0; --i) {
         acc = logic.mkOr(acc, logic.mkNot(getNextVersion(invariant, i)));
-        acc = logic.mkAnd({acc, getNextVersion(invariant, i-1), getNextVersion(transition, i-1)});
+        acc = logic.mkAnd({acc, getNextVersion(invariant, i - 1), getNextVersion(transition, i - 1)});
     }
     PTRef afterElimination = QuantifierElimination(logic).keepOnly(acc, stateVars);
     PTRef result = TermUtils(logic).toNNF(logic.mkNot(afterElimination));

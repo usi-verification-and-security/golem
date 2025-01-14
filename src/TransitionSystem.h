@@ -4,14 +4,13 @@
  * SPDX-License-Identifier: MIT
  */
 
-
 #ifndef GOLEM_TRANSITIONSYSTEM_H
 #define GOLEM_TRANSITIONSYSTEM_H
 
 #include "osmt_terms.h"
 
-#include <vector>
 #include <memory>
+#include <vector>
 
 class SystemType {
 
@@ -22,7 +21,6 @@ class SystemType {
     Logic & logic;
 
 public:
-
     SystemType(std::vector<SRef> stateVarTypes, Logic & logic);
     SystemType(std::vector<SRef> stateVarTypes, std::vector<SRef> auxiliaryVarTypes, Logic & logic);
     SystemType(std::vector<PTRef> stateVars, std::vector<PTRef> auxiliaryVars, Logic & logic);
@@ -47,19 +45,15 @@ class TransitionSystem {
     PTRef transition;
     PTRef query;
 
-
 public:
-    TransitionSystem(Logic & logic, std::unique_ptr<SystemType> systemType,
-        PTRef initialStates, PTRef transitionRelation, PTRef badStates) :
-        logic(logic),
-        systemType(std::move(systemType)),
-        init(initialStates),
-        transition(transitionRelation),
-        query(badStates)
-    {
-        if (not isWellFormed()) {
-            throw std::logic_error("Transition system not created correctly");
-        }
+    TransitionSystem(Logic & logic, std::unique_ptr<SystemType> systemType, PTRef initialStates,
+                     PTRef transitionRelation, PTRef badStates)
+        : logic(logic),
+          systemType(std::move(systemType)),
+          init(initialStates),
+          transition(transitionRelation),
+          query(badStates) {
+        if (not isWellFormed()) { throw std::logic_error("Transition system not created correctly"); }
     }
 
     PTRef getInit() const;
@@ -86,16 +80,14 @@ struct KTo1Inductive {
     enum class Mode { UNFOLD, QE };
     explicit KTo1Inductive(Mode mode) : mode(mode) {}
     [[nodiscard]] PTRef kinductiveToInductive(PTRef invariant, unsigned k, TransitionSystem const & system) const;
+
 private:
     Mode mode;
 
     [[nodiscard]] static PTRef qe(PTRef invariant, unsigned k, TransitionSystem const & system);
     [[nodiscard]] static PTRef unfold(PTRef invariant, unsigned k, TransitionSystem const & system);
-
 };
 
 PTRef kinductiveToInductive(PTRef invariant, unsigned k, TransitionSystem const & system);
 
-
-
-#endif //GOLEM_TRANSITIONSYSTEM_H
+#endif // GOLEM_TRANSITIONSYSTEM_H

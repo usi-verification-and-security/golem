@@ -277,8 +277,11 @@ private:
 class Algorithm {
 public:
     explicit Algorithm(ChcDirectedHyperGraph const & clauses, bool computeWitness = false)
-        : clauses(clauses), computeWitness(computeWitness),
-          representation(AdjacencyListsGraphRepresentation::from(clauses)), queue(clauses), arg{clauses} {
+        : clauses(clauses),
+          computeWitness(computeWitness),
+          representation(AdjacencyListsGraphRepresentation::from(clauses)),
+          queue(clauses),
+          arg{clauses} {
         auto [nodeId, covered] = arg.tryInsertNode(clauses.getEntry(), PredicateAbstractionManager::Predicates{});
         assert(not covered);
         assert(nodeId == ARG::ENTRY);

@@ -1,5 +1,7 @@
 src/TransformationUtils.cc
 src/TransformationUtils.h
+src/TransitionSystem.cc
+src/TransitionSystem.h
 src/ChcInterpreter.cc
 src/ChcInterpreter.h
 
