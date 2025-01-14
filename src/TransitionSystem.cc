@@ -183,68 +183,59 @@ PTRef KTo1Inductive::kinductiveToInductive(PTRef invariant, unsigned k, Transiti
     switch (mode) {
         case Mode::UNFOLD:
             return unfold(invariant, k, system);
-        case Mode::LEGACY:
-            return legacy(invariant, k, system);
+        case Mode::QE:
+            return qe(invariant, k, system);
         default:
             assert(false);
             throw std::logic_error("Unreachable!");
     }
 }
 
-PTRef KTo1Inductive::legacy(PTRef invariant, unsigned k, TransitionSystem const & system) {
-    /*
-     * If P(x) is k-inductive invariant then the following formula is 1-inductive invariant:
-     * P(x_0)
-     * \land \forall x_1 (Tr(x_0,x_1) \implies P(x_1)
-     * \land \forall x_1,x_2 (Tr(x_0,x_1 \land P(x_1) \land Tr(x_1,x_2) \implies P(x_2))
-     * ...
-     * \land \forall x_1,x_2,\ldots,x_{k-1}(Tr(x_0,x_1) \land p(x_1) \land \ldots \land P(x_{k-2}) \land Tr(x_{k-2},x_{k-1} \implies P(x_{k_1}))
-     *
-     * This is equivalent to
-     * * P(x_0)
-     * \land \neg \exists x_1 (Tr(x_0,x_1) \land \neg P(x_1)
-     * \land \neg \exists x_1,x_2 (Tr(x_0,x_1 \land P(x_1) \land Tr(x_1,x_2) \land \neg P(x_2))
-     * ...
-     * \land \neg \exists x_1,x_2,\ldots,x_{k-1}(Tr(x_0,x_1) \land p(x_1) \land \ldots \land P(x_{k-2}) \land Tr(x_{k-2},x_{k-1} \land \neg P(x_{k-1}))
-     *
-     * Some computation can be re-used between iteration as going from one iteration to another (ignoring the last negated P(x_i)) we only add
-     * next version of P(x_i) and Tr(x_i, x_{i+1})
-     */
-    // TODO: eliminate auxiliary variables from transition relation beforehand
+/**
+ * If P(x) is k-inductive invariant then the following formula is 1-inductive invariant:
+ * P(x_0) \land \forall x_1,x_2,\ldots,x_{k-1}
+ *  (P(x_0) \land Tr(x_0,x_1) \implies P(x_1))
+ *  \land (P(x_0) \land Tr(x_0,x_1 \land P(x_1) \land Tr(x_1,x_2) \implies P(x_2))
+ *  ...
+ *  \land (P(x_0) \land Tr(x_0,x_1) \land p(x_1) \land \ldots \land P(x_{k-2}) \land Tr(x_{k-2},x_{k-1} \implies P(x_{k_1}))
+ *
+ * This is equivalent to
+ * P(x_0) \land \neg \exists x_1,x_2,\ldots,x_{k-1}
+ *  (P(x_0) \land Tr(x_0,x_1) \land \neg P(x_1))
+ *  \lor (P(x_0) \land Tr(x_0,x_1 \land P(x_1) \land Tr(x_1,x_2) \land \neg P(x_2))
+ *  ...
+ *  \lor (P(x_0) \land Tr(x_0,x_1) \land p(x_1) \land \ldots \land P(x_{k-2}) \land Tr(x_{k-2},x_{k-1} \land \neg P(x_{k-1}))
+ *
+ * The quantifier-free core can be further rewritten using distributivity to
+ * (P(x_0) \land Tr(x_0,x_1) \land (
+ *  \neg P(x_1) \lor (P(x_1) \land Tr(x_1,x_2) \land (
+ *   \neg P(x_2) \lor (P(x_2) \land Tr(x_2,x_3) \land (
+ *    ...
+ *      \neg P(x_{k-2}) \lor (P(x_{k-2}) \land Tr(x_{k-2},x_{k-1}) \land \neg P(x_{k-1})
+ *   )...))
+ *
+ * @param invariant k-inductive invsariant for the transition system \p system
+ * @param k
+ * @param system
+ * @return 1-inductive invariant for the same system that is logically stronger than the k-inductive one
+ */
+PTRef KTo1Inductive::qe(PTRef invariant, unsigned k, TransitionSystem const & system) {
+    assert(k >= 2);
     Logic & logic = system.getLogic();
-    vec<PTRef> stateVars = system.getStateVars();
-    vec<PTRef> resArgs;
-    // step 0
-    resArgs.push(invariant);
-    vec<PTRef> helpers;
-    helpers.push(PTRef_Undef);
     PTRef transition = system.getTransition();
+    auto stateVars = system.getStateVars();
     auto getNextVersion = [&logic](PTRef fla, int shift) {
         return TimeMachine(logic).sendFlaThroughTime(fla, shift);
     };
-    auto getStateVars = [&logic, &stateVars](int version) {
-        vec<PTRef> versioned;
-        TimeMachine timeMachine(logic);
-        for (PTRef var : stateVars) {
-            versioned.push(timeMachine.sendVarThroughTime(var, version));
-        }
-        return versioned;
-    };
-    // step 1
-//    std::cout << "Step 1 out of " << k << std::endl;
-    PTRef afterElimination = QuantifierElimination(logic).keepOnly(logic.mkAnd(transition, logic.mkNot(getNextVersion(invariant, 1))), stateVars);
-    resArgs.push(logic.mkNot(afterElimination));
-    helpers.push(transition);
-    // steps 2 to k-1
-    for (unsigned i = 2; i < k; ++i) {
-//        std::cout << "Step " << i << " out of " << k << std::endl;
-        PTRef helper = logic.mkAnd({helpers[i-1], getNextVersion(invariant, i-1), getNextVersion(transition, i-1)});
-        helper = QuantifierElimination(logic).eliminate(helper, getStateVars(i-1));
-        helpers.push(helper);
-        afterElimination = QuantifierElimination(logic).keepOnly(logic.mkAnd(helper, logic.mkNot(getNextVersion(invariant, i))), stateVars);
-        resArgs.push(logic.mkNot(afterElimination));
+    PTRef acc = logic.getTerm_false();
+    for (unsigned i = k - 1; i > 0; --i) {
+        acc = logic.mkOr(acc, logic.mkNot(getNextVersion(invariant, i)));
+        acc = logic.mkAnd({acc, getNextVersion(invariant, i-1), getNextVersion(transition, i-1)});
     }
-    return logic.mkAnd(std::move(resArgs));
+    PTRef afterElimination = QuantifierElimination(logic).keepOnly(acc, stateVars);
+    PTRef result = TermUtils(logic).toNNF(logic.mkNot(afterElimination));
+    result = logic.mkAnd(result, invariant);
+    return result;
 }
 
 namespace {
@@ -314,6 +305,7 @@ PTRef KTo1Inductive::unfold(PTRef invariant, unsigned k, TransitionSystem const 
 }
 
 PTRef kinductiveToInductive(PTRef invariant, unsigned k, TransitionSystem const & system) {
+    if (k == 1) { return invariant; }
     // std::cout << "Reducing k-inductive invariant with k=" << k << std::endl;
     // Timer timer;
     PTRef res = KTo1Inductive{KTo1Inductive::Mode::UNFOLD}.kinductiveToInductive(invariant, k, system);
