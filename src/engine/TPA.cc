@@ -485,7 +485,7 @@ VerificationAnswer TPASplit::checkPower(unsigned short power) {
     }
 }
 
-/*
+    /*
  * Check if 'to' is reachable from 'from' (these are state formulas) in exactly 2^{n+1} steps (n is 'power').
  * We do this using the n-th abstraction of the transition relation and check 2-step reachability in this abstraction.
  * If 'to' is unreachable, we interpolate over the 2 step transition to obtain 1-step transition of level n+1.
@@ -1385,6 +1385,8 @@ struct Entry {
     NodeState state;
     SymRef node;
     std::optional<EId> incomingEdge; // Edge used to get into this node, valid only for PRE state
+    std::optional<std::vector<Entry>> subPath; // Edge used to get into this node, valid only for PRE state
+    std::optional<size_t> iteration_num; // Edge used to get into this node, valid only for PRE state
     PTRef reached;
 };
 
@@ -1471,7 +1473,9 @@ private:
 
     [[nodiscard]] Path produceExactReachedStates(NetworkNode & node, TPABase const & solver, std::vector<std::vector<EId>> const & loops) ;
 
-    [[nodiscard]] witness_t computeInvalidityWitness(std::vector<EId> const & path) const;
+    [[nodiscard]] witness_t computeInvalidityWitness(Path const & path) const;
+
+    [[nodiscard]] std::vector<EId> extractPath(Path const & path) const;
 
     [[nodiscard]] PTRef produceUnrolling(int depth, PTRef vars) const;
 
@@ -1518,31 +1522,21 @@ void TransitionSystemNetworkManager::initNetwork() {
     }
 }
 
-namespace {
 
-std::vector<EId> extractPath(Path const & path) {
-    std::vector<EId> res;
-    for (auto const & entry : path) {
-        if (entry.state == NodeState::PRE) { res.push_back(entry.incomingEdge.value()); }
-    }
-    return res;
-}
-
-} // namespace
 
 VerificationResult TransitionSystemNetworkManager::solve() && {
     initNetwork();
     Path path;
-    path.push_back({NodeState::POST, graph.getEntry(), std::nullopt, logic.getTerm_true()});
+    path.push_back({NodeState::POST, graph.getEntry(), std::nullopt, std::nullopt, std::nullopt, logic.getTerm_true()});
     while (not path.empty()) {
-        auto const & [state, node, eid, reached] = path.back();
+        auto const & [state, node, eid, subpath, iterations, reached] = path.back();
         auto & networkNode = getNode(node);
         switch (state) {
             case NodeState::PRE: // Traverse loop
             {
                 auto res = queryTransitionSystem(networkNode, reached, logic.mkNot(networkNode.postSafe));
                 if (res.reachabilityResult == ReachabilityResult::REACHABLE) {
-                    path.push_back({NodeState::POST, node, std::nullopt, res.explanation});
+                    path.push_back({NodeState::POST, node, std::nullopt, std::nullopt, networkNode.solver->getTransitionStepCount(), res.explanation});
                 } else {
 //                    networkNode.loopInvariant = logic.mkAnd(networkNode.loopInvariant, networkNode.solver->getTransitionInvariant());
                     networkNode.preSafe = logic.mkOr(networkNode.preSafe, res.explanation);
@@ -1565,8 +1559,8 @@ VerificationResult TransitionSystemNetworkManager::solve() && {
                         auto res = queryLoops(networkNode, reached, logic.mkNot(networkNode.preSafe));
                         if(res.reachabilityResult == ReachabilityResult::REACHABLE) {
                             assert(res.subpath.has_value());
-//                            path.insert(path.end(), res.subpath.value().begin(), res.subpath.value().end());
-                            path.push_back({NodeState::PRE, node, std::nullopt, res.explanation});
+                            path.pop_back();
+                            path.push_back({NodeState::PRE, node, eid, res.subpath, std::nullopt, res.explanation});
                             continue;
                         } else {
                             networkNode.preSafe = logic.mkOr(networkNode.preSafe, res.explanation);
@@ -1636,10 +1630,10 @@ VerificationResult TransitionSystemNetworkManager::solve() && {
                     }
                     auto res = queryEdge(nextEdge, reached, logic.mkNot(getNode(target).preSafe));
                     if (res.reachabilityResult == ReachabilityResult::REACHABLE) {
-                        path.push_back({NodeState::PRE, target, nextEdge, res.explanation});
+                        path.push_back({NodeState::PRE, target, nextEdge, std::nullopt,  std::nullopt, res.explanation});
                         if (target == graph.getExit()) {
                             witness_t witness = owner.shouldComputeWitness()
-                                                    ? computeInvalidityWitness(extractPath(path))
+                                                    ? computeInvalidityWitness(path)
                                                     : NoWitness{};
                             return {VerificationAnswer::UNSAFE, std::move(witness)};
                         }
@@ -1656,16 +1650,37 @@ VerificationResult TransitionSystemNetworkManager::solve() && {
     return {VerificationAnswer::SAFE, std::move(witness)};
 }
 
-witness_t TransitionSystemNetworkManager::computeInvalidityWitness(std::vector<EId> const & path) const {
-    std::vector<EId> errorPath;
-    for (EId edge : path) {
-        errorPath.push_back(edge);
-        SymRef target = graph.getTarget(edge);
-        if (target != graph.getExit()) {
-            auto steps = getNode(target).solver->getTransitionStepCount();
-            errorPath.insert(errorPath.end(), steps, getSelfLoopFor(target, graph, adjacencyRepresentation).value());
+std::vector<EId> TransitionSystemNetworkManager::extractPath(Path const & path) const {
+    std::vector<EId> res;
+    for (auto const & entry : path) {
+        if (entry.state == NodeState::PRE) {
+            res.push_back(entry.incomingEdge.value());
+            if(entry.subPath.has_value()){
+                auto subpath = extractPath(entry.subPath.value());
+                res.insert(res.end(), subpath.begin(), subpath.end());
+            }
+        } else {
+            if(entry.iteration_num.has_value()){
+                auto steps = entry.iteration_num.value();
+                res.insert(res.end(), steps, getSelfLoopFor(entry.node, graph, adjacencyRepresentation).value());
+            }
         }
     }
+    return res;
+}
+
+
+witness_t TransitionSystemNetworkManager::computeInvalidityWitness(Path const & path) const {
+    std::vector<EId> errorPath = extractPath(path);
+
+//    for (EId edge : path) {
+//        errorPath.push_back(edge);
+//        SymRef target = graph.getTarget(edge);
+//        if (target != graph.getExit()) {
+//            auto steps = getNode(target).solver->getTransitionStepCount();
+//            errorPath.insert(errorPath.end(), steps, getSelfLoopFor(target, graph, adjacencyRepresentation).value());
+//        }
+//    }
     return InvalidityWitness::fromErrorPath(ErrorPath{std::move(errorPath)}, graph);
 }
 
@@ -1730,24 +1745,25 @@ TransitionSystem TransitionSystemNetworkManager::constructTransitionSystemFor(Sy
         int n = 0;
         for (int i = 0; i < loop.size(); i++) {
             auto const & source = getNode(graph.getSource(loop[i]));
-            PTRef nestedLoopTrInv = source.loopInvariant == PTRef_Undef ? logic.getTerm_false() : timeMachine.sendFlaThroughTime(source.loopInvariant, n);
+//            PTRef nestedLoopTrInv = source.loopInvariant == PTRef_Undef ? logic.getTerm_false() : timeMachine.sendFlaThroughTime(source.loopInvariant, n);
             PTRef loopTrInv = timeMachine.sendFlaThroughTime(source.solver->getTransitionInvariant(), n++);
             // TODO: What if loopTrInv is k-inductive? I need to come up with propper handling of k-inductive TrInvs
             // TODO: Check for "or" should be also changed, I just need to validate how much variable versions are in transition
             if (logic.isOr(loopTrInv)) {
-                if(nestedLoopTrInv != logic.getTerm_false()){
-                    auto selfLoopVars = getVariablesFromEdge(
-                        logic, graph, getSelfLoopFor(graph.getSource(loop[i]), graph, adjacencyRepresentation).value());
-                    std::unordered_map<PTRef, PTRef, PTRefHash> subMap;
-                    for(auto var: selfLoopVars.nextStateVars){
-                        subMap.insert(std::make_pair(timeMachine.sendVarThroughTime(var,n), timeMachine.sendVarThroughTime(var,n+1)));
-                    }
-                    loopTrInv = utils.varSubstitute(loopTrInv, subMap);
-                }
+//                if(nestedLoopTrInv != logic.getTerm_false()){
+//                    auto selfLoopVars = getVariablesFromEdge(
+//                        logic, graph, getSelfLoopFor(graph.getSource(loop[i]), graph, adjacencyRepresentation).value());
+//                    std::unordered_map<PTRef, PTRef, PTRefHash> subMap;
+//                    for(auto var: selfLoopVars.nextStateVars){
+//                        subMap.insert(std::make_pair(timeMachine.sendVarThroughTime(var,n), timeMachine.sendVarThroughTime(var,n+1)));
+//                    }
+//                    loopTrInv = utils.varSubstitute(loopTrInv, subMap);
+//                }
                 n++;
             }
             PTRef label = timeMachine.sendFlaThroughTime(graph.getEdgeLabel(loop[i]), n++);
-            loopMTr = logic.mkAnd({loopMTr, logic.mkOr(loopTrInv, nestedLoopTrInv), label});
+//            loopMTr = logic.mkAnd({loopMTr, logic.mkOr(loopTrInv, nestedLoopTrInv), label});
+            loopMTr = logic.mkAnd({loopMTr, loopTrInv, label});
         }
         std::unordered_map<PTRef, PTRef, PTRefHash> subMap;
         for(auto var: edgeVars.stateVars){
@@ -1900,7 +1916,7 @@ Path TransitionSystemNetworkManager::produceExactReachedStates(NetworkNode & nod
                     if ( l%2 == 0 ) {
                         auto res = queryTransitionSystem(networkNode, reachedRefined, logic.mkNot(networkNode.postSafeLoop));
                         if (res.reachabilityResult == ReachabilityResult::REACHABLE) {
-                            subPath.push_back({NodeState::POST, graph.getSource(edge), std::nullopt, res.explanation});
+                            subPath.push_back({NodeState::POST, graph.getSource(edge), std::nullopt, std::nullopt, networkNode.solver->getTransitionStepCount(), res.explanation});
                             l++;
                         } else {
                             if(l == 0) {
@@ -1911,7 +1927,7 @@ Path TransitionSystemNetworkManager::produceExactReachedStates(NetworkNode & nod
                                 auto res = queryLoops(networkNode, reachedRefined, logic.mkNot(networkNode.preSafeLoop));
                                 if (res.reachabilityResult == ReachabilityResult::REACHABLE) {
                                     subPath.push_back(
-                                        {NodeState::PRE, graph.getSource(edge), std::nullopt, res.explanation});
+                                        {NodeState::PRE, graph.getSource(edge), edge, res.subpath,  std::nullopt, res.explanation});
                                     l++;
                                 } else {
                                     networkNode.preSafeLoop = logic.mkOr(networkNode.preSafeLoop, res.explanation);
@@ -1929,9 +1945,10 @@ Path TransitionSystemNetworkManager::produceExactReachedStates(NetworkNode & nod
                         auto target = graph.getTarget(edge);
                         TransitionSystemNetworkManager::QueryResult res;
                         if (l == node.loops[j].size()*2-1 ) {
-                            res = queryEdge(edge, reachedRefined, logic.mkNot(getNode(target).preSafe));
-                            if(res.reachabilityResult == ReachabilityResult::REACHABLE){
-                                subPath.push_back({NodeState::PRE, target, edge, res.explanation});
+                            res = queryEdge(edge, reachedRefined, logic.mkAnd(logic.mkNot(getNode(target).preSafe), logic.mkNot(getNode(target).preSafeLoop)));
+                            //TODO: Figure out why this thing is necessary!!!
+                            if (res.reachabilityResult == ReachabilityResult::REACHABLE) {
+                                subPath.push_back({NodeState::PRE, target, edge, std::nullopt,  std::nullopt, res.explanation});
                                 return subPath;
                             }
                             save = false;
@@ -1940,7 +1957,7 @@ Path TransitionSystemNetworkManager::produceExactReachedStates(NetworkNode & nod
                             res = queryEdge(edge, reachedRefined, logic.mkNot(getNode(target).preSafeLoop));
                         }
                         if (res.reachabilityResult == ReachabilityResult::REACHABLE) {
-                            subPath.push_back({NodeState::PRE, target, edge, res.explanation});
+                            subPath.push_back({NodeState::PRE, target, edge, std::nullopt,  std::nullopt, res.explanation});
                             l++;
                         } else {
                             networkNode.postSafeLoop = logic.mkOr(networkNode.postSafeLoop, res.explanation);
