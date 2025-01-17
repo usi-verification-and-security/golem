@@ -1427,6 +1427,7 @@ private:
         std::set<EId> loopEdges;
         std::vector<PTRef> loopTransitions;
         PTRef loopInvariant{PTRef_Undef};
+        PTRef transitionInvariant{PTRef_Undef};
     };
 
     std::unordered_map<SymRef, NetworkNode, SymRefHash> networkMap;
@@ -1499,6 +1500,7 @@ void TransitionSystemNetworkManager::initNetwork() {
         node.postSafeLoop = logic.getTerm_false();
         node.preSafeLoopW = logic.getTerm_false();
         node.postSafeLoopW = logic.getTerm_false();
+        node.transitionInvariant = logic.getTerm_true();
         node.blocked_children = 0;
         if (vid == graph.getEntry() or vid == graph.getExit()) { continue; }
         node.solver = mkSolver();
@@ -1534,12 +1536,17 @@ VerificationResult TransitionSystemNetworkManager::solve() && {
         switch (state) {
             case NodeState::PRE: // Traverse loop
             {
-                auto res = queryTransitionSystem(networkNode, reached, logic.mkNot(networkNode.postSafe));
+                PTRef start = reached;
+                if(subpath.has_value()){
+                    start = subpath.value().back().reached;
+                }
+                auto res = queryTransitionSystem(networkNode, start, logic.mkNot(networkNode.postSafe));
                 if (res.reachabilityResult == ReachabilityResult::REACHABLE) {
                     path.push_back({NodeState::POST, node, std::nullopt, std::nullopt, networkNode.solver->getTransitionStepCount(), res.explanation});
                 } else {
 //                    networkNode.loopInvariant = logic.mkAnd(networkNode.loopInvariant, networkNode.solver->getTransitionInvariant());
                     networkNode.preSafe = logic.mkOr(networkNode.preSafe, res.explanation);
+                    networkNode.transitionInvariant = logic.mkAnd(networkNode.transitionInvariant, networkNode.solver->getTransitionInvariant());
                     if(networkNode.loopEdges.empty()) {
                         networkNode.preSafeLoopW = networkNode.preSafe;
                     }
@@ -1560,7 +1567,7 @@ VerificationResult TransitionSystemNetworkManager::solve() && {
                         if(res.reachabilityResult == ReachabilityResult::REACHABLE) {
                             assert(res.subpath.has_value());
                             path.pop_back();
-                            path.push_back({NodeState::PRE, node, eid, res.subpath, std::nullopt, res.explanation});
+                            path.push_back({NodeState::PRE, node, eid, res.subpath, std::nullopt, reached});
                             continue;
                         } else {
                             networkNode.preSafe = logic.mkOr(networkNode.preSafe, res.explanation);
@@ -1568,7 +1575,7 @@ VerificationResult TransitionSystemNetworkManager::solve() && {
                             //TODO: to block incoming states
                         }
                     }
-                    getNode(graph.getSource(eid.value())).loopEdges.insert(eid.value());
+                    if(!networkNode.loopEdges.empty()) {getNode(graph.getSource(eid.value())).loopEdges.insert(eid.value());}
                     path.pop_back();
                 }
                 break;
@@ -1622,8 +1629,8 @@ VerificationResult TransitionSystemNetworkManager::solve() && {
                                 loophead++;
                             }
                             getNode(target).loops.back().push_back(nextEdge);
+                            networkNode.loopEdges.insert(nextEdge);
                         }
-                        networkNode.loopEdges.insert(nextEdge);
                         networkNode.blockedReason[childIndex] = logic.getTerm_true();
                         ++networkNode.blocked_children;
                         continue;
@@ -1746,10 +1753,12 @@ TransitionSystem TransitionSystemNetworkManager::constructTransitionSystemFor(Sy
         for (int i = 0; i < loop.size(); i++) {
             auto const & source = getNode(graph.getSource(loop[i]));
 //            PTRef nestedLoopTrInv = source.loopInvariant == PTRef_Undef ? logic.getTerm_false() : timeMachine.sendFlaThroughTime(source.loopInvariant, n);
-            PTRef loopTrInv = timeMachine.sendFlaThroughTime(source.solver->getTransitionInvariant(), n++);
+//            PTRef loopTrInv = timeMachine.sendFlaThroughTime(source.transitionInvariant, n);
+            PTRef loopTrInv = source.solver->getTransitionInvariant() == PTRef_Undef ? logic.getTerm_true() : timeMachine.sendFlaThroughTime(source.solver->getTransitionInvariant(), n);
+            n++;
             // TODO: What if loopTrInv is k-inductive? I need to come up with propper handling of k-inductive TrInvs
             // TODO: Check for "or" should be also changed, I just need to validate how much variable versions are in transition
-            if (logic.isOr(loopTrInv)) {
+            if (source.solver->getRelationType() == TPAType::EQUALS) {
 //                if(nestedLoopTrInv != logic.getTerm_false()){
 //                    auto selfLoopVars = getVariablesFromEdge(
 //                        logic, graph, getSelfLoopFor(graph.getSource(loop[i]), graph, adjacencyRepresentation).value());
@@ -1861,7 +1870,8 @@ TransitionSystemNetworkManager::queryLoops(NetworkNode & node, PTRef sourceCondi
             }
             case VerificationAnswer::UNSAFE: {
                 Path states = produceExactReachedStates(node, *solver, node.loops);
-                if (states.empty()) {node.loopTransitions = {}; continue;}
+                node.loopTransitions = {};
+                if (states.empty()) { continue;}
                 return {ReachabilityResult::REACHABLE, states.back().reached, states};
             }
             default:
@@ -1909,7 +1919,11 @@ Path TransitionSystemNetworkManager::produceExactReachedStates(NetworkNode & nod
                     networkNode.postSafeLoop = networkNode.postSafeLoopW;
                 }
                 for(int l = 0; l < node.loops[j].size()*2;){
-                    if (subPath.size() > 0) reachedRefined = subPath.back().reached;
+                    if (subPath.size() > 0) {
+                        reachedRefined = subPath.back().reached;
+                    } else {
+                        reachedRefined = init;
+                    }
                     int k = l/2;
                     auto edge = node.loops[j][k];
                     auto & networkNode = getNode(graph.getSource(edge));
@@ -1926,6 +1940,7 @@ Path TransitionSystemNetworkManager::produceExactReachedStates(NetworkNode & nod
                             if (!networkNode.loops.empty()) {
                                 auto res = queryLoops(networkNode, reachedRefined, logic.mkNot(networkNode.preSafeLoop));
                                 if (res.reachabilityResult == ReachabilityResult::REACHABLE) {
+                                    subPath.pop_back();
                                     subPath.push_back(
                                         {NodeState::PRE, graph.getSource(edge), edge, res.subpath,  std::nullopt, res.explanation});
                                     l++;
@@ -1945,7 +1960,7 @@ Path TransitionSystemNetworkManager::produceExactReachedStates(NetworkNode & nod
                         auto target = graph.getTarget(edge);
                         TransitionSystemNetworkManager::QueryResult res;
                         if (l == node.loops[j].size()*2-1 ) {
-                            res = queryEdge(edge, reachedRefined, logic.mkAnd(logic.mkNot(getNode(target).preSafe), logic.mkNot(getNode(target).preSafeLoop)));
+                            res = queryEdge(edge, reachedRefined, logic.mkNot(getNode(target).preSafe));
                             //TODO: Figure out why this thing is necessary!!!
                             if (res.reachabilityResult == ReachabilityResult::REACHABLE) {
                                 subPath.push_back({NodeState::PRE, target, edge, std::nullopt,  std::nullopt, res.explanation});
@@ -1999,6 +2014,11 @@ unsigned TPABase::getTransitionStepCount() const {
 PTRef TPABase::getTransitionInvariant() const {
     return explanation.safeTransitionInvariant;
 }
+
+TPAType TPABase::getRelationType() const {
+    return explanation.relationType;
+}
+
 
 /*
  * Returns superset of init that are still safe
