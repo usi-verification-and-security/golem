@@ -1482,7 +1482,7 @@ private:
 
     [[nodiscard]] std::tuple <PTRef, std::unique_ptr<SystemType>> produceMergedTransition(NetworkNode & node, std::vector<std::vector<EId>> const & loops) const;
 
-    [[nodiscard]] witness_t computeValidityWitness() const;
+    [[nodiscard]] witness_t computeValidityWitness();
 };
 
 VerificationResult TPAEngine::solveTransitionSystemGraph(const ChcDirectedGraph & graph) {
@@ -1691,7 +1691,7 @@ witness_t TransitionSystemNetworkManager::computeInvalidityWitness(Path const & 
     return InvalidityWitness::fromErrorPath(ErrorPath{std::move(errorPath)}, graph);
 }
 
-witness_t TransitionSystemNetworkManager::computeValidityWitness() const {
+witness_t TransitionSystemNetworkManager::computeValidityWitness() {
     assert(isTransitionSystemDAG(graph));
     TermUtils utils(logic);
     TimeMachine timeMachine(logic);
@@ -1699,7 +1699,7 @@ witness_t TransitionSystemNetworkManager::computeValidityWitness() const {
 
     for (auto vertex : graph.getVertices()) {
         if (vertex == graph.getEntry() || vertex == graph.getExit()) continue;
-        auto const & node = getNode(vertex);
+        auto & node = getNode(vertex);
 
         auto graphVars = utils.predicateArgsInOrder(graph.getStateVersion(vertex));
         vec<PTRef> unversionedVars;
@@ -1716,6 +1716,11 @@ witness_t TransitionSystemNetworkManager::computeValidityWitness() const {
             PTRef graphInvariant = utils.varSubstitute(node.solver->getInductiveInvariant(), subs);
             PTRef unversionedPredicate = logic.mkUninterpFun(vertex, std::move(unversionedVars));
             definitions[unversionedPredicate] = graphInvariant;
+//            if(!node.loops.empty()){
+//                auto loopsRes = queryLoops(node, node.preSafe, logic.mkNot(node.preSafe), true);
+//                definitions[unversionedPredicate] = logic.mkOr(graphInvariant, loopsRes.explanation);
+//                continue;
+//            }
         } else {
             return NoWitness("Unexpected situation occurred during witness computation in TPA engine");
         }
@@ -1866,7 +1871,8 @@ TransitionSystemNetworkManager::queryLoops(NetworkNode & node, PTRef sourceCondi
                 node.loopInvariant == PTRef_Undef ?  node.loopInvariant = solver->getTransitionInvariant() : logic.mkAnd(node.loopInvariant, solver->getTransitionInvariant());
                 assert(explanation != PTRef_Undef);
                 TRACE(1, "TS blocks " << logic.pp(explanation))
-                return {ReachabilityResult::UNREACHABLE, explanation};
+                    return {ReachabilityResult::UNREACHABLE, explanation, {}};
+                    // return {ReachabilityResult::UNREACHABLE, solver->getInductiveInvariant(), {}};
             }
             case VerificationAnswer::UNSAFE: {
                 Path states = produceExactReachedStates(node, *solver, node.loops);
