@@ -53,12 +53,6 @@ InvalidityWitness InvalidityWitness::fromErrorPath(ErrorPath const & errorPath, 
     auto const & path = errorPath;
     if (path.isEmpty()) { return {}; }
     auto edgeIds = path.getEdges();
-//    auto errIt = std::adjacent_find(edgeIds.begin(), edgeIds.end() - 1,
-//                                      [graph](auto i, auto j) { return graph.getTarget(i) != graph.getSource(j); });
-//    auto errEdge1 = *errIt;
-//    auto errEdge2 = *(errIt+1);
-    assert(std::adjacent_find(edgeIds.begin(), edgeIds.end() ,
-          [graph](auto i, auto j) { return graph.getTarget(i) != graph.getSource(j); }) == edgeIds.end());
     // Compute model for the error path
     auto model = [&]() {
         SMTSolver solver(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
