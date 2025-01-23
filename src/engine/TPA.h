@@ -132,7 +132,6 @@ public:
     PTRef getReachedStates() const;
     unsigned getTransitionStepCount() const;
     PTRef getTransitionInvariant() const;
-    TPAType getRelationType() const;
     PTRef getInductiveInvariant() const;
     vec<PTRef> getStateVars(int version) const;
 
