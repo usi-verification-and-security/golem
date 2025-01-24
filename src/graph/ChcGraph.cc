@@ -343,12 +343,24 @@ namespace {
 std::vector<PTRef> getAuxiliaryVariablesFromEdge(ChcDirectedHyperGraph const & graph, EId eid) {
     Logic & logic = graph.getLogic();
     PTRef label = graph.getEdgeLabel(eid);
-    auto allVars = TermUtils(logic).getVars(label);
+    TermUtils utils(logic);
+    auto allVars = utils.getVars(label);
+    auto nonAuxVars = [&] {
+        std::unordered_set<PTRef, PTRefHash> acc;
+        std::unordered_map<SymRef, unsigned, SymRefHash> instanceCount;
+        auto targetVars = utils.predicateArgsInOrder(graph.predicateRepresentation().getTargetTermFor(graph.getTarget(eid)));
+        acc.insert(targetVars.begin(), targetVars.end());
+        for (auto source : graph.getSources(eid)) {
+            auto instance = instanceCount[source]++;
+            auto sourceVars = utils.predicateArgsInOrder(graph.predicateRepresentation().getSourceTermFor(source, instance));
+            acc.insert(sourceVars.begin(), sourceVars.end());
+        }
+        return acc;
+    }();
+
     std::vector<PTRef> auxVars;
     for (PTRef var : allVars) {
-        std::string name = logic.getSymName(var);
-        // FIXME: This is hackish
-        if (name.rfind("aux", 0) == 0) {
+        if (nonAuxVars.count(var) == 0) {
             auxVars.push_back(var);
         }
     }

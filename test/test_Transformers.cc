@@ -21,6 +21,7 @@
 #include "transformers/RemoveUnreachableNodes.h"
 #include "transformers/SimpleChainSummarizer.h"
 #include "transformers/TransformationPipeline.h"
+#include "utils/SmtSolver.h"
 
 class Transformer_New_Test : public LIAEngineTest {
 };
@@ -599,6 +600,67 @@ TEST_F(Transformer_New_Test, test_SimpleNodeEliminator_HyperEdgeBooleanConstrain
     VerificationResult translatedResult(VerificationAnswer::SAFE, translatedWitness);
     Validator validator(logic);
     EXPECT_EQ(validator.validate(originalGraph, translatedResult), Validator::Result::VALIDATED);
+}
+
+TEST_F(Transformer_New_Test, test_SimpleNodeEliminator_AuxiliaryVariables) {
+    Options options;
+    options.addOption(Options::LOGIC, "QF_LIA");
+    options.addOption(Options::COMPUTE_WITNESS, "true");
+    PTRef z = logic->mkIntVar("z");
+    SymRef s1 = mkPredicateSymbol("s1", {intSort(), intSort()});
+    SymRef s2 = mkPredicateSymbol("s2", {intSort(), intSort()});
+    PTRef a1 = logic->mkBoolVar("a1");
+    PTRef a2 = logic->mkBoolVar("a2");
+    // x < y => S1(x,y)
+    // S1(x,y) and x > z => S2(z,y)
+    // S2(1,3) => A1
+    // S2(0,2) => A2
+    // A1 and A2 => false
+
+    std::vector<ChClause> clauses{
+        {
+            ChcHead{UninterpretedPredicate{instantiatePredicate(s1, {x,y})}},
+            ChcBody{{logic->mkLt(x,y)}, {}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{instantiatePredicate(s2, {z,y})}},
+            ChcBody{{logic->mkGt(x, z)}, {UninterpretedPredicate{instantiatePredicate(s1, {x,y})}}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{a1}},
+            ChcBody{{logic->getTerm_true()}, {UninterpretedPredicate{instantiatePredicate(s2, {one, logic->mkIntConst(3)})}}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{a2}},
+            ChcBody{{logic->getTerm_true()}, {UninterpretedPredicate{instantiatePredicate(s2, {zero, logic->mkIntConst(2)})}}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{logic->getTerm_false()}},
+            ChcBody{{logic->getTerm_true()}, {UninterpretedPredicate{a1}, UninterpretedPredicate{a2}}}
+        }
+    };
+
+    for (auto const & clause : clauses) { system.addClause(clause); }
+
+    Logic & logic = *this->logic;
+    auto normalizedSystem = Normalizer(logic).normalize(system);
+    auto hyperGraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
+    auto originalGraph = *hyperGraph;
+    // We first apply SimpleChainSummarizer to obtain an edge with auxiliary variables that do not have a name starting with "aux"
+    TransformationPipeline::pipeline_t pipeline;
+    pipeline.push_back(std::make_unique<SimpleChainSummarizer>());
+    pipeline.push_back(std::make_unique<SimpleNodeEliminator>());
+    TransformationPipeline transformations(std::move(pipeline));
+    auto [transformedGraph, translator] = transformations.transform(std::move(hyperGraph));
+    ASSERT_EQ(transformedGraph->getEdges().size(), 1);
+    auto edge = transformedGraph->getEdges().at(0);
+    ASSERT_EQ(edge.to, transformedGraph->getExit());
+    ASSERT_EQ(edge.from.size(), 1);
+    ASSERT_EQ(edge.from.at(0), transformedGraph->getEntry());
+    // The edge has to be satisfiable
+    SMTSolver solver(logic);
+    solver.assertProp(edge.fla.fla);
+    ASSERT_EQ(solver.check(), SMTSolver::Answer::SAT);
 }
 
 TEST_F(Transformer_New_Test, test_SimpleNodeEliminator_PredicateClash_Unsafe) {
