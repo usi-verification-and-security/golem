@@ -17,19 +17,22 @@ void NodeEliminator::BackTranslator::notifyRemovedVertex(SymRef sym, Contraction
 
 Transformer::TransformationResult NodeEliminator::transform(std::unique_ptr<ChcDirectedHyperGraph> graph) {
     auto backTranslator = std::make_unique<BackTranslator>(graph->getLogic(), graph->predicateRepresentation());
+    auto vertices = graph->getVertices();
+    // We need to sort to have deterministic order
+    std::sort(vertices.begin(), vertices.end(), [](SymRef first, SymRef second) { return first.x < second.x; });
+    // ignore entry and exit, those should never be removed
+    vertices.erase(std::remove_if(vertices.begin(), vertices.end(),[&graph](SymRef vertex) {
+        return vertex == graph->getEntry() or vertex == graph->getExit();
+    }), vertices.end());
     while(true) {
         auto adjancencyRepresentation = AdjacencyListsGraphRepresentation::from(*graph);
-        auto vertices = adjancencyRepresentation.getNodes();
-        // ignore entry and exit, those should never be removed
-        vertices.erase(std::remove_if(vertices.begin(), vertices.end(),[&graph](SymRef vertex) {
-            return vertex == graph->getEntry() or vertex == graph->getExit();
-        }), vertices.end());
         auto predicateWrapper = [&](SymRef vertex) {
             return this->shouldEliminateNode(vertex, adjancencyRepresentation, *graph);
         };
         auto candidateForRemovalIt = std::find_if(vertices.begin(), vertices.end(), predicateWrapper);
         if (candidateForRemovalIt == vertices.end()) { break; }
         auto vertexToRemove = *candidateForRemovalIt;
+        vertices.erase(candidateForRemovalIt);
         auto contractionResult = graph->contractVertex(vertexToRemove);
         backTranslator->notifyRemovedVertex(vertexToRemove, std::move(contractionResult));
     }
