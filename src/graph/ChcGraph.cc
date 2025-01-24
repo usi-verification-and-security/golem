@@ -516,8 +516,7 @@ ChcDirectedHyperGraph::VertexContractionResult ChcDirectedHyperGraph::contractVe
         for (std::size_t outgoingIndex = 0; outgoingIndex < outgoingEdges.size(); ++outgoingIndex) {
             EId outgoingId = outgoingEdges[outgoingIndex];
             if (getSources(outgoingId).size() > 1 and incomingEdges.size() > 1) { throw std::logic_error("Unable to contract vertex with outgoing hyperedge!"); }
-            bool requiresRenamingAuxiliaryVars =  incomingSource == getEntry() and outgoingEdges.size() > 1
-                                                 and getSources(outgoingId).size() > 1;
+            bool requiresRenamingAuxiliaryVars = incomingSource == getEntry() and getSources(outgoingId).size() > 1;
             auto replacingEdge = mergeEdgePair(incomingId, outgoingId, requiresRenamingAuxiliaryVars);
             result.replacing.emplace_back(std::move(replacingEdge), std::make_pair(incomingIndex, outgoingIndex));
         }
