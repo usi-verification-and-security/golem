@@ -1014,7 +1014,7 @@ bool TPABase::checkLessThanFixedPoint(unsigned short power) {
                 explanation.relationType = TPAType::LESS_THAN;
                 explanation.fixedPointType = SafetyExplanation::FixedPointType::RIGHT;
                 explanation.inductivnessPowerExponent = 0;
-                explanation.safeTransitionInvariant = logic.mkAnd(logic.mkAnd(rightInvariants), currentLevelTransition);
+                explanation.safeTransitionInvariant = logic.mkAnd(rightInvariants);
                 return true;
             }
         }
@@ -1048,7 +1048,7 @@ bool TPABase::checkLessThanFixedPoint(unsigned short power) {
                 explanation.relationType = TPAType::LESS_THAN;
                 explanation.fixedPointType = SafetyExplanation::FixedPointType::LEFT;
                 explanation.inductivnessPowerExponent = 0;
-                explanation.safeTransitionInvariant = logic.mkAnd(logic.mkAnd(leftInvariants), currentLevelTransition);
+                explanation.safeTransitionInvariant = logic.mkAnd(leftInvariants);
                 return true;
             }
         }
@@ -1544,7 +1544,6 @@ VerificationResult TransitionSystemNetworkManager::solve() && {
                 if (res.reachabilityResult == ReachabilityResult::REACHABLE) {
                     path.push_back({NodeState::POST, node, std::nullopt, std::nullopt, networkNode.solver->getTransitionStepCount(), res.explanation});
                 } else {
-//                    networkNode.loopInvariant = logic.mkAnd(networkNode.loopInvariant, networkNode.solver->getTransitionInvariant());
                     networkNode.preSafe = logic.mkOr(networkNode.preSafe, res.explanation);
                     networkNode.transitionInvariant = logic.mkAnd(networkNode.transitionInvariant, networkNode.solver->getTransitionInvariant());
                     if(networkNode.loopEdges.empty()) {
@@ -1757,13 +1756,13 @@ TransitionSystem TransitionSystemNetworkManager::constructTransitionSystemFor(Sy
         int n = 0;
         for (int i = 0; i < loop.size(); i++) {
             auto const & source = getNode(graph.getSource(loop[i]));
-//            PTRef nestedLoopTrInv = source.loopInvariant == PTRef_Undef ? logic.getTerm_false() : timeMachine.sendFlaThroughTime(source.loopInvariant, n);
+            PTRef nestedLoopTrInv = source.loopInvariant == PTRef_Undef || i == 0 ? logic.getTerm_false() : timeMachine.sendFlaThroughTime(source.loopInvariant, n);
             PTRef loopTrInv = timeMachine.sendFlaThroughTime(source.transitionInvariant, n);
 //            PTRef loopTrInv = source.solver->getTransitionInvariant() == PTRef_Undef ? logic.getTerm_true() : timeMachine.sendFlaThroughTime(source.solver->getTransitionInvariant(), n);
             n+=2;
             PTRef label = timeMachine.sendFlaThroughTime(graph.getEdgeLabel(loop[i]), n++);
-//            loopMTr = logic.mkAnd({loopMTr, logic.mkOr(loopTrInv, nestedLoopTrInv), label});
-            loopMTr = logic.mkAnd({loopMTr, loopTrInv, label});
+            loopMTr = logic.mkAnd({loopMTr, logic.mkOr(loopTrInv, nestedLoopTrInv), label});
+//            loopMTr = logic.mkAnd({loopMTr, loopTrInv, label});
         }
         std::unordered_map<PTRef, PTRef, PTRefHash> subMap;
         for(auto var: edgeVars.stateVars){
