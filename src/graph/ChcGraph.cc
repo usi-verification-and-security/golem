@@ -318,11 +318,14 @@ PTRef renameAuxiliaries(ChcDirectedHyperGraph const & graph, EId incoming) {
 }
 }
 
-DirectedHyperEdge ChcDirectedHyperGraph::mergeEdgePair(EId incoming, EId outgoing, bool requiresRenamingAuxiliaryVars) {
+DirectedHyperEdge ChcDirectedHyperGraph::mergeEdgePair(EId incoming, EId outgoing) {
     assert(getSources(incoming).size() == 1); // Incoming must be a simple edge
     if (getSources(outgoing).size() == 1) { // Outgoing is a simple edge
-        assert(not requiresRenamingAuxiliaryVars);
-        return mergeEdges({incoming, outgoing});
+        auto edge = mergeEdges({incoming, outgoing});
+        auto eid = edge.id;
+        PTRef cleanedLabel = renameAuxiliaries(*this, eid);
+        edges.at(eid).fla.fla = cleanedLabel;
+        return getEdge(eid);
     }
     TermUtils utils(logic);
     auto common = getTarget(incoming);
@@ -332,7 +335,7 @@ DirectedHyperEdge ChcDirectedHyperGraph::mergeEdgePair(EId incoming, EId outgoin
     auto sources = getSources(outgoing);
     assert(std::count(sources.begin(), sources.end(), common) == 1);
 
-    PTRef incomingLabel = requiresRenamingAuxiliaryVars ? renameAuxiliaries(*this, incoming) : getEdgeLabel(incoming);
+    PTRef incomingLabel = getEdgeLabel(incoming);
     TermUtils::substitutions_map substitutionsMap;
     utils.mapFromPredicate(getNextStateVersion(common), getStateVersion(common, 0), substitutionsMap);
     PTRef renamedLabel = utils.varSubstitute(incomingLabel, substitutionsMap);
@@ -350,6 +353,8 @@ DirectedHyperEdge ChcDirectedHyperGraph::mergeEdgePair(EId incoming, EId outgoin
         if (sources.empty()) { sources.push_back(getEntry()); }
     }
     auto eid = newEdge(std::move(sources), target, InterpretedFla{simplifiedLabel});
+    PTRef cleanedLabel = renameAuxiliaries(*this, eid);
+    edges.at(eid).fla.fla = cleanedLabel;
     return getEdge(eid);
 
 }
@@ -384,12 +389,12 @@ PTRef ChcDirectedHyperGraph::mergeLabels(std::vector<EId> const & chain) const {
         utils.mapFromPredicate(getNextStateVersion(common), getStateVersion(common), subMap);
     }
     PTRef combinedLabel = logic.mkAnd(std::move(labels));
-//    std::cout << "Original labels: " << logic.pp(combinedLabel) << '\n';
+    // std::cout << "Original labels: " << logic.pp(combinedLabel) << '\n';
     PTRef updatedLabel = utils.varSubstitute(combinedLabel, subMap);
-//    std::cout << "After substitution: " << logic.pp(updatedLabel) << '\n';
+    // std::cout << "After substitution: " << logic.pp(updatedLabel) << '\n';
     PTRef simplifiedLabel = TrivialQuantifierElimination(logic).tryEliminateVarsExcept(utils.predicateArgsInOrder(
         getStateVersion(source)) + utils.predicateArgsInOrder(getNextStateVersion(target)), updatedLabel);
-//    std::cout << "After simplification: " << logic.pp(simplifiedLabel) << std::endl;
+    // std::cout << "After simplification: " << logic.pp(simplifiedLabel) << std::endl;
     return simplifiedLabel;
 }
 
@@ -443,13 +448,11 @@ ChcDirectedHyperGraph::VertexContractionResult ChcDirectedHyperGraph::contractVe
     for (std::size_t incomingIndex = 0; incomingIndex < incomingEdges.size(); ++incomingIndex) {
         EId incomingId = incomingEdges[incomingIndex];
         if (getSources(incomingId).size() > 1) { throw std::logic_error("Unable to contract vertex with incoming hyperedge!"); }
-        auto incomingSource = getSources(incomingId)[0];
 
         for (std::size_t outgoingIndex = 0; outgoingIndex < outgoingEdges.size(); ++outgoingIndex) {
             EId outgoingId = outgoingEdges[outgoingIndex];
             if (getSources(outgoingId).size() > 1 and incomingEdges.size() > 1) { throw std::logic_error("Unable to contract vertex with outgoing hyperedge!"); }
-            bool requiresRenamingAuxiliaryVars = incomingSource == getEntry() and getSources(outgoingId).size() > 1;
-            auto replacingEdge = mergeEdgePair(incomingId, outgoingId, requiresRenamingAuxiliaryVars);
+            auto replacingEdge = mergeEdgePair(incomingId, outgoingId);
             result.replacing.emplace_back(std::move(replacingEdge), std::make_pair(incomingIndex, outgoingIndex));
         }
     }

@@ -663,6 +663,58 @@ TEST_F(Transformer_New_Test, test_SimpleNodeEliminator_AuxiliaryVariables) {
     ASSERT_EQ(solver.check(), SMTSolver::Answer::SAT);
 }
 
+TEST_F(Transformer_New_Test, test_SimpleNodeEliminator_AuxiliaryVariables2) {
+    Options options;
+    options.addOption(Options::LOGIC, "QF_LIA");
+    options.addOption(Options::COMPUTE_WITNESS, "true");
+    SymRef s1 = mkPredicateSymbol("s1", {intSort(), intSort()});
+    SymRef s2 = mkPredicateSymbol("s2", {intSort()});
+    PTRef a1 = logic->mkBoolVar("a1");
+    // x < y => S1(x,y)
+    // S1(x,1) => A1
+    // A1 and S1(x,7) and x > y => S2(y)
+    // S2(3) => false
+
+    std::vector<ChClause> clauses{
+        {
+            ChcHead{UninterpretedPredicate{instantiatePredicate(s1, {x,y})}},
+            ChcBody{{logic->mkLt(x,y)}, {}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{a1}},
+            ChcBody{{logic->getTerm_true()}, {UninterpretedPredicate{instantiatePredicate(s1, {x, one})}}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{instantiatePredicate(s2, {y})}},
+            ChcBody{{logic->mkGt(x,y)}, {UninterpretedPredicate{instantiatePredicate(s1, {x, logic->mkIntConst(7)})}, UninterpretedPredicate{a1}}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{logic->getTerm_false()}},
+            ChcBody{{logic->getTerm_true()}, {UninterpretedPredicate{instantiatePredicate(s2, {logic->mkIntConst(3)})}}}
+        }
+    };
+
+    for (auto const & clause : clauses) { system.addClause(clause); }
+
+    Logic & logic = *this->logic;
+    auto normalizedSystem = Normalizer(logic).normalize(system);
+    auto hyperGraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
+    auto originalGraph = *hyperGraph;
+    TransformationPipeline::pipeline_t pipeline;
+    pipeline.push_back(std::make_unique<SimpleNodeEliminator>());
+    TransformationPipeline transformations(std::move(pipeline));
+    auto [transformedGraph, translator] = transformations.transform(std::move(hyperGraph));
+    ASSERT_EQ(transformedGraph->getEdges().size(), 1);
+    auto edge = transformedGraph->getEdges().at(0);
+    ASSERT_EQ(edge.to, transformedGraph->getExit());
+    ASSERT_EQ(edge.from.size(), 1);
+    ASSERT_EQ(edge.from.at(0), transformedGraph->getEntry());
+    // The edge has to be satisfiable
+    SMTSolver solver(logic);
+    solver.assertProp(edge.fla.fla);
+    ASSERT_EQ(solver.check(), SMTSolver::Answer::SAT);
+}
+
 TEST_F(Transformer_New_Test, test_SimpleNodeEliminator_PredicateClash_Unsafe) {
     Options options;
     options.addOption(Options::LOGIC, "QF_LIA");
