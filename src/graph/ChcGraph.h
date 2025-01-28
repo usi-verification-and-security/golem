@@ -138,12 +138,7 @@ class ChcDirectedGraph {
     // graph transformations
     friend class NestedLoopTransformation;
     friend class SingleLoopTransformation;
-    void contractVertex(SymRef sym);
     WitnessInfo contractConnectedVertices(std::vector<EId> edges);
-    void mergeEdges(EId incoming, EId outgoing);
-    void deleteNode(SymRef sym);
-    PTRef mergeLabels(DirectedEdge const & incoming, DirectedEdge const & outgoing) const;
-    void mergeMultiEdges();
 
 public:
     ChcDirectedGraph(std::vector<DirectedEdge> const & edges, LinearCanonicalPredicateRepresentation predicates,
