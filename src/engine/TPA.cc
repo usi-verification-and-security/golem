@@ -1894,6 +1894,9 @@ Path TransitionSystemNetworkManager::produceExactReachedStates(NetworkNode & nod
         SMTSolver smtSolver(logic, SMTSolver::WitnessProduction::NONE);
 
         for(int j = 0; j < node.loopTransitions.size(); j++){
+            if (!subPath.empty()) {
+                reachedRefined = subPath.back().reached;
+            }
             smtSolver.assertProp(reachedRefined);
             smtSolver.assertProp(node.loopTransitions[j]);
             smtSolver.assertProp(TimeMachine(logic).sendFlaThroughTime(subquery,1));
@@ -1901,11 +1904,14 @@ Path TransitionSystemNetworkManager::produceExactReachedStates(NetworkNode & nod
             smtSolver.resetSolver();
             bool save = true;
             if(res == SMTSolver::Answer::SAT) {
+
+                uint preSize = subPath.size();
                 for(auto edge : node.loops[j]){
                     auto & networkNode = getNode(graph.getSource(edge));
                     networkNode.preSafeLoop = networkNode.preSafeLoopW;
                     networkNode.postSafeLoop = networkNode.postSafeLoopW;
                 }
+
                 for(int l = 0; l < node.loops[j].size()*2;){
                     if (!subPath.empty()) {
                         reachedRefined = subPath.back().reached;
@@ -1927,6 +1933,9 @@ Path TransitionSystemNetworkManager::produceExactReachedStates(NetworkNode & nod
                                 if (save) {
                                     networkNode.preSafeLoopW = networkNode.preSafeLoop;
                                     networkNode.postSafeLoopW = networkNode.postSafeLoop;
+                                }
+                                if(j < node.loopTransitions.size() - 1){
+                                    break;
                                 }
                                 return {};
                             }
@@ -1977,6 +1986,14 @@ Path TransitionSystemNetworkManager::produceExactReachedStates(NetworkNode & nod
                         networkNode.preSafeLoopW = networkNode.preSafeLoop;
                         networkNode.postSafeLoopW = networkNode.postSafeLoop;
                     }
+                }
+
+                if (preSize < subPath.size()){
+                    break;
+                }
+            } else {
+                if (j == node.loopTransitions.size() - 1){
+                    return {};
                 }
             }
         }
