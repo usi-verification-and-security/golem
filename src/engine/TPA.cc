@@ -432,6 +432,7 @@ VerificationAnswer TPABase::solve() {
 }
 
 VerificationAnswer TPABase::checkTrivialUnreachability() {
+    assert(transition != logic.getTerm_false());
     if (query == logic.getTerm_false()) {
         // TODO: Check UNSAT with solver?
         explanation.inductivnessPowerExponent = 0;
@@ -2033,7 +2034,15 @@ unsigned TPABase::getTransitionStepCount() const {
 
 PTRef TPABase::getTransitionInvariant() const {
     if(explanation.relationType == TPAType::LESS_THAN) {
-        return shiftOnlyNextVars(explanation.safeTransitionInvariant);
+        if(explanation.invariantType == SafetyExplanation::TransitionInvariantType::RESTRICTED_TO_INIT){
+            return logic.mkAnd(init, shiftOnlyNextVars( explanation.safeTransitionInvariant));
+        }
+        if(explanation.invariantType == SafetyExplanation::TransitionInvariantType::RESTRICTED_TO_QUERY){
+            return logic.mkAnd( TimeMachine(logic).sendFlaThroughTime(query,1), shiftOnlyNextVars( explanation.safeTransitionInvariant));
+        } else {
+            return explanation.safeTransitionInvariant;
+        }
+//            return shiftOnlyNextVars(logic.mkAnd(logic.mkAnd(leftInvariants), logic.mkAnd(rightInvariants)));
     } else {
         return explanation.safeTransitionInvariant;
     }
@@ -2044,10 +2053,11 @@ PTRef TPABase::getTransitionInvariant() const {
  * Returns superset of init that are still safe
  */
 PTRef TPABase::getSafetyExplanation() const {
-    if (explanation.invariantType == SafetyExplanation::TransitionInvariantType::RESTRICTED_TO_INIT) {
+//    if (explanation.invariantType == SafetyExplanation::TransitionInvariantType::RESTRICTED_TO_INIT) {
         // TODO: compute the safe inductive invariant and return negation of that?
-        return getInductiveInvariant();
-    }
+//        return getInductiveInvariant();
+//        return getInductiveInvariant();
+//    }
     PTRef transitionInvariant = explanation.safeTransitionInvariant;
     // TODO: Currently transition invariants from TPA:Type::EQUALS are over three copies of the variables.
     //       Maybe we should use auxiliary (existentially quantified) variables for the intermediate state?
