@@ -72,6 +72,7 @@ struct SafetyExplanation {
     TPAType relationType{TPAType::LESS_THAN};
     FixedPointType fixedPointType{FixedPointType::LEFT};
     PTRef safeTransitionInvariant{PTRef_Undef};
+    PTRef safetyExplanation{PTRef_Undef};
 
     /** the transition invariant is k-inductive for k = 2^{inductivnessPowerExponent}*/
     uint32_t inductivnessPowerExponent{0};
@@ -132,6 +133,8 @@ public:
     PTRef getReachedStates() const;
     unsigned getTransitionStepCount() const;
     PTRef getTransitionInvariant() const;
+    PTRef getRestrictedExpl() const;
+    bool getRestricted() const;
     PTRef getInductiveInvariant() const;
     vec<PTRef> getStateVars(int version) const;
 
