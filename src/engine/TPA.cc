@@ -1014,7 +1014,7 @@ bool TPABase::checkLessThanFixedPoint(unsigned short power) {
                 explanation.relationType = TPAType::LESS_THAN;
                 explanation.fixedPointType = SafetyExplanation::FixedPointType::RIGHT;
                 explanation.inductivnessPowerExponent = 0;
-                explanation.safeTransitionInvariant = logic.mkAnd(rightInvariants);
+                explanation.safeTransitionInvariant = logic.mkAnd(logic.mkAnd(rightInvariants), currentLevelTransition);
                 return true;
             }
         }
@@ -1048,7 +1048,7 @@ bool TPABase::checkLessThanFixedPoint(unsigned short power) {
                 explanation.relationType = TPAType::LESS_THAN;
                 explanation.fixedPointType = SafetyExplanation::FixedPointType::LEFT;
                 explanation.inductivnessPowerExponent = 0;
-                explanation.safeTransitionInvariant = logic.mkAnd(leftInvariants);
+                explanation.safeTransitionInvariant = logic.mkAnd(logic.mkAnd(leftInvariants), currentLevelTransition);
                 return true;
             }
         }
@@ -1566,9 +1566,18 @@ VerificationResult TransitionSystemNetworkManager::solve() && {
                         if(res.reachabilityResult == ReachabilityResult::REACHABLE) {
                             assert(res.subpath.has_value());
                             path.pop_back();
+//                            Path sub = subpath.value();
+//                            sub.insert(sub->end(), res.subpath.value()->begin(), res.subpath.value()->end());
                             path.push_back({NodeState::PRE, node, eid, res.subpath, std::nullopt, reached});
                             continue;
                         } else {
+//                            auto res = queryLoops(networkNode, reached, logic.mkNot(networkNode.preSafe));
+//                            if(res.reachabilityResult == ReachabilityResult::REACHABLE) {
+//                                assert(res.subpath.has_value());
+//                                path.pop_back();
+//                                path.push_back({NodeState::PRE, node, eid, res.subpath, std::nullopt, reached});
+//                                continue;
+//                            }
                             networkNode.preSafe = logic.mkOr(networkNode.preSafe, res.explanation);
                             //TODO: I need to return both trInv for the loop (for further analysis) and state invariant
                             //TODO: to block incoming states
@@ -1855,6 +1864,7 @@ TransitionSystemNetworkManager::queryLoops(NetworkNode & node, PTRef sourceCondi
                 PTRef explanation = solver->getSafetyExplanation();
                 node.loopInvariant == PTRef_Undef ?  node.loopInvariant = solver->getTransitionInvariant() : logic.mkAnd(node.loopInvariant, solver->getTransitionInvariant());
                 assert(explanation != PTRef_Undef);
+                node.loopTransitions = {};
                 TRACE(1, "TS blocks " << logic.pp(explanation))
                     return {ReachabilityResult::UNREACHABLE, explanation, {}};
                     // return {ReachabilityResult::UNREACHABLE, solver->getInductiveInvariant(), {}};
@@ -2036,7 +2046,7 @@ PTRef TPABase::getTransitionInvariant() const {
 PTRef TPABase::getSafetyExplanation() const {
     if (explanation.invariantType == SafetyExplanation::TransitionInvariantType::RESTRICTED_TO_INIT) {
         // TODO: compute the safe inductive invariant and return negation of that?
-        return init;
+        return getInductiveInvariant();
     }
     PTRef transitionInvariant = explanation.safeTransitionInvariant;
     // TODO: Currently transition invariants from TPA:Type::EQUALS are over three copies of the variables.
