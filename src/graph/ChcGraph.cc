@@ -308,8 +308,7 @@ PTRef renameAuxiliaries(ChcDirectedHyperGraph const & graph, EId incoming) {
     TermUtils::substitutions_map substitutionsMap;
     TimeMachine tm(logic);
     for (PTRef var : incomingAuxVars) {
-        std::string newName = tm.getUnversionedName(var);
-        newName += "#" + std::to_string(counter++);
+        std::string newName = "gaux#" + std::to_string(counter++);
         PTRef newVar = tm.getVarVersionZero(newName, logic.getSortRef(var));
         substitutionsMap.insert({var, newVar});
     }
