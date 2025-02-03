@@ -4,6 +4,8 @@ src/TransitionSystem.cc
 src/TransitionSystem.h
 src/ChcInterpreter.cc
 src/ChcInterpreter.h
+src/QuantifierElimination.cc
+src/QuantifierElimination.h
 
 src/engine/Bmc.cc
 src/engine/Bmc.h
