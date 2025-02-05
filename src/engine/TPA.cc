@@ -1155,7 +1155,11 @@ bool TPASplit::checkExactFixedPoint(unsigned short power) {
                 ipartitions_t mask = (1 << 1); // This puts query into the A-part
                 vec<PTRef> itps;
                 itpContext->getSingleInterpolant(itps, mask);
-                explanation.safetyExplanation = itps[0];
+                if (restrictedInvariant == 1) {
+                    explanation.safetyExplanation = getNextVersion(itps[0],1);
+                } else {
+                    explanation.safetyExplanation = getNextVersion(itps[0],-1);
+                }
             }
             explanation.inductivnessPowerExponent = i;
             explanation.safeTransitionInvariant =
@@ -1452,7 +1456,6 @@ private:
         std::vector<PTRef> loopTransitions;
         PTRef loopInvariant{PTRef_Undef};
         PTRef transitionInvariant{PTRef_Undef};
-        PTRef restrictedTransitionInvariant{PTRef_Undef};
     };
 
     std::unordered_map<SymRef, NetworkNode, SymRefHash> networkMap;
@@ -1526,7 +1529,6 @@ void TransitionSystemNetworkManager::initNetwork() {
         node.preSafeLoopW = logic.getTerm_false();
         node.postSafeLoopW = logic.getTerm_false();
         node.transitionInvariant = logic.getTerm_true();
-        node.restrictedTransitionInvariant = logic.getTerm_false();
         node.blocked_children = 0;
         if (vid == graph.getEntry() or vid == graph.getExit()) { continue; }
         node.solver = mkSolver();
@@ -1573,7 +1575,7 @@ VerificationResult TransitionSystemNetworkManager::solve() && {
                     networkNode.preSafe = logic.mkOr(networkNode.preSafe, res.explanation);
 
                     if(networkNode.solver->getRestricted()){
-                        networkNode.restrictedTransitionInvariant = logic.mkOr(networkNode.restrictedTransitionInvariant, logic.mkAnd(networkNode.solver->getRestrictedExpl(), networkNode.solver->getTransitionInvariant()));
+                        networkNode.transitionInvariant = logic.mkAnd(networkNode.transitionInvariant, logic.mkOr(logic.mkAnd(networkNode.solver->getRestrictedExpl(), networkNode.solver->getTransitionInvariant()), logic.mkNot(networkNode.solver->getRestrictedExpl())));
                     } else {
                         networkNode.transitionInvariant = logic.mkAnd(networkNode.transitionInvariant, networkNode.solver->getTransitionInvariant());
                     }
@@ -1582,33 +1584,13 @@ VerificationResult TransitionSystemNetworkManager::solve() && {
                     }
                     if(!networkNode.loops.empty()) {
                         //TODO: Nested loops handling
-//                        std::vector<std::vector<EId>> loopsF;
-//                        std::copy_if(networkNode.loops.begin(), networkNode.loops.end(), std::back_inserter(loopsF), [path](auto loop){
-//                            for(auto elem: path){
-//                                if(std::find_if(loop.begin(), loop.end(), [elem](auto edge){
-//                                        return elem.state == NodeState::PRE && elem.incomingEdge.value() == edge;
-//                                    }) != loop.end()) {
-//                                    return false;
-//                                }
-//                            }
-//                            return true;
-//                        } );
                         auto res = queryLoops(networkNode, reached, logic.mkNot(networkNode.preSafe));
                         if(res.reachabilityResult == ReachabilityResult::REACHABLE) {
                             assert(res.subpath.has_value());
                             path.pop_back();
-//                            Path sub = subpath.value();
-//                            sub.insert(sub->end(), res.subpath.value()->begin(), res.subpath.value()->end());
                             path.push_back({NodeState::PRE, node, eid, res.subpath, std::nullopt, reached});
                             continue;
                         } else {
-//                            auto res = queryLoops(networkNode, reached, logic.mkNot(networkNode.preSafe));
-//                            if(res.reachabilityResult == ReachabilityResult::REACHABLE) {
-//                                assert(res.subpath.has_value());
-//                                path.pop_back();
-//                                path.push_back({NodeState::PRE, node, eid, res.subpath, std::nullopt, reached});
-//                                continue;
-//                            }
                             networkNode.preSafe = logic.mkOr(networkNode.preSafe, res.explanation);
                             //TODO: I need to return both trInv for the loop (for further analysis) and state invariant
                             //TODO: to block incoming states
@@ -1625,17 +1607,6 @@ VerificationResult TransitionSystemNetworkManager::solve() && {
                     PTRef blocked = logic.mkAnd(networkNode.blockedReason);
                     networkNode.postSafe = logic.mkOr(networkNode.postSafe, blocked);
                     if(networkNode.loopEdges.empty()) {networkNode.postSafeLoopW = networkNode.postSafe;}
-//                    else {
-//                        if(networkNode.loopEdges.size() != networkNode.children.size()){
-//                            PTRef subblocked = logic.getTerm_true();
-//                            for(int i = 0; i < networkNode.blockedReason.size(); i++){
-//                                if(std::find(networkNode.loopEdges.begin(), networkNode.loopEdges.end(), networkNode.children[i]) == networkNode.loopEdges.end() ) {
-//                                    subblocked = logic.mkAnd(subblocked, networkNode.blockedReason[i]);
-//                                }
-//                            }
-//                            networkNode.postSafeLoop = logic.mkOr(networkNode.postSafeLoop, subblocked);
-//                        }
-//                    }
                     path.pop_back();
                     for (PTRef & reason : networkNode.blockedReason) {
                         reason = PTRef_Undef;
@@ -1645,18 +1616,12 @@ VerificationResult TransitionSystemNetworkManager::solve() && {
                     assert(networkNode.blocked_children < networkNode.children.size());
                     auto childIndex = networkNode.blocked_children;
                     EId nextEdge = networkNode.children[childIndex];
-//                    if (graph.getTarget(nextEdge)networkNode.loopEdges.find(nextEdge) != networkNode.loopEdges.end() ) {
-//                        networkNode.blockedReason[childIndex] = logic.getTerm_true();
-//                        ++networkNode.blocked_children;
-//                        continue;
-//                    }
                     auto target = graph.getTarget(nextEdge);
                     // Check if we have a nested loop in the structure
                     // If we do, save the nested loop to the source of this nested loop and try to find other paths
                     auto loophead = std::find_if(path.begin(), path.end(), [target](auto step)
                                                  {return step.node == target;});
                     if (loophead != path.end()) {
-//                        networkNode.loopInvariant = logic.getTerm_true();
                         // We should ignore first node (it is PRE of entry to the loop)
                         if(std::find(networkNode.loopEdges.begin(), networkNode.loopEdges.end(), nextEdge) == networkNode.loopEdges.end()) {
                             loophead += 1;
@@ -1797,7 +1762,7 @@ TransitionSystem TransitionSystemNetworkManager::constructTransitionSystemFor(Sy
         for (int i = 0; i < loop.size(); i++) {
             auto const & source = getNode(graph.getSource(loop[i]));
             PTRef nestedLoopTrInv = source.loopInvariant == PTRef_Undef || i == 0 ? logic.getTerm_false() : timeMachine.sendFlaThroughTime(source.loopInvariant, n);
-            PTRef loopTrInv = timeMachine.sendFlaThroughTime(logic.mkOr(source.restrictedTransitionInvariant, logic.mkAnd(logic.mkNot(source.restrictedTransitionInvariant), source.transitionInvariant)), n);
+            PTRef loopTrInv = timeMachine.sendFlaThroughTime(source.transitionInvariant, n);
             n+=2;
             PTRef label = timeMachine.sendFlaThroughTime(graph.getEdgeLabel(loop[i]), n++);
             loopMTr = logic.mkAnd({loopMTr, logic.mkOr(loopTrInv, nestedLoopTrInv), label});
@@ -1897,7 +1862,6 @@ TransitionSystemNetworkManager::queryLoops(NetworkNode & node, PTRef sourceCondi
                 node.loopTransitions = {};
                 TRACE(1, "TS blocks " << logic.pp(explanation))
                 return {ReachabilityResult::UNREACHABLE, explanation, {}};
-                    // return {ReachabilityResult::UNREACHABLE, solver->getInductiveInvariant(), {}};
             }
             case VerificationAnswer::UNSAFE: {
                 Path states = produceExactReachedStates(node, *solver, node.loops);
@@ -1968,7 +1932,7 @@ Path TransitionSystemNetworkManager::produceExactReachedStates(NetworkNode & nod
                             l++;
                         } else {
                             if(networkNode.solver->getRestricted()){
-                                networkNode.restrictedTransitionInvariant = logic.mkOr(networkNode.restrictedTransitionInvariant, logic.mkAnd(networkNode.solver->getRestrictedExpl(), networkNode.solver->getTransitionInvariant()));
+                                networkNode.transitionInvariant = logic.mkAnd(networkNode.transitionInvariant, logic.mkOr(logic.mkAnd(networkNode.solver->getRestrictedExpl(), networkNode.solver->getTransitionInvariant()), logic.mkNot(networkNode.solver->getRestrictedExpl())));
                             } else {
                                 networkNode.transitionInvariant = logic.mkAnd(networkNode.transitionInvariant, networkNode.solver->getTransitionInvariant());
                             }
