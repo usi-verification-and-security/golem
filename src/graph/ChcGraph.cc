@@ -10,6 +10,7 @@
 #include "TransformationUtils.h"
 #include <iostream>
 #include <map>
+#include <set>
 
 
 namespace{
@@ -398,11 +399,14 @@ PTRef ChcDirectedHyperGraph::mergeLabels(std::vector<EId> const & chain) const {
 }
 
 std::vector<SymRef> ChcDirectedGraph::getVertices() const {
-    std::unordered_set<SymRef, SymRefHash> vertices;
+    struct Comp { bool operator()(SymRef first, SymRef second) const { return first.x < second.x; } };
+    std::set<SymRef, Comp> vertices;
     forEachEdge([&](DirectedEdge const & edge){
+        vertices.insert(edge.from);
         vertices.insert(edge.to);
     });
     vertices.insert(getEntry());
+    vertices.insert(getExit());
     return {vertices.begin(), vertices.end()};
 }
 

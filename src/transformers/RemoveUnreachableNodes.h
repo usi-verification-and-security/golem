@@ -15,12 +15,14 @@ public:
 
     class BackTranslator : public WitnessBackTranslator {
         Logic & logic;
-        std::vector<SymRef> removedNodes;
+        std::vector<SymRef> unreachableFromTrue;
+        std::vector<SymRef> backwardUnreachableFromFalse;
 
     public:
-        BackTranslator(Logic & logic, std::vector<SymRef> && removedNodes) :
+        BackTranslator(Logic & logic, std::vector<SymRef> && unreachableFromTrue, std::vector<SymRef> && backwardUnreachableFromFalse) :
             logic(logic),
-            removedNodes(std::move(removedNodes))
+            unreachableFromTrue(std::move(unreachableFromTrue)),
+            backwardUnreachableFromFalse(std::move(backwardUnreachableFromFalse))
             {}
 
         InvalidityWitness translate(InvalidityWitness witness) override { return witness; }

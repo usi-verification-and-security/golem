@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2022-2025, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
@@ -11,12 +11,19 @@ Transformer::TransformationResult RemoveUnreachableNodes::transform(std::unique_
     auto allNodes = adjacencyLists.getNodes();
     auto & logic = graph->getLogic();
 
-    if (std::find(allNodes.begin(), allNodes.end(), graph->getExit()) == allNodes.end()) {
-        // There is no edge to exit, all edges can be removed
+    if (adjacencyLists.getIncomingEdgesFor(graph->getExit()).empty() or
+        adjacencyLists.getOutgoingEdgesFor(graph->getEntry()).empty()) {
+        // All edges can be removed
         // We return empty graph, and remember all removed vertices for backtranslation
+        allNodes.erase(std::remove_if(allNodes.begin(), allNodes.end(), [&](SymRef node) {
+            return node == graph->getEntry() or node == graph->getExit();
+        }), allNodes.end());
+        auto backtranslator = adjacencyLists.getIncomingEdgesFor(graph->getExit()).empty() ?
+            std::make_unique<BackTranslator>(graph->getLogic(), std::vector<SymRef>{}, std::move(allNodes)) :
+            std::make_unique<BackTranslator>(graph->getLogic(), std::move(allNodes), std::vector<SymRef>{});
         return {
             ChcDirectedHyperGraph::makeEmpty(logic),
-            std::make_unique<BackTranslator>(graph->getLogic(), std::move(allNodes))
+            std::move(backtranslator)
         };
     }
 
@@ -49,15 +56,19 @@ Transformer::TransformationResult RemoveUnreachableNodes::transform(std::unique_
         }
     }
 
-    return {std::move(graph), std::make_unique<BackTranslator>(graph->getLogic(), std::move(removedNodes))};
+    return {std::move(graph), std::make_unique<BackTranslator>(logic, std::vector<SymRef>{}, std::move(removedNodes))};
 }
 
 ValidityWitness RemoveUnreachableNodes::BackTranslator::translate(ValidityWitness witness) {
-    if (this->removedNodes.empty()) { return witness; }
+    if (unreachableFromTrue.empty() and backwardUnreachableFromFalse.empty()) { return witness; }
     auto definitions = witness.getDefinitions();
-    for (auto node : removedNodes) {
+    for (auto node : backwardUnreachableFromFalse) {
         assert(definitions.find(node) == definitions.end());
         definitions.insert({node, logic.getTerm_true()});
+    }
+    for (auto node : unreachableFromTrue) {
+        assert(definitions.find(node) == definitions.end());
+        definitions.insert({node, logic.getTerm_false()});
     }
     return ValidityWitness(std::move(definitions));
 }
