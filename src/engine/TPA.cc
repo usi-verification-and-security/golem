@@ -1016,9 +1016,11 @@ bool TPABase::checkLessThanFixedPoint(unsigned short power) {
                 if(restrictedInvariant) {
                     auto itpContext = solver.getInterpolationContext();
                     ipartitions_t mask = (1 << 1); // This puts init into the A-part
+                    // ipartitions_t mask = (1 << 0) + (1 << 2); // This puts init into the A-part
                     vec<PTRef> itps;
                     itpContext->getSingleInterpolant(itps, mask);
                     explanation.safetyExplanation = itps[0];
+                    // explanation.safetyExplanation = logic.mkNot(itps[0]);
                 }
                 explanation.fixedPointType = SafetyExplanation::FixedPointType::RIGHT;
                 explanation.inductivnessPowerExponent = 0;
@@ -1057,9 +1059,11 @@ bool TPABase::checkLessThanFixedPoint(unsigned short power) {
                 if(restrictedInvariant) {
                     auto itpContext = solver.getInterpolationContext();
                     ipartitions_t mask = (1 << 1); // This puts query into the A-part
+                    // ipartitions_t mask = (1 << 0) + (1 << 2); // This puts init into the A-part
                     vec<PTRef> itps;
                     itpContext->getSingleInterpolant(itps, mask);
                     explanation.safetyExplanation = itps[0];
+                    // explanation.safetyExplanation = logic.mkNot(itps[0]);
                 }
                 explanation.fixedPointType = SafetyExplanation::FixedPointType::LEFT;
                 explanation.inductivnessPowerExponent = 0;
@@ -1152,12 +1156,15 @@ bool TPASplit::checkExactFixedPoint(unsigned short power) {
             explanation.relationType = TPAType::EQUALS;
             if(restrictedInvariant) {
                 auto itpContext = solver.getInterpolationContext();
+                // ipartitions_t mask = (1 << 0) + (1 << 2); // This puts query into the A-part
                 ipartitions_t mask = (1 << 1); // This puts query into the A-part
                 vec<PTRef> itps;
                 itpContext->getSingleInterpolant(itps, mask);
                 if (restrictedInvariant == 1) {
+                    // explanation.safetyExplanation = logic.mkNot(getNextVersion(itps[0],1));
                     explanation.safetyExplanation = getNextVersion(itps[0],1);
                 } else {
+                    // explanation.safetyExplanation = logic.mkNot(getNextVersion(itps[0],-1));
                     explanation.safetyExplanation = getNextVersion(itps[0],-1);
                 }
             }
@@ -1584,13 +1591,21 @@ VerificationResult TransitionSystemNetworkManager::solve() && {
                     }
                     if(!networkNode.loops.empty()) {
                         //TODO: Nested loops handling
-                        auto res = queryLoops(networkNode, reached, logic.mkNot(networkNode.preSafe));
+                        res = queryLoops(networkNode, reached, logic.mkNot(networkNode.preSafe));
                         if(res.reachabilityResult == ReachabilityResult::REACHABLE) {
                             assert(res.subpath.has_value());
                             path.pop_back();
                             path.push_back({NodeState::PRE, node, eid, res.subpath, std::nullopt, reached});
                             continue;
                         } else {
+                            // networkNode.preSafe = logic.mkOr(networkNode.preSafe, res.explanation);
+                            // res = queryLoops(networkNode, reached, logic.mkNot(networkNode.preSafe));
+                            // if(res.reachabilityResult == ReachabilityResult::REACHABLE) {
+                                // assert(res.subpath.has_value());
+                                // path.pop_back();
+                                // path.push_back({NodeState::PRE, node, eid, res.subpath, std::nullopt, reached});
+                                // continue;
+                            // }
                             networkNode.preSafe = logic.mkOr(networkNode.preSafe, res.explanation);
                             //TODO: I need to return both trInv for the loop (for further analysis) and state invariant
                             //TODO: to block incoming states
@@ -1762,6 +1777,8 @@ TransitionSystem TransitionSystemNetworkManager::constructTransitionSystemFor(Sy
         for (int i = 0; i < loop.size(); i++) {
             auto const & source = getNode(graph.getSource(loop[i]));
             PTRef nestedLoopTrInv = source.loopInvariant == PTRef_Undef || i == 0 ? logic.getTerm_false() : timeMachine.sendFlaThroughTime(source.loopInvariant, n);
+            // PTRef loopTrInv = source.solver->getTransitionInvariant() == PTRef_Undef ? logic.getTerm_true() : timeMachine.sendFlaThroughTime(source.solver->getTransitionInvariant(), n);
+
             PTRef loopTrInv = timeMachine.sendFlaThroughTime(source.transitionInvariant, n);
             n+=2;
             PTRef label = timeMachine.sendFlaThroughTime(graph.getEdgeLabel(loop[i]), n++);
@@ -1799,7 +1816,7 @@ TransitionSystemNetworkManager::QueryResult TransitionSystemNetworkManager::quer
     if (res == SMTSolver::Answer::SAT) {
         auto model = solver.getModel();
         ModelBasedProjection mbp(logic);
-        PTRef query = logic.mkAnd({sourceCondition, label, target});
+        PTRef query = logic.mkAnd({sourceCondition, label});
         auto targetVars = TermUtils(logic).predicateArgsInOrder(graph.getNextStateVersion(graph.getTarget(eid)));
         PTRef eliminated = mbp.keepOnly(query, targetVars, *model);
         eliminated = TimeMachine(logic).sendFlaThroughTime(eliminated, -1);
@@ -1926,6 +1943,9 @@ Path TransitionSystemNetworkManager::produceExactReachedStates(NetworkNode & nod
                     auto edge = node.loops[j][k];
                     auto & networkNode = getNode(graph.getSource(edge));
                     if ( l%2 == 0 ) {
+                        if (!subPath.empty() && subPath.back().subPath.has_value()) {
+                            reachedRefined = subPath.back().subPath.value().back().reached;
+                        }
                         auto res = queryTransitionSystem(networkNode, reachedRefined, logic.mkNot(networkNode.postSafeLoop));
                         if (res.reachabilityResult == ReachabilityResult::REACHABLE) {
                             subPath.push_back({NodeState::POST, graph.getSource(edge), std::nullopt, std::nullopt, networkNode.solver->getTransitionStepCount(), res.explanation});
@@ -1948,14 +1968,22 @@ Path TransitionSystemNetworkManager::produceExactReachedStates(NetworkNode & nod
                                 return {};
                             }
                             if (!networkNode.loops.empty()) {
-                                auto res = queryLoops(networkNode, reachedRefined, logic.mkNot(networkNode.preSafeLoop));
+                                auto res = queryLoops(networkNode, subPath.back().reached, logic.mkNot(networkNode.preSafeLoop));
                                 if (res.reachabilityResult == ReachabilityResult::REACHABLE) {
+                                    PTRef temp = subPath.back().reached;
                                     subPath.pop_back();
                                     subPath.push_back(
-                                        {NodeState::PRE, graph.getSource(edge), edge, res.subpath,  std::nullopt, res.explanation});
-                                    l++;
+                                        {NodeState::PRE, graph.getSource(edge), edge, res.subpath,  std::nullopt, temp});
                                 } else {
-                                    networkNode.preSafeLoop = logic.mkOr(networkNode.preSafeLoop, res.explanation);
+                                    // networkNode.preSafeLoop = logic.mkOr(networkNode.preSafeLoop, res.explanation);
+                                    // res = queryLoops(networkNode, reached, logic.mkNot(networkNode.preSafe));
+                                    // if(res.reachabilityResult == ReachabilityResult::REACHABLE) {
+                                        // assert(res.subpath.has_value());
+                                        // subPath.pop_back();
+                                        // subPath.push_back({NodeState::PRE, graph.getSource(edge), edge, res.subpath, std::nullopt, reached});
+                                        // continue;
+                                    // }
+                                    networkNode.preSafeLoop = logic.mkOr(networkNode.preSafe, res.explanation);
                                     // TODO: I need to return both trInv for the loop (for further analysis) and state invariant
                                     // TODO: to block incoming states
                                     subPath.pop_back();
@@ -2059,8 +2087,8 @@ bool TPABase::getRestricted() const {
 PTRef TPABase::getSafetyExplanation() const {
     if (explanation.invariantType == SafetyExplanation::TransitionInvariantType::RESTRICTED_TO_INIT) {
         // TODO: compute the safe inductive invariant and return negation of that?
-//        return explanation.safetyExplanation;
-//        return getInductiveInvariant();
+        // return explanation.safetyExplanation;
+        // return getInductiveInvariant();
         return init;
     }
     PTRef transitionInvariant = explanation.safeTransitionInvariant;
