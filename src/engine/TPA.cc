@@ -439,6 +439,7 @@ VerificationAnswer TPABase::checkTrivialUnreachability() {
         explanation.safeTransitionInvariant = logic.getTerm_true();
         explanation.relationType = TPAType::LESS_THAN;
         explanation.invariantType = SafetyExplanation::TransitionInvariantType::RESTRICTED_TO_QUERY;
+        explanation.safetyExplanation = query;
         explanation.fixedPointType = SafetyExplanation::FixedPointType::LEFT;
         return VerificationAnswer::SAFE;
     }
@@ -448,6 +449,7 @@ VerificationAnswer TPABase::checkTrivialUnreachability() {
         explanation.safeTransitionInvariant = logic.getTerm_true();
         explanation.relationType = TPAType::LESS_THAN;
         explanation.invariantType = SafetyExplanation::TransitionInvariantType::RESTRICTED_TO_INIT;
+        explanation.safetyExplanation = init;
         explanation.fixedPointType = SafetyExplanation::FixedPointType::RIGHT;
         return VerificationAnswer::SAFE;
     }
@@ -1881,6 +1883,9 @@ TransitionSystemNetworkManager::queryLoops(NetworkNode & node, PTRef sourceCondi
                 return {ReachabilityResult::UNREACHABLE, explanation, {}};
             }
             case VerificationAnswer::UNSAFE: {
+                if (solver->getTransitionStepCount() == 0) {
+                    return {ReachabilityResult::REACHABLE, sourceCondition, {}};
+                }
                 Path states = produceExactReachedStates(node, *solver, node.loops);
                 node.loopTransitions = {};
                 if (states.empty()) { continue;}
@@ -1969,6 +1974,11 @@ Path TransitionSystemNetworkManager::produceExactReachedStates(NetworkNode & nod
                             }
                             if (!networkNode.loops.empty()) {
                                 auto res = queryLoops(networkNode, subPath.back().reached, logic.mkNot(networkNode.preSafeLoop));
+                                for(auto edge : node.loops[j]){
+                                    auto & networkNode = getNode(graph.getSource(edge));
+                                    networkNode.preSafeLoop = networkNode.preSafeLoopW;
+                                    networkNode.postSafeLoop = networkNode.postSafeLoopW;
+                                }
                                 if (res.reachabilityResult == ReachabilityResult::REACHABLE) {
                                     PTRef temp = subPath.back().reached;
                                     subPath.pop_back();
