@@ -122,6 +122,7 @@ public:
 
     PTRef getInit() const;
     PTRef getTransitionRelation() const;
+    PTRef getIdentity() const;
     PTRef getQuery() const;
 
     /**

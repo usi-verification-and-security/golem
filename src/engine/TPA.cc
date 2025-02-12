@@ -283,6 +283,12 @@ PTRef TPABase::getTransitionRelation() const {
     return transition;
 }
 
+
+PTRef TPABase::getIdentity() const {
+    return identity;
+}
+
+
 PTRef TPABase::getQuery() const {
     return query;
 }
@@ -1770,13 +1776,18 @@ TransitionSystem TransitionSystemNetworkManager::constructTransitionSystemFor(Sy
         int n = 0;
         for (int i = 0; i < loop.size(); i++) {
             auto const & source = getNode(graph.getSource(loop[i]));
-            PTRef nestedLoopTrInv = source.loopInvariant == PTRef_Undef || i == 0 ? logic.getTerm_false() : timeMachine.sendFlaThroughTime(source.loopInvariant, n);
+            PTRef nestedLoopTrInv = source.loopInvariant == PTRef_Undef || i == 0 ? logic.getTerm_false() : logic.mkAnd(timeMachine.sendFlaThroughTime(source.loopInvariant, n), timeMachine.sendFlaThroughTime(source.transitionInvariant, n+2));
             // PTRef loopTrInv = source.solver->getTransitionInvariant() == PTRef_Undef ? logic.getTerm_true() : timeMachine.sendFlaThroughTime(source.solver->getTransitionInvariant(), n);
 
             PTRef loopTrInv = timeMachine.sendFlaThroughTime(source.transitionInvariant, n);
-            n+=2;
+            PTRef loopInv = nestedLoopTrInv == logic.getTerm_false() ? loopTrInv : nestedLoopTrInv;
+            n = nestedLoopTrInv == logic.getTerm_false() ? n + 2 : n + 4;
+            // if (nestedLoopTrInv != logic.getTerm_false()) {
+                // loopTrInv = logic.mkAnd({loopTrInv, timeMachine.sendFlaThroughTime(node.solver->getIdentity(),n),  timeMachine.sendFlaThroughTime(node.solver->getIdentity(),n+1)});
+                // n+=2;
+            // }
             PTRef label = timeMachine.sendFlaThroughTime(graph.getEdgeLabel(loop[i]), n++);
-            loopMTr = logic.mkAnd({loopMTr, logic.mkOr(loopTrInv, nestedLoopTrInv), label});
+            loopMTr = logic.mkAnd({loopMTr, loopInv, label});
 //            loopMTr = logic.mkAnd({loopMTr, loopTrInv, label});
         }
         std::unordered_map<PTRef, PTRef, PTRefHash> subMap;
@@ -1869,7 +1880,11 @@ TransitionSystemNetworkManager::queryLoops(NetworkNode & node, PTRef sourceCondi
         switch (res) {
             case VerificationAnswer::SAFE: {
                 PTRef explanation = solver->getSafetyExplanation();
-                node.loopInvariant == PTRef_Undef ?  node.loopInvariant = solver->getTransitionInvariant() : logic.mkAnd(node.loopInvariant, solver->getTransitionInvariant());
+                PTRef trInv = solver->getTransitionInvariant();
+                if (solver->getRestricted()) {
+                    trInv = logic.mkOr(logic.mkAnd(trInv, solver->getSafetyExplanation()), logic.mkNot(solver->getSafetyExplanation()));
+                }
+                node.loopInvariant = node.loopInvariant == PTRef_Undef ? trInv : logic.mkAnd(node.loopInvariant, trInv);
                 assert(explanation != PTRef_Undef);
                 node.loopTransitions = {};
                 TRACE(1, "TS blocks " << logic.pp(explanation))
