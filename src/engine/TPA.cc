@@ -1882,7 +1882,7 @@ TransitionSystemNetworkManager::queryLoops(NetworkNode & node, PTRef sourceCondi
                 PTRef explanation = solver->getSafetyExplanation();
                 PTRef trInv = solver->getTransitionInvariant();
                 if (solver->getRestricted()) {
-                    trInv = logic.mkOr(logic.mkAnd(trInv, solver->getSafetyExplanation()), logic.mkNot(solver->getSafetyExplanation()));
+                    trInv = logic.mkOr(logic.mkAnd(trInv, solver->getRestrictedExpl()), logic.mkNot(solver->getRestrictedExpl()));
                 }
                 node.loopInvariant = node.loopInvariant == PTRef_Undef ? trInv : logic.mkAnd(node.loopInvariant, trInv);
                 assert(explanation != PTRef_Undef);
@@ -2010,8 +2010,9 @@ Path TransitionSystemNetworkManager::produceExactReachedStates(NetworkNode & nod
                                         // subPath.push_back({NodeState::PRE, graph.getSource(edge), edge, res.subpath, std::nullopt, reached});
                                         // continue;
                                     // }
+                                    // networkNode.loopSafe = res.explanation;
                                     networkNode.loopSafe = logic.mkOr(networkNode.loopSafe, res.explanation);
-                                    networkNode.preSafeLoop = networkNode.loopSafe;
+                                    networkNode.preSafeLoop = res.explanation;
                                     // TODO: I need to return both trInv for the loop (for further analysis) and state invariant
                                     // TODO: to block incoming states
                                     subPath.pop_back();
