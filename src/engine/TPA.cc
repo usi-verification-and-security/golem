@@ -1639,11 +1639,11 @@ VerificationResult TransitionSystemNetworkManager::solve() && {
                     auto target = graph.getTarget(nextEdge);
                     // Check if we have a nested loop in the structure
                     // If we do, save the nested loop to the source of this nested loop and try to find other paths
-                    auto loophead = std::find_if(path.begin(), path.end(), [target](auto step)
+                    auto loophead = std::find_if(path.cbegin(), path.cend(), [target](auto step)
                                                  {return step.node == target;});
                     if (loophead != path.end()) {
                         // We should ignore first node (it is PRE of entry to the loop)
-                        if(std::find(networkNode.loopEdges.begin(), networkNode.loopEdges.end(), nextEdge) == networkNode.loopEdges.end()) {
+                        if(std::find(networkNode.loopEdges.cbegin(), networkNode.loopEdges.end(), nextEdge) == networkNode.loopEdges.cend()) {
                             loophead += 1;
                             getNode(target).loops.push_back({});
                             while (loophead != path.end()) {
