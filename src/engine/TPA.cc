@@ -1516,7 +1516,7 @@ private:
     [[nodiscard]] QueryResult queryTransitionSystem(NetworkNode const & node, PTRef sourceCondition,
                                                     PTRef targetCondition) const;
 
-    [[nodiscard]] QueryResult queryLoops(NetworkNode & node, PTRef sourceCondition, PTRef targetCondition) ;
+    [[nodiscard]] QueryResult queryLoops(NetworkNode & node, PTRef sourceCondition, PTRef targetCondition, bool produceInv = false) ;
 
     [[nodiscard]] Path produceExactReachedStates(NetworkNode & node, TPABase const & solver, std::vector<std::vector<EId>> const & loops) ;
 
@@ -1738,6 +1738,11 @@ witness_t TransitionSystemNetworkManager::computeValidityWitness() {
         assert(res == ReachabilityResult::UNREACHABLE);
         if (res == ReachabilityResult::UNREACHABLE) {
             PTRef graphInvariant = utils.varSubstitute(node.solver->getInductiveInvariant(), subs);
+            if (!node.loops.empty()) {
+                auto [res, loopInv, subpath] = queryLoops(node, node.preSafe, logic.mkNot(node.postSafe));
+                loopInv = utils.varSubstitute(loopInv, subs);
+                graphInvariant = logic.mkOr(graphInvariant, loopInv);
+            }
             PTRef unversionedPredicate = logic.mkUninterpFun(vertex, std::move(unversionedVars));
             definitions[unversionedPredicate] = graphInvariant;
         } else {
@@ -1868,7 +1873,7 @@ TransitionSystemNetworkManager::queryTransitionSystem(NetworkNode const & node, 
 }
 
 TransitionSystemNetworkManager::QueryResult
-TransitionSystemNetworkManager::queryLoops(NetworkNode & node, PTRef sourceCondition, PTRef targetCondition) {
+TransitionSystemNetworkManager::queryLoops(NetworkNode & node, PTRef sourceCondition, PTRef targetCondition, bool produceInv) {
     while(true) {
         auto [mergedTransition, systemType] = produceMergedTransition(node, node.loops);
         std::unique_ptr<TPABase> solver{nullptr};
@@ -1888,6 +1893,9 @@ TransitionSystemNetworkManager::queryLoops(NetworkNode & node, PTRef sourceCondi
                 assert(explanation != PTRef_Undef);
                 node.loopTransitions = {};
                 TRACE(1, "TS blocks " << logic.pp(explanation))
+                if (produceInv) {
+                    return {ReachabilityResult::UNREACHABLE, solver->getInductiveInvariant(), {}};
+                }
                 return {ReachabilityResult::UNREACHABLE, explanation, {}};
             }
             case VerificationAnswer::UNSAFE: {
