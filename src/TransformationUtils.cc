@@ -13,6 +13,7 @@ bool isTransitionSystem(ChcDirectedGraph const & graph) {
     auto reversePostorder = reversePostOrder(graph, graphRepresentation);
     // TS has 3 vertices: Init, Body, Bad
     if (reversePostorder.size() != 3) { return false; }
+    if (reversePostorder[0] != graph.getEntry() or reversePostorder[2] != graph.getExit()) { return false; }
     // TS has 3 edges: From Init to Body, self-loop on Body, from Body to Bad
     auto beg = reversePostorder[0];
     auto loop = reversePostorder[1];
