@@ -1419,7 +1419,10 @@ PTRef TPABase::safeSupersetOfInitialStates(PTRef start, PTRef transitionInvarian
     ipartitions_t mask = (1 << 1) + (1 << 2); // This puts transition + query into the A-part
     vec<PTRef> itps;
     itpContext->getSingleInterpolant(itps, mask);
-    return logic.mkNot(itps[0]);
+    PTRef itp = logic.mkNot(itps[0]);
+    mask = 1 << 0;
+    itpContext->getSingleInterpolant(itps, mask);
+    return itp;
 }
 
 
@@ -1602,6 +1605,7 @@ VerificationResult TransitionSystemNetworkManager::solve() && {
                         networkNode.preSafeLoopW = networkNode.preSafe;
                     }
                     if(!networkNode.loops.empty()) {
+                        // std::cout<<"NESTED LOOP HANDLING\n";
                         //TODO: Nested loops handling
                         res = queryLoops(networkNode, reached, logic.mkNot(networkNode.preSafe));
                         if(res.reachabilityResult == ReachabilityResult::REACHABLE) {
@@ -1784,7 +1788,7 @@ TransitionSystem TransitionSystemNetworkManager::constructTransitionSystemFor(Sy
             PTRef nestedLoopTrInv = source.loopInvariant == PTRef_Undef || i == 0 ? logic.getTerm_false() : logic.mkAnd(timeMachine.sendFlaThroughTime(source.loopInvariant, n), timeMachine.sendFlaThroughTime(source.transitionInvariant, n+2));
             // PTRef loopTrInv = source.solver->getTransitionInvariant() == PTRef_Undef ? logic.getTerm_true() : timeMachine.sendFlaThroughTime(source.solver->getTransitionInvariant(), n);
 
-            PTRef loopTrInv = timeMachine.sendFlaThroughTime(source.transitionInvariant, n);
+            PTRef loopTrInv = timeMachine.sendFlaThroughTime(logic.mkAnd(source.transitionInvariant, source.solver->getGeneralTransitionInvariant()), n);
             PTRef loopInv = nestedLoopTrInv == logic.getTerm_false() ? loopTrInv : nestedLoopTrInv;
             n = nestedLoopTrInv == logic.getTerm_false() ? n + 2 : n + 4;
             // if (nestedLoopTrInv != logic.getTerm_false()) {
@@ -1915,7 +1919,7 @@ TransitionSystemNetworkManager::queryLoops(NetworkNode & node, PTRef sourceCondi
 }
 
 Path TransitionSystemNetworkManager::produceExactReachedStates(NetworkNode & node, TPABase const & solver, std::vector<std::vector<EId>> const & loops) {
-    PTRef reached = solver.getReachedStates();
+    PTRef reached = solver.getQuery();
     PTRef transition = solver.getTransitionRelation();
     PTRef init = solver.getInit();
     uint transitions = solver.getTransitionStepCount();
@@ -2035,12 +2039,6 @@ Path TransitionSystemNetworkManager::produceExactReachedStates(NetworkNode & nod
                         auto target = graph.getTarget(edge);
                         TransitionSystemNetworkManager::QueryResult res;
                         if (l == node.loops[j].size()*2-1 ) {
-                            res = queryEdge(edge, reachedRefined, logic.mkNot(getNode(target).preSafe));
-                            //TODO: Figure out why this thing is necessary!!!
-                            if (res.reachabilityResult == ReachabilityResult::REACHABLE) {
-                                subPath.push_back({NodeState::PRE, target, edge, std::nullopt,  std::nullopt, res.explanation});
-                                return subPath;
-                            }
                             save = false;
                             res = queryEdge(edge, reachedRefined, logic.mkAnd(logic.mkNot(getNode(target).preSafeLoop), subquery));
                         } else {
@@ -2094,6 +2092,10 @@ unsigned TPABase::getTransitionStepCount() const {
     return reachedStates.steps;
 }
 
+PTRef TPABase::getGeneralTransitionInvariant() const {
+    return shiftOnlyNextVars(logic.mkAnd(logic.mkAnd(leftInvariants), logic.mkAnd(rightInvariants)));
+}
+
 PTRef TPABase::getTransitionInvariant() const {
     if(explanation.relationType == TPAType::LESS_THAN) {
             return shiftOnlyNextVars(explanation.safeTransitionInvariant);
@@ -2124,8 +2126,6 @@ bool TPABase::getRestricted() const {
 PTRef TPABase::getSafetyExplanation() const {
     if (explanation.invariantType == SafetyExplanation::TransitionInvariantType::RESTRICTED_TO_INIT) {
         // TODO: compute the safe inductive invariant and return negation of that?
-        // return explanation.safetyExplanation;
-        // return getInductiveInvariant();
         return init;
     }
     PTRef transitionInvariant = explanation.safeTransitionInvariant;
@@ -2133,7 +2133,7 @@ PTRef TPABase::getSafetyExplanation() const {
     //       Maybe we should use auxiliary (existentially quantified) variables for the intermediate state?
     //       And rename the variables so the final state is version 1, same as for TPAType::LESS_THAN?
     return safeSupersetOfInitialStates(
-        getInit(), transitionInvariant,
+    getInit(), transitionInvariant,
         getNextVersion(getQuery(), explanation.relationType == TPAType::LESS_THAN ? 1 : 2));
 }
 
