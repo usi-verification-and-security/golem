@@ -283,12 +283,6 @@ PTRef TPABase::getTransitionRelation() const {
     return transition;
 }
 
-
-PTRef TPABase::getIdentity() const {
-    return identity;
-}
-
-
 PTRef TPABase::getQuery() const {
     return query;
 }
@@ -438,7 +432,6 @@ VerificationAnswer TPABase::solve() {
 }
 
 VerificationAnswer TPABase::checkTrivialUnreachability() {
-    assert(transition != logic.getTerm_false());
     if (query == logic.getTerm_false()) {
         // TODO: Check UNSAT with solver?
         explanation.inductivnessPowerExponent = 0;
@@ -494,7 +487,7 @@ VerificationAnswer TPASplit::checkPower(unsigned short power) {
     }
 }
 
-    /*
+/*
  * Check if 'to' is reachable from 'from' (these are state formulas) in exactly 2^{n+1} steps (n is 'power').
  * We do this using the n-th abstraction of the transition relation and check 2-step reachability in this abstraction.
  * If 'to' is unreachable, we interpolate over the 2 step transition to obtain 1-step transition of level n+1.
@@ -1595,17 +1588,13 @@ VerificationResult TransitionSystemNetworkManager::solve() && {
                     path.push_back({NodeState::POST, node, std::nullopt, std::nullopt, networkNode.solver->getTransitionStepCount(), res.explanation});
                 } else {
                     networkNode.preSafe = logic.mkOr(networkNode.preSafe, res.explanation);
+                    networkNode.transitionInvariant = logic.mkAnd(networkNode.transitionInvariant, networkNode.solver->getTransitionInvariant());
 
-                    if(networkNode.solver->getRestricted()){
-                        networkNode.transitionInvariant = logic.mkAnd(networkNode.transitionInvariant, logic.mkOr(logic.mkAnd(networkNode.solver->getRestrictedExpl(), networkNode.solver->getTransitionInvariant()), logic.mkNot(networkNode.solver->getRestrictedExpl())));
-                    } else {
-                        networkNode.transitionInvariant = logic.mkAnd(networkNode.transitionInvariant, networkNode.solver->getTransitionInvariant());
-                    }
                     if(networkNode.loopEdges.empty()) {
                         networkNode.preSafeLoopW = networkNode.preSafe;
                     }
                     if(!networkNode.loops.empty()) {
-                        // std::cout<<"NESTED LOOP HANDLING\n";
+                        std::cout<<"NESTED LOOP HANDLING\n";
                         //TODO: Nested loops handling
                         res = queryLoops(networkNode, reached, logic.mkNot(networkNode.preSafe));
                         if(res.reachabilityResult == ReachabilityResult::REACHABLE) {
@@ -1786,15 +1775,10 @@ TransitionSystem TransitionSystemNetworkManager::constructTransitionSystemFor(Sy
         for (int i = 0; i < loop.size(); i++) {
             auto const & source = getNode(graph.getSource(loop[i]));
             PTRef nestedLoopTrInv = source.loopInvariant == PTRef_Undef || i == 0 ? logic.getTerm_false() : logic.mkAnd(timeMachine.sendFlaThroughTime(source.loopInvariant, n), timeMachine.sendFlaThroughTime(source.transitionInvariant, n+2));
-            // PTRef loopTrInv = source.solver->getTransitionInvariant() == PTRef_Undef ? logic.getTerm_true() : timeMachine.sendFlaThroughTime(source.solver->getTransitionInvariant(), n);
 
             PTRef loopTrInv = timeMachine.sendFlaThroughTime(logic.mkAnd(source.transitionInvariant, source.solver->getGeneralTransitionInvariant()), n);
             PTRef loopInv = nestedLoopTrInv == logic.getTerm_false() ? loopTrInv : nestedLoopTrInv;
             n = nestedLoopTrInv == logic.getTerm_false() ? n + 2 : n + 4;
-            // if (nestedLoopTrInv != logic.getTerm_false()) {
-                // loopTrInv = logic.mkAnd({loopTrInv, timeMachine.sendFlaThroughTime(node.solver->getIdentity(),n),  timeMachine.sendFlaThroughTime(node.solver->getIdentity(),n+1)});
-                // n+=2;
-            // }
             PTRef label = timeMachine.sendFlaThroughTime(graph.getEdgeLabel(loop[i]), n++);
             loopMTr = logic.mkAnd({loopMTr, loopInv, label});
 //            loopMTr = logic.mkAnd({loopMTr, loopTrInv, label});
@@ -1890,9 +1874,6 @@ TransitionSystemNetworkManager::queryLoops(NetworkNode & node, PTRef sourceCondi
             case VerificationAnswer::SAFE: {
                 PTRef explanation = solver->getSafetyExplanation();
                 PTRef trInv = solver->getTransitionInvariant();
-                if (solver->getRestricted()) {
-                    trInv = logic.mkOr(logic.mkAnd(trInv, solver->getRestrictedExpl()), logic.mkNot(solver->getRestrictedExpl()));
-                }
                 node.loopInvariant = node.loopInvariant == PTRef_Undef ? trInv : logic.mkAnd(node.loopInvariant, trInv);
                 assert(explanation != PTRef_Undef);
                 node.loopTransitions = {};
@@ -1923,16 +1904,20 @@ Path TransitionSystemNetworkManager::produceExactReachedStates(NetworkNode & nod
     PTRef transition = solver.getTransitionRelation();
     PTRef init = solver.getInit();
     uint transitions = solver.getTransitionStepCount();
-    PTRef query = logic.mkAnd(init, TimeMachine(logic).sendFlaThroughTime(reached, transitions));
+    PTRef reachedRefined = init;
+    PTRef query = logic.mkAnd(reachedRefined, TimeMachine(logic).sendFlaThroughTime(reached, transitions));
     for(int i=0; i < transitions; i++){
         query = logic.mkAnd(query, TimeMachine(logic).sendFlaThroughTime(transition, i));
     }
-    PTRef reachedRefined = init;
     auto edgeVars = getVariablesFromEdge(
         logic, graph, getSelfLoopFor(graph.getSource(loops[0][0]), graph, adjacencyRepresentation).value());
     Path subPath;
     for(int i=0; i < transitions; i++){
         vec<PTRef> coreVars;
+        // PTRef query = logic.mkAnd(TimeMachine(logic).sendFlaThroughTime(reachedRefined, i), TimeMachine(logic).sendFlaThroughTime(reached, transitions));
+        // for(int j=i; j < transitions; j++){
+        //     query = logic.mkAnd(query, TimeMachine(logic).sendFlaThroughTime(transition, i));
+        // }
         for(auto var: edgeVars.stateVars){
             coreVars.push(TimeMachine(logic).sendVarThroughTime(var, i+1));
         }
@@ -1976,11 +1961,8 @@ Path TransitionSystemNetworkManager::produceExactReachedStates(NetworkNode & nod
                             subPath.push_back({NodeState::POST, graph.getSource(edge), std::nullopt, std::nullopt, networkNode.solver->getTransitionStepCount(), res.explanation});
                             l++;
                         } else {
-                            if(networkNode.solver->getRestricted()){
-                                networkNode.transitionInvariant = logic.mkAnd(networkNode.transitionInvariant, logic.mkOr(logic.mkAnd(networkNode.solver->getRestrictedExpl(), networkNode.solver->getTransitionInvariant()), logic.mkNot(networkNode.solver->getRestrictedExpl())));
-                            } else {
-                                networkNode.transitionInvariant = logic.mkAnd(networkNode.transitionInvariant, networkNode.solver->getTransitionInvariant());
-                            }
+                            networkNode.transitionInvariant = logic.mkAnd(networkNode.transitionInvariant, networkNode.solver->getTransitionInvariant());
+
                             networkNode.preSafeLoop = logic.mkOr(networkNode.preSafeLoop, res.explanation);
                             if(l == 0) {
                                 if (save) {
@@ -2041,6 +2023,7 @@ Path TransitionSystemNetworkManager::produceExactReachedStates(NetworkNode & nod
                         if (l == node.loops[j].size()*2-1 ) {
                             save = false;
                             res = queryEdge(edge, reachedRefined, logic.mkAnd(logic.mkNot(getNode(target).preSafeLoop), subquery));
+                            reachedRefined = res.explanation;
                         } else {
                             res = queryEdge(edge, reachedRefined, logic.mkNot(getNode(target).preSafeLoop));
                         }
@@ -2097,26 +2080,14 @@ PTRef TPABase::getGeneralTransitionInvariant() const {
 }
 
 PTRef TPABase::getTransitionInvariant() const {
-    if(explanation.relationType == TPAType::LESS_THAN) {
-            return shiftOnlyNextVars(explanation.safeTransitionInvariant);
-    } else {
-        return explanation.safeTransitionInvariant;
-    }
-}
+    PTRef invariant = logic.getTerm_true();
+    invariant = explanation.relationType == TPAType::LESS_THAN ?
+        logic.mkAnd(invariant, shiftOnlyNextVars(explanation.safeTransitionInvariant)) :
+        logic.mkAnd(invariant, explanation.safeTransitionInvariant) ;
 
-PTRef TPABase::getRestrictedExpl() const {
-//    if(explanation.invariantType == SafetyExplanation::TransitionInvariantType::RESTRICTED_TO_QUERY){
-//        return shiftOnlyNextVars(explanation.safeTransitionInvariant);
-//    }
-    return explanation.safetyExplanation;
-}
-
-bool TPABase::getRestricted() const {
-    if(explanation.invariantType == SafetyExplanation::TransitionInvariantType::UNRESTRICTED) {
-        return false;
-    } else {
-        return true;
-    }
+    PTRef constraint = explanation.safetyExplanation;
+    return explanation.invariantType == SafetyExplanation::TransitionInvariantType::UNRESTRICTED ?  invariant :
+    logic.mkOr(logic.mkAnd(invariant, constraint), logic.mkNot(constraint));
 }
 
 
