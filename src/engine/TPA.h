@@ -123,7 +123,6 @@ public:
 
     PTRef getInit() const;
     PTRef getTransitionRelation() const;
-    PTRef getIdentity() const;
     PTRef getQuery() const;
 
     /**
@@ -135,9 +134,6 @@ public:
     PTRef getReachedStates() const;
     unsigned getTransitionStepCount() const;
     PTRef getTransitionInvariant() const;
-    PTRef getGeneralTransitionInvariant() const;
-    PTRef getRestrictedExpl() const;
-    bool getRestricted() const;
     PTRef getInductiveInvariant() const;
     vec<PTRef> getStateVars(int version) const;
 
