@@ -20,4 +20,13 @@ private:
     std::chrono::high_resolution_clock::time_point start;
 };
 
+#define MEASURE(statement)                                                                                             \
+    Timer timer;                                                                                                       \
+    statement;                                                                                                         \
+    auto elapsedMs = timer.elapsedMilliseconds();
+
+#define MEASURE_AND_REPORT(statement)                                                                                  \
+    MEASURE(statement)                                                                                                 \
+    std::cout << "Execution of \"" << #statement << "\" took " << elapsedMs << " ms\n";
+
 #endif // GOLEM_TIMER_H
