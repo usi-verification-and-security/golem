@@ -1017,11 +1017,9 @@ bool TPABase::checkLessThanFixedPoint(unsigned short power) {
                 if(restrictedInvariant) {
                     auto itpContext = solver.getInterpolationContext();
                     ipartitions_t mask = (1 << 1); // This puts init into the A-part
-                    // ipartitions_t mask = (1 << 0) + (1 << 2); // This puts init into the A-part
                     vec<PTRef> itps;
                     itpContext->getSingleInterpolant(itps, mask);
                     explanation.safetyExplanation = itps[0];
-                    // explanation.safetyExplanation = logic.mkNot(itps[0]);
                 }
                 explanation.fixedPointType = SafetyExplanation::FixedPointType::RIGHT;
                 explanation.inductivnessPowerExponent = 0;
@@ -1060,11 +1058,9 @@ bool TPABase::checkLessThanFixedPoint(unsigned short power) {
                 if(restrictedInvariant) {
                     auto itpContext = solver.getInterpolationContext();
                     ipartitions_t mask = (1 << 1); // This puts query into the A-part
-                    // ipartitions_t mask = (1 << 0) + (1 << 2); // This puts init into the A-part
                     vec<PTRef> itps;
                     itpContext->getSingleInterpolant(itps, mask);
                     explanation.safetyExplanation = itps[0];
-                    // explanation.safetyExplanation = logic.mkNot(itps[0]);
                 }
                 explanation.fixedPointType = SafetyExplanation::FixedPointType::LEFT;
                 explanation.inductivnessPowerExponent = 0;
@@ -1157,17 +1153,11 @@ bool TPASplit::checkExactFixedPoint(unsigned short power) {
             explanation.relationType = TPAType::EQUALS;
             if(restrictedInvariant) {
                 auto itpContext = solver.getInterpolationContext();
-                // ipartitions_t mask = (1 << 0) + (1 << 2); // This puts query into the A-part
                 ipartitions_t mask = (1 << 1); // This puts query into the A-part
                 vec<PTRef> itps;
                 itpContext->getSingleInterpolant(itps, mask);
-                if (restrictedInvariant == 1) {
-                    // explanation.safetyExplanation = logic.mkNot(getNextVersion(itps[0],1));
-                    explanation.safetyExplanation = getNextVersion(itps[0],1);
-                } else {
-                    // explanation.safetyExplanation = logic.mkNot(getNextVersion(itps[0],-1));
-                    explanation.safetyExplanation = getNextVersion(itps[0],-1);
-                }
+                explanation.safetyExplanation = restrictedInvariant == 1 ? getNextVersion(itps[0],1) :
+                    getNextVersion(itps[0],-1);
             }
             explanation.inductivnessPowerExponent = i;
             explanation.safeTransitionInvariant =
