@@ -11,7 +11,7 @@
 
 struct Timer {
     Timer() : start(std::chrono::high_resolution_clock::now()) {}
-    auto elapsedMilliseconds() {
+    [[nodiscard]] auto elapsedMilliseconds() const {
         return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - start)
             .count();
     }
