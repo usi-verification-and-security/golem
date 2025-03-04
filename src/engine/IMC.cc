@@ -58,6 +58,7 @@ PTRef getInterpolant(SMTSolver & solver, ipartitions_t const & mask) {
 
 // procedure FiniteRun(M=(I,T,F), k>0)
 TransitionSystemVerificationResult IMC::finiteRun(TransitionSystem const & ts, unsigned k) {
+    if (verbosity > 0) { std::cout << "[IMC] Checking with lookahead length " << k << '\n'; }
     assert(k > 0);
     SMTSolver solver(logic, SMTSolver::WitnessProduction::ONLY_INTERPOLANTS);
     solver.getConfig().setSimplifyInterpolant(4);
