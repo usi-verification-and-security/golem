@@ -1402,10 +1402,7 @@ PTRef TPABase::safeSupersetOfInitialStates(PTRef start, PTRef transitionInvarian
     ipartitions_t mask = (1 << 1) + (1 << 2); // This puts transition + query into the A-part
     vec<PTRef> itps;
     itpContext->getSingleInterpolant(itps, mask);
-    PTRef itp = logic.mkNot(itps[0]);
-    mask = 1 << 0;
-    itpContext->getSingleInterpolant(itps, mask);
-    return itp;
+    return logic.mkNot(itps[0]);
 }
 
 
@@ -1414,8 +1411,8 @@ struct Entry {
     NodeState state;
     SymRef node;
     std::optional<EId> incomingEdge; // Edge used to get into this node, valid only for PRE state
-    std::optional<std::vector<Entry>> subPath; // Edge used to get into this node, valid only for PRE state
-    std::optional<size_t> iteration_num; // Edge used to get into this node, valid only for PRE state
+    std::optional<std::vector<Entry>> subPath; // SubPath to exit the nested loop, valid only for PRE state
+    std::optional<size_t> iteration_num; // Number of iterations to get out of node, valid only for POST state
     PTRef reached;
 };
 
@@ -1430,7 +1427,6 @@ class TransitionSystemNetworkManager {
     ChcDirectedGraph const & graph;
     AdjacencyListsGraphRepresentation adjacencyRepresentation;
 
-
 public:
     TransitionSystemNetworkManager(TPAEngine & owner, ChcDirectedGraph const & graph)
         : owner(owner), logic(owner.logic), graph(graph),
@@ -1443,13 +1439,11 @@ private:
         std::unique_ptr<TPABase> solver{nullptr};
         PTRef preSafe{PTRef_Undef};
         PTRef preSafeLoop{PTRef_Undef};
-        PTRef preTemp{PTRef_Undef};
         PTRef preSafeLoopW{PTRef_Undef};
         // TODO: preSafe and postSafe are being overwritten during solving
         //       ideally we would create Network nodes as we discover graph
         PTRef postSafe{PTRef_Undef};
         PTRef postSafeLoop{PTRef_Undef};
-        PTRef postTemp{PTRef_Undef};
         PTRef postSafeLoopW{PTRef_Undef};
         PTRef loopSafe{PTRef_Undef};
         std::size_t blocked_children{0};
@@ -1963,19 +1957,12 @@ Path TransitionSystemNetworkManager::produceExactReachedStates(NetworkNode & nod
                                 return {};
                             }
                             if (!networkNode.loops.empty()) {
-                                for(auto loop : networkNode.loops) {
-                                    for (auto edge: loop) {
-                                        auto & networkNode = getNode(graph.getSource(edge));
-                                        networkNode.preTemp = networkNode.preSafeLoop;
-                                        networkNode.postTemp = networkNode.postSafeLoop;
-                                    }
-                                }
                                 auto res = queryLoops(networkNode, subPath.back().reached, logic.mkNot(networkNode.preSafeLoop));
                                 for(auto loop : networkNode.loops) {
                                     for (auto edge: loop) {
                                         auto & networkNode = getNode(graph.getSource(edge));
-                                        networkNode.preSafeLoop = networkNode.preTemp;
-                                        networkNode.postSafeLoop = networkNode.postTemp;
+                                        networkNode.preSafeLoop = networkNode.preSafeLoopW;
+                                        networkNode.postSafeLoop = networkNode.postSafeLoopW;
                                     }
                                 }
                                 if (res.reachabilityResult == ReachabilityResult::REACHABLE) {
