@@ -1563,10 +1563,7 @@ VerificationResult TransitionSystemNetworkManager::solve() && {
         switch (state) {
             case NodeState::PRE: // Traverse loop
             {
-                PTRef start = reached;
-                if(subpath.has_value()){
-                    start = subpath.value().back().reached;
-                }
+                PTRef start = subpath.has_value() ? subpath.value().back().reached : reached;
                 auto res = queryTransitionSystem(networkNode, start, logic.mkNot(networkNode.postSafe));
                 if (res.reachabilityResult == ReachabilityResult::REACHABLE) {
                     path.push_back({NodeState::POST, node, std::nullopt, std::nullopt, networkNode.solver->getTransitionStepCount(), res.explanation});
@@ -1574,9 +1571,7 @@ VerificationResult TransitionSystemNetworkManager::solve() && {
                     networkNode.preSafe = logic.mkOr(networkNode.preSafe, res.explanation);
                     networkNode.transitionInvariant = logic.mkAnd(networkNode.transitionInvariant, networkNode.solver->getTransitionInvariant());
 
-                    if(networkNode.loopEdges.empty()) {
-                        networkNode.preSafeLoopW = networkNode.preSafe;
-                    }
+                    networkNode.preSafeLoopW = networkNode.loopEdges.empty() ? networkNode.preSafe : networkNode.preSafeLoopW;
                     if(!networkNode.loops.empty()) {
                         std::cout<<"NESTED LOOP HANDLING\n";
                         //TODO: Nested loops handling
@@ -1589,8 +1584,6 @@ VerificationResult TransitionSystemNetworkManager::solve() && {
                         } else {
                             networkNode.loopSafe = logic.mkOr(networkNode.loopSafe, res.explanation);
                             networkNode.preSafe = networkNode.loopSafe;
-                            //TODO: I need to return both trInv for the loop (for further analysis) and state invariant
-                            //TODO: to block incoming states
                         }
                     }
                     if(!networkNode.loopEdges.empty()) {getNode(graph.getSource(eid.value())).loopEdges.insert(eid.value());}
@@ -1603,7 +1596,7 @@ VerificationResult TransitionSystemNetworkManager::solve() && {
                 if (networkNode.blocked_children == networkNode.children.size()) { // No way out
                     PTRef blocked = logic.mkAnd(networkNode.blockedReason);
                     networkNode.postSafe = logic.mkOr(networkNode.postSafe, blocked);
-                    if(networkNode.loopEdges.empty()) {networkNode.postSafeLoopW = networkNode.postSafe;}
+                    networkNode.postSafeLoopW = networkNode.loopEdges.empty() ? networkNode.postSafe : networkNode.postSafeLoopW;
                     path.pop_back();
                     for (PTRef & reason : networkNode.blockedReason) {
                         reason = PTRef_Undef;
@@ -1616,18 +1609,18 @@ VerificationResult TransitionSystemNetworkManager::solve() && {
                     auto target = graph.getTarget(nextEdge);
                     // Check if we have a nested loop in the structure
                     // If we do, save the nested loop to the source of this nested loop and try to find other paths
-                    auto loophead = std::find_if(path.cbegin(), path.cend(), [target](auto step)
-                                                 {return step.node == target;});
+                    auto loophead = std::find_if(path.cbegin(), path.cend(),
+                        [target](auto step){return step.node == target;});
                     if (loophead != path.end()) {
                         // We should ignore first node (it is PRE of entry to the loop)
-                        if(std::find(networkNode.loopEdges.cbegin(), networkNode.loopEdges.end(), nextEdge) == networkNode.loopEdges.cend()) {
-                            loophead += 1;
-                            getNode(target).loops.push_back({});
+                        if(networkNode.loopEdges.find(nextEdge) == networkNode.loopEdges.cend()) {
+                            ++loophead;
+                            getNode(target).loops.emplace_back();
                             while (loophead != path.end()) {
                                 if (loophead->incomingEdge.has_value()) {
                                     getNode(target).loops.back().push_back(loophead->incomingEdge.value());
                                 }
-                                loophead++;
+                                ++loophead;
                             }
                             getNode(target).loops.back().push_back(nextEdge);
                             networkNode.loopEdges.insert(nextEdge);
@@ -1664,8 +1657,8 @@ std::vector<EId> TransitionSystemNetworkManager::extractPath(Path const & path) 
         if (entry.state == NodeState::PRE) {
             res.push_back(entry.incomingEdge.value());
             if(entry.subPath.has_value()){
-                auto subpath = extractPath(entry.subPath.value());
-                res.insert(res.end(), subpath.begin(), subpath.end());
+                auto subPath = extractPath(entry.subPath.value());
+                res.insert(res.end(), subPath.begin(), subPath.end());
             }
         } else {
             if(entry.iteration_num.has_value()){
@@ -1679,17 +1672,7 @@ std::vector<EId> TransitionSystemNetworkManager::extractPath(Path const & path) 
 
 
 witness_t TransitionSystemNetworkManager::computeInvalidityWitness(Path const & path) const {
-    std::vector<EId> errorPath = extractPath(path);
-
-//    for (EId edge : path) {
-//        errorPath.push_back(edge);
-//        SymRef target = graph.getTarget(edge);
-//        if (target != graph.getExit()) {
-//            auto steps = getNode(target).solver->getTransitionStepCount();
-//            errorPath.insert(errorPath.end(), steps, getSelfLoopFor(target, graph, adjacencyRepresentation).value());
-//        }
-//    }
-    return InvalidityWitness::fromErrorPath(ErrorPath{std::move(errorPath)}, graph);
+    return InvalidityWitness::fromErrorPath(ErrorPath{extractPath(path)}, graph);
 }
 
 witness_t TransitionSystemNetworkManager::computeValidityWitness() {
@@ -2076,7 +2059,7 @@ PTRef TPABase::getSafetyExplanation() const {
     //       Maybe we should use auxiliary (existentially quantified) variables for the intermediate state?
     //       And rename the variables so the final state is version 1, same as for TPAType::LESS_THAN?
     return safeSupersetOfInitialStates(
-    getInit(), transitionInvariant,
+        getInit(), transitionInvariant,
         getNextVersion(getQuery(), explanation.relationType == TPAType::LESS_THAN ? 1 : 2));
 }
 
