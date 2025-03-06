@@ -1726,8 +1726,7 @@ TransitionSystem TransitionSystemNetworkManager::constructTransitionSystemFor(Sy
         for (int i = 0; i < loop.size(); i++) {
             auto const & source = getNode(graph.getSource(loop[i]));
             PTRef nestedLoopTrInv = source.loopInvariant == PTRef_Undef || i == 0 ? logic.getTerm_false() : logic.mkAnd(timeMachine.sendFlaThroughTime(source.loopInvariant, n), timeMachine.sendFlaThroughTime(source.transitionInvariant, n+2));
-            PTRef loopTrInv = timeMachine.sendFlaThroughTime(source.transitionInvariant, n);
-            PTRef loopInv = nestedLoopTrInv == logic.getTerm_false() ? loopTrInv : nestedLoopTrInv;
+            PTRef loopTrInv = timeMachine.sendFlaThroughTime(logic.mkAnd(source.transitionInvariant, source.solver->getGeneralTransitionInvariant()), n);            PTRef loopInv = nestedLoopTrInv == logic.getTerm_false() ? loopTrInv : nestedLoopTrInv;
             n = nestedLoopTrInv == logic.getTerm_false() ? n + 2 : n + 4;
             PTRef label = timeMachine.sendFlaThroughTime(graph.getEdgeLabel(loop[i]), n++);
             loopMTr = logic.mkAnd({loopMTr, loopInv, label});
@@ -1966,9 +1965,11 @@ PTRef TPABase::getTransitionInvariant() const {
         logic.mkAnd(invariant, explanation.safeTransitionInvariant) ;
 
     PTRef constraint = explanation.safetyExplanation;
-    PTRef unrestrictedInv = shiftOnlyNextVars(logic.mkAnd(logic.mkAnd(leftInvariants), logic.mkAnd(rightInvariants)));
-    return explanation.invariantType == SafetyExplanation::TransitionInvariantType::UNRESTRICTED ?  logic.mkAnd(unrestrictedInv, invariant) :
-    logic.mkAnd(unrestrictedInv, logic.mkOr(logic.mkAnd(invariant, constraint), logic.mkNot(constraint)));
+    return explanation.invariantType == SafetyExplanation::TransitionInvariantType::UNRESTRICTED ?  invariant :
+    logic.mkOr(logic.mkAnd(invariant, constraint), logic.mkNot(constraint));
+    // PTRef unrestrictedInv = shiftOnlyNextVars(logic.mkAnd(logic.mkAnd(leftInvariants), logic.mkAnd(rightInvariants)));
+    // return explanation.invariantType == SafetyExplanation::TransitionInvariantType::UNRESTRICTED ?  logic.mkAnd(unrestrictedInv, invariant) :
+    // logic.mkAnd(unrestrictedInv, logic.mkOr(logic.mkAnd(invariant, constraint), logic.mkNot(constraint)));
 }
 
 
@@ -2051,4 +2052,8 @@ InvalidityWitness TPAEngine::computeInvalidityWitness(ChcDirectedGraph const & g
 ValidityWitness TPAEngine::computeValidityWitness(ChcDirectedGraph const & graph, TransitionSystem const & ts,
                                                   PTRef inductiveInvariant) const {
     return ValidityWitness::fromTransitionSystem(logic, graph, ts, inductiveInvariant);
+}
+
+PTRef TPABase::getGeneralTransitionInvariant() const {
+    return shiftOnlyNextVars(logic.mkAnd(logic.mkAnd(leftInvariants), logic.mkAnd(rightInvariants)));
 }
