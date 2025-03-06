@@ -1506,7 +1506,7 @@ private:
 
     [[nodiscard]] PTRef produceUnrolling(int depth, PTRef vars) const;
 
-    [[nodiscard]] std::tuple <PTRef, std::unique_ptr<SystemType>> produceMergedTransition(NetworkNode & node, std::vector<std::vector<EId>> const & loops) const;
+    [[nodiscard]] std::tuple <PTRef, std::unique_ptr<SystemType>> produceMergedTransition(NetworkNode & node) const;
 
     [[nodiscard]] witness_t computeValidityWitness();
 };
@@ -1722,7 +1722,8 @@ TransitionSystem TransitionSystemNetworkManager::constructTransitionSystemFor(Sy
 }
 
 
-[[nodiscard]] std::tuple <PTRef, std::unique_ptr<SystemType>> TransitionSystemNetworkManager::produceMergedTransition(NetworkNode & node, std::vector<std::vector<EId>> const & loops) const {
+[[nodiscard]] std::tuple <PTRef, std::unique_ptr<SystemType>> TransitionSystemNetworkManager::produceMergedTransition(NetworkNode & node) const {
+    auto& loops = node.loops;
     assert(!loops.empty());
     TimeMachine timeMachine(logic);
     TermUtils utils(logic);
@@ -1828,7 +1829,7 @@ TransitionSystemNetworkManager::queryTransitionSystem(NetworkNode const & node, 
 TransitionSystemNetworkManager::QueryResult
 TransitionSystemNetworkManager::queryLoops(NetworkNode & node, PTRef sourceCondition, PTRef targetCondition, bool produceInv) {
     while(true) {
-        auto [mergedTransition, systemType] = produceMergedTransition(node, node.loops);
+        auto [mergedTransition, systemType] = produceMergedTransition(node);
         std::unique_ptr<TPABase> solver{nullptr};
         solver = mkSolver();
         solver->resetTransitionSystem(
