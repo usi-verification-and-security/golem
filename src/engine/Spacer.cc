@@ -158,6 +158,7 @@ void DerivationDatabase::newDerivation(DerivationDatabase::DerivedFact fact, EId
 class SpacerContext {
     Logic & logic;
     ChcDirectedHyperGraph const & graph;
+    AdjacencyListsGraphRepresentation adjacencyLists;
 
     UnderApproxMap under;
     OverApproxMap over;
@@ -191,6 +192,8 @@ class SpacerContext {
     PTRef getEdgeMaySummary(EId eid, std::size_t bound) const;
 
     PTRef getEdgeMixedSummary(EId eid, std::size_t bound, std::size_t lastMayIndex) const;
+
+    std::vector<EId> const & incomingEdges(SymRef v) const;
 
     enum class BoundedSafetyResult { SAFE, UNSAFE };
 
@@ -244,7 +247,7 @@ VerificationResult Spacer::solve(ChcDirectedHyperGraph const & system) {
 }
 
 SpacerContext::SpacerContext(Logic & logic, ChcDirectedHyperGraph const & graph, bool logProof)
-    : logic(logic), graph(graph), logProof(logProof), vertexInstances(graph) {
+    : logic(logic), graph(graph), adjacencyLists(AdjacencyListsGraphRepresentation::from(graph)), logProof(logProof), vertexInstances(graph) {
     auto vertices = graph.getVertices();
     for (auto vid : vertices) {
         PTRef toInsert = vid == graph.getEntry() ? logic.getTerm_true() : logic.getTerm_false();
@@ -296,13 +299,8 @@ VerificationResult SpacerContext::run() {
 }
 
 
-std::vector<EId> incomingEdges(SymRef v, ChcDirectedHyperGraph const & graph) {
-    // TODO: Remember the adjacency representation and do not recompute this all the time
-    std::vector<EId> incoming;
-    graph.forEachEdge([&](auto const & edge) {
-       if (graph.getTarget(edge.id) == v) { incoming.push_back(edge.id); }
-    });
-    return incoming;
+std::vector<EId> const & SpacerContext::incomingEdges(SymRef v) const {
+    return adjacencyLists.getIncomingEdgesFor(v);
 }
 
 SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t currentBound) {
@@ -318,7 +316,7 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
             assert(false); // With the must summaries, we actually never finish here
             return BoundedSafetyResult::UNSAFE;
         }
-        auto edges = incomingEdges(pob.vertex, graph);
+        auto const & edges = incomingEdges(pob.vertex);
         bool mustReached = checkMustReachability(edges, pob);
         if (mustReached) {
             if (pob.vertex == query) {
@@ -540,7 +538,7 @@ SpacerContext::InductiveCheckResult SpacerContext::isInductive(std::size_t maxLe
 //            std::cout << " Checking vertex " << vid.id << std::endl;
             // encode body as disjunction over all the incoming edges
             vec<PTRef> edgeRepresentations;
-            for (EId eid : incomingEdges(vid, graph)) {
+            for (EId eid : incomingEdges(vid)) {
                 edgeRepresentations.push(getEdgeMaySummary(eid, level));
 //                std::cout << "Representation of edge " << eid.id << " at level " << level << " is " << logic.printTerm(edgeRepresentations.last()) << std::endl;
             }
