@@ -1425,11 +1425,13 @@ private:
         PTRef preSafe{PTRef_Undef};
         PTRef preSafeLoop{PTRef_Undef};
         PTRef preSafeLoopW{PTRef_Undef};
+        PTRef preTemp{PTRef_Undef};
         // TODO: preSafe and postSafe are being overwritten during solving
         //       ideally we would create Network nodes as we discover graph
         PTRef postSafe{PTRef_Undef};
         PTRef postSafeLoop{PTRef_Undef};
         PTRef postSafeLoopW{PTRef_Undef};
+        PTRef postTemp{PTRef_Undef};
         PTRef loopSafe{PTRef_Undef};
         std::size_t blocked_children{0};
         std::vector<EId> children;
@@ -1895,12 +1897,19 @@ Path TransitionSystemNetworkManager::produceExactReachedStates(NetworkNode & nod
                             networkNode.preSafeLoop = logic.mkOr(networkNode.preSafeLoop, res.explanation);
                             if (l == 0) { break; }
                             if (!networkNode.loops.empty()) {
+                                for(auto loop : networkNode.loops) {
+                                    for (auto edge: loop) {
+                                        auto & networkNode = getNode(graph.getSource(edge));
+                                        networkNode.preTemp = networkNode.preSafeLoop;
+                                        networkNode.postTemp = networkNode.postSafeLoop;
+                                    }
+                                }
                                 res = queryLoops(networkNode, subPath.back().reached, logic.mkNot(networkNode.preSafeLoop));
                                 for(const auto& loop : networkNode.loops) {
                                     for (auto eid: loop) {
                                         auto & tempNode = getNode(graph.getSource(eid));
-                                        tempNode.preSafeLoop = tempNode.preSafeLoopW;
-                                        tempNode.postSafeLoop = tempNode.postSafeLoopW;
+                                        tempNode.preSafeLoop = tempNode.preTemp;
+                                        tempNode.postSafeLoop = tempNode.postTemp;
                                     }
                                 }
                                 if (res.reachabilityResult == ReachabilityResult::REACHABLE) {
