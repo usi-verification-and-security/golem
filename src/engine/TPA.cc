@@ -1731,6 +1731,8 @@ TransitionSystem TransitionSystemNetworkManager::constructTransitionSystemFor(Sy
     auto edgeVars = getVariablesFromEdge(
         logic, graph, getSelfLoopFor(graph.getSource(loops[0][0]), graph, adjacencyRepresentation).value());
     vec<PTRef> coreVars;
+    std::vector<PTRef> auxiliaryVars;
+
     for(auto var: edgeVars.stateVars){
         coreVars.push(var);
         coreVars.push(timeMachine.sendFlaThroughTime(var, 1));
@@ -1743,7 +1745,8 @@ TransitionSystem TransitionSystemNetworkManager::constructTransitionSystemFor(Sy
         for (int i = 0; i < loop.size(); i++) {
             auto const & source = getNode(graph.getSource(loop[i]));
             PTRef nestedLoopTrInv = source.loopInvariant == PTRef_Undef || i == 0 ? logic.getTerm_false() : logic.mkAnd(timeMachine.sendFlaThroughTime(source.loopInvariant, n), timeMachine.sendFlaThroughTime(source.transitionInvariant, n+2));
-            PTRef loopTrInv = timeMachine.sendFlaThroughTime(logic.mkAnd(source.transitionInvariant, source.solver->getGeneralTransitionInvariant()), n);            PTRef loopInv = nestedLoopTrInv == logic.getTerm_false() ? loopTrInv : nestedLoopTrInv;
+            PTRef loopTrInv = timeMachine.sendFlaThroughTime(logic.mkAnd(source.transitionInvariant, source.solver->getGeneralTransitionInvariant()), n);
+            PTRef loopInv = nestedLoopTrInv == logic.getTerm_false() ? loopTrInv : nestedLoopTrInv;
             n = nestedLoopTrInv == logic.getTerm_false() ? n + 2 : n + 4;
             PTRef label = timeMachine.sendFlaThroughTime(graph.getEdgeLabel(loop[i]), n++);
             loopMTr = logic.mkAnd({loopMTr, loopInv, label});
@@ -1754,11 +1757,24 @@ TransitionSystem TransitionSystemNetworkManager::constructTransitionSystemFor(Sy
             subMap.insert(std::make_pair(timeMachine.sendVarThroughTime(var,n), timeMachine.sendVarThroughTime(var,1)));
         }
         loopMTr = utils.varSubstitute(loopMTr, subMap);
-        PTRef form = QuantifierElimination(logic).keepOnly(loopMTr, coreVars);
-        node.loopTransitions.push_back(form);
-        generalMTr = logic.mkOr(generalMTr, form);
+        auto allVars = TermUtils(logic).getVars(loopMTr);
+        unsigned num = 0;
+        subMap.clear();
+        for (auto var: allVars) {
+            if (std::find(edgeVars.stateVars.begin(), edgeVars.stateVars.end(), var) == edgeVars.stateVars.end() &&
+                std::find(edgeVars.nextStateVars.begin(), edgeVars.nextStateVars.end(), var) == edgeVars.nextStateVars.end()) {
+                auto varName = std::string("tmp") + std::to_string(num);
+                num++;
+                auxiliaryVars.push_back(timeMachine.getVarVersionZero(varName, logic.getSortRef(var)));
+                subMap.insert(std::make_pair(var, auxiliaryVars.back()));
+            }
+        }
+        loopMTr = utils.varSubstitute(loopMTr, subMap);
+        node.loopTransitions.push_back(loopMTr);
+        generalMTr = logic.mkOr(generalMTr, loopMTr);
     }
-    auto systemType = std::make_unique<SystemType>(edgeVars.stateVars, edgeVars.auxiliaryVars, logic);
+    auto systemType = std::make_unique<SystemType>(edgeVars.stateVars, auxiliaryVars, logic);
+    edgeVars.auxiliaryVars = std::move(auxiliaryVars);
     PTRef transitionFla = transitionFormulaInSystemType(*systemType, edgeVars, generalMTr, logic);
     return {transitionFla, std::move(systemType)};
 }
