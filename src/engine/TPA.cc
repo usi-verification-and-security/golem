@@ -1779,7 +1779,7 @@ TransitionSystemNetworkManager::QueryResult TransitionSystemNetworkManager::quer
     if (res == SMTSolver::Answer::SAT) {
         auto model = solver.getModel();
         ModelBasedProjection mbp(logic);
-        PTRef query = logic.mkAnd({sourceCondition, label, target});
+        PTRef query = logic.mkAnd({sourceCondition, label});
         auto targetVars = TermUtils(logic).predicateArgsInOrder(graph.getNextStateVersion(graph.getTarget(eid)));
         PTRef eliminated = mbp.keepOnly(query, targetVars, *model);
         eliminated = TimeMachine(logic).sendFlaThroughTime(eliminated, -1);
