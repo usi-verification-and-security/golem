@@ -421,7 +421,6 @@ VerificationAnswer TPABase::checkTrivialUnreachability() {
         explanation.safeTransitionInvariant = logic.getTerm_true();
         explanation.relationType = TPAType::LESS_THAN;
         explanation.invariantType = SafetyExplanation::TransitionInvariantType::RESTRICTED_TO_QUERY;
-        explanation.safetyExplanation = query;
         explanation.fixedPointType = SafetyExplanation::FixedPointType::LEFT;
         return VerificationAnswer::SAFE;
     }
@@ -431,7 +430,6 @@ VerificationAnswer TPABase::checkTrivialUnreachability() {
         explanation.safeTransitionInvariant = logic.getTerm_true();
         explanation.relationType = TPAType::LESS_THAN;
         explanation.invariantType = SafetyExplanation::TransitionInvariantType::RESTRICTED_TO_INIT;
-        explanation.safetyExplanation = init;
         explanation.fixedPointType = SafetyExplanation::FixedPointType::RIGHT;
         return VerificationAnswer::SAFE;
     }
@@ -884,7 +882,7 @@ bool TPASplit::verifyExactPower(unsigned short power) const {
     return res == SMTSolver::Answer::UNSAT;
 }
 
-void TPABase::squashInvariants(vec<PTRef> & candidates) {
+void TPABase::squashInvariants(vec<PTRef> & candidates) const {
     while (candidates.size() > 128) {
         int j = 0;
         for (int i = candidates.size() - 1; i >= 1 && i > j; i-- && j++) {
@@ -970,7 +968,7 @@ bool TPABase::checkLessThanFixedPoint(unsigned short power) {
     for (unsigned short i = 1; i <= power; ++i) {
         PTRef currentLevelTransition = getPower(i, TPAType::LESS_THAN);
         // first check if it is a fixed point with respect to the initial states
-        SMTSolver solver(logic, SMTSolver::WitnessProduction::ONLY_INTERPOLANTS);
+        SMTSolver solver(logic, SMTSolver::WitnessProduction::NONE);
         {
             houdiniCheck(currentLevelTransition, transition, SafetyExplanation::FixedPointType::RIGHT);
             solver.assertProp(
@@ -997,13 +995,6 @@ bool TPABase::checkLessThanFixedPoint(unsigned short power) {
                                                 ? SafetyExplanation::TransitionInvariantType::RESTRICTED_TO_INIT
                                                 : SafetyExplanation::TransitionInvariantType::UNRESTRICTED;
                 explanation.relationType = TPAType::LESS_THAN;
-                if(restrictedInvariant) {
-                    auto itpContext = solver.getInterpolationContext();
-                    ipartitions_t mask = (1 << 1); // This puts init into the A-part
-                    vec<PTRef> itps;
-                    itpContext->getSingleInterpolant(itps, mask);
-                    explanation.safetyExplanation = itps[0];
-                }
                 explanation.fixedPointType = SafetyExplanation::FixedPointType::RIGHT;
                 explanation.inductivnessPowerExponent = 0;
                 explanation.safeTransitionInvariant = logic.mkAnd(logic.mkAnd(rightInvariants), currentLevelTransition);
@@ -1038,13 +1029,6 @@ bool TPABase::checkLessThanFixedPoint(unsigned short power) {
                                                 ? SafetyExplanation::TransitionInvariantType::RESTRICTED_TO_QUERY
                                                 : SafetyExplanation::TransitionInvariantType::UNRESTRICTED;
                 explanation.relationType = TPAType::LESS_THAN;
-                if(restrictedInvariant) {
-                    auto itpContext = solver.getInterpolationContext();
-                    ipartitions_t mask = (1 << 1); // This puts query into the A-part
-                    vec<PTRef> itps;
-                    itpContext->getSingleInterpolant(itps, mask);
-                    explanation.safetyExplanation = itps[0];
-                }
                 explanation.fixedPointType = SafetyExplanation::FixedPointType::LEFT;
                 explanation.inductivnessPowerExponent = 0;
                 explanation.safeTransitionInvariant = logic.mkAnd(logic.mkAnd(leftInvariants), currentLevelTransition);
@@ -1090,22 +1074,20 @@ bool TPASplit::checkExactFixedPoint(unsigned short power) {
         PTRef currentLevelTransition = getExactPower(i);
         PTRef currentTwoStep = logic.mkAnd(currentLevelTransition, getNextVersion(currentLevelTransition));
         PTRef shifted = shiftOnlyNextVars(currentLevelTransition);
-        SMTSolver solver(logic, SMTSolver::WitnessProduction::ONLY_INTERPOLANTS);
+        SMTSolver solver(logic, SMTSolver::WitnessProduction::NONE);
         solver.assertProp(logic.mkAnd({currentTwoStep, logic.mkNot(shifted)}));
         auto satres = solver.check();
         char restrictedInvariant = 0;
         if (satres != SMTSolver::Answer::UNSAT) {
             solver.push();
-            solver.assertProp(getNextVersion(init, -1));
-            solver.assertProp(getNextVersion(getLessThanPower(i), -1));
+            solver.assertProp(getNextVersion(logic.mkAnd(init, getLessThanPower(i)), -1));
             satres = solver.check();
             if (satres == SMTSolver::Answer::UNSAT) { restrictedInvariant = 1; }
         }
         if (satres != SMTSolver::Answer::UNSAT) {
             solver.pop();
             solver.push();
-            solver.assertProp(getNextVersion(query, 3));
-            solver.assertProp(getNextVersion(getLessThanPower(i), 2));
+            solver.assertProp(logic.mkAnd(getNextVersion(getLessThanPower(i), 2), getNextVersion(query, 3)));
             satres = solver.check();
             if (satres == SMTSolver::Answer::UNSAT) { restrictedInvariant = 2; }
         }
@@ -1134,14 +1116,6 @@ bool TPASplit::checkExactFixedPoint(unsigned short power) {
                 : restrictedInvariant == 1 ? SafetyExplanation::TransitionInvariantType::RESTRICTED_TO_INIT
                                            : SafetyExplanation::TransitionInvariantType::RESTRICTED_TO_QUERY;
             explanation.relationType = TPAType::EQUALS;
-            if(restrictedInvariant) {
-                auto itpContext = solver.getInterpolationContext();
-                ipartitions_t mask = (1 << 1); // This puts query into the A-part
-                vec<PTRef> itps;
-                itpContext->getSingleInterpolant(itps, mask);
-                explanation.safetyExplanation = restrictedInvariant == 1 ? getNextVersion(itps[0],1) :
-                    getNextVersion(itps[0],-1);
-            }
             explanation.inductivnessPowerExponent = i;
             explanation.safeTransitionInvariant =
                 logic.mkOr(shiftOnlyNextVars(getPower(i, TPAType::LESS_THAN)),
@@ -1541,6 +1515,7 @@ void TransitionSystemNetworkManager::initNetwork() {
 
 
 VerificationResult TransitionSystemNetworkManager::solve() && {
+    std::cout<<"TransitionSystemNetworkManager::solve()\n";
     initNetwork();
     Path path;
     path.push_back({NodeState::POST, graph.getEntry(), std::nullopt, std::nullopt, std::nullopt, logic.getTerm_true()});
@@ -1560,7 +1535,6 @@ VerificationResult TransitionSystemNetworkManager::solve() && {
 
                     networkNode.preSafeLoopW = networkNode.loopEdges.empty() ? networkNode.preSafe : networkNode.preSafeLoopW;
                     if(!networkNode.loops.empty()) {
-                        std::cout<<"NESTED LOOP HANDLING\n";
                         //TODO: Nested loops handling
                         res = queryLoops(networkNode, reached, logic.mkNot(networkNode.preSafe));
                         if(res.reachabilityResult == ReachabilityResult::REACHABLE) {
@@ -1828,6 +1802,7 @@ TransitionSystemNetworkManager::queryTransitionSystem(NetworkNode const & node, 
 
 TransitionSystemNetworkManager::QueryResult
 TransitionSystemNetworkManager::queryLoops(NetworkNode & node, PTRef sourceCondition, PTRef targetCondition, bool produceInv) {
+    std::cout<<"NESTED LOOPS ANALYSIS\n";
     while(true) {
         auto [mergedTransition, systemType] = produceMergedTransition(node);
         std::unique_ptr<TPABase> solver{nullptr};
@@ -1878,7 +1853,7 @@ Path TransitionSystemNetworkManager::produceExactReachedStates(NetworkNode & nod
         for(auto var: edgeVars.stateVars){
             coreVars.push(TimeMachine(logic).sendVarThroughTime(var, i+1));
         }
-        PTRef subquery = TimeMachine(logic).sendFlaThroughTime(QuantifierElimination(logic).keepOnly(query, coreVars), -(i+1));
+        PTRef subquery = i == transitions - 1 ? reached :TimeMachine(logic).sendFlaThroughTime(QuantifierElimination(logic).keepOnly(query, coreVars), -(i+1));
         SMTSolver smtSolver(logic, SMTSolver::WitnessProduction::NONE);
         auto preSize = subPath.size();
 
@@ -1989,30 +1964,60 @@ PTRef TPABase::getTransitionInvariant() const {
         logic.mkAnd(invariant, shiftOnlyNextVars(explanation.safeTransitionInvariant)) :
         logic.mkAnd(invariant, explanation.safeTransitionInvariant) ;
 
-    PTRef constraint = explanation.safetyExplanation;
+    PTRef constraint = explanation.invariantType == SafetyExplanation::TransitionInvariantType::RESTRICTED_TO_INIT ?  init : getNextVersion(query,1);
     return explanation.invariantType == SafetyExplanation::TransitionInvariantType::UNRESTRICTED ?  invariant :
     logic.mkOr(logic.mkAnd(invariant, constraint), logic.mkNot(constraint));
-    // PTRef unrestrictedInv = shiftOnlyNextVars(logic.mkAnd(logic.mkAnd(leftInvariants), logic.mkAnd(rightInvariants)));
-    // return explanation.invariantType == SafetyExplanation::TransitionInvariantType::UNRESTRICTED ?  logic.mkAnd(unrestrictedInv, invariant) :
-    // logic.mkAnd(unrestrictedInv, logic.mkOr(logic.mkAnd(invariant, constraint), logic.mkNot(constraint)));
 }
 
+
+PTRef TPABase::ExplMinimisation(PTRef explCandidates, PTRef trInv, PTRef query) const {
+    SMTSolver solver(logic, SMTSolver::WitnessProduction::NONE);
+    solver.push();
+    auto candidates = topLevelConjuncts(logic, explCandidates);
+    solver.assertProp(getNextVersion(query));
+    solver.assertProp(trInv);
+    assert (solver.check() == SMTSolver::Answer::SAT);
+
+    solver.push();
+    squashInvariants(candidates);
+
+    solver.assertProp(explCandidates);
+    assert (solver.check() == SMTSolver::Answer::UNSAT);
+    for (int i = candidates.size() - 1; i >= 0; i--) {
+        PTRef cand = candidates[i];
+        candidates[i] = candidates[candidates.size() - 1];
+        candidates.pop();
+        solver.pop();
+        solver.push();
+        solver.assertProp(logic.mkAnd(candidates));
+        if (solver.check() == SMTSolver::Answer::SAT) {
+            candidates.push(cand);
+        }
+    }
+    solver.pop();
+    solver.assertProp(logic.mkAnd(candidates));
+    assert(solver.check() == SMTSolver::Answer::UNSAT);
+    return logic.mkAnd(candidates);
+}
 
 /*
  * Returns superset of init that are still safe
  */
 PTRef TPABase::getSafetyExplanation() const {
+    PTRef expl;
     if (explanation.invariantType == SafetyExplanation::TransitionInvariantType::RESTRICTED_TO_INIT) {
         // TODO: compute the safe inductive invariant and return negation of that?
-        return init;
+        expl = init;
+    } else {
+        // TODO: Currently transition invariants from TPA:Type::EQUALS are over three copies of the variables.
+        //       Maybe we should use auxiliary (existentially quantified) variables for the intermediate state?
+        //       And rename the variables so the final state is version 1, same as for TPAType::LESS_THAN?
+        expl = safeSupersetOfInitialStates(
+            getInit(), explanation.safeTransitionInvariant,
+            getNextVersion(getQuery(), explanation.relationType == TPAType::LESS_THAN ? 1 : 2));
     }
-    PTRef transitionInvariant = explanation.safeTransitionInvariant;
-    // TODO: Currently transition invariants from TPA:Type::EQUALS are over three copies of the variables.
-    //       Maybe we should use auxiliary (existentially quantified) variables for the intermediate state?
-    //       And rename the variables so the final state is version 1, same as for TPAType::LESS_THAN?
-    return safeSupersetOfInitialStates(
-        getInit(), transitionInvariant,
-        getNextVersion(getQuery(), explanation.relationType == TPAType::LESS_THAN ? 1 : 2));
+    expl = ExplMinimisation(expl, explanation.safeTransitionInvariant, query);
+    return expl;
 }
 
 PTRef TPABase::getInductiveInvariant() const {
