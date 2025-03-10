@@ -987,7 +987,7 @@ bool TPABase::checkLessThanFixedPoint(unsigned short power) {
     for (unsigned short i = 1; i <= power; ++i) {
         PTRef currentLevelTransition = getPower(i, TPAType::LESS_THAN);
         // first check if it is a fixed point with respect to the initial states
-        SMTSolver solver(logic, SMTSolver::WitnessProduction::ONLY_INTERPOLANTS);
+        SMTSolver solver(logic, SMTSolver::WitnessProduction::NONE);
         {
             houdiniCheck(currentLevelTransition, transition, SafetyExplanation::FixedPointType::RIGHT);
             solver.assertProp(
@@ -1014,13 +1014,13 @@ bool TPABase::checkLessThanFixedPoint(unsigned short power) {
                                                 ? SafetyExplanation::TransitionInvariantType::RESTRICTED_TO_INIT
                                                 : SafetyExplanation::TransitionInvariantType::UNRESTRICTED;
                 explanation.relationType = TPAType::LESS_THAN;
-                if(restrictedInvariant) {
-                    auto itpContext = solver.getInterpolationContext();
-                    ipartitions_t mask = (1 << 1); // This puts init into the A-part
-                    vec<PTRef> itps;
-                    itpContext->getSingleInterpolant(itps, mask);
-                    explanation.safetyExplanation = itps[0];
-                }
+                // if(restrictedInvariant) {
+                //     auto itpContext = solver.getInterpolationContext();
+                //     ipartitions_t mask = (1 << 1); // This puts init into the A-part
+                //     vec<PTRef> itps;
+                //     itpContext->getSingleInterpolant(itps, mask);
+                //     explanation.safetyExplanation = itps[0];
+                // }
                 explanation.fixedPointType = SafetyExplanation::FixedPointType::RIGHT;
                 explanation.inductivnessPowerExponent = 0;
                 explanation.safeTransitionInvariant = logic.mkAnd(logic.mkAnd(rightInvariants), currentLevelTransition);
@@ -1055,13 +1055,13 @@ bool TPABase::checkLessThanFixedPoint(unsigned short power) {
                                                 ? SafetyExplanation::TransitionInvariantType::RESTRICTED_TO_QUERY
                                                 : SafetyExplanation::TransitionInvariantType::UNRESTRICTED;
                 explanation.relationType = TPAType::LESS_THAN;
-                if(restrictedInvariant) {
-                    auto itpContext = solver.getInterpolationContext();
-                    ipartitions_t mask = (1 << 1); // This puts query into the A-part
-                    vec<PTRef> itps;
-                    itpContext->getSingleInterpolant(itps, mask);
-                    explanation.safetyExplanation = itps[0];
-                }
+                // if(restrictedInvariant) {
+                //     auto itpContext = solver.getInterpolationContext();
+                //     ipartitions_t mask = (1 << 1); // This puts query into the A-part
+                //     vec<PTRef> itps;
+                //     itpContext->getSingleInterpolant(itps, mask);
+                //     explanation.safetyExplanation = itps[0];
+                // }
                 explanation.fixedPointType = SafetyExplanation::FixedPointType::LEFT;
                 explanation.inductivnessPowerExponent = 0;
                 explanation.safeTransitionInvariant = logic.mkAnd(logic.mkAnd(leftInvariants), currentLevelTransition);
@@ -1107,7 +1107,7 @@ bool TPASplit::checkExactFixedPoint(unsigned short power) {
         PTRef currentLevelTransition = getExactPower(i);
         PTRef currentTwoStep = logic.mkAnd(currentLevelTransition, getNextVersion(currentLevelTransition));
         PTRef shifted = shiftOnlyNextVars(currentLevelTransition);
-        SMTSolver solver(logic, SMTSolver::WitnessProduction::ONLY_INTERPOLANTS);
+        SMTSolver solver(logic, SMTSolver::WitnessProduction::NONE);
         solver.assertProp(logic.mkAnd({currentTwoStep, logic.mkNot(shifted)}));
         auto satres = solver.check();
         char restrictedInvariant = 0;
@@ -1151,14 +1151,14 @@ bool TPASplit::checkExactFixedPoint(unsigned short power) {
                 : restrictedInvariant == 1 ? SafetyExplanation::TransitionInvariantType::RESTRICTED_TO_INIT
                                            : SafetyExplanation::TransitionInvariantType::RESTRICTED_TO_QUERY;
             explanation.relationType = TPAType::EQUALS;
-            if(restrictedInvariant) {
-                auto itpContext = solver.getInterpolationContext();
-                ipartitions_t mask = (1 << 1); // This puts query into the A-part
-                vec<PTRef> itps;
-                itpContext->getSingleInterpolant(itps, mask);
-                explanation.safetyExplanation = restrictedInvariant == 1 ? getNextVersion(itps[0],1) :
-                    getNextVersion(itps[0],-1);
-            }
+            // if(restrictedInvariant) {
+            //     auto itpContext = solver.getInterpolationContext();
+            //     ipartitions_t mask = (1 << 1); // This puts query into the A-part
+            //     vec<PTRef> itps;
+            //     itpContext->getSingleInterpolant(itps, mask);
+            //     explanation.safetyExplanation = restrictedInvariant == 1 ? getNextVersion(itps[0],1) :
+            //         getNextVersion(itps[0],-1);
+            // }
             explanation.inductivnessPowerExponent = i;
             explanation.safeTransitionInvariant =
                 logic.mkOr(shiftOnlyNextVars(getPower(i, TPAType::LESS_THAN)),
@@ -1575,7 +1575,6 @@ VerificationResult TransitionSystemNetworkManager::solve() && {
 
                     networkNode.preSafeLoopW = networkNode.loopEdges.empty() ? networkNode.preSafe : networkNode.preSafeLoopW;
                     if(!networkNode.loops.empty()) {
-                        std::cout<<"NESTED LOOP HANDLING\n";
                         //TODO: Nested loops handling
                         res = queryLoops(networkNode, reached, logic.mkNot(networkNode.preSafe));
                         if(res.reachabilityResult == ReachabilityResult::REACHABLE) {
@@ -1893,7 +1892,7 @@ Path TransitionSystemNetworkManager::produceExactReachedStates(NetworkNode & nod
         for(auto var: edgeVars.stateVars){
             coreVars.push(TimeMachine(logic).sendVarThroughTime(var, i+1));
         }
-        PTRef subquery = TimeMachine(logic).sendFlaThroughTime(QuantifierElimination(logic).keepOnly(query, coreVars), -(i+1));
+        PTRef subquery = i == transitions - 1 ? reached :TimeMachine(logic).sendFlaThroughTime(QuantifierElimination(logic).keepOnly(query, coreVars), -(i+1));
         SMTSolver smtSolver(logic, SMTSolver::WitnessProduction::NONE);
         auto preSize = subPath.size();
 
@@ -1936,6 +1935,7 @@ Path TransitionSystemNetworkManager::produceExactReachedStates(NetworkNode & nod
                                     }
                                 }
                                 res = queryLoops(networkNode, subPath.back().reached, logic.mkNot(networkNode.preSafeLoop));
+                                std::cout<<"Ended inner loops query";
                                 for(const auto& loop : networkNode.loops) {
                                     for (auto eid: loop) {
                                         auto & tempNode = getNode(graph.getSource(eid));
@@ -2004,7 +2004,7 @@ PTRef TPABase::getTransitionInvariant() const {
         logic.mkAnd(invariant, shiftOnlyNextVars(explanation.safeTransitionInvariant)) :
         logic.mkAnd(invariant, explanation.safeTransitionInvariant) ;
 
-    PTRef constraint = explanation.safetyExplanation;
+    PTRef constraint = explanation.invariantType == SafetyExplanation::TransitionInvariantType::RESTRICTED_TO_INIT ?  init : getNextVersion(query,1);
     return explanation.invariantType == SafetyExplanation::TransitionInvariantType::UNRESTRICTED ?  invariant :
     logic.mkOr(logic.mkAnd(invariant, constraint), logic.mkNot(constraint));
     // PTRef unrestrictedInv = shiftOnlyNextVars(logic.mkAnd(logic.mkAnd(leftInvariants), logic.mkAnd(rightInvariants)));
