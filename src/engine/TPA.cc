@@ -1935,7 +1935,6 @@ Path TransitionSystemNetworkManager::produceExactReachedStates(NetworkNode & nod
                                     }
                                 }
                                 res = queryLoops(networkNode, subPath.back().reached, logic.mkNot(networkNode.preSafeLoop));
-                                std::cout<<"Ended inner loops query";
                                 for(const auto& loop : networkNode.loops) {
                                     for (auto eid: loop) {
                                         auto & tempNode = getNode(graph.getSource(eid));
