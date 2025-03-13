@@ -129,6 +129,7 @@ public:
      * are also safe, given the explanation found by the algorithm.
      * @return superset of initial states that are still safe
      */
+    PTRef ExplMinimisation(PTRef explCandidates, PTRef trInv, PTRef query) const;
     PTRef getSafetyExplanation() const;
     PTRef getReachedStates() const;
     unsigned getTransitionStepCount() const;
@@ -201,7 +202,7 @@ protected:
 
     void resetExplanation();
 
-    void squashInvariants(vec<PTRef> & candidates);
+    void squashInvariants(vec<PTRef> & candidates) const;
 
     VerificationAnswer checkTrivialUnreachability();
 };

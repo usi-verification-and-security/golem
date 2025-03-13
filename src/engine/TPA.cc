@@ -901,7 +901,7 @@ bool TPASplit::verifyExactPower(unsigned short power) const {
     return res == SMTSolver::Answer::UNSAT;
 }
 
-void TPABase::squashInvariants(vec<PTRef> & candidates) {
+void TPABase::squashInvariants(vec<PTRef> & candidates) const {
     while (candidates.size() > 128) {
         int j = 0;
         for (int i = candidates.size() - 1; i >= 1 && i > j; i-- && j++) {
@@ -1556,6 +1556,7 @@ void TransitionSystemNetworkManager::initNetwork() {
 
 
 VerificationResult TransitionSystemNetworkManager::solve() && {
+    std::cout<<"TransitionSystemNetworkManager::solve()\n";
     initNetwork();
     Path path;
     path.push_back({NodeState::POST, graph.getEntry(), std::nullopt, std::nullopt, std::nullopt, logic.getTerm_true()});
@@ -1842,6 +1843,7 @@ TransitionSystemNetworkManager::queryTransitionSystem(NetworkNode const & node, 
 
 TransitionSystemNetworkManager::QueryResult
 TransitionSystemNetworkManager::queryLoops(NetworkNode & node, PTRef sourceCondition, PTRef targetCondition, bool produceInv) {
+    std::cout<<"NESTED LOOPS ANALYSIS\n";
     while(true) {
         auto [mergedTransition, systemType] = produceMergedTransition(node);
         std::unique_ptr<TPABase> solver{nullptr};
@@ -2006,27 +2008,54 @@ PTRef TPABase::getTransitionInvariant() const {
     PTRef constraint = explanation.invariantType == SafetyExplanation::TransitionInvariantType::RESTRICTED_TO_INIT ?  init : getNextVersion(query,1);
     return explanation.invariantType == SafetyExplanation::TransitionInvariantType::UNRESTRICTED ?  invariant :
     logic.mkOr(logic.mkAnd(invariant, constraint), logic.mkNot(constraint));
-    // PTRef unrestrictedInv = shiftOnlyNextVars(logic.mkAnd(logic.mkAnd(leftInvariants), logic.mkAnd(rightInvariants)));
-    // return explanation.invariantType == SafetyExplanation::TransitionInvariantType::UNRESTRICTED ?  logic.mkAnd(unrestrictedInv, invariant) :
-    // logic.mkAnd(unrestrictedInv, logic.mkOr(logic.mkAnd(invariant, constraint), logic.mkNot(constraint)));
 }
 
+
+PTRef TPABase::ExplMinimisation(PTRef explCandidates, PTRef trInv, PTRef query) const {
+    SMTSolver solver(logic, SMTSolver::WitnessProduction::NONE);
+    solver.push();
+    auto candidates = topLevelConjuncts(logic, explCandidates);
+    solver.assertProp(getNextVersion(query));
+    solver.assertProp(trInv);
+
+    solver.push();
+    squashInvariants(candidates);
+
+    solver.assertProp(explCandidates);
+    while (solver.check() == SMTSolver::Answer::UNSAT) {
+        for (int i = candidates.size() - 1; i >= 0; i--) {
+            PTRef cand = candidates[i];
+            candidates[i] = candidates[candidates.size() - 1];
+            candidates.pop();
+            solver.pop();
+            solver.push();
+            solver.assertProp(logic.mkAnd(candidates));
+            if (solver.check() == SMTSolver::Answer::SAT) {
+                candidates.push(cand);
+            }
+        }
+    }
+    return logic.mkAnd(candidates);
+}
 
 /*
  * Returns superset of init that are still safe
  */
 PTRef TPABase::getSafetyExplanation() const {
+    PTRef expl;
     if (explanation.invariantType == SafetyExplanation::TransitionInvariantType::RESTRICTED_TO_INIT) {
         // TODO: compute the safe inductive invariant and return negation of that?
-        return init;
+        expl = init;
+    } else {
+        // TODO: Currently transition invariants from TPA:Type::EQUALS are over three copies of the variables.
+        //       Maybe we should use auxiliary (existentially quantified) variables for the intermediate state?
+        //       And rename the variables so the final state is version 1, same as for TPAType::LESS_THAN?
+        expl = safeSupersetOfInitialStates(
+            getInit(), explanation.safeTransitionInvariant,
+            getNextVersion(getQuery(), explanation.relationType == TPAType::LESS_THAN ? 1 : 2));
     }
-    PTRef transitionInvariant = explanation.safeTransitionInvariant;
-    // TODO: Currently transition invariants from TPA:Type::EQUALS are over three copies of the variables.
-    //       Maybe we should use auxiliary (existentially quantified) variables for the intermediate state?
-    //       And rename the variables so the final state is version 1, same as for TPAType::LESS_THAN?
-    return safeSupersetOfInitialStates(
-        getInit(), transitionInvariant,
-        getNextVersion(getQuery(), explanation.relationType == TPAType::LESS_THAN ? 1 : 2));
+    expl = ExplMinimisation(expl, transition, query);
+    return expl;
 }
 
 PTRef TPABase::getInductiveInvariant() const {
