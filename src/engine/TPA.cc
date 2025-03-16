@@ -2017,24 +2017,27 @@ PTRef TPABase::ExplMinimisation(PTRef explCandidates, PTRef trInv, PTRef query) 
     auto candidates = topLevelConjuncts(logic, explCandidates);
     solver.assertProp(getNextVersion(query));
     solver.assertProp(trInv);
+    assert (solver.check() == SMTSolver::Answer::SAT);
 
     solver.push();
     squashInvariants(candidates);
 
     solver.assertProp(explCandidates);
-    while (solver.check() == SMTSolver::Answer::UNSAT) {
-        for (int i = candidates.size() - 1; i >= 0; i--) {
-            PTRef cand = candidates[i];
-            candidates[i] = candidates[candidates.size() - 1];
-            candidates.pop();
-            solver.pop();
-            solver.push();
-            solver.assertProp(logic.mkAnd(candidates));
-            if (solver.check() == SMTSolver::Answer::SAT) {
-                candidates.push(cand);
-            }
+    assert (solver.check() == SMTSolver::Answer::UNSAT);
+    for (int i = candidates.size() - 1; i >= 0; i--) {
+        PTRef cand = candidates[i];
+        candidates[i] = candidates[candidates.size() - 1];
+        candidates.pop();
+        solver.pop();
+        solver.push();
+        solver.assertProp(logic.mkAnd(candidates));
+        if (solver.check() == SMTSolver::Answer::SAT) {
+            candidates.push(cand);
         }
     }
+    solver.pop();
+    solver.assertProp(logic.mkAnd(candidates));
+    assert(solver.check() == SMTSolver::Answer::UNSAT);
     return logic.mkAnd(candidates);
 }
 
@@ -2054,7 +2057,7 @@ PTRef TPABase::getSafetyExplanation() const {
             getInit(), explanation.safeTransitionInvariant,
             getNextVersion(getQuery(), explanation.relationType == TPAType::LESS_THAN ? 1 : 2));
     }
-    expl = ExplMinimisation(expl, transition, query);
+    expl = ExplMinimisation(expl, explanation.safeTransitionInvariant, query);
     return expl;
 }
 
