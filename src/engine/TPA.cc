@@ -1373,14 +1373,10 @@ PTRef TPABase::safeSupersetOfInitialStates(PTRef start, PTRef transitionInvarian
     auto res = solver.check();
     if (res != SMTSolver::Answer::UNSAT) { throw std::logic_error("SMT query was suppose to be unsat, but is not!"); }
     auto itpContext = solver.getInterpolationContext();
-    // ipartitions_t mask = (1 << 1) + (1 << 2); // This puts transition + query into the A-part
-    ipartitions_t mask = (1 << 0); // This puts transition + query into the A-part
-
+    ipartitions_t mask = (1 << 1) + (1 << 2); // This puts transition + query into the A-part
     vec<PTRef> itps;
     itpContext->getSingleInterpolant(itps, mask);
-    // return logic.mkNot(itps[0]);
-    return itps[0];
-
+    return logic.mkNot(itps[0]);
 }
 
 
