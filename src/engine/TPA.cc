@@ -1014,13 +1014,6 @@ bool TPABase::checkLessThanFixedPoint(unsigned short power) {
                                                 ? SafetyExplanation::TransitionInvariantType::RESTRICTED_TO_INIT
                                                 : SafetyExplanation::TransitionInvariantType::UNRESTRICTED;
                 explanation.relationType = TPAType::LESS_THAN;
-                // if(restrictedInvariant) {
-                //     auto itpContext = solver.getInterpolationContext();
-                //     ipartitions_t mask = (1 << 1); // This puts init into the A-part
-                //     vec<PTRef> itps;
-                //     itpContext->getSingleInterpolant(itps, mask);
-                //     explanation.safetyExplanation = itps[0];
-                // }
                 explanation.fixedPointType = SafetyExplanation::FixedPointType::RIGHT;
                 explanation.inductivnessPowerExponent = 0;
                 explanation.safeTransitionInvariant = logic.mkAnd(logic.mkAnd(rightInvariants), currentLevelTransition);
@@ -1055,13 +1048,6 @@ bool TPABase::checkLessThanFixedPoint(unsigned short power) {
                                                 ? SafetyExplanation::TransitionInvariantType::RESTRICTED_TO_QUERY
                                                 : SafetyExplanation::TransitionInvariantType::UNRESTRICTED;
                 explanation.relationType = TPAType::LESS_THAN;
-                // if(restrictedInvariant) {
-                //     auto itpContext = solver.getInterpolationContext();
-                //     ipartitions_t mask = (1 << 1); // This puts query into the A-part
-                //     vec<PTRef> itps;
-                //     itpContext->getSingleInterpolant(itps, mask);
-                //     explanation.safetyExplanation = itps[0];
-                // }
                 explanation.fixedPointType = SafetyExplanation::FixedPointType::LEFT;
                 explanation.inductivnessPowerExponent = 0;
                 explanation.safeTransitionInvariant = logic.mkAnd(logic.mkAnd(leftInvariants), currentLevelTransition);
@@ -1113,16 +1099,14 @@ bool TPASplit::checkExactFixedPoint(unsigned short power) {
         char restrictedInvariant = 0;
         if (satres != SMTSolver::Answer::UNSAT) {
             solver.push();
-            solver.assertProp(getNextVersion(init, -1));
-            solver.assertProp(getNextVersion(getLessThanPower(i), -1));
+            solver.assertProp(getNextVersion(logic.mkAnd(init, getLessThanPower(i)), -1));
             satres = solver.check();
             if (satres == SMTSolver::Answer::UNSAT) { restrictedInvariant = 1; }
         }
         if (satres != SMTSolver::Answer::UNSAT) {
             solver.pop();
             solver.push();
-            solver.assertProp(getNextVersion(query, 3));
-            solver.assertProp(getNextVersion(getLessThanPower(i), 2));
+            solver.assertProp(logic.mkAnd(getNextVersion(getLessThanPower(i), 2), getNextVersion(query, 3)));
             satres = solver.check();
             if (satres == SMTSolver::Answer::UNSAT) { restrictedInvariant = 2; }
         }
@@ -1151,14 +1135,6 @@ bool TPASplit::checkExactFixedPoint(unsigned short power) {
                 : restrictedInvariant == 1 ? SafetyExplanation::TransitionInvariantType::RESTRICTED_TO_INIT
                                            : SafetyExplanation::TransitionInvariantType::RESTRICTED_TO_QUERY;
             explanation.relationType = TPAType::EQUALS;
-            // if(restrictedInvariant) {
-            //     auto itpContext = solver.getInterpolationContext();
-            //     ipartitions_t mask = (1 << 1); // This puts query into the A-part
-            //     vec<PTRef> itps;
-            //     itpContext->getSingleInterpolant(itps, mask);
-            //     explanation.safetyExplanation = restrictedInvariant == 1 ? getNextVersion(itps[0],1) :
-            //         getNextVersion(itps[0],-1);
-            // }
             explanation.inductivnessPowerExponent = i;
             explanation.safeTransitionInvariant =
                 logic.mkOr(shiftOnlyNextVars(getPower(i, TPAType::LESS_THAN)),
