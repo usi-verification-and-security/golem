@@ -54,8 +54,11 @@ VerificationResult TPAEngine::solve(ChcDirectedHyperGraph const & graph) {
 }
 
 VerificationResult TPAEngine::solve(const ChcDirectedGraph & graph) {
-    if (isTrivial(graph)) { return solveTrivial(graph); }
+    if (isTrivial(graph)) {
+            std::cout<<"isTrivial\n";
+            return solveTrivial(graph); }
     if (isTransitionSystem(graph)) {
+        std::cout<<"solveTransitionSystem\n";
         auto ts = toTransitionSystem(graph);
         auto solver = mkSolver();
         auto res = solver->solveTransitionSystem(*ts);
@@ -82,9 +85,11 @@ VerificationResult TPAEngine::solve(const ChcDirectedGraph & graph) {
             auto res = solveTransitionSystemGraph(*transformedGraph);
             return preTranslator->translate(res);
         } else {
+            std::cout<<"solveTransitionSystemGraph\n";
             return solveTransitionSystemGraph(graph);
         }
     }
+    std::cout<<"force ts\n";
     // Translate CHCGraph into transition system
     SingleLoopTransformation transformation;
     auto [ts, backtranslator] = transformation.transform(graph);
