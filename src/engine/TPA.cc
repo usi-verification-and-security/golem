@@ -1989,8 +1989,8 @@ PTRef TPABase::ExplMinimisation(PTRef explCandidates) const {
     SMTSolver solver(logic, SMTSolver::WitnessProduction::NONE);
     solver.push();
     auto candidates = topLevelConjuncts(logic, explCandidates);
-    solver.assertProp(getNextVersion(query, explanation.relationType == TPAType::LESS_THAN ? 1 : 2));
     solver.assertProp(explanation.safeTransitionInvariant);
+    solver.assertProp(getNextVersion(query, explanation.relationType == TPAType::LESS_THAN ? 1 : 2));
     assert (solver.check() == SMTSolver::Answer::SAT);
 
     solver.push();
@@ -2060,7 +2060,9 @@ PTRef TPABase::getSafetyExplanation() const {
     if (logic.isNot(expl) && logic.isOr(term[0])) {
         expl = deMorganize(expl);
     }
-    expl = ExplMinimisation(expl);
+    if (explanation.relationType == TPAType::LESS_THAN) {
+        expl = ExplMinimisation(expl);
+    }
     return expl;
 }
 
