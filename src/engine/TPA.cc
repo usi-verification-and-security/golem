@@ -2056,7 +2056,8 @@ PTRef TPABase::getSafetyExplanation() const {
             getInit(), explanation.safeTransitionInvariant,
             getNextVersion(getQuery(), explanation.relationType == TPAType::LESS_THAN ? 1 : 2));
     }
-    if (logic.isNot(expl)) {
+    Pterm const & term = logic.getPterm(expl);
+    if (logic.isNot(expl) && logic.isOr(term[0])) {
         expl = deMorganize(expl);
     }
     expl = ExplMinimisation(expl);
