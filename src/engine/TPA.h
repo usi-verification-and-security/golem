@@ -129,7 +129,7 @@ public:
      * are also safe, given the explanation found by the algorithm.
      * @return superset of initial states that are still safe
      */
-    PTRef ExplMinimisation(PTRef explCandidates, PTRef trInv, PTRef query) const;
+    PTRef ExplMinimisation(PTRef explCandidates) const;
     PTRef getSafetyExplanation() const;
     PTRef getReachedStates() const;
     unsigned getTransitionStepCount() const;
@@ -137,6 +137,13 @@ public:
     PTRef getTransitionInvariant() const;
     PTRef getInductiveInvariant() const;
     vec<PTRef> getStateVars(int version) const;
+    void retrieveDisjuncts(PTRef f, vec<PTRef> & disjuncts) const ;
+    bool isLiteral(PTRef ptr) const;
+    PTRef deMorganize(PTRef formula) const;
+
+
+
+
 
 protected:
     virtual VerificationAnswer checkPower(unsigned short power) = 0;

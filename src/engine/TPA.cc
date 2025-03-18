@@ -1985,12 +1985,12 @@ PTRef TPABase::getTransitionInvariant() const {
 }
 
 
-PTRef TPABase::ExplMinimisation(PTRef explCandidates, PTRef trInv, PTRef query) const {
+PTRef TPABase::ExplMinimisation(PTRef explCandidates) const {
     SMTSolver solver(logic, SMTSolver::WitnessProduction::NONE);
     solver.push();
     auto candidates = topLevelConjuncts(logic, explCandidates);
-    solver.assertProp(getNextVersion(query));
-    solver.assertProp(trInv);
+    solver.assertProp(getNextVersion(query, explanation.relationType == TPAType::LESS_THAN ? 1 : 2));
+    solver.assertProp(explanation.safeTransitionInvariant);
     assert (solver.check() == SMTSolver::Answer::SAT);
 
     solver.push();
@@ -2015,6 +2015,31 @@ PTRef TPABase::ExplMinimisation(PTRef explCandidates, PTRef trInv, PTRef query) 
     return logic.mkAnd(candidates);
 }
 
+bool TPABase::isLiteral(PTRef ptr) const {
+    return (logic.isNot(ptr) and logic.isAtom(logic.getPterm(ptr)[0])) or logic.isAtom(ptr);
+}
+
+void TPABase::retrieveDisjuncts(PTRef f, vec<PTRef> & disjuncts) const {
+    assert(isLiteral(f) or logic.isOr(f));
+    if (isLiteral(f)) {
+        disjuncts.push(logic.mkNot(f)); // We return already negated disjuncts for the purposes of deMorgan
+    } else {
+        Pterm const & t = logic.getPterm(f);
+        for (PTRef tr : t) {
+            retrieveDisjuncts(tr, disjuncts);
+        }
+    }
+}
+
+PTRef TPABase::deMorganize(PTRef formula) const {
+    assert(logic.isNot(formula));
+    Pterm const & term = logic.getPterm(formula);
+    assert(logic.isOr(term[0]));
+    vec<PTRef> disjuncts;
+    retrieveDisjuncts(term[0], disjuncts);
+    return logic.mkAnd(disjuncts);
+}
+
 /*
  * Returns superset of init that are still safe
  */
@@ -2031,7 +2056,10 @@ PTRef TPABase::getSafetyExplanation() const {
             getInit(), explanation.safeTransitionInvariant,
             getNextVersion(getQuery(), explanation.relationType == TPAType::LESS_THAN ? 1 : 2));
     }
-    expl = ExplMinimisation(expl, explanation.safeTransitionInvariant, query);
+    if (logic.isNot(expl)) {
+        expl = deMorganize(expl);
+    }
+    expl = ExplMinimisation(expl);
     return expl;
 }
 
