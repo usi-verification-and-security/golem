@@ -37,8 +37,11 @@ std::unique_ptr<TPABase> TPAEngine::mkSolver() {
 }
 
 VerificationResult TPAEngine::solve(const ChcDirectedGraph & graph) {
-    if (isTrivial(graph)) { return solveTrivial(graph); }
+    if (isTrivial(graph)) {
+            std::cout<<"isTrivial\n";
+            return solveTrivial(graph); }
     if (isTransitionSystem(graph)) {
+        std::cout<<"solveTransitionSystem\n";
         auto ts = toTransitionSystem(graph);
         auto solver = mkSolver();
         auto res = solver->solveTransitionSystem(*ts);
@@ -65,9 +68,11 @@ VerificationResult TPAEngine::solve(const ChcDirectedGraph & graph) {
             auto res = solveTransitionSystemGraph(*transformedGraph);
             return preTranslator->translate(res);
         } else {
+            std::cout<<"solveTransitionSystemGraph\n";
             return solveTransitionSystemGraph(graph);
         }
     }
+    std::cout<<"force ts\n";
     // Translate CHCGraph into transition system
     SingleLoopTransformation transformation;
     auto [ts, backtranslator] = transformation.transform(graph);
@@ -1970,12 +1975,12 @@ PTRef TPABase::getTransitionInvariant() const {
 }
 
 
-PTRef TPABase::ExplMinimisation(PTRef explCandidates, PTRef trInv, PTRef query) const {
+PTRef TPABase::ExplMinimisation(PTRef explCandidates) const {
     SMTSolver solver(logic, SMTSolver::WitnessProduction::NONE);
     solver.push();
     auto candidates = topLevelConjuncts(logic, explCandidates);
-    solver.assertProp(getNextVersion(query));
-    solver.assertProp(trInv);
+    solver.assertProp(explanation.safeTransitionInvariant);
+    solver.assertProp(getNextVersion(query, explanation.relationType == TPAType::LESS_THAN ? 1 : 2));
     assert (solver.check() == SMTSolver::Answer::SAT);
 
     solver.push();
@@ -2000,6 +2005,31 @@ PTRef TPABase::ExplMinimisation(PTRef explCandidates, PTRef trInv, PTRef query) 
     return logic.mkAnd(candidates);
 }
 
+bool TPABase::isLiteral(PTRef ptr) const {
+    return (logic.isNot(ptr) and logic.isAtom(logic.getPterm(ptr)[0])) or logic.isAtom(ptr);
+}
+
+void TPABase::retrieveDisjuncts(PTRef f, vec<PTRef> & disjuncts) const {
+    assert(isLiteral(f) or logic.isOr(f));
+    if (isLiteral(f)) {
+        disjuncts.push(logic.mkNot(f)); // We return already negated disjuncts for the purposes of deMorgan
+    } else {
+        Pterm const & t = logic.getPterm(f);
+        for (PTRef tr : t) {
+            retrieveDisjuncts(tr, disjuncts);
+        }
+    }
+}
+
+PTRef TPABase::deMorganize(PTRef formula) const {
+    assert(logic.isNot(formula));
+    Pterm const & term = logic.getPterm(formula);
+    assert(logic.isOr(term[0]));
+    vec<PTRef> disjuncts;
+    retrieveDisjuncts(term[0], disjuncts);
+    return logic.mkAnd(disjuncts);
+}
+
 /*
  * Returns superset of init that are still safe
  */
@@ -2016,7 +2046,13 @@ PTRef TPABase::getSafetyExplanation() const {
             getInit(), explanation.safeTransitionInvariant,
             getNextVersion(getQuery(), explanation.relationType == TPAType::LESS_THAN ? 1 : 2));
     }
-    expl = ExplMinimisation(expl, explanation.safeTransitionInvariant, query);
+    // Pterm const & term = logic.getPterm(expl);
+    // if (logic.isNot(expl) && logic.isOr(term[0])) {
+    //     expl = deMorganize(expl);
+    // }
+    // if (explanation.relationType == TPAType::LESS_THAN) {
+    // expl = ExplMinimisation(expl);
+    // }
     return expl;
 }
 
