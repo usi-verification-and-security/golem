@@ -1921,47 +1921,47 @@ Path TransitionSystemNetworkManager::produceExactReachedStates(NetworkNode & nod
                         } else {
                             networkNode.transitionInvariant = logic.mkAnd(networkNode.transitionInvariant, networkNode.solver->getTransitionInvariant());
                             networkNode.preSafeLoop = logic.mkOr(networkNode.preSafeLoop, res.explanation);
-                            {
-                                PTRef reached_l = logic.mkNot(networkNode.postSafeLoop);
-                                PTRef transition_l = networkNode.transitionInvariant;
-                                PTRef reachedRefined_l = networkNode.preSafeLoop;
-                                PTRef query_l = logic.mkAnd({reachedRefined_l, transition_l, TimeMachine(logic).sendFlaThroughTime(reached_l, 2)});
-                                SMTSolver smtSolverl(logic, SMTSolver::WitnessProduction::NONE);
-                                smtSolverl.assertProp(query_l);
-                                auto resl = smtSolverl.check();
-                                assert(resl == SMTSolver::Answer::UNSAT);
-                            }
+                            // {
+                            //     PTRef reached_l = logic.mkNot(networkNode.postSafeLoop);
+                            //     PTRef transition_l = networkNode.transitionInvariant;
+                            //     PTRef reachedRefined_l = networkNode.preSafeLoop;
+                            //     PTRef query_l = logic.mkAnd({reachedRefined_l, transition_l, TimeMachine(logic).sendFlaThroughTime(reached_l, 2)});
+                            //     SMTSolver smtSolverl(logic, SMTSolver::WitnessProduction::NONE);
+                            //     smtSolverl.assertProp(query_l);
+                            //     auto resl = smtSolverl.check();
+                            //     assert(resl == SMTSolver::Answer::UNSAT);
+                            // }
                             if (l == 0) {
-                                {
-                                    PTRef reached_l = logic.mkNot(networkNode.postSafeLoop);
-                                    PTRef transition_l = networkNode.transitionInvariant;
-                                    PTRef reachedRefined_l = networkNode.preSafeLoop;
-                                    PTRef query_l = logic.mkAnd({reachedRefined_l, transition_l, TimeMachine(logic).sendFlaThroughTime(reached_l, 2)});
-                                    SMTSolver smtSolverl(logic, SMTSolver::WitnessProduction::NONE);
-                                    smtSolverl.assertProp(query_l);
-                                    auto resl = smtSolverl.check();
-                                    assert(resl == SMTSolver::Answer::UNSAT);
-                                }
-                                {
-                                    auto timeMachine = TimeMachine(logic);
-                                    PTRef queryl = networkNode.preSafeLoop;
-                                    PTRef loopMTr = logic.getTerm_true();
-                                    unsigned n = 0;
-                                    for (int i = k; i < node.loops[j].size(); i++) {
-                                        auto const & source = getNode(graph.getSource(node.loops[j][i]));
-                                        PTRef loopTrInv = timeMachine.sendFlaThroughTime(logic.mkAnd(source.transitionInvariant, source.solver->getGeneralTransitionInvariant()), n);
-                                        PTRef nestedLoopTrInv = source.loopInvariant == PTRef_Undef || i == 0 ? logic.getTerm_false() : logic.mkAnd(timeMachine.sendFlaThroughTime(source.loopInvariant, n), timeMachine.sendFlaThroughTime(source.transitionInvariant, n+2));
-                                        PTRef loopInv = nestedLoopTrInv == logic.getTerm_false() ? loopTrInv : nestedLoopTrInv;
-                                        n = nestedLoopTrInv == logic.getTerm_false() ? n + 2 : n + 4;
-                                        PTRef label = timeMachine.sendFlaThroughTime(graph.getEdgeLabel(node.loops[j][i]), n++);
-                                        loopMTr = logic.mkAnd({loopMTr, loopInv, label});
-                                    }
-                                    queryl = logic.mkAnd({queryl, timeMachine.sendFlaThroughTime(subquery, n) ,loopMTr});
-                                    SMTSolver smtSolverl(logic, SMTSolver::WitnessProduction::NONE);
-                                    smtSolverl.assertProp(queryl);
-                                    auto resl = smtSolverl.check();
-                                    assert(resl == SMTSolver::Answer::UNSAT);
-                                }
+                                // {
+                                //     PTRef reached_l = logic.mkNot(networkNode.postSafeLoop);
+                                //     PTRef transition_l = networkNode.transitionInvariant;
+                                //     PTRef reachedRefined_l = networkNode.preSafeLoop;
+                                //     PTRef query_l = logic.mkAnd({reachedRefined_l, transition_l, TimeMachine(logic).sendFlaThroughTime(reached_l, 2)});
+                                //     SMTSolver smtSolverl(logic, SMTSolver::WitnessProduction::NONE);
+                                //     smtSolverl.assertProp(query_l);
+                                //     auto resl = smtSolverl.check();
+                                //     assert(resl == SMTSolver::Answer::UNSAT);
+                                // }
+                                // {
+                                //     auto timeMachine = TimeMachine(logic);
+                                //     PTRef queryl = networkNode.preSafeLoop;
+                                //     PTRef loopMTr = logic.getTerm_true();
+                                //     unsigned n = 0;
+                                //     for (int i = k; i < node.loops[j].size(); i++) {
+                                //         auto const & source = getNode(graph.getSource(node.loops[j][i]));
+                                //         PTRef loopTrInv = timeMachine.sendFlaThroughTime(logic.mkAnd(source.transitionInvariant, source.solver->getGeneralTransitionInvariant()), n);
+                                //         PTRef nestedLoopTrInv = source.loopInvariant == PTRef_Undef || i == 0 ? logic.getTerm_false() : logic.mkAnd(timeMachine.sendFlaThroughTime(source.loopInvariant, n), timeMachine.sendFlaThroughTime(source.transitionInvariant, n+2));
+                                //         PTRef loopInv = nestedLoopTrInv == logic.getTerm_false() ? loopTrInv : nestedLoopTrInv;
+                                //         n = nestedLoopTrInv == logic.getTerm_false() ? n + 2 : n + 4;
+                                //         PTRef label = timeMachine.sendFlaThroughTime(graph.getEdgeLabel(node.loops[j][i]), n++);
+                                //         loopMTr = logic.mkAnd({loopMTr, loopInv, label});
+                                //     }
+                                //     queryl = logic.mkAnd({queryl, timeMachine.sendFlaThroughTime(subquery, n) ,loopMTr});
+                                //     SMTSolver smtSolverl(logic, SMTSolver::WitnessProduction::NONE);
+                                //     smtSolverl.assertProp(queryl);
+                                //     auto resl = smtSolverl.check();
+                                //     assert(resl == SMTSolver::Answer::UNSAT);
+                                // }
                                 break;
                             }
                             if (!networkNode.loops.empty()) {
@@ -1986,57 +1986,57 @@ Path TransitionSystemNetworkManager::produceExactReachedStates(NetworkNode & nod
                                 }
                                 PTRef oldPreSafe = networkNode.preSafeLoop;
                                 networkNode.preSafeLoop = res.explanation;
-                                {
-                                    PTRef reached_l = logic.mkNot(oldPreSafe);
-                                    PTRef transition_l = networkNode.loopInvariant;
-                                    PTRef reachedRefined_l = networkNode.preSafeLoop;
-                                    PTRef query_l = logic.mkAnd({reachedRefined_l, transition_l, TimeMachine(logic).sendFlaThroughTime(reached_l, 2)});
-                                    SMTSolver smtSolverl(logic, SMTSolver::WitnessProduction::NONE);
-                                    smtSolverl.assertProp(query_l);
-                                    auto resl = smtSolverl.check();
-                                    assert(resl == SMTSolver::Answer::UNSAT);
-                                }
-                                {
-                                    auto timeMachine = TimeMachine(logic);
-                                    PTRef queryl = networkNode.preSafeLoop;
-                                    PTRef loopMTr = logic.getTerm_true();
-                                    unsigned n = 0;
-                                    for (int i = k; i < node.loops[j].size(); i++) {
-                                        auto const & source = getNode(graph.getSource(node.loops[j][i]));
-                                        PTRef loopTrInv = timeMachine.sendFlaThroughTime(logic.mkAnd(source.transitionInvariant, source.solver->getGeneralTransitionInvariant()), n);
-                                        PTRef nestedLoopTrInv = source.loopInvariant == PTRef_Undef || i == 0 ? logic.getTerm_false() : logic.mkAnd(timeMachine.sendFlaThroughTime(source.loopInvariant, n), timeMachine.sendFlaThroughTime(source.transitionInvariant, n+2));
-                                        PTRef loopInv = nestedLoopTrInv == logic.getTerm_false() ? loopTrInv : nestedLoopTrInv;
-                                        n = nestedLoopTrInv == logic.getTerm_false() ? n + 2 : n + 4;
-                                        PTRef label = timeMachine.sendFlaThroughTime(graph.getEdgeLabel(node.loops[j][i]), n++);
-                                        loopMTr = logic.mkAnd({loopMTr, loopInv, label});
-                                    }
-                                    queryl = logic.mkAnd({queryl, timeMachine.sendFlaThroughTime(subquery, n) ,loopMTr});
-                                    SMTSolver smtSolverl(logic, SMTSolver::WitnessProduction::NONE);
-                                    smtSolverl.assertProp(queryl);
-                                    auto resl = smtSolverl.check();
-                                    assert(resl == SMTSolver::Answer::UNSAT);
-                                }
+                                // {
+                                //     PTRef reached_l = logic.mkNot(oldPreSafe);
+                                //     PTRef transition_l = networkNode.loopInvariant;
+                                //     PTRef reachedRefined_l = networkNode.preSafeLoop;
+                                //     PTRef query_l = logic.mkAnd({reachedRefined_l, transition_l, TimeMachine(logic).sendFlaThroughTime(reached_l, 2)});
+                                //     SMTSolver smtSolverl(logic, SMTSolver::WitnessProduction::NONE);
+                                //     smtSolverl.assertProp(query_l);
+                                //     auto resl = smtSolverl.check();
+                                //     assert(resl == SMTSolver::Answer::UNSAT);
+                                // }
+                                // {
+                                //     auto timeMachine = TimeMachine(logic);
+                                //     PTRef queryl = networkNode.preSafeLoop;
+                                //     PTRef loopMTr = logic.getTerm_true();
+                                //     unsigned n = 0;
+                                //     for (int i = k; i < node.loops[j].size(); i++) {
+                                //         auto const & source = getNode(graph.getSource(node.loops[j][i]));
+                                //         PTRef loopTrInv = timeMachine.sendFlaThroughTime(logic.mkAnd(source.transitionInvariant, source.solver->getGeneralTransitionInvariant()), n);
+                                //         PTRef nestedLoopTrInv = source.loopInvariant == PTRef_Undef || i == 0 ? logic.getTerm_false() : logic.mkAnd(timeMachine.sendFlaThroughTime(source.loopInvariant, n), timeMachine.sendFlaThroughTime(source.transitionInvariant, n+2));
+                                //         PTRef loopInv = nestedLoopTrInv == logic.getTerm_false() ? loopTrInv : nestedLoopTrInv;
+                                //         n = nestedLoopTrInv == logic.getTerm_false() ? n + 2 : n + 4;
+                                //         PTRef label = timeMachine.sendFlaThroughTime(graph.getEdgeLabel(node.loops[j][i]), n++);
+                                //         loopMTr = logic.mkAnd({loopMTr, loopInv, label});
+                                //     }
+                                //     queryl = logic.mkAnd({queryl, timeMachine.sendFlaThroughTime(subquery, n) ,loopMTr});
+                                //     SMTSolver smtSolverl(logic, SMTSolver::WitnessProduction::NONE);
+                                //     smtSolverl.assertProp(queryl);
+                                //     auto resl = smtSolverl.check();
+                                //     assert(resl == SMTSolver::Answer::UNSAT);
+                                // }
                             }
-                            {
-                                auto timeMachine = TimeMachine(logic);
-                                PTRef queryl = networkNode.preSafeLoop;
-                                PTRef loopMTr = logic.getTerm_true();
-                                unsigned n = 0;
-                                for (int i = k; i < node.loops[j].size(); i++) {
-                                    auto const & source = getNode(graph.getSource(node.loops[j][i]));
-                                    PTRef loopTrInv = timeMachine.sendFlaThroughTime(logic.mkAnd(source.transitionInvariant, source.solver->getGeneralTransitionInvariant()), n);
-                                    PTRef nestedLoopTrInv = source.loopInvariant == PTRef_Undef || i == 0 ? logic.getTerm_false() : logic.mkAnd(timeMachine.sendFlaThroughTime(source.loopInvariant, n), timeMachine.sendFlaThroughTime(source.transitionInvariant, n+2));
-                                    PTRef loopInv = nestedLoopTrInv == logic.getTerm_false() ? loopTrInv : nestedLoopTrInv;
-                                    n = nestedLoopTrInv == logic.getTerm_false() ? n + 2 : n + 4;
-                                    PTRef label = timeMachine.sendFlaThroughTime(graph.getEdgeLabel(node.loops[j][i]), n++);
-                                    loopMTr = logic.mkAnd({loopMTr, loopInv, label});
-                                }
-                                queryl = logic.mkAnd({queryl, timeMachine.sendFlaThroughTime(subquery, n) ,loopMTr});
-                                SMTSolver smtSolverl(logic, SMTSolver::WitnessProduction::NONE);
-                                smtSolverl.assertProp(queryl);
-                                auto resl = smtSolverl.check();
-                                assert(resl == SMTSolver::Answer::UNSAT);
-                            }
+                            // {
+                            //     auto timeMachine = TimeMachine(logic);
+                            //     PTRef queryl = networkNode.preSafeLoop;
+                            //     PTRef loopMTr = logic.getTerm_true();
+                            //     unsigned n = 0;
+                            //     for (int i = k; i < node.loops[j].size(); i++) {
+                            //         auto const & source = getNode(graph.getSource(node.loops[j][i]));
+                            //         PTRef loopTrInv = timeMachine.sendFlaThroughTime(logic.mkAnd(source.transitionInvariant, source.solver->getGeneralTransitionInvariant()), n);
+                            //         PTRef nestedLoopTrInv = source.loopInvariant == PTRef_Undef || i == 0 ? logic.getTerm_false() : logic.mkAnd(timeMachine.sendFlaThroughTime(source.loopInvariant, n), timeMachine.sendFlaThroughTime(source.transitionInvariant, n+2));
+                            //         PTRef loopInv = nestedLoopTrInv == logic.getTerm_false() ? loopTrInv : nestedLoopTrInv;
+                            //         n = nestedLoopTrInv == logic.getTerm_false() ? n + 2 : n + 4;
+                            //         PTRef label = timeMachine.sendFlaThroughTime(graph.getEdgeLabel(node.loops[j][i]), n++);
+                            //         loopMTr = logic.mkAnd({loopMTr, loopInv, label});
+                            //     }
+                            //     queryl = logic.mkAnd({queryl, timeMachine.sendFlaThroughTime(subquery, n) ,loopMTr});
+                            //     SMTSolver smtSolverl(logic, SMTSolver::WitnessProduction::NONE);
+                            //     smtSolverl.assertProp(queryl);
+                            //     auto resl = smtSolverl.check();
+                            //     assert(resl == SMTSolver::Answer::UNSAT);
+                            // }
                             subPath.pop_back();
                             l--;
                         }
@@ -2049,26 +2049,26 @@ Path TransitionSystemNetworkManager::produceExactReachedStates(NetworkNode & nod
                             subPath.push_back({NodeState::PRE, target, edge, std::nullopt,  std::nullopt, res.explanation});
                             l++;
                         } else {
-                            {
-                                auto timeMachine = TimeMachine(logic);
-                                PTRef queryl = reachedRefined;
-                                PTRef loopMTr = graph.getEdgeLabel(edge);
-                                unsigned n = 1;
-                                for (int i = k+1; i < node.loops[j].size(); i++) {
-                                    auto const & source = getNode(graph.getSource(node.loops[j][i]));
-                                    PTRef loopTrInv = timeMachine.sendFlaThroughTime(logic.mkAnd(source.transitionInvariant, source.solver->getGeneralTransitionInvariant()), n);
-                                    PTRef nestedLoopTrInv = source.loopInvariant == PTRef_Undef || i == 0 ? logic.getTerm_false() : logic.mkAnd(timeMachine.sendFlaThroughTime(source.loopInvariant, n), timeMachine.sendFlaThroughTime(source.transitionInvariant, n+2));
-                                    PTRef loopInv = nestedLoopTrInv == logic.getTerm_false() ? loopTrInv : nestedLoopTrInv;
-                                    n = nestedLoopTrInv == logic.getTerm_false() ? n + 2 : n + 4;
-                                    PTRef label = timeMachine.sendFlaThroughTime(graph.getEdgeLabel(node.loops[j][i]), n++);
-                                    loopMTr = logic.mkAnd({loopMTr, loopInv, label});
-                                }
-                                queryl = logic.mkAnd({queryl, timeMachine.sendFlaThroughTime(subquery, n) ,loopMTr});
-                                SMTSolver smtSolverl(logic, SMTSolver::WitnessProduction::NONE);
-                                smtSolverl.assertProp(queryl);
-                                auto resl = smtSolverl.check();
-                                assert(resl == SMTSolver::Answer::UNSAT);
-                            }
+                            // {
+                            //     auto timeMachine = TimeMachine(logic);
+                            //     PTRef queryl = reachedRefined;
+                            //     PTRef loopMTr = graph.getEdgeLabel(edge);
+                            //     unsigned n = 1;
+                            //     for (int i = k+1; i < node.loops[j].size(); i++) {
+                            //         auto const & source = getNode(graph.getSource(node.loops[j][i]));
+                            //         PTRef loopTrInv = timeMachine.sendFlaThroughTime(logic.mkAnd(source.transitionInvariant, source.solver->getGeneralTransitionInvariant()), n);
+                            //         PTRef nestedLoopTrInv = source.loopInvariant == PTRef_Undef || i == 0 ? logic.getTerm_false() : logic.mkAnd(timeMachine.sendFlaThroughTime(source.loopInvariant, n), timeMachine.sendFlaThroughTime(source.transitionInvariant, n+2));
+                            //         PTRef loopInv = nestedLoopTrInv == logic.getTerm_false() ? loopTrInv : nestedLoopTrInv;
+                            //         n = nestedLoopTrInv == logic.getTerm_false() ? n + 2 : n + 4;
+                            //         PTRef label = timeMachine.sendFlaThroughTime(graph.getEdgeLabel(node.loops[j][i]), n++);
+                            //         loopMTr = logic.mkAnd({loopMTr, loopInv, label});
+                            //     }
+                            //     queryl = logic.mkAnd({queryl, timeMachine.sendFlaThroughTime(subquery, n) ,loopMTr});
+                            //     SMTSolver smtSolverl(logic, SMTSolver::WitnessProduction::NONE);
+                            //     smtSolverl.assertProp(queryl);
+                            //     auto resl = smtSolverl.check();
+                            //     assert(resl == SMTSolver::Answer::UNSAT);
+                            // }
 
 
                             networkNode.postSafeLoop = logic.mkOr(networkNode.postSafeLoop, res.explanation);
@@ -2080,26 +2080,27 @@ Path TransitionSystemNetworkManager::produceExactReachedStates(NetworkNode & nod
                 if (subPath.size() > preSize) {
                     reachedRefined = subPath.back().reached;
                     break;
-                    } else {
-                    auto timeMachine = TimeMachine(logic);
-                    PTRef queryl = solver.getInit();
-                    PTRef loopMTr = logic.getTerm_true();
-                    unsigned n = 0;
-                    for (int i = 0; i < node.loops[j].size(); i++) {
-                        auto const & source = getNode(graph.getSource(node.loops[j][i]));
-                        PTRef loopTrInv = timeMachine.sendFlaThroughTime(logic.mkAnd(source.transitionInvariant, source.solver->getGeneralTransitionInvariant()), n);
-                        PTRef nestedLoopTrInv = source.loopInvariant == PTRef_Undef || i == 0 ? logic.getTerm_false() : logic.mkAnd(timeMachine.sendFlaThroughTime(source.loopInvariant, n), timeMachine.sendFlaThroughTime(source.transitionInvariant, n+2));
-                        PTRef loopInv = nestedLoopTrInv == logic.getTerm_false() ? loopTrInv : nestedLoopTrInv;
-                        n = nestedLoopTrInv == logic.getTerm_false() ? n + 2 : n + 4;
-                        PTRef label = timeMachine.sendFlaThroughTime(graph.getEdgeLabel(node.loops[j][i]), n++);
-                        loopMTr = logic.mkAnd({loopMTr, loopInv, label});
                     }
-                    queryl = logic.mkAnd({queryl, timeMachine.sendFlaThroughTime(subquery, n) ,loopMTr});
-                    SMTSolver smtSolverl(logic, SMTSolver::WitnessProduction::NONE);
-                    smtSolverl.assertProp(queryl);
-                    auto resl = smtSolverl.check();
-                    assert(resl == SMTSolver::Answer::UNSAT);
-                }
+                //     else {
+                //     auto timeMachine = TimeMachine(logic);
+                //     PTRef queryl = solver.getInit();
+                //     PTRef loopMTr = logic.getTerm_true();
+                //     unsigned n = 0;
+                //     for (int i = 0; i < node.loops[j].size(); i++) {
+                //         auto const & source = getNode(graph.getSource(node.loops[j][i]));
+                //         PTRef loopTrInv = timeMachine.sendFlaThroughTime(logic.mkAnd(source.transitionInvariant, source.solver->getGeneralTransitionInvariant()), n);
+                //         PTRef nestedLoopTrInv = source.loopInvariant == PTRef_Undef || i == 0 ? logic.getTerm_false() : logic.mkAnd(timeMachine.sendFlaThroughTime(source.loopInvariant, n), timeMachine.sendFlaThroughTime(source.transitionInvariant, n+2));
+                //         PTRef loopInv = nestedLoopTrInv == logic.getTerm_false() ? loopTrInv : nestedLoopTrInv;
+                //         n = nestedLoopTrInv == logic.getTerm_false() ? n + 2 : n + 4;
+                //         PTRef label = timeMachine.sendFlaThroughTime(graph.getEdgeLabel(node.loops[j][i]), n++);
+                //         loopMTr = logic.mkAnd({loopMTr, loopInv, label});
+                //     }
+                //     queryl = logic.mkAnd({queryl, timeMachine.sendFlaThroughTime(subquery, n) ,loopMTr});
+                //     SMTSolver smtSolverl(logic, SMTSolver::WitnessProduction::NONE);
+                //     smtSolverl.assertProp(queryl);
+                //     auto resl = smtSolverl.check();
+                //     assert(resl == SMTSolver::Answer::UNSAT);
+                // }
             }
         }
         if (subPath.size() == preSize) {
