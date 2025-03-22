@@ -96,6 +96,7 @@ protected:
     PTRef init;
     PTRef transition;
     PTRef query;
+    PTRef min = PTRef_Undef;
     vec<PTRef> stateVariables;
     vec<PTRef> auxiliaryVariables;
     vec<PTRef> leftInvariants;
@@ -129,7 +130,7 @@ public:
      * are also safe, given the explanation found by the algorithm.
      * @return superset of initial states that are still safe
      */
-    PTRef ExplMinimisation(PTRef explCandidates) const;
+    PTRef ExplMinimisation(PTRef explCandidates, PTRef base) const;
     PTRef getSafetyExplanation() const;
     PTRef getReachedStates() const;
     unsigned getTransitionStepCount() const;
