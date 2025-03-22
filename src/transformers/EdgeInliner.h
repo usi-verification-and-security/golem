@@ -43,9 +43,9 @@ public:
                                 DirectedHyperEdge const & predecessor, Predecessors);
 
     private:
-        std::vector<PTRef> getAuxiliaryVarsFor(SymRef node);
+        std::vector<PTRef> getAuxiliaryVarsFor(SymRef node) const;
 
-        PTRef computeInterpolantFor(SymRef node, PTRef incoming, PTRef outgoing);
+        PTRef computeInterpolantFor(SymRef node, PTRef incoming, PTRef outgoing) const;
     };
 };
 

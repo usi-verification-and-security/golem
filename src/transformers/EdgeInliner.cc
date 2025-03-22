@@ -21,7 +21,7 @@ KnownValues computeKnownValues(PTRef fla, IndexMap const & varToIndex, Logic & l
             PTRef lhs = logic.getPterm(conjunct)[0];
             PTRef rhs = logic.getPterm(conjunct)[1];
             if (logic.isConstant(lhs) or logic.isConstant(rhs)) {
-                PTRef var = logic.isConstant(lhs) ? rhs : lhs;
+                PTRef const var = logic.isConstant(lhs) ? rhs : lhs;
                 if (logic.isVar(var) and varToIndex.find(var) != varToIndex.end()) {
                     values[varToIndex.at(var)] = logic.isConstant(lhs) ? lhs : rhs;
                 }
@@ -60,12 +60,6 @@ std::vector<EId> computeFeasibleTransitions(ChcDirectedHyperGraph const & graph,
     }
     auto sourceValues = computeKnownValues(graph.getEdgeLabel(outgoingEdge), varToIndex, logic);
     assert(sourceValues.size() == sourceVars.size());
-    // for (auto i = 0u; i < sourceVars.size(); ++i) {
-    //     if (sourceValues[i] != PTRef_Undef) {
-    //         std::cout << logic.pp(sourceVars[i]) << " -> " << logic.pp(sourceValues[i]) << '\n';
-    //     }
-    // }
-    // std::cout << std::endl;
 
     for (EId incomingEdge : incomingEdges) {
         if (graph.getEdgeLabel(incomingEdge) == logic.getTerm_false()) { continue; }
@@ -81,13 +75,6 @@ std::vector<EId> computeFeasibleTransitions(ChcDirectedHyperGraph const & graph,
             feasible &= sourceValues[i] == PTRef_Undef or targetValues[i] == PTRef_Undef or sourceValues[i] == targetValues[i];
         }
         if (feasible) { feasibleTransitions.push_back(incomingEdge); }
-        // for (auto i = 0u; i < targetValues.size(); ++i) {
-        //     if (targetValues[i] != PTRef_Undef) {
-        //         std::cout << logic.pp(targetVars[i]) << " -> " << logic.pp(targetValues[i]) << '\n';
-        //     }
-        // }
-        // std::cout << std::endl;
-        // std::cout << "Pair " << incomingEdge.id << " and " << outgoingEdge.id << " is " << (feasible ? "feasible" : "infeasible") << '\n' << '\n';
     }
     return feasibleTransitions;
 
@@ -105,10 +92,8 @@ Transformer::TransformationResult EdgeInliner::transform(std::unique_ptr<ChcDire
             auto const & sources = edge.from;
             if (sources.size() == 1 and sources.front() != graph->getEntry()) {
                 auto source = sources.front();
-                // std::cout << "Checking edge " << edge.id.id << std::endl;
                 auto const & incoming = adjacencyLists.getIncomingEdgesFor(source);
                 auto feasibleTransitions = computeFeasibleTransitions(*graph, incoming, edge.id);
-                // std::cout << "Number of feasible transitions: " << feasibleTransitions.size() << std::endl;
                 if (feasibleTransitions.size() >= 2) { continue; }
                 auto computePredecessors = [&](SymRef node) {
                     auto const & predecessorsIds = adjacencyLists.getIncomingEdgesFor(node);
@@ -120,16 +105,12 @@ Transformer::TransformationResult EdgeInliner::transform(std::unique_ptr<ChcDire
                 };
                 if (feasibleTransitions.empty()) {
                     // This edge can never be taken
-                    // std::cout << "This edge can never be taken!" << std::endl;
                     backtranslator->notifyEdgeDeleted(edge, computePredecessors(source));
                     graph->deleteEdges({edge.id});
                 } else if (feasibleTransitions.size() == 1) {
                     auto predecessor = feasibleTransitions[0];
                     if (graph->getSources(predecessor).size() != 1 or graph->getSources(predecessor).front() == graph->getTarget(predecessor)) { continue; }
                     // Only one way how to get here, combine the two edge and remove this one
-                    // std::cout << "Only one feasible input! This edge can be removed!" << std::endl;
-                    // std::cout << "Inlining edge " << edge.id.id << ": " << edge.from.front().x << " -> " << edge.to.x << '\n';
-                    // std::cout << "Predecessor is " << feasibleTransitions[0].id << ": " << (graph->getSources(feasibleTransitions[0]).empty() ? " " : std::to_string(graph->getSources(feasibleTransitions[0]).front().x)) << " -> " << graph->getTarget(feasibleTransitions[0]).x << '\n';
                     auto predecessors = computePredecessors(source);
                     auto newEdge = graph->inlineEdge(edge.id, predecessor);
                     backtranslator->notifyEdgeReplaced(newEdge, edge, graph->getEdge(predecessor), std::move(predecessors));
@@ -251,7 +232,7 @@ void EdgeInliner::BackTranslator::notifyEdgeReplaced(DirectedHyperEdge const & n
     this->predecessors.insert({removedEdge.id, std::move(predecessors)});
 }
 
-std::vector<PTRef> EdgeInliner::BackTranslator::getAuxiliaryVarsFor(SymRef node) {
+std::vector<PTRef> EdgeInliner::BackTranslator::getAuxiliaryVarsFor(SymRef node) const {
     PTRef sourceTerm = predicateRepresentation.getSourceTermFor(node);
     auto vars = TermUtils(logic).predicateArgsInOrder(sourceTerm);
     for (auto i = 0u; i < vars.size(); ++i) {
@@ -263,7 +244,7 @@ std::vector<PTRef> EdgeInliner::BackTranslator::getAuxiliaryVarsFor(SymRef node)
     return vars;
 }
 
-PTRef EdgeInliner::BackTranslator::computeInterpolantFor(SymRef node, PTRef incoming, PTRef outgoing) {
+PTRef EdgeInliner::BackTranslator::computeInterpolantFor(SymRef node, PTRef incoming, PTRef outgoing) const {
     TermUtils utils(logic);
     SMTSolver solver(logic, SMTSolver::WitnessProduction::ONLY_INTERPOLANTS);
     solver.getConfig().setSimplifyInterpolant(4);
@@ -289,8 +270,8 @@ PTRef EdgeInliner::BackTranslator::computeInterpolantFor(SymRef node, PTRef inco
     solver.assertProp(outgoingConstraintRenamed);
     auto res = solver.check();
     if (res != SMTSolver::Answer::UNSAT) {
-        std::cout << logic.pp(incomingConstraintRenamed) << '\n';
-        std::cout << '\n' << logic.pp(outgoingConstraintRenamed) << '\n';
+        // std::cout << logic.pp(incomingConstraintRenamed) << '\n';
+        // std::cout << '\n' << logic.pp(outgoingConstraintRenamed) << '\n';
         throw std::logic_error("Error in backtranslating of edge inliner");
     }
     auto itpContext = solver.getInterpolationContext();
