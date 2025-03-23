@@ -1900,9 +1900,9 @@ TransitionSystemNetworkManager::queryTransitionSystem(NetworkNode const & node, 
 
 TransitionSystemNetworkManager::QueryResult
 TransitionSystemNetworkManager::queryLoops(NetworkNode & node, PTRef sourceCondition, PTRef targetCondition, bool produceInv) {
-    std::cout<<"NESTED LOOPS ANALYSIS\n";
+    // std::cout<<"NESTED LOOPS ANALYSIS\n";
     while(true) {
-        std::cout<<"NODE: " << graph.getSource(node.children[0]).x << std::endl;
+        // std::cout<<"NODE: " << graph.getSource(node.children[0]).x << std::endl;
         auto [mergedTransition, systemType] = produceMergedTransition(node);
         std::unique_ptr<TPABase> solver{nullptr};
         solver = mkSolver();
@@ -1933,7 +1933,7 @@ TransitionSystemNetworkManager::queryLoops(NetworkNode & node, PTRef sourceCondi
             }
             case VerificationAnswer::UNSAFE: {
                 assert(solver->getTransitionStepCount() > 0);
-                std::cout<<"Produced counterexample of size "<< solver->getTransitionStepCount() <<"\n";
+                // std::cout<<"Produced counterexample of size "<< solver->getTransitionStepCount() <<"\n";
                 Path states = produceExactReachedStates(node, *solver, node.loops);
                 node.loopTransitions = {};
                 if (states.empty()) {
@@ -2046,8 +2046,8 @@ Path TransitionSystemNetworkManager::produceExactReachedStates(NetworkNode & nod
                                 //     assert(resl == SMTSolver::Answer::UNSAT);
                                 // }
                                 // TODO: Make it into or statement, to gather queeries from multiple branches
-                                networkNode.preSafe = logic.mkOr(networkNode.preSafe, networkNode.preSafeLoop);
-                                postQuery = postQuery == logic.getTerm_true() ? logic.mkNot(networkNode.preSafeLoop): logic.mkOr(postQuery, logic.mkNot(networkNode.preSafeLoop));
+                                // networkNode.preSafe = logic.mkOr(networkNode.preSafe, networkNode.preSafeLoop);
+                                postQuery = postQuery == logic.ggitetTerm_true() ? logic.mkNot(networkNode.preSafeLoop): logic.mkOr(postQuery, logic.mkNot(networkNode.preSafeLoop));
                                 break;
                             }
                             if (!networkNode.loops.empty()) {
@@ -2121,7 +2121,7 @@ Path TransitionSystemNetworkManager::produceExactReachedStates(NetworkNode & nod
                             //     SMTSolver smtSolverl(logic, SMTSolver::WitnessProduction::NONE);
                             //     smtSolverl.assertProp(queryl);
                             //     auto resl = smtSolverl.check();
-                            //     assert(resl == SMTSolver::Answer::UNSAT);
+                            //     cl == SMTSolver::Answer::UNSAT);
                             // }
                             subPath.pop_back();
                             l--;
