@@ -2047,7 +2047,7 @@ Path TransitionSystemNetworkManager::produceExactReachedStates(NetworkNode & nod
                                 // }
                                 // TODO: Make it into or statement, to gather queeries from multiple branches
                                 // networkNode.preSafe = logic.mkOr(networkNode.preSafe, networkNode.preSafeLoop);
-                                postQuery = postQuery == logic.ggitetTerm_true() ? logic.mkNot(networkNode.preSafeLoop): logic.mkOr(postQuery, logic.mkNot(networkNode.preSafeLoop));
+                                postQuery = postQuery == logic.getTerm_true() ? logic.mkNot(networkNode.preSafeLoop): logic.mkOr(postQuery, logic.mkNot(networkNode.preSafeLoop));
                                 break;
                             }
                             if (!networkNode.loops.empty()) {
