@@ -16,6 +16,7 @@
 #include "transformers/BasicTransformationPipelines.h"
 #include "transformers/ConstraintSimplifier.h"
 #include "transformers/EdgeInliner.h"
+#include "transformers/FalseClauseRemoval.h"
 #include "transformers/MultiEdgeMerger.h"
 #include "transformers/NestedLoopTransformation.h"
 #include "transformers/NodeEliminator.h"

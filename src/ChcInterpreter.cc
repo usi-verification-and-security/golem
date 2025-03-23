@@ -11,14 +11,7 @@
 #include "graph/ChcGraph.h"
 #include "graph/ChcGraphBuilder.h"
 #include "proofs/Term.h"
-#include "transformers/ConstraintSimplifier.h"
-#include "transformers/EdgeInliner.h"
-#include "transformers/FalseClauseRemoval.h"
-#include "transformers/MultiEdgeMerger.h"
-#include "transformers/NodeEliminator.h"
-#include "transformers/RemoveUnreachableNodes.h"
-#include "transformers/SimpleChainSummarizer.h"
-#include "transformers/TransformationPipeline.h"
+#include "transformers/BasicTransformationPipelines.h"
 
 #include <csignal>
 #include <memory>
@@ -483,20 +476,8 @@ void ChcInterpreterContext::interpretCheckSat() {
         originalGraph = std::make_unique<ChcDirectedHyperGraph>(*hypergraph);
     }
 
-    TransformationPipeline::pipeline_t transformations;
-    transformations.push_back(std::make_unique<ConstraintSimplifier>());
-    transformations.push_back(std::make_unique<SimpleChainSummarizer>());
-    transformations.push_back(std::make_unique<RemoveUnreachableNodes>());
-    transformations.push_back(std::make_unique<SimpleNodeEliminator>());
-    transformations.push_back(std::make_unique<EdgeInliner>());
-    transformations.push_back(std::make_unique<FalseClauseRemoval>());
-    transformations.push_back(std::make_unique<RemoveUnreachableNodes>());
-    transformations.push_back(std::make_unique<MultiEdgeMerger>());
-    transformations.push_back(std::make_unique<SimpleChainSummarizer>());
-    transformations.push_back(std::make_unique<RemoveUnreachableNodes>());
-    transformations.push_back(std::make_unique<SimpleNodeEliminator>());
-    transformations.push_back(std::make_unique<MultiEdgeMerger>());
-    auto [newGraph, translator] = TransformationPipeline(std::move(transformations)).transform(std::move(hypergraph));
+    auto pipeline = Transformations::defaultTransformationPipeline();
+    auto [newGraph, translator] = pipeline.transform(std::move(hypergraph));
     hypergraph = std::move(newGraph);
     // This if is needed to run the portfolio of multiple engines
     auto engineName = opts.getOrDefault(Options::ENGINE, "spacer");
