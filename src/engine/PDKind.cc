@@ -90,15 +90,25 @@ using InductionFrame = std::set<IFrameElement>;
 struct PushResult {
     InductionFrame i_frame;
     InductionFrame new_i_frame;
-    int n;
+    unsigned n;
     bool is_invalid;
-    int steps_to_ctx;
+    unsigned steps_to_ctx;
     PushResult(InductionFrame i_frame,
                InductionFrame new_i_frame,
-               int n,
+               unsigned n,
                bool is_invalid,
-               int steps_to_ctx) : i_frame(std::move(i_frame)), new_i_frame(std::move(new_i_frame)), n(n), is_invalid(is_invalid), steps_to_ctx(steps_to_ctx) {}
+               unsigned steps_to_ctx) : i_frame(std::move(i_frame)), new_i_frame(std::move(new_i_frame)), n(n), is_invalid(is_invalid), steps_to_ctx(steps_to_ctx) {}
 };
+
+struct Reachable {
+    std::size_t steps{};
+};
+
+struct Unreachable {
+    PTRef explanation{PTRef_Undef};
+};
+
+using ReachabilityResult = std::variant<Reachable, Unreachable>;
 
 /**
  * A data structure where r[i] represents the states that are reachable in i steps from some initial states, i.e., r[0].
@@ -139,10 +149,10 @@ private:
     Logic & logic;
     TransitionSystem const & system;
 
-    std::tuple<bool, PTRef> reachable(unsigned k, PTRef formula);
+    ReachabilityResult reachable(unsigned k, PTRef formula);
 public:
     ReachabilityChecker(Logic & logic, TransitionSystem const & system) : r_frames(logic), logic(logic), system(system) {}
-    std::tuple<bool, int, PTRef> checkReachability(int from, int to, PTRef formula);
+    ReachabilityResult checkReachability(unsigned from, unsigned to, PTRef formula);
     PTRef generalize(Model & model, PTRef transition, PTRef formula);
 };
 
@@ -156,7 +166,7 @@ private:
     bool computeWitness;
 
     [[nodiscard]]
-    PushResult push(TransitionSystem const & system, InductionFrame & iframe, int n, int k, ReachabilityChecker & reachability_checker) const;
+    PushResult push(TransitionSystem const & system, InductionFrame & iframe, unsigned n, unsigned k, ReachabilityChecker & reachability_checker) const;
 
     [[nodiscard]]
     PTRef getInvariant(InductionFrame const & iframe, unsigned int k, TransitionSystem const & system) const;
@@ -184,7 +194,7 @@ TransitionSystemVerificationResult Context::solve(TransitionSystem const & syste
         }
     }
     
-    int n = 0;
+    unsigned n = 0;
     PTRef p = logic.mkNot(query);
     InductionFrame inductionFrame;
     inductionFrame.insert(IFrameElement(p, CounterExample(query, 0u)));
@@ -192,7 +202,7 @@ TransitionSystemVerificationResult Context::solve(TransitionSystem const & syste
     ReachabilityChecker reachability_checker(logic, system);
     // Solve the system by iteratively trying to construct an inductive strengthening of (p, not p) induction frame.
     while (true) {
-        int k = n + 1; /* Pick k such that 1 <= k <= n + 1 */
+        unsigned k = n + 1; /* Pick k such that 1 <= k <= n + 1 */
         auto res = push(system, inductionFrame, n, k, reachability_checker);
 
         if (res.is_invalid) {
@@ -214,7 +224,7 @@ TransitionSystemVerificationResult Context::solve(TransitionSystem const & syste
 /**
  * Check if p is invariant by iteratively constructing k-inductive strengthening of p.
  */
-PushResult Context::push(TransitionSystem const & system, InductionFrame & iframe, int n, const int k, ReachabilityChecker & reachability_checker) const {
+PushResult Context::push(TransitionSystem const & system, InductionFrame & iframe, unsigned const n, unsigned const k, ReachabilityChecker & reachability_checker) const {
     // Create a queue q and initialize it with iframe.
     std::queue<IFrameElement> q;
     for (auto e : iframe) {
@@ -225,7 +235,7 @@ PushResult Context::push(TransitionSystem const & system, InductionFrame & ifram
     TimeMachine tm{logic};
     PTRef transition = system.getTransition();
     InductionFrame newIframe = {};
-    int np = n + k;
+    unsigned np = n + k;
     bool invalid = false;
     int steps_to_ctx = 0;
     
@@ -253,7 +263,7 @@ PushResult Context::push(TransitionSystem const & system, InductionFrame & ifram
         }();
 
         PTRef not_fabs = logic.mkNot(obligation.lemma);
-        PTRef versioned_not_fabs = tm.sendFlaThroughTime(not_fabs, k);
+        PTRef versioned_not_fabs = tm.sendFlaThroughTime(not_fabs, static_cast<int>(k));
         PTRef t_k_constr = logic.mkAnd(t_k, f_abs_conj);
 
         // Check if iframe_abs is k-inductive?
@@ -268,7 +278,7 @@ PushResult Context::push(TransitionSystem const & system, InductionFrame & ifram
         }
 
         // Check if f_cex is reachable.
-        PTRef f_cex = tm.sendFlaThroughTime(obligation.counter_example.ctx, k);
+        PTRef f_cex = tm.sendFlaThroughTime(obligation.counter_example.ctx, static_cast<int>(k));
         SMTSolver solver2(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
         solver2.assertProp(iframe_abs);
         solver2.assertProp(t_k_constr);
@@ -280,14 +290,15 @@ PushResult Context::push(TransitionSystem const & system, InductionFrame & ifram
             CounterExample g_cex(reachability_checker.generalize(*model2, t_k, f_cex), obligation.counter_example.num_of_steps + k);
             // Remember num of steps for each cex, g_cex is f_cex + k
             auto reach_res = reachability_checker.checkReachability(n - k + 1, n, g_cex.ctx);
-            if (std::get<0>(reach_res)) {
+            if (std::holds_alternative<Reachable>(reach_res)) {
                 // g_cex is reachable, return invalid.
                 invalid = true;
-                steps_to_ctx = g_cex.num_of_steps + std::get<1>(reach_res); // This is needed for invalidity proof
+                steps_to_ctx = g_cex.num_of_steps + std::get<Reachable>(reach_res).steps; // This is needed for invalidity proof
                 continue;
             } else {
                 // Eliminate g_cex.
-                PTRef g_abs = std::get<2>(reach_res);
+                assert(std::holds_alternative<Unreachable>(reach_res));
+                PTRef g_abs = std::get<Unreachable>(reach_res).explanation;
                 IFrameElement newObligation = IFrameElement(g_abs, g_cex);
                 iframe.insert(newObligation);
                 q.push(newObligation);
@@ -300,16 +311,18 @@ PushResult Context::push(TransitionSystem const & system, InductionFrame & ifram
         auto model1 = solver1.getModel();
         PTRef g_cti = reachability_checker.generalize(*model1, t_k, versioned_not_fabs);
         auto reach_res = reachability_checker.checkReachability(n - k + 1, n, g_cti);
-        if (std::get<0>(reach_res)) {
+        if (std::holds_alternative<Reachable>(reach_res)) {
             // Insert weaker obligation : (not f_cex, f_cex).
-            reach_res = reachability_checker.checkReachability(n + 1, std::get<1>(reach_res) + k, not_fabs);
-            np = std::min(np, std::get<1>(reach_res));
+            reach_res = reachability_checker.checkReachability(n + 1, std::get<Reachable>(reach_res).steps + k, not_fabs);
+            assert(std::holds_alternative<Reachable>(reach_res));
+            np = std::min<std::size_t>(np, std::get<Reachable>(reach_res).steps);
             IFrameElement newObligation = IFrameElement(logic.mkNot(obligation.counter_example.ctx), obligation.counter_example);
             iframe.insert(newObligation);
             newIframe.insert(newObligation);
         } else {
             // Strengthen f_abs by g_abs.
-            PTRef g_abs = std::get<2>(reach_res);
+            assert(std::holds_alternative<Unreachable>(reach_res));
+            PTRef g_abs = std::get<Unreachable>(reach_res).explanation;
             g_abs = logic.mkAnd(obligation.lemma, g_abs);
             IFrameElement newObligation = IFrameElement(g_abs, obligation.counter_example);
             iframe.insert(newObligation);
@@ -338,7 +351,7 @@ PTRef Context::getInvariant(const InductionFrame & iframe, unsigned int k, Trans
  * @param k number of steps
  * @return true if is reachable, false and interpolant if isn't
  */
-std::tuple<bool, PTRef> ReachabilityChecker::reachable(unsigned k, PTRef formula) {
+ReachabilityResult ReachabilityChecker::reachable(unsigned k, PTRef formula) {
     // Check reachability from initial states in 0 steps.
     if (k == 0) {
         SMTSolver init_solver(logic, SMTSolver::WitnessProduction::ONLY_INTERPOLANTS);
@@ -352,9 +365,11 @@ std::tuple<bool, PTRef> ReachabilityChecker::reachable(unsigned k, PTRef formula
             int mask = 1;
             itpContext->getSingleInterpolant(itps, mask);
             assert(itps.size() == 1);
-            return std::make_tuple(false, itps[0]);
+            return Unreachable{itps[0]};
+        } else if (res == SMTSolver::Answer::SAT) {
+            return Reachable{};
         }
-        return std::make_tuple(true, logic.getTerm_false());
+        throw std::logic_error{"Unexpected result from SMT solver"};
     }
 
     TimeMachine tm{logic};
@@ -374,10 +389,11 @@ std::tuple<bool, PTRef> ReachabilityChecker::reachable(unsigned k, PTRef formula
             PTRef g = generalize(*model,system.getTransition(), versioned_formula);
             auto reach_res = reachable(k-1, g);
             // If is reachable return true, else update the reachability frame.
-            if (std::get<0>(reach_res)) {
-                return std::make_tuple(true, logic.getTerm_false());
+            if (std::holds_alternative<Reachable>(reach_res)) {
+                return reach_res;
             } else {
-                r_frames.insert(std::get<1>(reach_res), k-1);
+                PTRef explanation = std::get<Unreachable>(reach_res).explanation;
+                r_frames.insert(explanation, k-1);
             }
         } else {
             auto itpContext = solver.getInterpolationContext();
@@ -401,32 +417,34 @@ std::tuple<bool, PTRef> ReachabilityChecker::reachable(unsigned k, PTRef formula
                 assert(itps.size() == 1);
                 PTRef init_interpolant = itps[0];
 
-                return std::make_tuple(false, logic.mkOr(interpolant, init_interpolant));
+                return Unreachable{logic.mkOr(interpolant, init_interpolant)};
             }
 
-            return std::make_tuple(false, interpolant);
+            return Unreachable{interpolant};
         }
     }
 }
 
 /**
  * Checks if formula is reachable in k_from to k_to steps.
- * @param k_from    least number of steps
- * @param k_to      max number of steps
+ * @param from    least number of steps
+ * @param to      max number of steps
  * @param formula   tested formula
- * @return is reachable, number of steps, interpolant of the formula if not reachable
+ * @return number of steps if reachable, explanation if unreachable
  */
-std::tuple<bool, int, PTRef> ReachabilityChecker::checkReachability(int k_from, int k_to, PTRef formula) {
-    for (int i = k_from; i <= k_to; i++) {
+ReachabilityResult ReachabilityChecker::checkReachability(unsigned const from, unsigned const to, PTRef formula) {
+    for (unsigned i = from; i <= to; i++) {
         auto reach_res = reachable(i, formula);
-        if (std::get<0>(reach_res)) {
-            return std::make_tuple(true, i, logic.getTerm_false());
+        if (std::holds_alternative<Reachable>(reach_res)) {
+            return Reachable{i};
         }
-        if (i == k_to) {
-            return std::make_tuple(false, i, std::get<1>(reach_res));
+        if (i == to) {
+            assert(std::holds_alternative<Unreachable>(reach_res));
+            return reach_res;
         }
     }
-    return std::make_tuple(false, 0, logic.getTerm_false());
+    // TODO: Check if this makes sense!
+    return Unreachable{logic.getTerm_false()};
 }
 
 /**
