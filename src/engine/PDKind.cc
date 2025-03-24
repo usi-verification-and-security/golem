@@ -12,6 +12,7 @@
 #include "TransformationUtils.h"
 #include "transformers/BasicTransformationPipelines.h"
 #include "transformers/SingleLoopTransformation.h"
+#include "utils/ScopeGuard.h"
 #include "utils/SmtSolver.h"
 
 #include <memory>
@@ -149,9 +150,16 @@ private:
     Logic & logic;
     TransitionSystem const & system;
 
+    std::unique_ptr<SMTSolver> zeroReachabilityChecker;
+
     ReachabilityResult reachable(unsigned k, PTRef formula);
+    ReachabilityResult zeroStepReachability(PTRef formula) const;
 public:
-    ReachabilityChecker(Logic & logic, TransitionSystem const & system) : r_frames(logic), logic(logic), system(system) {}
+    ReachabilityChecker(Logic & logic, TransitionSystem const & system) : r_frames(logic), logic(logic), system(system) {
+        zeroReachabilityChecker = std::make_unique<SMTSolver>(logic, SMTSolver::WitnessProduction::ONLY_INTERPOLANTS);
+        zeroReachabilityChecker->assertProp(system.getInit());
+        zeroReachabilityChecker->getConfig().setSimplifyInterpolant(4);
+    }
     ReachabilityResult checkReachability(unsigned from, unsigned to, PTRef formula);
     PTRef generalize(Model & model, PTRef transition, PTRef formula);
 };
@@ -346,6 +354,26 @@ PTRef Context::getInvariant(const InductionFrame & iframe, unsigned int k, Trans
     return kinductiveToInductive(kinvariant, k, system);
 }
 
+ReachabilityResult ReachabilityChecker::zeroStepReachability(PTRef formula) const {
+    auto & solver = *zeroReachabilityChecker;
+    ScopeGuard guard{[&](){ solver.pop(); }};
+    solver.push();
+    solver.assertProp(formula);
+    auto res = solver.check();
+    if (res == SMTSolver::Answer::UNSAT) {
+        auto itpContext = solver.getInterpolationContext();
+        vec<PTRef> itps;
+        int mask = 1;
+        itpContext->getSingleInterpolant(itps, mask);
+        assert(itps.size() == 1);
+        return Unreachable{itps[0]};
+    } else if (res == SMTSolver::Answer::SAT) {
+        return Reachable{};
+    }
+    throw std::logic_error{"Unexpected result from SMT solver"};
+}
+
+
 /**
  * Recursively checks if formula is reachable in k steps from initial states by updating and using the reachability frame.
  * @param k number of steps
@@ -354,22 +382,7 @@ PTRef Context::getInvariant(const InductionFrame & iframe, unsigned int k, Trans
 ReachabilityResult ReachabilityChecker::reachable(unsigned k, PTRef formula) {
     // Check reachability from initial states in 0 steps.
     if (k == 0) {
-        SMTSolver init_solver(logic, SMTSolver::WitnessProduction::ONLY_INTERPOLANTS);
-        init_solver.getConfig().setSimplifyInterpolant(4);
-        init_solver.assertProp(system.getInit());
-        init_solver.assertProp(formula);
-        auto res = init_solver.check();
-        if (res == SMTSolver::Answer::UNSAT) {
-            auto itpContext = init_solver.getInterpolationContext();
-            vec<PTRef> itps;
-            int mask = 1;
-            itpContext->getSingleInterpolant(itps, mask);
-            assert(itps.size() == 1);
-            return Unreachable{itps[0]};
-        } else if (res == SMTSolver::Answer::SAT) {
-            return Reachable{};
-        }
-        throw std::logic_error{"Unexpected result from SMT solver"};
+        return zeroStepReachability(formula);
     }
 
     TimeMachine tm{logic};
@@ -403,24 +416,9 @@ ReachabilityResult ReachabilityChecker::reachable(unsigned k, PTRef formula) {
             assert(itps.size() == 1);
             PTRef interpolant = tm.sendFlaThroughTime(itps[0], -1);
 
-            // Get interpolant for initial states. If it exists, return disjunction of both interpolants.
-            SMTSolver init_solver(logic, SMTSolver::WitnessProduction::ONLY_INTERPOLANTS);
-            init_solver.assertProp(system.getInit());
-            init_solver.assertProp(formula);
-
-            auto res = init_solver.check();
-            if (res == SMTSolver::Answer::UNSAT) {
-                auto itpContext = init_solver.getInterpolationContext();
-                vec<PTRef> itps;
-                int mask = 1;
-                itpContext->getSingleInterpolant(itps, mask);
-                assert(itps.size() == 1);
-                PTRef init_interpolant = itps[0];
-
-                return Unreachable{logic.mkOr(interpolant, init_interpolant)};
-            }
-
-            return Unreachable{interpolant};
+            auto zeroStepRes = zeroStepReachability(formula);
+            assert(std::holds_alternative<Unreachable>(zeroStepRes));
+            return Unreachable{logic.mkOr(interpolant, std::get<Unreachable>(zeroStepRes).explanation)};
         }
     }
 }
