@@ -22,9 +22,8 @@
  */
 struct CounterExample {
     PTRef ctx;
-    int num_of_steps;
-    CounterExample(PTRef ctx) : ctx(ctx), num_of_steps(0) {}
-    CounterExample(PTRef ctx, int num_of_steps) : ctx(ctx), num_of_steps(num_of_steps) {}
+    unsigned num_of_steps;
+    CounterExample(PTRef ctx, unsigned num_of_steps) : ctx(ctx), num_of_steps(num_of_steps) {}
 };
 
 /**
@@ -50,18 +49,9 @@ struct IFrameElement {
 };
 
 /**
- * Comparator for Induction Frame elemtents.
- */
-struct IFrameElementCompare {
-        bool operator()(const IFrameElement &a, const IFrameElement &b) const {
-            return a < b;
-        }
-};
-
-/**
  * Wrapper for Induction Frame set.
  */
-using InductionFrame = std::set<IFrameElement, IFrameElementCompare>;
+using InductionFrame = std::set<IFrameElement>;
 
 /**
  * Wrapper for return value of the Push function.
@@ -83,29 +73,30 @@ struct PushResult {
  * A data structure where r[i] represents the states that are reachable in i steps from some initial states, i.e., r[0].
  */
 class RFrames {
-    std::vector<PTRef> r;
-    Logic & logic;
 public:
-    RFrames(Logic & logic) : logic(logic) {}
+    explicit RFrames(Logic & logic) : logic(logic) {}
 
-    const PTRef & operator[] (size_t i) {
-        if (i >= r.size()) {
-            while (r.size() <= i) {
-                r.push_back(logic.getTerm_true());
-            }
-        }
+    PTRef operator[] (size_t i) {
+        ensureReadyFor(i);
         return r[i];
     }
 
     void insert(PTRef fla, size_t k) {
-        if (k >= r.size()) {
-            while (r.size() <= k) {
-                r.push_back(logic.getTerm_true());
-            }
-        }
+        ensureReadyFor(k);
         PTRef new_fla = logic.mkAnd(r[k], fla);
         r[k] = new_fla;
     }
+
+private:
+    std::vector<PTRef> r;
+    Logic & logic;
+
+    void ensureReadyFor(size_t k) {
+        while (k >= r.size()) {
+            r.push_back(logic.getTerm_true());
+        }
+    }
+
 };
 
 /**
@@ -116,6 +107,7 @@ private:
     RFrames r_frames;
     Logic & logic;
     TransitionSystem const & system;
+
     std::tuple<bool, PTRef> reachable(unsigned k, PTRef formula);
 public:
     ReachabilityChecker(Logic & logic, TransitionSystem const & system) : r_frames(logic), logic(logic), system(system) {}
@@ -139,7 +131,7 @@ class PDKind : public Engine {
             }
         }
 
-        virtual VerificationResult solve(ChcDirectedHyperGraph const & graph) override;
+        VerificationResult solve(ChcDirectedHyperGraph const & graph) override;
 
         VerificationResult solve(ChcDirectedGraph const & system);
 

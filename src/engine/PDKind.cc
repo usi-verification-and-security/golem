@@ -56,8 +56,6 @@ TransitionSystemVerificationResult PDKind::solveTransitionSystem(TransitionSyste
     PTRef init = system.getInit();
     PTRef query = system.getQuery();
 
-    ReachabilityChecker reachability_checker(logic, system);
-
     { // Check for system with empty initial states and system where initial and bad states intersect.
         SMTSolver solver(logic, SMTSolver::WitnessProduction::NONE);
         solver.assertProp(init);
@@ -75,8 +73,9 @@ TransitionSystemVerificationResult PDKind::solveTransitionSystem(TransitionSyste
     int n = 0;
     PTRef p = logic.mkNot(query);
     InductionFrame inductionFrame;
-    inductionFrame.insert(IFrameElement(p, CounterExample(logic.mkNot(p))));
+    inductionFrame.insert(IFrameElement(p, CounterExample(query, 0u)));
 
+    ReachabilityChecker reachability_checker(logic, system);
     // Solve the system by iteratively trying to construct an inductive strengthening of (p, not p) induction frame.
     while (true) {
         int k = n + 1; /* Pick k such that 1 <= k <= n + 1 */
@@ -101,7 +100,7 @@ TransitionSystemVerificationResult PDKind::solveTransitionSystem(TransitionSyste
 /**
  * Check if p is invariant by iteratively constructing k-inductive strengthening of p.
  */
-PushResult PDKind::push(TransitionSystem const & system, InductionFrame & iframe, int n, int k, ReachabilityChecker & reachability_checker) {
+PushResult PDKind::push(TransitionSystem const & system, InductionFrame & iframe, int n, const int k, ReachabilityChecker & reachability_checker) {
     // Create a queue q and initialize it with iframe.
     std::queue<IFrameElement> q;
     for (auto e : iframe) {
@@ -110,7 +109,6 @@ PushResult PDKind::push(TransitionSystem const & system, InductionFrame & iframe
     
     // Initialize used variables.
     TimeMachine tm{logic};
-    std::size_t maxUnrollings = k;
     PTRef transition = system.getTransition();
     InductionFrame newIframe = {};
     int np = n + k;
@@ -121,26 +119,27 @@ PushResult PDKind::push(TransitionSystem const & system, InductionFrame & iframe
         IFrameElement obligation = q.front();
         q.pop();
         
-        // Initialize iframe_abs, which is a conjunction of lemmas from iframe.
-        std::vector<PTRef> iframe_abs_vec  = {};
-        for (auto e : iframe) {
-            iframe_abs_vec.push_back(e.lemma);
-        }
-        PTRef iframe_abs = logic.mkAnd(iframe_abs_vec);
+        PTRef iframe_abs = [&]() {
+            vec<PTRef> iframe_abs_vec;
+            for (auto e : iframe) {
+                iframe_abs_vec.push(e.lemma);
+            }
+            return logic.mkAnd(std::move(iframe_abs_vec));
+        }();
 
         // Create transition T[F_ABS]^k by definition.
-        PTRef t_k = transition;
-        PTRef f_abs_conj = logic.getTerm_true();
-        std::size_t currentUnrolling;
-        for (currentUnrolling = 1; currentUnrolling < maxUnrollings; ++currentUnrolling) {
-            PTRef versionedFla = tm.sendFlaThroughTime(iframe_abs, currentUnrolling);
-            PTRef versionedTransition = tm.sendFlaThroughTime(transition, currentUnrolling);
-            t_k = logic.mkAnd(t_k, versionedTransition);
-            f_abs_conj = logic.mkAnd(f_abs_conj, versionedFla);
-        }
+        auto [t_k, f_abs_conj] = [&]() -> std::pair<PTRef, PTRef> {
+            vec<PTRef> transitions {transition};
+            vec<PTRef> frameComponents;
+            for (int currentUnrolling = 1; currentUnrolling < k; ++currentUnrolling) {
+                frameComponents.push(tm.sendFlaThroughTime(iframe_abs, currentUnrolling));
+                transitions.push(tm.sendFlaThroughTime(transition, currentUnrolling));
+            }
+            return std::make_pair(logic.mkAnd(std::move(transitions)), logic.mkAnd(std::move(frameComponents)));
+        }();
 
         PTRef not_fabs = logic.mkNot(obligation.lemma);
-        PTRef versioned_not_fabs = tm.sendFlaThroughTime(not_fabs, currentUnrolling);
+        PTRef versioned_not_fabs = tm.sendFlaThroughTime(not_fabs, k);
         PTRef t_k_constr = logic.mkAnd(t_k, f_abs_conj);
 
         // Check if iframe_abs is k-inductive?
@@ -155,7 +154,7 @@ PushResult PDKind::push(TransitionSystem const & system, InductionFrame & iframe
         }
 
         // Check if f_cex is reachable.
-        PTRef f_cex = tm.sendFlaThroughTime(obligation.counter_example.ctx, currentUnrolling);
+        PTRef f_cex = tm.sendFlaThroughTime(obligation.counter_example.ctx, k);
         SMTSolver solver2(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
         solver2.assertProp(iframe_abs);
         solver2.assertProp(t_k_constr);
