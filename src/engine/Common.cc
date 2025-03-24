@@ -31,5 +31,8 @@ VerificationResult solveTrivial(ChcDirectedGraph const & graph) {
         }
     }
     // Here we know that no edge is satisfiable
-    return VerificationResult(VerificationAnswer::SAFE, ValidityWitness{});
+    std::unordered_map<SymRef, PTRef, SymRefHash> solution;
+    solution.insert({graph.getEntry(), logic.getTerm_true()});
+    solution.insert({graph.getExit(), logic.getTerm_false()});
+    return {VerificationAnswer::SAFE, ValidityWitness{std::move(solution)}};
 }
