@@ -8,7 +8,6 @@
 
 #include "Common.h"
 #include "ModelBasedProjection.h"
-#include "QuantifierElimination.h"
 #include "TermUtils.h"
 #include "TransformationUtils.h"
 #include "transformers/BasicTransformationPipelines.h"
@@ -50,9 +49,124 @@ VerificationResult PDKind::solve(ChcDirectedGraph const & system) {
 }
 
 /**
- * Solve system with PDKIND algorithm.
+ * Counter example formula in addition with number of steps needed to reach the counter example.
  */
-TransitionSystemVerificationResult PDKind::solveTransitionSystem(TransitionSystem const & system) {
+struct CounterExample {
+    PTRef ctx;
+    unsigned num_of_steps;
+    CounterExample(PTRef ctx, unsigned num_of_steps) : ctx(ctx), num_of_steps(num_of_steps) {}
+};
+
+/**
+ * Tuple containing lemma and counter example.
+ */
+struct IFrameElement {
+        PTRef lemma;
+        CounterExample counter_example;
+
+        IFrameElement(PTRef lemma, CounterExample counter_example) : lemma(lemma), counter_example(counter_example) {}
+
+        bool operator==(IFrameElement const & other) const {
+            return this->lemma == other.lemma && this->counter_example.ctx == other.counter_example.ctx;
+        }
+
+        bool operator<(IFrameElement const & other) const {
+            if (this->lemma == other.lemma) {
+                return this->counter_example.ctx < other.counter_example.ctx;
+            } else {
+                return this->lemma < other.lemma;
+            }
+        }
+};
+
+/**
+ * Wrapper for Induction Frame set.
+ */
+using InductionFrame = std::set<IFrameElement>;
+
+/**
+ * Wrapper for return value of the Push function.
+ */
+struct PushResult {
+    InductionFrame i_frame;
+    InductionFrame new_i_frame;
+    int n;
+    bool is_invalid;
+    int steps_to_ctx;
+    PushResult(InductionFrame i_frame,
+               InductionFrame new_i_frame,
+               int n,
+               bool is_invalid,
+               int steps_to_ctx) : i_frame(std::move(i_frame)), new_i_frame(std::move(new_i_frame)), n(n), is_invalid(is_invalid), steps_to_ctx(steps_to_ctx) {}
+};
+
+/**
+ * A data structure where r[i] represents the states that are reachable in i steps from some initial states, i.e., r[0].
+ */
+class RFrames {
+public:
+    explicit RFrames(Logic & logic) : logic(logic) {}
+
+    PTRef operator[] (size_t i) {
+        ensureReadyFor(i);
+        return r[i];
+    }
+
+    void insert(PTRef fla, size_t k) {
+        ensureReadyFor(k);
+        PTRef new_fla = logic.mkAnd(r[k], fla);
+        r[k] = new_fla;
+    }
+
+private:
+    std::vector<PTRef> r;
+    Logic & logic;
+
+    void ensureReadyFor(size_t k) {
+        while (k >= r.size()) {
+            r.push_back(logic.getTerm_true());
+        }
+    }
+
+};
+
+/**
+ * Each instance builds its own reachability frame and uses it to check if other states are reachable in k steps.
+ */
+class ReachabilityChecker {
+private:
+    RFrames r_frames;
+    Logic & logic;
+    TransitionSystem const & system;
+
+    std::tuple<bool, PTRef> reachable(unsigned k, PTRef formula);
+public:
+    ReachabilityChecker(Logic & logic, TransitionSystem const & system) : r_frames(logic), logic(logic), system(system) {}
+    std::tuple<bool, int, PTRef> checkReachability(int from, int to, PTRef formula);
+    PTRef generalize(Model & model, PTRef transition, PTRef formula);
+};
+
+class Context {
+public:
+    Context(Logic & logic, bool computeWitness) : logic(logic), computeWitness(computeWitness) {}
+
+    TransitionSystemVerificationResult solve(TransitionSystem const & system);
+private:
+    Logic & logic;
+    bool computeWitness;
+
+    [[nodiscard]]
+    PushResult push(TransitionSystem const & system, InductionFrame & iframe, int n, int k, ReachabilityChecker & reachability_checker) const;
+
+    [[nodiscard]]
+    PTRef getInvariant(InductionFrame const & iframe, unsigned int k, TransitionSystem const & system) const;
+};
+
+TransitionSystemVerificationResult PDKind::solveTransitionSystem(TransitionSystem const & system) const {
+    return Context(logic, computeWitness).solve(system);
+}
+
+TransitionSystemVerificationResult Context::solve(TransitionSystem const & system) {
     PTRef init = system.getInit();
     PTRef query = system.getQuery();
 
@@ -100,7 +214,7 @@ TransitionSystemVerificationResult PDKind::solveTransitionSystem(TransitionSyste
 /**
  * Check if p is invariant by iteratively constructing k-inductive strengthening of p.
  */
-PushResult PDKind::push(TransitionSystem const & system, InductionFrame & iframe, int n, const int k, ReachabilityChecker & reachability_checker) {
+PushResult Context::push(TransitionSystem const & system, InductionFrame & iframe, int n, const int k, ReachabilityChecker & reachability_checker) const {
     // Create a queue q and initialize it with iframe.
     std::queue<IFrameElement> q;
     for (auto e : iframe) {
@@ -210,7 +324,7 @@ PushResult PDKind::push(TransitionSystem const & system, InductionFrame & iframe
  * Make k-inductive invariant as a conjunction of formulas in frame and transofmr it to inductive invariant.
  * @return inductive invariant
  */
-PTRef PDKind::getInvariant(const InductionFrame & iframe, unsigned int k, TransitionSystem const & system) {
+PTRef Context::getInvariant(const InductionFrame & iframe, unsigned int k, TransitionSystem const & system) const {
     std::vector<PTRef> lemmas;
     for(auto o : iframe) {
         lemmas.push_back(o.lemma);
