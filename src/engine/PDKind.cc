@@ -111,34 +111,58 @@ struct Unreachable {
 
 using ReachabilityResult = std::variant<Reachable, Unreachable>;
 
+namespace SolverAnswer {
+struct Feasible {
+    std::unique_ptr<Model> model;
+};
+struct Infeasible {
+    PTRef interpolant;
+};
+using Answer = std::variant<Feasible, Infeasible>;
+}
+
+class FrameSolver {
+public:
+    explicit FrameSolver(Logic & logic, PTRef transition) : logic(logic), transition(transition) {
+        solver = std::make_unique<SMTSolver>(logic, SMTSolver::WitnessProduction::MODEL_AND_INTERPOLANTS);
+        solver->getConfig().setSimplifyInterpolant(4);
+    }
+    SolverAnswer::Answer checkFeasibility(PTRef state);
+    void addLemma(PTRef lemma);
+private:
+    Logic & logic;
+    PTRef transition;
+    vec<PTRef> lemmas;
+    std::unique_ptr<SMTSolver> solver;
+    // std::size_t queryRestartLimit = 100;
+};
+
 /**
  * A data structure where r[i] represents the states that are reachable in i steps from some initial states, i.e., r[0].
  */
 class RFrames {
 public:
-    explicit RFrames(Logic & logic) : logic(logic) {}
-
-    PTRef operator[] (size_t i) {
-        ensureReadyFor(i);
-        return r[i];
+    explicit RFrames(Logic & logic, PTRef transition) : logic(logic), transition(transition) {
+        ensureReadyFor(0);
     }
 
-    void insert(PTRef fla, size_t k) {
+    SolverAnswer::Answer queryWithTransitionAt(std::size_t k, PTRef state);
+    void addLemma(std::size_t k, PTRef lemma) {
         ensureReadyFor(k);
-        PTRef new_fla = logic.mkAnd(r[k], fla);
-        r[k] = new_fla;
+        solvers[k].addLemma(lemma);
     }
 
 private:
-    std::vector<PTRef> r;
+    std::vector<FrameSolver> solvers;
+
     Logic & logic;
+    PTRef transition;
 
     void ensureReadyFor(size_t k) {
-        while (k >= r.size()) {
-            r.push_back(logic.getTerm_true());
+        while (k >= solvers.size()) {
+            solvers.emplace_back(logic, transition);
         }
     }
-
 };
 
 /**
@@ -149,19 +173,17 @@ private:
     RFrames r_frames;
     Logic & logic;
     TransitionSystem const & system;
-
-    std::unique_ptr<SMTSolver> zeroReachabilityChecker;
+    std::unique_ptr<SMTSolver> zeroStepSolver;
 
     ReachabilityResult reachable(unsigned k, PTRef formula);
-    ReachabilityResult zeroStepReachability(PTRef formula) const;
+    [[nodiscard]] ReachabilityResult zeroStepReachability(PTRef state);
 public:
-    ReachabilityChecker(Logic & logic, TransitionSystem const & system) : r_frames(logic), logic(logic), system(system) {
-        zeroReachabilityChecker = std::make_unique<SMTSolver>(logic, SMTSolver::WitnessProduction::ONLY_INTERPOLANTS);
-        zeroReachabilityChecker->assertProp(system.getInit());
-        zeroReachabilityChecker->getConfig().setSimplifyInterpolant(4);
+    ReachabilityChecker(Logic & logic, TransitionSystem const & system) : r_frames(logic, system.getTransition()), logic(logic), system(system) {
+        zeroStepSolver = std::make_unique<SMTSolver>(logic, SMTSolver::WitnessProduction::ONLY_INTERPOLANTS);
+        zeroStepSolver->getConfig().setSimplifyInterpolant(4);
+        zeroStepSolver->assertProp(system.getInit());
     }
     ReachabilityResult checkReachability(unsigned from, unsigned to, PTRef formula);
-    PTRef generalize(Model & model, PTRef transition, PTRef formula);
 };
 
 class Context {
@@ -230,6 +252,16 @@ TransitionSystemVerificationResult Context::solve(TransitionSystem const & syste
 }
 
 /**
+ * Creates a generalization of a formula by removing non-state variables.
+ */
+PTRef generalize(Logic & logic, Model & model, std::vector<PTRef> const & stateVars, PTRef transition, PTRef formula) {
+    PTRef conj = logic.mkAnd(transition, formula);
+    ModelBasedProjection mbp(logic);
+    PTRef g = mbp.keepOnly(conj, stateVars, model);
+    return g;
+}
+
+/**
  * Check if p is invariant by iteratively constructing k-inductive strengthening of p.
  */
 PushResult Context::push(TransitionSystem const & system, InductionFrame & iframe, unsigned const n, unsigned const k, ReachabilityChecker & reachability_checker) const {
@@ -295,7 +327,7 @@ PushResult Context::push(TransitionSystem const & system, InductionFrame & ifram
 
         if (res2 == SMTSolver::Answer::SAT) {
             auto model2 = solver2.getModel();
-            CounterExample g_cex(reachability_checker.generalize(*model2, t_k, f_cex), obligation.counter_example.num_of_steps + k);
+            CounterExample g_cex(generalize(logic, *model2, system.getStateVars(), t_k, f_cex), obligation.counter_example.num_of_steps + k);
             // Remember num of steps for each cex, g_cex is f_cex + k
             auto reach_res = reachability_checker.checkReachability(n - k + 1, n, g_cex.ctx);
             if (std::holds_alternative<Reachable>(reach_res)) {
@@ -317,7 +349,7 @@ PushResult Context::push(TransitionSystem const & system, InductionFrame & ifram
 
         // Analyze the induction failure.
         auto model1 = solver1.getModel();
-        PTRef g_cti = reachability_checker.generalize(*model1, t_k, versioned_not_fabs);
+        PTRef g_cti = generalize(logic, *model1, system.getStateVars(), t_k, versioned_not_fabs);
         auto reach_res = reachability_checker.checkReachability(n - k + 1, n, g_cti);
         if (std::holds_alternative<Reachable>(reach_res)) {
             // Insert weaker obligation : (not f_cex, f_cex).
@@ -354,11 +386,11 @@ PTRef Context::getInvariant(const InductionFrame & iframe, unsigned int k, Trans
     return kinductiveToInductive(kinvariant, k, system);
 }
 
-ReachabilityResult ReachabilityChecker::zeroStepReachability(PTRef formula) const {
-    auto & solver = *zeroReachabilityChecker;
+ReachabilityResult ReachabilityChecker::zeroStepReachability(PTRef state) {
+    auto & solver = *this->zeroStepSolver;
     ScopeGuard guard{[&](){ solver.pop(); }};
     solver.push();
-    solver.assertProp(formula);
+    solver.assertProp(state);
     auto res = solver.check();
     if (res == SMTSolver::Answer::UNSAT) {
         auto itpContext = solver.getInterpolationContext();
@@ -372,6 +404,37 @@ ReachabilityResult ReachabilityChecker::zeroStepReachability(PTRef formula) cons
     }
     throw std::logic_error{"Unexpected result from SMT solver"};
 }
+
+SolverAnswer::Answer RFrames::queryWithTransitionAt(std::size_t k, PTRef state) {
+    ensureReadyFor(k);
+    return solvers[k].checkFeasibility(state);
+}
+
+SolverAnswer::Answer FrameSolver::checkFeasibility(PTRef state) {
+    solver->resetSolver();
+    solver->assertProp(logic.mkAnd(lemmas));
+    solver->assertProp(transition);
+    solver->assertProp(state);
+    auto res = solver->check();
+    if (res == SMTSolver::Answer::SAT) {
+        return SolverAnswer::Feasible{solver->getModel()};
+    } else if (res == SMTSolver::Answer::UNSAT) {
+        auto itpContext = solver->getInterpolationContext();
+        vec<PTRef> itps;
+        int mask = 3;
+        itpContext->getSingleInterpolant(itps, mask);
+        assert(itps.size() == 1);
+        return SolverAnswer::Infeasible{itps[0]};
+    }
+    throw std::logic_error{"Unexpected result from SMT solver"};
+
+}
+
+void FrameSolver::addLemma(PTRef lemma) {
+    lemmas.push(lemma);
+}
+
+
 
 
 /**
@@ -389,36 +452,27 @@ ReachabilityResult ReachabilityChecker::reachable(unsigned k, PTRef formula) {
     PTRef versioned_formula = tm.sendFlaThroughTime(formula, 1); // Send the formula through time by one, so it matches the pattern init_0 transition_0-1 formula_1.
     while (true) {
         // Check if formula is reachable from r_frames[k-1] in 1 step.
-        SMTSolver solver(logic, SMTSolver::WitnessProduction::MODEL_AND_INTERPOLANTS);
-        solver.getConfig().setSimplifyInterpolant(4);
-        solver.assertProp(r_frames[k-1]);
-        solver.assertProp(system.getTransition());
-        solver.assertProp(versioned_formula);
-        auto res = solver.check();
+        auto answer = r_frames.queryWithTransitionAt(k-1, versioned_formula);
 
         // If is reachable, create a generalization of such states and check if they are reachable in k-1 steps.
-        if (res == SMTSolver::Answer::SAT) {
-            auto model = solver.getModel();
-            PTRef g = generalize(*model,system.getTransition(), versioned_formula);
+        if (std::holds_alternative<SolverAnswer::Feasible>(answer)) {
+            PTRef g = generalize(logic, *std::get<SolverAnswer::Feasible>(answer).model, system.getStateVars(),system.getTransition(), versioned_formula);
             auto reach_res = reachable(k-1, g);
             // If is reachable return true, else update the reachability frame.
             if (std::holds_alternative<Reachable>(reach_res)) {
                 return reach_res;
             } else {
                 PTRef explanation = std::get<Unreachable>(reach_res).explanation;
-                r_frames.insert(explanation, k-1);
+                r_frames.addLemma(k-1, explanation);
             }
         } else {
-            auto itpContext = solver.getInterpolationContext();
-            vec<PTRef> itps;
-            int mask = 3;
-            itpContext->getSingleInterpolant(itps, mask);
-            assert(itps.size() == 1);
-            PTRef interpolant = tm.sendFlaThroughTime(itps[0], -1);
+            assert(std::holds_alternative<SolverAnswer::Infeasible>(answer));
+            PTRef interpolant = std::get<SolverAnswer::Infeasible>(answer).interpolant;
+            PTRef lemma = tm.sendFlaThroughTime(interpolant, -1);
 
             auto zeroStepRes = zeroStepReachability(formula);
             assert(std::holds_alternative<Unreachable>(zeroStepRes));
-            return Unreachable{logic.mkOr(interpolant, std::get<Unreachable>(zeroStepRes).explanation)};
+            return Unreachable{logic.mkOr(lemma, std::get<Unreachable>(zeroStepRes).explanation)};
         }
     }
 }
@@ -431,6 +485,7 @@ ReachabilityResult ReachabilityChecker::reachable(unsigned k, PTRef formula) {
  * @return number of steps if reachable, explanation if unreachable
  */
 ReachabilityResult ReachabilityChecker::checkReachability(unsigned const from, unsigned const to, PTRef formula) {
+    assert(from <= to);
     for (unsigned i = from; i <= to; i++) {
         auto reach_res = reachable(i, formula);
         if (std::holds_alternative<Reachable>(reach_res)) {
@@ -441,19 +496,6 @@ ReachabilityResult ReachabilityChecker::checkReachability(unsigned const from, u
             return reach_res;
         }
     }
-    // TODO: Check if this makes sense!
-    return Unreachable{logic.getTerm_false()};
-}
-
-/**
- * Creates a generalization of a formula by removing non-state variables.
- */
-PTRef ReachabilityChecker::generalize(Model & model, PTRef transition, PTRef formula) {
-    auto xvars = system.getStateVars();
-
-    PTRef conj = logic.mkAnd(transition, formula);
-    ModelBasedProjection mbp(logic);
-    PTRef g = mbp.keepOnly(conj, xvars, model);
-
-    return g;
+    assert(false);
+    throw std::logic_error("Unreachable!");
 }
