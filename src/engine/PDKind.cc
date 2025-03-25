@@ -278,6 +278,17 @@ PushResult Context::push(TransitionSystem const & system, InductionFrame & ifram
     unsigned np = n + k;
     bool invalid = false;
     int steps_to_ctx = 0;
+
+    PTRef kTransition = [&]() {
+        vec<PTRef> transitions {transition};
+        for (unsigned currentUnrolling = 1; currentUnrolling < k; ++currentUnrolling) {
+            transitions.push(tm.sendFlaThroughTime(transition, static_cast<int>(currentUnrolling)));
+        }
+        return logic.mkAnd(std::move(transitions));
+    }();
+
+    SMTSolver kinductionChecker(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
+    kinductionChecker.assertProp(kTransition);
     
     while (not invalid && not q.empty()) {
         IFrameElement obligation = q.front();
@@ -292,42 +303,43 @@ PushResult Context::push(TransitionSystem const & system, InductionFrame & ifram
         }();
 
         // Create transition T[F_ABS]^k by definition.
-        auto [t_k, f_abs_conj] = [&]() -> std::pair<PTRef, PTRef> {
-            vec<PTRef> transitions {transition};
-            vec<PTRef> frameComponents;
-            for (int currentUnrolling = 1; currentUnrolling < k; ++currentUnrolling) {
-                frameComponents.push(tm.sendFlaThroughTime(iframe_abs, currentUnrolling));
-                transitions.push(tm.sendFlaThroughTime(transition, currentUnrolling));
+        PTRef transitionRestriction = [&]() -> PTRef {
+            vec<PTRef> frameComponents {iframe_abs};
+            for (unsigned currentUnrolling = 1; currentUnrolling < k; ++currentUnrolling) {
+                frameComponents.push(tm.sendFlaThroughTime(iframe_abs, static_cast<int>(currentUnrolling)));
             }
-            return std::make_pair(logic.mkAnd(std::move(transitions)), logic.mkAnd(std::move(frameComponents)));
+            return logic.mkAnd(std::move(frameComponents));
         }();
 
         PTRef not_fabs = logic.mkNot(obligation.lemma);
         PTRef versioned_not_fabs = tm.sendFlaThroughTime(not_fabs, static_cast<int>(k));
-        PTRef t_k_constr = logic.mkAnd(t_k, f_abs_conj);
 
         // Check if iframe_abs is k-inductive?
-        SMTSolver solver1(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
-        solver1.assertProp(iframe_abs);
-        solver1.assertProp(t_k_constr);
-        solver1.assertProp(versioned_not_fabs);
-        auto res1 = solver1.check();
+        ScopeGuard popGuard = ScopeGuard{[&kinductionChecker] {
+            kinductionChecker.pop();
+            kinductionChecker.pop();
+        }};
+        kinductionChecker.push();
+        kinductionChecker.assertProp(transitionRestriction);
+        kinductionChecker.push();
+        kinductionChecker.assertProp(versioned_not_fabs);
+        auto res1 = kinductionChecker.check();
         if (res1 == SMTSolver::Answer::UNSAT) {
             newIframe.insert(obligation);
             continue;
         }
+        auto inductionFailureWitness = kinductionChecker.getModel();
+
 
         // Check if f_cex is reachable.
+        kinductionChecker.pop();
+        kinductionChecker.push();
         PTRef f_cex = tm.sendFlaThroughTime(obligation.counter_example.ctx, static_cast<int>(k));
-        SMTSolver solver2(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
-        solver2.assertProp(iframe_abs);
-        solver2.assertProp(t_k_constr);
-        solver2.assertProp(f_cex);
-        auto res2 = solver2.check();
+        kinductionChecker.assertProp(f_cex);
+        auto res2 = kinductionChecker.check();
 
         if (res2 == SMTSolver::Answer::SAT) {
-            auto model2 = solver2.getModel();
-            CounterExample g_cex(generalize(logic, *model2, system.getStateVars(), t_k, f_cex), obligation.counter_example.num_of_steps + k);
+            CounterExample g_cex(generalize(logic, *kinductionChecker.getModel(), system.getStateVars(), kTransition, f_cex), obligation.counter_example.num_of_steps + k);
             // Remember num of steps for each cex, g_cex is f_cex + k
             auto reach_res = reachability_checker.checkReachability(n - k + 1, n, g_cex.ctx);
             if (std::holds_alternative<Reachable>(reach_res)) {
@@ -348,8 +360,7 @@ PushResult Context::push(TransitionSystem const & system, InductionFrame & ifram
         }
 
         // Analyze the induction failure.
-        auto model1 = solver1.getModel();
-        PTRef g_cti = generalize(logic, *model1, system.getStateVars(), t_k, versioned_not_fabs);
+        PTRef g_cti = generalize(logic, *inductionFailureWitness, system.getStateVars(), kTransition, versioned_not_fabs);
         auto reach_res = reachability_checker.checkReachability(n - k + 1, n, g_cti);
         if (std::holds_alternative<Reachable>(reach_res)) {
             // Insert weaker obligation : (not f_cex, f_cex).
