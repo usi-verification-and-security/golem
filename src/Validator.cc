@@ -23,10 +23,8 @@ Validator::Result Validator::validate(ChcDirectedHyperGraph const & graph, Verif
 
 Validator::Result Validator::validateValidityWitness(ChcDirectedHyperGraph const & graph, ValidityWitness const & witness) const {
     auto definitions = witness.getDefinitions();
-    if (definitions.find(graph.getExit()) == definitions.end()) {
-        definitions.insert({graph.getExit(), logic.getTerm_false()});
-        definitions.insert({graph.getEntry(), logic.getTerm_true()});
-    }
+    assert(definitions.find(graph.getEntry()) != definitions.end());
+    assert(definitions.find(graph.getExit()) != definitions.end());
     // get correct interpretation for each node
     auto getInterpretation = [&](SymRef symbol) -> PTRef {
         auto const it = definitions.find(symbol);

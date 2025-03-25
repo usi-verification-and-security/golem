@@ -1579,7 +1579,7 @@ witness_t TransitionSystemNetworkManager::computeValidityWitness() const {
     assert(isTransitionSystemDAG(graph));
     TermUtils utils(logic);
     TimeMachine timeMachine(logic);
-    ValidityWitness::definitions_t definitions;
+    auto definitions = ValidityWitness::trivialDefinitions(graph);
 
     for (auto vertex : graph.getVertices()) {
         if (vertex == graph.getEntry() || vertex == graph.getExit()) continue;

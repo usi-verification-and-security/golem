@@ -189,8 +189,8 @@ ValidityWitness::fromTransitionSystem(Logic & logic, ChcDirectedGraph const & gr
     TermUtils utils(logic);
     TimeMachine timeMachine(logic);
     TermUtils::substitutions_map subs;
-    auto graphVars = utils.predicateArgsInOrder(graph.getStateVersion(vertex));
-    auto systemVars = transitionSystem.getStateVars();
+    auto const graphVars = utils.predicateArgsInOrder(graph.getStateVersion(vertex));
+    auto const systemVars = transitionSystem.getStateVars();
     vec<PTRef> unversionedVars;
     assert(graphVars.size() == systemVars.size());
     for (std::size_t i = 0; i < graphVars.size(); ++i) {
@@ -199,7 +199,8 @@ ValidityWitness::fromTransitionSystem(Logic & logic, ChcDirectedGraph const & gr
     }
     PTRef graphInvariant = utils.varSubstitute(inductiveInvariant, subs);
 //    std::cout << "Graph invariant: " << logic.printTerm(graphInvariant) << std::endl;
-    ValidityWitness::definitions_t definitions{{vertex, graphInvariant}};
+    auto definitions = trivialDefinitions(graph);
+    definitions.insert({vertex, graphInvariant});
     return ValidityWitness(std::move(definitions));
 }
 
@@ -216,3 +217,26 @@ translateTransitionSystemResult(TransitionSystemVerificationResult result, ChcDi
     assert(false);
     return VerificationResult(VerificationAnswer::UNKNOWN);
 }
+
+ValidityWitness ValidityWitness::trivialWitness(ChcDirectedGraph const & graph) {
+    return ValidityWitness{trivialDefinitions(graph)};
+}
+
+ValidityWitness ValidityWitness::trivialWitness(ChcDirectedHyperGraph const & graph) {
+    return ValidityWitness{trivialDefinitions(graph)};
+}
+
+ValidityWitness::definitions_t ValidityWitness::trivialDefinitions(ChcDirectedGraph const & graph) {
+    return definitions_t{
+        std::make_pair(graph.getEntry(), graph.getLogic().getTerm_true()),
+        std::make_pair(graph.getExit(), graph.getLogic().getTerm_false())
+    };
+}
+
+ValidityWitness::definitions_t ValidityWitness::trivialDefinitions(ChcDirectedHyperGraph const & graph) {
+    return definitions_t{
+        std::make_pair(graph.getEntry(), graph.getLogic().getTerm_true()),
+        std::make_pair(graph.getExit(), graph.getLogic().getTerm_false())
+    };
+}
+

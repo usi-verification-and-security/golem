@@ -130,8 +130,6 @@ ValidityWitness NodeEliminator::BackTranslator::translate(ValidityWitness witnes
     auto definitions = witness.getDefinitions();
 
     auto definitionFor = [&](SymRef vertex) {
-        if (vertex == logic.getSym_false()) { return logic.getTerm_false(); }
-        if (vertex == logic.getSym_true()) { return logic.getTerm_true(); }
         auto it = definitions.find(vertex);
         return it != definitions.end() ? it->second : PTRef_Undef;
     };

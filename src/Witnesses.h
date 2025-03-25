@@ -106,6 +106,11 @@ public:
 
     static ValidityWitness fromTransitionSystem(Logic & logic, ChcDirectedGraph const & graph,
                                                 TransitionSystem const & transitionSystem, PTRef invariant);
+
+    static definitions_t trivialDefinitions(ChcDirectedGraph const & graph);
+    static definitions_t trivialDefinitions(ChcDirectedHyperGraph const & graph);
+    static ValidityWitness trivialWitness(ChcDirectedGraph const & graph);
+    static ValidityWitness trivialWitness(ChcDirectedHyperGraph const & graph);
 };
 
 class NoWitness {

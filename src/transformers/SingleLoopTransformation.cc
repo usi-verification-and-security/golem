@@ -157,7 +157,7 @@ SingleLoopTransformation::WitnessBackTranslator::translateInvariant(PTRef induct
         substitutions.insert({locationVar, logic.getTerm_false()});
     }
 
-    ValidityWitness::definitions_t vertexInvariants;
+    auto vertexInvariants = ValidityWitness::trivialDefinitions(graph);
     for (auto vertex : vertices) {
         if (vertex == graph.getEntry() or vertex == graph.getExit()) { continue; }
         PTRef locationVar = this->locationVarMap.at(vertex);

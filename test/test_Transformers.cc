@@ -502,7 +502,7 @@ TEST_F(Transformer_test, test_NodeEliminator_PredicateWithoutVariables) {
     SimpleNodeEliminator transformation;
     auto [transformedGraph, backtranslator] = transformation.transform(std::move(hyperGraph));
     ASSERT_EQ(transformedGraph->getEdges().size(), 1);
-    ValidityWitness witness = backtranslator->translate(ValidityWitness());
+    ValidityWitness witness = backtranslator->translate(ValidityWitness::trivialWitness(*transformedGraph));
     Validator validator(logic);
     auto res = validator.validate(originalGraph, VerificationResult(VerificationAnswer::SAFE, witness));
     ASSERT_EQ(res, Validator::Result::VALIDATED);
@@ -585,8 +585,7 @@ TEST_F(Transformer_New_Test, test_SimpleNodeEliminator_HyperEdge_Safe) {
     ASSERT_EQ(edge.to, transformedGraph->getExit());
     ASSERT_EQ(edge.from.size(), 1);
     ASSERT_EQ(edge.from.at(0), transformedGraph->getEntry());
-    ValidityWitness witness{};
-    auto translatedWitness = translator->translate(witness);
+    auto translatedWitness = translator->translate(ValidityWitness::trivialWitness(*transformedGraph));
     VerificationResult translatedResult(VerificationAnswer::SAFE, translatedWitness);
     Validator validator(logic);
     EXPECT_EQ(validator.validate(originalGraph, translatedResult), Validator::Result::VALIDATED);
@@ -680,8 +679,7 @@ TEST_F(Transformer_New_Test, test_SimpleNodeEliminator_HyperEdgeBooleanConstrain
     ASSERT_EQ(edge.to, transformedGraph->getExit());
     ASSERT_EQ(edge.from.size(), 1);
     ASSERT_EQ(edge.from.at(0), transformedGraph->getEntry());
-    ValidityWitness witness{};
-    auto translatedWitness = translator->translate(witness);
+    auto translatedWitness = translator->translate(ValidityWitness::trivialWitness(*transformedGraph));
     VerificationResult translatedResult(VerificationAnswer::SAFE, translatedWitness);
     Validator validator(logic);
     EXPECT_EQ(validator.validate(originalGraph, translatedResult), Validator::Result::VALIDATED);
