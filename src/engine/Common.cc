@@ -24,15 +24,12 @@ VerificationResult solveTrivial(ChcDirectedGraph const & graph) {
                 {.index = 1, .premises = {0}, .derivedFact = logic.getTerm_false(), .clauseId = eid});
             InvalidityWitness witness;
             witness.setDerivation(std::move(derivation));
-            return VerificationResult(VerificationAnswer::UNSAFE, std::move(witness));
+            return {VerificationAnswer::UNSAFE, std::move(witness)};
         } else {
             // Unexpected solver result;
-            return VerificationResult(VerificationAnswer::UNKNOWN);
+            return VerificationResult{VerificationAnswer::UNKNOWN};
         }
     }
     // Here we know that no edge is satisfiable
-    std::unordered_map<SymRef, PTRef, SymRefHash> solution;
-    solution.insert({graph.getEntry(), logic.getTerm_true()});
-    solution.insert({graph.getExit(), logic.getTerm_false()});
-    return {VerificationAnswer::SAFE, ValidityWitness{std::move(solution)}};
+    return {VerificationAnswer::SAFE, ValidityWitness::trivialWitness(graph)};
 }
