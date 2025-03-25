@@ -40,7 +40,7 @@ VerificationResult PDKind::solve(ChcDirectedGraph const & system) {
     if (isTransitionSystem(system)) {
         auto ts = toTransitionSystem(system);
         auto res = solveTransitionSystem(*ts);
-        return translateTransitionSystemResult(res, system, *ts);
+        return computeWitness ? translateTransitionSystemResult(res, system, *ts) : VerificationResult(res.answer);
     }
     SingleLoopTransformation transformation;
     auto[ts, backtranslator] = transformation.transform(system);
