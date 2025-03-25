@@ -41,7 +41,7 @@ std::unique_ptr<TPABase> TPAEngine::mkSolver() {
 }
 
 VerificationResult TPAEngine::solve(ChcDirectedHyperGraph const & graph) {
-    auto pipeline = Transformations::towardsTransitionSystems();
+    auto pipeline = Transformations::TPAPreprocessing();
     auto transformationResult = pipeline.transform(std::make_unique<ChcDirectedHyperGraph>(graph));
     auto transformedGraph = std::move(transformationResult.first);
     auto translator = std::move(transformationResult.second);
