@@ -38,7 +38,7 @@ protected:
     PTRef one;
     PTRef two;
     SymRef s1,s2,s3;
-    PTRef currentS1, currentS2, nextS1, nextS2;
+    PTRef currentS1, currentS2, currentS3, nextS1, nextS2, nextS3;
     Transformer_test() {
         x = logic.mkIntVar("x");
         xp = logic.mkIntVar("xp");
@@ -53,8 +53,10 @@ protected:
         s3 = logic.declareFun("s3", logic.getSort_bool(), {logic.getSort_int()});
         currentS1 = logic.mkUninterpFun(s1, {x});
         currentS2 = logic.mkUninterpFun(s2, {x});
+        currentS3 = logic.mkUninterpFun(s3, {x});
         nextS1 = logic.mkUninterpFun(s1, {xp});
         nextS2 = logic.mkUninterpFun(s2, {xp});
+        nextS3 = logic.mkUninterpFun(s3, {xp});
     }
 public:
     std::unique_ptr<ChcDirectedHyperGraph> systemToGraph(ChcSystem const & system) {
@@ -140,7 +142,7 @@ TEST_F(Transformer_test, test_TwoChains_WithLoop) {
     ASSERT_EQ(validator.validate(originalGraph, result), Validator::Result::VALIDATED);
 }
 
-TEST_F(Transformer_test, test_DoNotSummarizeLoop) {
+TEST_F(Transformer_test, test_DoNotSummarizeLoop_TwoVertices) {
     ChcSystem system;
     system.addUninterpretedPredicate(s1);
     system.addUninterpretedPredicate(s2);
@@ -176,7 +178,49 @@ TEST_F(Transformer_test, test_DoNotSummarizeLoop) {
     res = translator->translate(std::move(res));
     Validator validator(logic);
     EXPECT_EQ(validator.validate(originalGraph, res), Validator::Result::VALIDATED);
+}
 
+TEST_F(Transformer_test, test_DoNotSummarizeLoop_ThreeVertices) {
+    ChcSystem system;
+    system.addUninterpretedPredicate(s1);
+    system.addUninterpretedPredicate(s2);
+    system.addUninterpretedPredicate(s3);
+    system.addClause( // x = 0 => S1(x)
+        ChcHead{UninterpretedPredicate{currentS1}},
+        ChcBody{{logic.mkEq(x, zero)}, {}});
+    system.addClause( // S1(x) and x = 1 and x' = 0 => S2(x')
+        ChcHead{UninterpretedPredicate{nextS2}},
+        ChcBody{{logic.mkAnd(logic.mkEq(xp, zero), logic.mkEq(x, one))}, {UninterpretedPredicate{currentS1}}}
+    );
+    system.addClause( // S2(x) and x = 0 and x' = 0 => S3(x')
+        ChcHead{UninterpretedPredicate{nextS3}},
+        ChcBody{{logic.mkAnd(logic.mkEq(xp, zero), logic.mkEq(x, zero))}, {UninterpretedPredicate{currentS2}}}
+    );
+    system.addClause( // S3(x) and x' = 1 and x = 0 => S1(x')
+        ChcHead{UninterpretedPredicate{nextS1}},
+        ChcBody{{logic.mkAnd(logic.mkEq(xp, one), logic.mkEq(x, zero))}, {UninterpretedPredicate{currentS3}}}
+    );
+    system.addClause( // S1(x) and x = 1 => false
+        ChcHead{UninterpretedPredicate{logic.getTerm_false()}},
+        ChcBody{{logic.mkEq(x, one)}, {UninterpretedPredicate{currentS1}}}
+    );
+    auto hypergraph = systemToGraph(system);
+    auto originalGraph = *hypergraph;
+    TransformationPipeline::pipeline_t pipeline;
+    pipeline.push_back(std::make_unique<ConstraintSimplifier>());
+    pipeline.push_back(std::make_unique<SimpleChainSummarizer>());
+    TransformationPipeline transformations(std::move(pipeline));
+    auto [newGraph, translator] = transformations.transform(std::move(hypergraph));
+    auto vertices = newGraph->getVertices();
+    // Simple chain summarizer MUST NOT summarize the full loop s1->s2->s3->s1!
+    EXPECT_GT(vertices.size(), 3);
+    Options options;
+    options.addOption(Options::COMPUTE_WITNESS, "true");
+    auto res = Spacer(logic, options).solve(*newGraph);
+    ASSERT_EQ(res.getAnswer(), VerificationAnswer::SAFE);
+    res = translator->translate(std::move(res));
+    Validator validator(logic);
+    EXPECT_EQ(validator.validate(originalGraph, res), Validator::Result::VALIDATED);
 }
 
 TEST_F(Transformer_test, test_OutputFromEngine) {

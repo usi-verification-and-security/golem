@@ -35,16 +35,18 @@ Transformer::TransformationResult SimpleChainSummarizer::transform(std::unique_p
                 assert(outgoing.size() == 1);
                 edges.push_back(outgoing[0]);
                 current = graph->getTarget(outgoing[0]);
-            } while (isTrivial(current));
+            } while (isTrivial(current) and current != vertex);
+            auto last = current;
             current = vertex;
-            do {
+            while (isTrivial(current)) {
                 auto const & incoming = adjacencyList.getIncomingEdgesFor(current);
                 assert(incoming.size() == 1);
-                edges.insert(edges.begin(), incoming[0]);
                 auto const & sources = graph->getSources(incoming[0]);
                 assert(sources.size() == 1);
                 current = sources[0];
-            } while (isTrivial(current));
+                if (current == last) { break; } // This means we have come full circle; we do not add the last edge.
+                edges.insert(edges.begin(), incoming[0]);
+            }
             return edges;
         }(trivialVertex);
         std::vector<DirectedHyperEdge> summarizedChain;
