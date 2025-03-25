@@ -140,6 +140,45 @@ TEST_F(Transformer_test, test_TwoChains_WithLoop) {
     ASSERT_EQ(validator.validate(originalGraph, result), Validator::Result::VALIDATED);
 }
 
+TEST_F(Transformer_test, test_DoNotSummarizeLoop) {
+    ChcSystem system;
+    system.addUninterpretedPredicate(s1);
+    system.addUninterpretedPredicate(s2);
+    system.addClause( // x = 0 => S1(x)
+        ChcHead{UninterpretedPredicate{currentS1}},
+        ChcBody{{logic.mkEq(x, zero)}, {}});
+    system.addClause( // S1(x) and x = 1 and x' = 0 => S2(x')
+        ChcHead{UninterpretedPredicate{nextS2}},
+        ChcBody{{logic.mkAnd(logic.mkEq(xp, zero), logic.mkEq(x, one))}, {UninterpretedPredicate{currentS1}}}
+    );
+    system.addClause( // S2(x) and x' = 1 and x = 0 => S1(x')
+        ChcHead{UninterpretedPredicate{nextS1}},
+        ChcBody{{logic.mkAnd(logic.mkEq(xp, one), logic.mkEq(x, zero))}, {UninterpretedPredicate{currentS2}}}
+    );
+    system.addClause( // S1(x) and x = 1 => false
+        ChcHead{UninterpretedPredicate{logic.getTerm_false()}},
+        ChcBody{{logic.mkEq(x, one)}, {UninterpretedPredicate{currentS1}}}
+    );
+    auto hypergraph = systemToGraph(system);
+    auto originalGraph = *hypergraph;
+    TransformationPipeline::pipeline_t pipeline;
+    pipeline.push_back(std::make_unique<ConstraintSimplifier>());
+    pipeline.push_back(std::make_unique<SimpleChainSummarizer>());
+    TransformationPipeline transformations(std::move(pipeline));
+    auto [newGraph, translator] = transformations.transform(std::move(hypergraph));
+    auto vertices = newGraph->getVertices();
+    // Simple chain summarizer MUST NOT summarize the loop s1->s2->s1!
+    EXPECT_EQ(vertices.size(), 4);
+    Options options;
+    options.addOption(Options::COMPUTE_WITNESS, "true");
+    auto res = Spacer(logic, options).solve(*newGraph);
+    ASSERT_EQ(res.getAnswer(), VerificationAnswer::SAFE);
+    res = translator->translate(std::move(res));
+    Validator validator(logic);
+    EXPECT_EQ(validator.validate(originalGraph, res), Validator::Result::VALIDATED);
+
+}
+
 TEST_F(Transformer_test, test_OutputFromEngine) {
     ChcSystem system;
     Options options;

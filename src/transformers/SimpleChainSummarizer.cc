@@ -19,9 +19,9 @@ Transformer::TransformationResult SimpleChainSummarizer::transform(std::unique_p
             if (incoming.size() != 1) { return false; }
             auto const & outgoing = adjacencyList.getOutgoingEdgesFor(sym);
             if (outgoing.size() != 1) { return false; }
-            EId in = incoming[0];
-            EId out = outgoing[0];
-            return in != out and graph->getSources(in).size() == 1 and graph->getSources(out).size() == 1;
+            EId const in = incoming[0];
+            EId const out = outgoing[0];
+            return in != out and graph->getSources(in).size() == 1 and graph->getSources(out).size() == 1 and graph->getSources(in)[0] != graph->getTarget(out);
         };
         auto vertices = graph->getVertices();
         auto it = std::find_if(vertices.begin(), vertices.end(), isTrivial);
