@@ -7,7 +7,7 @@
 #ifndef GOLEM_PDKIND_H
 #define GOLEM_PDKIND_H
 
-#include "Engine.h"
+#include "TransitionSystemEngine.h"
 #include "TransitionSystem.h"
 
 
@@ -16,23 +16,17 @@
  *
  * [1] https://ieeexplore.ieee.org/document/7886665
  */
-class PDKind : public Engine {
+class PDKind : public TransitionSystemEngine {
         Logic & logic;
-        bool computeWitness {false};
     public:
-
         PDKind (Logic & logic, Options const & options) : logic(logic) {
             if (options.hasOption(Options::COMPUTE_WITNESS)) {
                 computeWitness = options.getOption(Options::COMPUTE_WITNESS) == "true";
             }
         }
 
-        VerificationResult solve(ChcDirectedHyperGraph const & graph) override;
-
-        VerificationResult solve(ChcDirectedGraph const & system);
-
     private:
-        [[nodiscard]] TransitionSystemVerificationResult solveTransitionSystem(TransitionSystem const & system) const;
+        [[nodiscard]] TransitionSystemVerificationResult solve(TransitionSystem const & system) override;
 };
 
 #endif // GOLEM_PDKIND_H

@@ -31,6 +31,7 @@ target_link_libraries(golem_lib PUBLIC OpenSMT::OpenSMT)
 target_sources(golem_lib
     PRIVATE ChcSystem.cc
     PRIVATE ChcInterpreter.cc
+    PRIVATE engine/ArgBasedEngine.cc
     PRIVATE engine/Bmc.cc
     PRIVATE engine/Common.cc
     PRIVATE engine/DAR.cc
@@ -41,7 +42,7 @@ target_sources(golem_lib
     PRIVATE engine/PDKind.cc
     PRIVATE engine/Spacer.cc
     PRIVATE engine/TPA.cc
-    PRIVATE engine/ArgBasedEngine.cc
+    PRIVATE engine/TransitionSystemEngine.cc
     PRIVATE TransitionSystem.cc
     PRIVATE Options.cc
     PRIVATE TermUtils.cc

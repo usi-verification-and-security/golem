@@ -9,14 +9,13 @@
 
 
 
-#include "Engine.h"
+#include "TransitionSystemEngine.h"
 #include "TransitionSystem.h"
 
-class Kind : public Engine {
+class Kind : public TransitionSystemEngine {
     Logic & logic;
 //    Options const & options;
     int verbosity {0};
-    bool computeWitness {false};
 public:
 
     Kind(Logic & logic, Options const & options) : logic(logic) {
@@ -24,9 +23,8 @@ public:
         computeWitness = options.getOrDefault(Options::COMPUTE_WITNESS, "") == "true";
     }
 
-    virtual VerificationResult solve(ChcDirectedHyperGraph const & graph) override;
 
-    VerificationResult solve(ChcDirectedGraph const & graph);
+    VerificationResult solve(ChcDirectedGraph const & graph) override;
 
 private:
     VerificationResult solveTransitionSystem(ChcDirectedGraph const & graph);

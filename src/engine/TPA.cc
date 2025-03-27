@@ -26,10 +26,6 @@
 const std::string TPAEngine::TPA = "tpa";
 const std::string TPAEngine::SPLIT_TPA = "split-tpa";
 
-bool TPAEngine::shouldComputeWitness() const {
-    return options.getOrDefault(Options::COMPUTE_WITNESS, "") == "true";
-}
-
 std::unique_ptr<TPABase> TPAEngine::mkSolver() {
     switch (coreAlgorithm) {
         case TPACore::BASIC:
@@ -38,19 +34,6 @@ std::unique_ptr<TPABase> TPAEngine::mkSolver() {
             return std::make_unique<TPASplit>(logic, options);
     }
     throw std::logic_error("UNREACHABLE");
-}
-
-VerificationResult TPAEngine::solve(ChcDirectedHyperGraph const & graph) {
-    auto pipeline = Transformations::towardsTransitionSystems();
-    auto transformationResult = pipeline.transform(std::make_unique<ChcDirectedHyperGraph>(graph));
-    auto transformedGraph = std::move(transformationResult.first);
-    auto translator = std::move(transformationResult.second);
-    if (transformedGraph->isNormalGraph()) {
-        auto normalGraph = transformedGraph->toNormalGraph();
-        auto res = solve(*normalGraph);
-        return shouldComputeWitness() ? translator->translate(std::move(res)) : std::move(res);
-    }
-    return VerificationResult(VerificationAnswer::UNKNOWN);
 }
 
 VerificationResult TPAEngine::solve(const ChcDirectedGraph & graph) {

@@ -7,7 +7,7 @@
 #ifndef GOLEM_TPA_H
 #define GOLEM_TPA_H
 
-#include "Engine.h"
+#include "TransitionSystemEngine.h"
 
 #include "osmt_solver.h"
 
@@ -31,7 +31,7 @@ class TPABase;
 
 enum class TPACore { BASIC, SPLIT };
 
-class TPAEngine : public Engine {
+class TPAEngine : public TransitionSystemEngine {
     Logic & logic;
     Options options;
     TPACore coreAlgorithm;
@@ -39,18 +39,18 @@ class TPAEngine : public Engine {
 
 public:
     TPAEngine(Logic & logic, Options options, TPACore core)
-        : logic(logic), options(std::move(options)), coreAlgorithm(core) {}
+        : logic(logic), options(std::move(options)), coreAlgorithm(core) {
+        computeWitness = options.getOrDefault(Options::COMPUTE_WITNESS, "") == "true";
+    }
 
-    VerificationResult solve(ChcDirectedHyperGraph const & graph) override;
+    VerificationResult solve(ChcDirectedGraph const & graph) override;
 
     static const std::string TPA;
     static const std::string SPLIT_TPA;
 
-    [[nodiscard]] bool shouldComputeWitness() const;
+    [[nodiscard]] bool shouldComputeWitness() const { return computeWitness; }
 
 private:
-    VerificationResult solve(const ChcDirectedGraph & system);
-
     std::unique_ptr<TPABase> mkSolver();
 
     VerificationResult solveTransitionSystemGraph(ChcDirectedGraph const & graph);

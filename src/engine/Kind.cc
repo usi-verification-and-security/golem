@@ -12,19 +12,6 @@
 #include "TransformationUtils.h"
 #include "utils/SmtSolver.h"
 
-VerificationResult Kind::solve(ChcDirectedHyperGraph const & graph) {
-    auto pipeline = Transformations::towardsTransitionSystems();
-    auto transformationResult = pipeline.transform(std::make_unique<ChcDirectedHyperGraph>(graph));
-    auto transformedGraph = std::move(transformationResult.first);
-    auto translator = std::move(transformationResult.second);
-    if (transformedGraph->isNormalGraph()) {
-        auto normalGraph = transformedGraph->toNormalGraph();
-        auto res = solve(*normalGraph);
-        return computeWitness ? translator->translate(std::move(res)) : std::move(res);
-    }
-    return VerificationResult(VerificationAnswer::UNKNOWN);
-}
-
 VerificationResult Kind::solve(ChcDirectedGraph const & graph) {
     if (isTrivial(graph)) {
         return solveTrivial(graph);

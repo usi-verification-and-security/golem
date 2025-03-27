@@ -20,34 +20,6 @@
 #include <set>
 #include <tuple>
 
-VerificationResult PDKind::solve(ChcDirectedHyperGraph const & graph) {
-    auto pipeline = Transformations::towardsTransitionSystems();
-    auto transformationResult = pipeline.transform(std::make_unique<ChcDirectedHyperGraph>(graph));
-    auto transformedGraph = std::move(transformationResult.first);
-    auto translator = std::move(transformationResult.second);
-    if (transformedGraph->isNormalGraph()) {
-        auto normalGraph = transformedGraph->toNormalGraph();
-        auto res = solve(*normalGraph);
-        return computeWitness ? translator->translate(std::move(res)) : std::move(res);
-    }
-    return VerificationResult(VerificationAnswer::UNKNOWN);
-}
-
-VerificationResult PDKind::solve(ChcDirectedGraph const & system) {
-    if (isTrivial(system)) {
-        return solveTrivial(system);
-    }
-    if (isTransitionSystem(system)) {
-        auto ts = toTransitionSystem(system);
-        auto res = solveTransitionSystem(*ts);
-        return computeWitness ? translateTransitionSystemResult(res, system, *ts) : VerificationResult(res.answer);
-    }
-    SingleLoopTransformation transformation;
-    auto[ts, backtranslator] = transformation.transform(system);
-    assert(ts);
-    auto res = solveTransitionSystem(*ts);
-    return computeWitness ? backtranslator->translate(res) : VerificationResult(res.answer);
-}
 
 /**
  * Counter example formula in addition with number of steps needed to reach the counter example.
@@ -202,7 +174,7 @@ private:
     PTRef getInvariant(InductionFrame const & iframe, unsigned int k, TransitionSystem const & system) const;
 };
 
-TransitionSystemVerificationResult PDKind::solveTransitionSystem(TransitionSystem const & system) const {
+TransitionSystemVerificationResult PDKind::solve(TransitionSystem const & system) {
     return Context(logic, computeWitness).solve(system);
 }
 
