@@ -1951,15 +1951,15 @@ Path TransitionSystemNetworkManager::produceExactReachedStates(NetworkNode & nod
     PTRef reachedRefined = solver.getInit();
     PTRef final = solver.getQuery();
     PTRef transition = solver.getTransitionRelation();
-    uint transitions = solver.getTransitionStepCount();
+    int transitions = solver.getTransitionStepCount();
     Path subPath = {};
     std::vector<unsigned> sizes = {0};
     std::vector<PTRef> postQuery {logic.getTerm_false()};
     // Iterating on transitions to build exact trace through the nested loops
-    for (uint i=0; i < transitions; i++) {
+    for (int i=0; i < transitions; i++) {
         // Creating subquery: CurrentReached(x) /\ MTr^(n-i)(x,x') /\ Query(x^(n-1)) /\ PostQuery(x')
         std::vector formulas {TimeMachine(logic).sendFlaThroughTime(final, transitions - i)};
-        for(uint j=i+1; j < transitions; j++){
+        for(int j=i+1; j < transitions; j++){
             formulas.push_back(TimeMachine(logic).sendFlaThroughTime(transition, j - i));
         }
         // postQuery needed to roll back through the trace, updating the previous iterations
@@ -2033,6 +2033,19 @@ Path TransitionSystemNetworkManager::produceExactReachedStates(NetworkNode & nod
                                         networkNode.preSafeLoop = logic.mkOr(networkNode.preSafeLoop, res.explanation);
                                 networkNode.transitionInvariant = logic.mkAnd(networkNode.transitionInvariant, networkNode.solver.value()->getTransitionInvariant());
                                 if (l == 0) {
+                                    nodeS.loopTransitions = {};
+                                    auto [mTr,st] = produceMergedTransition(nodeS);
+                                    std::vector formulas {TimeMachine(logic).sendFlaThroughTime(final, transitions)};
+                                    for(uint l=0; l < transitions; l++){
+                                        formulas.push_back(TimeMachine(logic).sendFlaThroughTime(mTr, l));
+                                    }
+                                    formulas.push_back(solver.getInit());
+                                    SMTSolver updChecker(logic);
+                                    updChecker.assertProp(logic.mkAnd(formulas));
+                                    if (updChecker.check() == SMTSolver::Answer::UNSAT) {
+                                        return {};
+                                    }
+                                    transition = mTr;
                                     postQuery[i] = logic.mkOr(postQuery[i], res.explanation);
                                     break;
                                 }
@@ -2051,6 +2064,19 @@ Path TransitionSystemNetworkManager::produceExactReachedStates(NetworkNode & nod
                                         networkNode.loopSafeLoop = logic.mkOr(networkNode.loopSafeLoop, networkNode.postSafeLoop) :
                                         networkNode.preSafeLoop = logic.mkOr(networkNode.preSafeLoop, networkNode.postSafeLoop);
                                 if (l == 0) {
+                                    nodeS.loopTransitions = {};
+                                    auto [mTr,st] = produceMergedTransition(nodeS);
+                                    std::vector formulas {TimeMachine(logic).sendFlaThroughTime(final, transitions)};
+                                    for(uint l=0; l < transitions; l++){
+                                        formulas.push_back(TimeMachine(logic).sendFlaThroughTime(mTr, l));
+                                    }
+                                    formulas.push_back(solver.getInit());
+                                    SMTSolver updChecker(logic);
+                                    updChecker.assertProp(logic.mkAnd(formulas));
+                                    if (updChecker.check() == SMTSolver::Answer::UNSAT) {
+                                        return {};
+                                    }
+                                    transition = mTr;
                                     postQuery[i] = logic.mkOr(postQuery[i], networkNode.postSafeLoop);
                                     break;
                                 }
