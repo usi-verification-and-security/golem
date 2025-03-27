@@ -1572,6 +1572,7 @@ VerificationResult TransitionSystemNetworkManager::solve() && {
                     if (checker.check() == SMTSolver::Answer::SAT) {
                         path.push_back({NodeState::POST, node, std::nullopt, std::nullopt, std::nullopt, start});
                     } else if (!networkNode.loops.empty()) {
+                        networkNode.preSafe = networkNode.postSafe;
                         std::cout << "Node analysis: " << node.x << "\n";
                         auto res = queryLoops(networkNode, reached, logic.mkNot(networkNode.postSafe));
                         if(res.reachabilityResult == ReachabilityResult::REACHABLE) {
@@ -1581,7 +1582,7 @@ VerificationResult TransitionSystemNetworkManager::solve() && {
                         }
                         if(!networkNode.loopEdges.empty()) {getNode(graph.getSource(eid.value())).loopEdges.insert(eid.value());}
                         path.pop_back();
-                        networkNode.loopSafe = logic.mkOr({networkNode.loopSafe, res.explanation, networkNode.postSafe});
+                        networkNode.loopSafe = logic.mkOr({networkNode.loopSafe, res.explanation});
                     } else {
                         networkNode.preSafe = networkNode.postSafe;
                         path.pop_back();
@@ -2066,50 +2067,6 @@ Path TransitionSystemNetworkManager::produceExactReachedStates(NetworkNode & nod
                                     continue;
                                 }
                                 networkNode.loopSafeLoop = logic.mkOr(networkNode.loopSafeLoop, res.explanation);
-
-                                {
-                                    PTRef reached_l = logic.mkNot(networkNode.postSafeLoop);
-                                    PTRef transition_l = networkNode.loopInvariant;
-                                    PTRef reachedRefined_l = networkNode.loopSafeLoop;
-                                    PTRef query_l = logic.mkAnd({reachedRefined_l, transition_l, TimeMachine(logic).sendFlaThroughTime(reached_l, 2)});
-                                    SMTSolver smtSolverl(logic, SMTSolver::WitnessProduction::NONE);
-                                    smtSolverl.assertProp(query_l);
-                                    auto resl = smtSolverl.check();
-                                    assert(resl == SMTSolver::Answer::UNSAT);
-                                }
-                                {
-                                    auto timeMachine = TimeMachine(logic);
-                                    PTRef queryl = logic.mkOr(networkNode.loopSafeLoop, reachedRefined);
-                                    std::vector<PTRef> nestedTransitions;
-                                    unsigned n = 0;
-                                    for (int i = 0; i < node.loops[j].size(); i++) {
-                                        auto const & source = getNode(graph.getSource(node.loops[j][i]));
-                                        PTRef loopInv = PTRef_Undef;
-
-                                        if (source.loopInvariant != PTRef_Undef && i != 0 ) {
-                                            if (source.solver.has_value()) {
-                                                PTRef loopTrInv = timeMachine.sendFlaThroughTime(logic.mkAnd(source.transitionInvariant, source.solver.value()->getGeneralTransitionInvariant()), n);
-                                                loopInv = logic.mkAnd(timeMachine.sendFlaThroughTime(source.loopInvariant, n), timeMachine.sendFlaThroughTime(loopTrInv, 2));
-                                                n+=4;
-                                            } else {
-                                                loopInv = timeMachine.sendFlaThroughTime(source.loopInvariant, n);
-                                                n+=2;
-                                            }
-                                        } else if (source.solver.has_value()) {
-                                            loopInv = timeMachine.sendFlaThroughTime(logic.mkAnd(source.transitionInvariant, source.solver.value()->getGeneralTransitionInvariant()), n);
-                                            n+=2;
-                                        }
-                                        PTRef label = timeMachine.sendFlaThroughTime(graph.getEdgeLabel(node.loops[j][i]), n++);
-                                        nestedTransitions.push_back(loopInv == PTRef_Undef ? label : logic.mkAnd(loopInv, label));
-                                    }
-                                    PTRef loopMTr = logic.mkAnd(nestedTransitions);
-                                    queryl = logic.mkAnd({queryl, timeMachine.sendFlaThroughTime(query, n-1) ,loopMTr});
-                                    SMTSolver smtSolverl(logic, SMTSolver::WitnessProduction::NONE);
-                                    smtSolverl.assertProp(queryl);
-                                    auto resl = smtSolverl.check();
-                                    assert(resl == SMTSolver::Answer::UNSAT);
-                                }
-
                                 l--;
                                 // networkNode.preSafeLoop = logic.mkOr(networkNode.preSafeLoop, res.explanation);
                                 subPath.pop_back();
@@ -2122,7 +2079,7 @@ Path TransitionSystemNetworkManager::produceExactReachedStates(NetworkNode & nod
                             logic.mkAnd(
                                     logic.mkNot(getNode(target).preSafeLoop),
                                     TimeMachine(logic).sendFlaThroughTime(query, -1)) :
-                                    networkNode.loopSafeLoop == logic.getTerm_false() ?
+                                    getNode(target).loopSafeLoop == logic.getTerm_false() ?
                                                 logic.mkNot(getNode(target).preSafeLoop) : logic.mkOr(logic.mkNot(getNode(target).preSafeLoop), logic.mkNot(getNode(target).loopSafeLoop)));
                                                    if (res.reachabilityResult == ReachabilityResult::REACHABLE) {
                             subPath.push_back({NodeState::PRE, target, edge, std::nullopt,  std::nullopt, res.explanation});
