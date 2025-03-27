@@ -210,8 +210,6 @@ protected:
 
     void resetExplanation();
 
-    void squashInvariants(vec<PTRef> & candidates) const;
-
     VerificationAnswer checkTrivialUnreachability();
 };
 
