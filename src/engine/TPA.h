@@ -40,9 +40,10 @@ class TPAEngine : public TransitionSystemEngine {
 public:
     TPAEngine(Logic & logic, Options options, TPACore core)
         : logic(logic), options(std::move(options)), coreAlgorithm(core) {
-        computeWitness = options.getOrDefault(Options::COMPUTE_WITNESS, "") == "true";
+        computeWitness = this->options.getOrDefault(Options::COMPUTE_WITNESS, "") == "true";
     }
 
+    using TransitionSystemEngine::solve;
     VerificationResult solve(ChcDirectedGraph const & graph) override;
 
     static const std::string TPA;

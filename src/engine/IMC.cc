@@ -13,23 +13,7 @@
 #include "transformers/SingleLoopTransformation.h"
 #include "utils/SmtSolver.h"
 
-VerificationResult IMC::solve(ChcDirectedGraph const & graph) {
-    if (isTrivial(graph)) { return solveTrivial(graph); }
-    if (isTransitionSystem(graph)) { return solveTransitionSystem(graph); }
-    SingleLoopTransformation transformation;
-    auto [ts, backtranslator] = transformation.transform(graph);
-    assert(ts);
-    auto res = solveTransitionSystemInternal(*ts);
-    return computeWitness ? backtranslator->translate(res) : VerificationResult(res.answer);
-}
-
-VerificationResult IMC::solveTransitionSystem(ChcDirectedGraph const & graph) {
-    auto ts = toTransitionSystem(graph);
-    auto res = solveTransitionSystemInternal(*ts);
-    return computeWitness ? translateTransitionSystemResult(res, graph, *ts) : VerificationResult(res.answer);
-}
-
-TransitionSystemVerificationResult IMC::solveTransitionSystemInternal(TransitionSystem const & system) {
+TransitionSystemVerificationResult IMC::solve(TransitionSystem const & system) {
     { // if I /\ F is Satisfiable, return true
         SMTSolver solver(logic, SMTSolver::WitnessProduction::NONE);
         solver.assertProp(system.getInit());

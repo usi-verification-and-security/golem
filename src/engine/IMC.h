@@ -8,15 +8,15 @@
 #ifndef GOLEM_IMC_H
 #define GOLEM_IMC_H
 
-#include "Engine.h"
 #include "TransitionSystem.h"
+#include "TransitionSystemEngine.h"
+
 #include "osmt_solver.h"
 
-class IMC : public Engine {
+class IMC : public TransitionSystemEngine {
     Logic & logic;
     // Options const & options;
     int verbosity = 0;
-    bool computeWitness = false;
 
 public:
     IMC(Logic & logic, Options const & options) : logic(logic) {
@@ -24,19 +24,10 @@ public:
         computeWitness = options.getOrDefault(Options::COMPUTE_WITNESS, "") == "true";
     }
 
-    virtual VerificationResult solve(ChcDirectedHyperGraph const & graph) override {
-        if (graph.isNormalGraph()) {
-            auto normalGraph = graph.toNormalGraph();
-            return solve(*normalGraph);
-        }
-        return VerificationResult(VerificationAnswer::UNKNOWN);
-    }
-
-    VerificationResult solve(ChcDirectedGraph const & graph);
+    using TransitionSystemEngine::solve;
 
 private:
-    VerificationResult solveTransitionSystem(ChcDirectedGraph const & graph);
-    TransitionSystemVerificationResult solveTransitionSystemInternal(TransitionSystem const & system);
+    TransitionSystemVerificationResult solve(TransitionSystem const & system) override;
 
     TransitionSystemVerificationResult finiteRun(TransitionSystem const & ts, unsigned k);
 

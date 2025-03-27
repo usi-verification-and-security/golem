@@ -493,6 +493,7 @@ TEST_F(Transformer_New_Test, test_NodeEliminator_SecondEdgeUsed) {
     SimpleNodeEliminator transformation;
     auto [transformedGraph, translator] = transformation.transform(std::move(hyperGraph));
     ASSERT_EQ(transformedGraph->getEdges().size(), 2);
+    options.addOption(Options::COMPUTE_WITNESS, "true");
     auto res = IMC(logic, options).solve(*transformedGraph);
     auto answer = res.getAnswer();
     ASSERT_EQ(answer, VerificationAnswer::UNSAFE);

@@ -9,24 +9,7 @@
 #include "Common.h"
 #include "TransformationUtils.h"
 
-#include "transformers/SingleLoopTransformation.h"
 #include "utils/SmtSolver.h"
-
-VerificationResult DAR::solve(ChcDirectedGraph const & graph) {
-    if (isTrivial(graph)) { return solveTrivial(graph); }
-    if (isTransitionSystem(graph)) { return solveTransitionSystem(graph); }
-    SingleLoopTransformation transformation;
-    auto [ts, backtranslator] = transformation.transform(graph);
-    assert(ts);
-    auto res = solveTransitionSystemInternal(*ts);
-    return computeWitness ? backtranslator->translate(res) : VerificationResult(res.answer);
-}
-
-VerificationResult DAR::solveTransitionSystem(ChcDirectedGraph const & graph) {
-    auto ts = toTransitionSystem(graph);
-    auto res = solveTransitionSystemInternal(*ts);
-    return computeWitness ? translateTransitionSystemResult(res, graph, *ts) : VerificationResult(res.answer);
-}
 
 class DualApproximatedReachability {
 public:
@@ -62,7 +45,7 @@ private:
     void showSequences() const;
 };
 
-TransitionSystemVerificationResult DAR::solveTransitionSystemInternal(TransitionSystem const & system) {
+TransitionSystemVerificationResult DAR::solve(TransitionSystem const & system) {
     { // Check satisfiability of Init /\ Query
         SMTSolver solver(logic, SMTSolver::WitnessProduction::NONE);
         solver.assertProp(system.getInit());
