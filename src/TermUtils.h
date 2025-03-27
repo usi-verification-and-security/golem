@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <iostream>
 #include <sstream>
+#include <utils/SmtSolver.h>
 
 class TermUtils {
     Logic & logic;
@@ -159,6 +160,17 @@ public:
         PTRef result;
     };
     SimplificationResult extractSubstitutionsAndSimplify(PTRef fla);
+
+
+
+    PTRef subformulaMinimisation(PTRef explCandidates, PTRef base) const;
+
+
+    bool isLiteral(PTRef ptr) const ;
+
+    void retrieveDisjuncts(PTRef f, vec<PTRef> & disjuncts) const ;
+
+    PTRef deMorganize(PTRef formula) const ;
 };
 
 class LATermUtils {

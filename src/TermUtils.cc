@@ -164,6 +164,58 @@ void TermUtils::printTermWithLets(std::ostream & out, PTRef root) {
     out << strRepr.at(root) << std::string(letCount, ')');
 }
 
+PTRef TermUtils::subformulaMinimisation(PTRef explCandidates, PTRef base) const {
+    SMTSolver solver(logic, SMTSolver::WitnessProduction::NONE);
+    solver.push();
+    auto candidates = topLevelConjuncts(logic, explCandidates);
+    solver.assertProp(base);
+
+    solver.push();
+    solver.assertProp(explCandidates);
+    assert (solver.check() == SMTSolver::Answer::UNSAT);
+    for (int i = candidates.size() - 1; i >= 0; i--) {
+        PTRef cand = candidates[i];
+        candidates[i] = candidates[candidates.size() - 1];
+        candidates.pop();
+        solver.pop();
+        solver.push();
+        solver.assertProp(logic.mkAnd(candidates));
+        if (solver.check() == SMTSolver::Answer::SAT) {
+            candidates.push(cand);
+        }
+    }
+    solver.pop();
+    solver.assertProp(logic.mkAnd(candidates));
+    assert(solver.check() == SMTSolver::Answer::UNSAT);
+    return logic.mkAnd(candidates);
+}
+
+bool TermUtils::isLiteral(PTRef ptr) const {
+    return (logic.isNot(ptr) and logic.isAtom(logic.getPterm(ptr)[0])) or logic.isAtom(ptr);
+}
+
+void TermUtils::retrieveDisjuncts(PTRef f, vec<PTRef> & disjuncts) const {
+    assert(isLiteral(f) or logic.isOr(f) or logic.isAnd(f));
+    if (isLiteral(f) || logic.isAnd(f)) {
+        disjuncts.push(logic.mkNot(f)); // We return already negated disjuncts for the purposes of deMorgan
+    } else {
+        Pterm const & t = logic.getPterm(f);
+        for (PTRef tr : t) {
+            retrieveDisjuncts(tr, disjuncts);
+        }
+    }
+}
+
+PTRef TermUtils::deMorganize(PTRef formula) const {
+    assert(logic.isNot(formula));
+    Pterm const & term = logic.getPterm(formula);
+    assert(logic.isOr(term[0]));
+    vec<PTRef> disjuncts;
+    retrieveDisjuncts(term[0], disjuncts);
+    return logic.mkAnd(disjuncts);
+}
+
+
 // TODO: Make this available in OpenSMT?
 TermUtils::SimplificationResult TermUtils::extractSubstitutionsAndSimplify(PTRef fla) {
     SimplificationResult result;
