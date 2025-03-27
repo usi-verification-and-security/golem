@@ -17,7 +17,7 @@
 class NodeEliminator : public Transformer {
     using predicate_t = std::function<bool(SymRef,AdjacencyListsGraphRepresentation const &, ChcDirectedHyperGraph const &)>;
 public:
-    NodeEliminator(predicate_t shouldEliminateNode) : shouldEliminateNode(std::move(shouldEliminateNode)) {}
+    explicit NodeEliminator(predicate_t shouldEliminateNode) : shouldEliminateNode(std::move(shouldEliminateNode)) {}
 
     TransformationResult transform(std::unique_ptr<ChcDirectedHyperGraph> graph) override;
 
@@ -41,15 +41,6 @@ public:
     };
 
     predicate_t shouldEliminateNode;
-};
-
-struct NonLoopEliminatorPredicate {
-    bool operator()(SymRef, AdjacencyListsGraphRepresentation const &, ChcDirectedHyperGraph const & graph) const;
-};
-
-class NonLoopEliminator : public NodeEliminator {
-public:
-    NonLoopEliminator() : NodeEliminator(NonLoopEliminatorPredicate{}) {}
 };
 
 struct SimpleNodeEliminatorPredicate {

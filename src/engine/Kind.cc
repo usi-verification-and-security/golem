@@ -7,7 +7,6 @@
 #include "Kind.h"
 
 #include "Common.h"
-#include "QuantifierElimination.h"
 #include "TermUtils.h"
 #include "transformers/BasicTransformationPipelines.h"
 #include "TransformationUtils.h"

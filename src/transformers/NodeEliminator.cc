@@ -39,14 +39,6 @@ Transformer::TransformationResult NodeEliminator::transform(std::unique_ptr<ChcD
     return {std::move(graph), std::move(backTranslator)};
 }
 
-bool NonLoopEliminatorPredicate::operator()(
-    SymRef vertex,
-    AdjacencyListsGraphRepresentation const & ar,
-    ChcDirectedHyperGraph const & graph) const {
-    // TODO: Remove the constraint about hyperEdge
-    return not hasHyperEdge(vertex, ar, graph) and isNonLoopNode(vertex, ar, graph);
-}
-
 bool SimpleNodeEliminatorPredicate::operator()(
     SymRef vertex,
     AdjacencyListsGraphRepresentation const & ar,
