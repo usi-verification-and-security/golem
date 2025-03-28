@@ -74,7 +74,7 @@ VerificationResult TPAEngine::solve(const ChcDirectedGraph & graph) {
                 assert(false);
                 throw std::logic_error("Unreachable!");
         }
-    } else if (not options.hasOption(Options::FORCE_TS)) {
+    } else if (not options.hasOption(Options::FORCE_TS) && hasSelfLoops(graph)) {
         if (options.hasOption(Options::SIMPLIFY_NESTED)) {
             NestedLoopTransformation transformation;
             auto [transformedGraph, preTranslator] = transformation.transform(graph);
@@ -1545,6 +1545,16 @@ VerificationResult TransitionSystemNetworkManager::solve() && {
                     auto res = queryLoops(networkNode, reached, logic.mkNot(networkNode.loopSafe));
                     if(res.reachabilityResult == ReachabilityResult::UNREACHABLE) {
                         networkNode.preSafe = logic.mkOr(networkNode.preSafe, res.explanation);
+                        {
+                            PTRef reached = logic.mkNot(networkNode.loopSafe);
+                            PTRef transition = networkNode.loopInvariant;
+                            PTRef reachedRefined = networkNode.preSafe;
+                            PTRef query = logic.mkAnd({reachedRefined, transition, TimeMachine(logic).sendFlaThroughTime(reached, 2)});
+                            SMTSolver smtSolver(logic, SMTSolver::WitnessProduction::NONE);
+                            smtSolver.assertProp(query);
+                            auto res = smtSolver.check();
+                            assert(res == SMTSolver::Answer::UNSAT);
+                        }
                         path.pop_back();
                         continue;
                     }
@@ -2112,7 +2122,9 @@ Path TransitionSystemNetworkManager::produceExactReachedStates(NetworkNode & nod
         if (subPath.size() == preSize) {
             sizes.pop_back();
             subPath.resize(sizes.back());
-            if (i == 0) return {};
+            if (i == 0) {
+                return {};
+            }
             i-=2;
             // return {};
         }

@@ -20,6 +20,7 @@ inline TransformationPipeline TPAPreprocessing() {
     stages.push_back(std::make_unique<FalseClauseRemoval>());
     stages.push_back(std::make_unique<MultiEdgeMerger>());
     stages.push_back(std::make_unique<SimpleNodeEliminator>());
+    stages.push_back(std::make_unique<MultiEdgeMerger>());
     stages.push_back(std::make_unique<TrivialEdgePruner>());
     TransformationPipeline pipeline(std::move(stages));
     return pipeline;
