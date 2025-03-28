@@ -1545,6 +1545,16 @@ VerificationResult TransitionSystemNetworkManager::solve() && {
                     auto res = queryLoops(networkNode, reached, logic.mkNot(networkNode.loopSafe));
                     if(res.reachabilityResult == ReachabilityResult::UNREACHABLE) {
                         networkNode.preSafe = logic.mkOr(networkNode.preSafe, res.explanation);
+                        {
+                            PTRef reached = logic.mkNot(networkNode.loopSafe);
+                            PTRef transition = networkNode.loopInvariant;
+                            PTRef reachedRefined = networkNode.preSafe;
+                            PTRef query = logic.mkAnd({reachedRefined, transition, TimeMachine(logic).sendFlaThroughTime(reached, 2)});
+                            SMTSolver smtSolver(logic, SMTSolver::WitnessProduction::NONE);
+                            smtSolver.assertProp(query);
+                            auto res = smtSolver.check();
+                            assert(res == SMTSolver::Answer::UNSAT);
+                        }
                         path.pop_back();
                         continue;
                     }
