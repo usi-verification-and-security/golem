@@ -74,7 +74,7 @@ VerificationResult TPAEngine::solve(const ChcDirectedGraph & graph) {
                 assert(false);
                 throw std::logic_error("Unreachable!");
         }
-    } else if (not options.hasOption(Options::FORCE_TS)) {
+    } else if (not options.hasOption(Options::FORCE_TS) && hasSelfLoops(graph)) {
         if (options.hasOption(Options::SIMPLIFY_NESTED)) {
             NestedLoopTransformation transformation;
             auto [transformedGraph, preTranslator] = transformation.transform(graph);
@@ -2122,7 +2122,9 @@ Path TransitionSystemNetworkManager::produceExactReachedStates(NetworkNode & nod
         if (subPath.size() == preSize) {
             sizes.pop_back();
             subPath.resize(sizes.back());
-            if (i == 0) return {};
+            if (i == 0) {
+                return {};
+            }
             i-=2;
             // return {};
         }
