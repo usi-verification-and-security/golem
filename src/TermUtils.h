@@ -1,11 +1,11 @@
 /*
- * Copyright (c) 2020-2022, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2020-2025, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
 
-#ifndef OPENSMT_TERMUTILS_H
-#define OPENSMT_TERMUTILS_H
+#ifndef GOLEM_TERMUTILS_H
+#define GOLEM_TERMUTILS_H
 
 #include "osmt_terms.h"
 
@@ -16,7 +16,7 @@
 class TermUtils {
     Logic & logic;
 public:
-    TermUtils(Logic & logic) : logic(logic) {}
+    explicit TermUtils(Logic & logic) : logic(logic) {}
 
     using substitutions_map = std::unordered_map<PTRef, PTRef, PTRefHash>;
 
@@ -126,6 +126,10 @@ public:
 
     vec<PTRef> getTopLevelDisjuncts(PTRef root) const {
         return getTopLevelDisjuncts(root, [](PTRef){ return true; });
+    }
+
+    vec<PTRef> getTopLevelEqualities(PTRef root) const {
+        return getTopLevelConjuncts(root, [&](PTRef fla){ return logic.isEquality(fla); });
     }
 
     PTRef conjoin (PTRef what, PTRef to);
@@ -503,4 +507,4 @@ inline vec<PTRef> operator+(vec<PTRef> const & first, vec<PTRef> const & second)
     return res;
 }
 
-#endif //OPENSMT_TERMUTILS_H
+#endif //GOLEM_TERMUTILS_H
