@@ -228,6 +228,8 @@ class SpacerContext {
 
     bool mayReachable(EId eid, PTRef targetConstraint, std::size_t bound) const;
 
+    std::vector<ProofObligation> computePredecessors(std::vector<EId> const & edges, ProofObligation const & pob) const;
+
     std::optional<ProofObligation> computePredecessor(EId eid, ProofObligation const & pob) const;
 
     PTRef projectFormula(PTRef fla, vec<PTRef> const & vars, Model & model) const;
@@ -325,13 +327,7 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
             pqueue.pop();
             continue;
         }
-        std::vector<ProofObligation> newProofObligations;
-        for (EId edgeId : edges) {
-            auto newProofObligation = computePredecessor(edgeId, pob);
-            if (newProofObligation.has_value()) {
-                newProofObligations.push_back(newProofObligation.value());
-            }
-        }
+        std::vector<ProofObligation> newProofObligations = computePredecessors(edges, pob);
         if (newProofObligations.empty()) {
             // all edges are blocked; compute new lemma blocking the current proof obligation
             // TODO:
@@ -340,8 +336,8 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
                 edgeRepresentations.push(getEdgeMaySummary(eid, pob.bound - 1));
             }
             auto res = interpolatingSat(logic.mkOr(edgeRepresentations), pob.constraint);
-            assert(res.answer == QueryAnswer::UNSAT);
             if (res.answer != QueryAnswer::UNSAT) {
+                assert(false);
                 throw std::logic_error("All edges should have been blocked, but they are not!");
             }
             PTRef newLemma = VersionManager(logic).targetFormulaToBase(res.interpolant);
@@ -466,6 +462,17 @@ bool SpacerContext::mayReachable(EId eid, PTRef targetConstraint, std::size_t bo
         throw std::logic_error("Spacer: Error in checking implication in mayReachable");
     }
     return checkRes.answer == SpacerContext::QueryAnswer::SAT;
+}
+
+std::vector<ProofObligation> SpacerContext::computePredecessors(std::vector<EId> const & edges, ProofObligation const & pob) const {
+    std::vector<ProofObligation> newProofObligations;
+    for (EId edgeId : edges) {
+        auto newProofObligation = computePredecessor(edgeId, pob);
+        if (newProofObligation.has_value()) {
+            newProofObligations.push_back(newProofObligation.value());
+        }
+    }
+    return newProofObligations;
 }
 
 std::optional<ProofObligation> SpacerContext::computePredecessor(EId eid, ProofObligation const & pob) const {
