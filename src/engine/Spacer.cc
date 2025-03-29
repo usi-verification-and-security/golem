@@ -74,6 +74,11 @@ struct ProofObligation {
     PTRef constraint;
 };
 
+struct PobInfo {
+    ProofObligation const & pob;
+    TermUtils::substitutions_map substitutions;
+};
+
 bool operator<(ProofObligation const& pob1, ProofObligation const& pob2) {
     // TODO: Does it make sense to break ties using vertices?
     return pob1.bound < pob2.bound or
@@ -230,7 +235,7 @@ class SpacerContext {
 
     std::vector<ProofObligation> computePredecessors(std::vector<EId> const & edges, ProofObligation const & pob) const;
 
-    std::optional<ProofObligation> computePredecessor(EId eid, ProofObligation const & pob) const;
+    std::optional<ProofObligation> computePredecessor(EId eid, PobInfo const & pob) const;
 
     PTRef projectFormula(PTRef fla, vec<PTRef> const & vars, Model & model) const;
 
@@ -466,8 +471,26 @@ bool SpacerContext::mayReachable(EId eid, PTRef targetConstraint, std::size_t bo
 
 std::vector<ProofObligation> SpacerContext::computePredecessors(std::vector<EId> const & edges, ProofObligation const & pob) const {
     std::vector<ProofObligation> newProofObligations;
+    auto equalities = TermUtils(logic).getTopLevelEqualities(pob.constraint);
+    auto it = std::partition(equalities.begin(), equalities.end(), [&](PTRef eq) {
+        assert(logic.isEquality(eq));
+        auto const & term = logic.getPterm(eq);
+        assert(term.size() == 2);
+        assert(not logic.isConstant(term[1])); // This should be an invariant of OpenSMT
+        return logic.isVar(term[1]) and logic.isConstant(term[0]);
+    });
+    if (it != equalities.end()) {
+        int const newSize = it - equalities.begin();
+        equalities.shrink_(equalities.size() - newSize);
+    }
+    TermUtils::substitutions_map substitutions_map;
+    for (PTRef eq : equalities) {
+        substitutions_map.insert({logic.getPterm(eq)[1], logic.getPterm(eq)[0]});
+    }
+
+    PobInfo pobInfo{.pob = pob, .substitutions = std::move(substitutions_map)};
     for (EId edgeId : edges) {
-        auto newProofObligation = computePredecessor(edgeId, pob);
+        auto newProofObligation = computePredecessor(edgeId, pobInfo);
         if (newProofObligation.has_value()) {
             newProofObligations.push_back(newProofObligation.value());
         }
@@ -475,20 +498,25 @@ std::vector<ProofObligation> SpacerContext::computePredecessors(std::vector<EId>
     return newProofObligations;
 }
 
-std::optional<ProofObligation> SpacerContext::computePredecessor(EId eid, ProofObligation const & pob) const {
+std::optional<ProofObligation> SpacerContext::computePredecessor(EId eid, PobInfo const & pobInfo) const {
+    auto const & pob = pobInfo.pob;
     assert(pob.bound > 0);
     auto sourceBound = pob.bound - 1;
     auto const & sources = graph.getSources(eid);
     assert(not sources.empty());
     if (sources.size() == 1) { // Edge with single source, we only need to check if pob is reachable with over-approximation
         PTRef maySummary = getEdgeMaySummary(eid, sourceBound);
-        auto res = sat(maySummary, pob.constraint);
+        PTRef simplified = TermUtils(logic).varSubstitute(maySummary, pobInfo.substitutions);
+        if (simplified == logic.getTerm_false()) {
+            return std::nullopt;
+        }
+        auto res = sat(simplified, pob.constraint);
         if (res.answer == QueryAnswer::SAT) {
             assert(res.model);
             // When this source is over-approximated and the edge becomes feasible -> extract next proof obligation
             auto source = sources[0];
             auto predicateVars = TermUtils(logic).getVars(graph.getStateVersion(source));
-            PTRef newConstraint = projectFormula(logic.mkAnd(maySummary, pob.constraint), predicateVars, *res.model);
+            PTRef newConstraint = projectFormula(logic.mkAnd(simplified, pob.constraint), predicateVars, *res.model);
             PTRef newPob = VersionManager(logic).sourceFormulaToTarget(newConstraint); // ensure POB is target fla
             TRACE(2, "New proof obligation generated")
             return ProofObligation{source, sourceBound, newPob};
