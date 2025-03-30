@@ -74,7 +74,7 @@ public:
 
 private:
     friend class ARG;
-    void refine(PredicateAbstractionManager::Predicates const & newPredicates) {
+    template<typename C> void refine(C const & newPredicates) {
         satisfiedPredicates.insert(newPredicates.begin(), newPredicates.end());
     }
 
@@ -175,8 +175,8 @@ public:
     [[nodiscard]] bool isCovered(NodeId nodeId) const { return coveredNodes.count(nodeId) > 0; }
 
     template<typename C>
-    [[nodiscard]] std::set<PTRef> computePropagatedPredicates(C const & candidates, std::vector<NodeId> const & sources,
-                                                              PTRef edgeConstraint) const;
+    [[nodiscard]] vec<PTRef> computePropagatedPredicates(C const & candidates, std::vector<NodeId> const & sources,
+                                                         PTRef edgeConstraint) const;
 
 private:
     static bool isCoveredByExistingInstance(CartesianPredicateAbstractionStates const & candidate,
@@ -438,7 +438,8 @@ void Algorithm::computeNewUnprocessedEdges(ARG::NodeId nodeId) {
 std::pair<ARG::NodeId, bool> Algorithm::computeTarget(const UnprocessedEdge & edge) {
     auto target = clauses.getEdge(edge.eid).to;
     auto const & candidates = arg.getPredicatesFor(target);
-    auto impliedPredicates = arg.computePropagatedPredicates(candidates, edge.sources, clauses.getEdgeLabel(edge.eid));
+    auto predicates = arg.computePropagatedPredicates(candidates, edge.sources, clauses.getEdgeLabel(edge.eid));
+    PredicateAbstractionManager::Predicates impliedPredicates(predicates.begin(), predicates.end());
     return arg.tryInsertNode(target, std::move(impliedPredicates));
 }
 
@@ -785,7 +786,7 @@ void ARG::refine(RefinementInfo const & refinementInfo) {
         if (candidates.empty()) { continue; }
         auto impliedPredicates =
             computePropagatedPredicates(candidates, edge.sources, clauses.getEdgeLabel(edge.clauseId));
-        changed[nid] = not impliedPredicates.empty();
+        changed[nid] = impliedPredicates.size() > 0;
         node.reachedStates->refine(impliedPredicates);
     }
 
@@ -822,27 +823,29 @@ std::vector<ARG::NodeId> ARG::recheckCoveredNodes() {
 }
 
 template<typename C>
-std::set<PTRef> ARG::computePropagatedPredicates(C const & candidates, std::vector<NodeId> const & sources,
-                                                 PTRef edgeConstraint) const {
+vec<PTRef> ARG::computePropagatedPredicates(C const & candidates, std::vector<NodeId> const & sources,
+                                            PTRef edgeConstraint) const {
     Logic & logic = clauses.getLogic();
     VersionManager versionManager{logic};
-    std::unordered_map<SymRef, int, SymRefHash> sourcesCount;
-    SMTSolver solver(logic, SMTSolver::WitnessProduction::NONE);
-    solver.assertProp(edgeConstraint);
-    for (auto sourceId : sources) {
-        PTRef reachedStates = getReachedStates(sourceId);
-        PTRef versioned =
-            versionManager.baseFormulaToSource(reachedStates, sourcesCount[getPredicateSymbol(sourceId)]++);
-        solver.assertProp(versioned);
+    PTRef const assertion = [&]() {
+        std::unordered_map<SymRef, int, SymRefHash> sourcesCount;
+        vec<PTRef> components{edgeConstraint};
+        for (auto const sourceId : sources) {
+            PTRef const reachedStates = getReachedStates(sourceId);
+            PTRef const versioned =
+                versionManager.baseFormulaToSource(reachedStates, sourcesCount[getPredicateSymbol(sourceId)]++);
+            components.push(versioned);
+        }
+        return logic.mkAnd(std::move(components));
+    }();
+    vec<PTRef> candidatesVec;
+    for (PTRef const candidate : candidates) {
+        PTRef versionedPredicate = versionManager.baseFormulaToTarget(candidate);
+        candidatesVec.push(versionedPredicate);
     }
-    std::set<PTRef> impliedPredicates;
-    for (PTRef predicate : candidates) {
-        solver.push();
-        PTRef versionedPredicate = versionManager.baseFormulaToTarget(predicate);
-        solver.assertProp(logic.mkNot(versionedPredicate));
-        auto res = solver.check();
-        if (res == SMTSolver::Answer::UNSAT) { impliedPredicates.insert(predicate); }
-        solver.pop();
+    auto impliedPredicates = impliedBy(std::move(candidatesVec), assertion, logic);
+    for (PTRef & predicate : impliedPredicates) {
+        predicate = versionManager.targetFormulaToBase(predicate);
     }
     return impliedPredicates;
 }
