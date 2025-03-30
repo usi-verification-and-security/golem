@@ -42,4 +42,7 @@ public:
     SMTConfig & getConfig() { return config; }
 };
 
+using Formulas = vec<PTRef>;
+Formulas impliedBy(Formulas candidates, PTRef assertion, Logic & logic);
+
 #endif // GOLEM_SMTSOLVER_H

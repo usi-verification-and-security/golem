@@ -592,58 +592,21 @@ bool SpacerContext::tryPushComponents(SymRef vid, std::size_t level, PTRef body)
     auto maySummaryComponents = over.getComponents(vid, level);
     vec<PTRef> targetCandidates;
     targetCandidates.capacity(maySummaryComponents.size());
-    vec<PTRef> activationLiterals;
-    activationLiterals.capacity(maySummaryComponents.size());
-    unsigned counter = 0;
-    for (PTRef component : maySummaryComponents) {
+    for (PTRef const component : maySummaryComponents) {
         if (over.has(vid, level + 1, component)) {
             continue;
         }
-        std::string name = ".act" + std::to_string(counter++);
-        PTRef activationVariable = logic.mkBoolVar(name.c_str());
         targetCandidates.push(VersionManager(logic).baseFormulaToTarget(component));
-        activationLiterals.push(activationVariable);
     }
-    if (targetCandidates.size() == 0) { return true; }
+    std::size_t const candidatesCount = targetCandidates.size_();
+    if (candidatesCount == 0) { return true; }
 
-    bool allPushed = true;
-    SMTSolver solver(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
-    solver.assertProp(body);
-    vec<PTRef> queries;
-    queries.capacity(targetCandidates.size());
-    for (auto i = 0; i < targetCandidates.size(); ++i) {
-        queries.push(logic.mkAnd(activationLiterals[i], logic.mkNot(targetCandidates[i])));
-    }
-    solver.assertProp(logic.mkOr(queries));
+    auto pushed = impliedBy(std::move(targetCandidates), body, logic);
 
-    auto disabled = 0u;
-    while (disabled < queries.size_()) {
-        solver.push();
-        solver.assertProp(logic.mkAnd(activationLiterals));
-        auto res = solver.check();
-        if (res == SMTSolver::Answer::UNSAT) { break; }
-        assert(res == SMTSolver::Answer::SAT);
-        if (res != SMTSolver::Answer::SAT) { throw std::logic_error("Solver could not solve a problem while trying to push components!"); }
-        auto model = solver.getModel();
-        for (auto i = 0; i < activationLiterals.size(); ++i) {
-            if (logic.isNot(activationLiterals[i])) { continue; } // already disabled
-            if (model->evaluate(queries[i]) == logic.getTerm_true()) {
-                ++disabled;
-                assert(not logic.isNot(activationLiterals[i]));
-                activationLiterals[i] = logic.mkNot(activationLiterals[i]);
-            }
-        }
-        solver.pop();
+    for (PTRef const lemma : pushed) {
+        addMaySummary(vid, level + 1, VersionManager(logic).targetFormulaToBase(lemma));
     }
-
-    for (auto i = 0; i < targetCandidates.size(); ++i) {
-        if (not logic.isNot(activationLiterals[i])) {
-            addMaySummary(vid, level + 1, VersionManager(logic).targetFormulaToBase(targetCandidates[i]));
-        } else {
-            allPushed = false;
-        }
-    }
-    return allPushed;
+    return pushed.size_() == candidatesCount;
 }
 
 

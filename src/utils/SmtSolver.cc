@@ -39,3 +39,51 @@ void SMTSolver::push() {
 void SMTSolver::pop() {
     solver->pop();
 }
+
+Formulas impliedBy(Formulas candidates, PTRef assertion, Logic & logic) {
+    vec<PTRef> activationLiterals;
+    activationLiterals.capacity(candidates.size());
+    for (std::size_t counter = 0; counter < candidates.size(); ++counter) {
+        std::string name = ".act" + std::to_string(counter);
+        PTRef activationVariable = logic.mkBoolVar(name.c_str());
+        activationLiterals.push(activationVariable);
+    }
+    SMTSolver solver(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
+    solver.assertProp(assertion);
+    vec<PTRef> queries;
+    queries.capacity(candidates.size());
+    for (auto i = 0; i < candidates.size(); ++i) {
+        queries.push(logic.mkAnd(activationLiterals[i], logic.mkNot(candidates[i])));
+    }
+    solver.assertProp(logic.mkOr(queries));
+
+    auto disabled = 0u;
+    while (disabled < queries.size_()) {
+        solver.push();
+        solver.assertProp(logic.mkAnd(activationLiterals));
+        auto res = solver.check();
+        if (res == SMTSolver::Answer::UNSAT) { break; }
+        if (res != SMTSolver::Answer::SAT) {
+            assert(false);
+            throw std::logic_error("Solver could not solve a problem while trying to push components!");
+        }
+        auto model = solver.getModel();
+        for (auto i = 0; i < activationLiterals.size(); ++i) {
+            if (logic.isNot(activationLiterals[i])) { continue; } // already disabled
+            if (model->evaluate(queries[i]) == logic.getTerm_true()) {
+                ++disabled;
+                assert(not logic.isNot(activationLiterals[i]));
+                activationLiterals[i] = logic.mkNot(activationLiterals[i]);
+            }
+        }
+        solver.pop();
+    }
+
+    Formulas implied;
+    for (auto i = 0; i < candidates.size(); ++i) {
+        if (not logic.isNot(activationLiterals[i])) {
+            implied.push(candidates[i]);
+        }
+    }
+    return implied;
+}
