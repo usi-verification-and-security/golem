@@ -40,21 +40,19 @@ void SMTSolver::pop() {
     solver->pop();
 }
 
-Formulas impliedBy(Formulas candidates, PTRef assertion, Logic & logic) {
+namespace {
+Formulas impliedBy(SMTSolver & solver, Formulas candidates, Logic & logic) {
+    vec<PTRef> queries;
+    queries.capacity(candidates.size());
     vec<PTRef> activationLiterals;
     activationLiterals.capacity(candidates.size());
-    for (std::size_t counter = 0; counter < candidates.size(); ++counter) {
+    for (int counter = 0; counter < candidates.size(); ++counter) {
         std::string name = ".act" + std::to_string(counter);
         PTRef activationVariable = logic.mkBoolVar(name.c_str());
         activationLiterals.push(activationVariable);
+        queries.push(logic.mkAnd(activationLiterals[counter], logic.mkNot(candidates[counter])));
     }
-    SMTSolver solver(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
-    solver.assertProp(assertion);
-    vec<PTRef> queries;
-    queries.capacity(candidates.size());
-    for (auto i = 0; i < candidates.size(); ++i) {
-        queries.push(logic.mkAnd(activationLiterals[i], logic.mkNot(candidates[i])));
-    }
+
     solver.assertProp(logic.mkOr(queries));
 
     auto disabled = 0u;
@@ -81,9 +79,22 @@ Formulas impliedBy(Formulas candidates, PTRef assertion, Logic & logic) {
 
     Formulas implied;
     for (auto i = 0; i < candidates.size(); ++i) {
-        if (not logic.isNot(activationLiterals[i])) {
-            implied.push(candidates[i]);
-        }
+        if (not logic.isNot(activationLiterals[i])) { implied.push(candidates[i]); }
     }
     return implied;
+}
+} // namespace
+
+Formulas impliedBy(Formulas candidates, PTRef assertion, Logic & logic) {
+    SMTSolver solver(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
+    solver.assertProp(assertion);
+    return impliedBy(solver, std::move(candidates), logic);
+}
+
+Formulas impliedBy(Formulas candidates, vec<PTRef> const & assertions, Logic & logic) {
+    SMTSolver solver(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
+    for (PTRef const assertion : assertions) {
+        solver.assertProp(assertion);
+    }
+    return impliedBy(solver, std::move(candidates), logic);
 }

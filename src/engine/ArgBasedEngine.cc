@@ -827,7 +827,7 @@ vec<PTRef> ARG::computePropagatedPredicates(C const & candidates, std::vector<No
                                             PTRef edgeConstraint) const {
     Logic & logic = clauses.getLogic();
     VersionManager versionManager{logic};
-    PTRef const assertion = [&]() {
+    vec<PTRef> assertions = [&]() {
         std::unordered_map<SymRef, int, SymRefHash> sourcesCount;
         vec<PTRef> components{edgeConstraint};
         for (auto const sourceId : sources) {
@@ -836,14 +836,14 @@ vec<PTRef> ARG::computePropagatedPredicates(C const & candidates, std::vector<No
                 versionManager.baseFormulaToSource(reachedStates, sourcesCount[getPredicateSymbol(sourceId)]++);
             components.push(versioned);
         }
-        return logic.mkAnd(std::move(components));
+        return components;
     }();
     vec<PTRef> candidatesVec;
     for (PTRef const candidate : candidates) {
         PTRef versionedPredicate = versionManager.baseFormulaToTarget(candidate);
         candidatesVec.push(versionedPredicate);
     }
-    auto impliedPredicates = impliedBy(std::move(candidatesVec), assertion, logic);
+    auto impliedPredicates = impliedBy(std::move(candidatesVec), assertions, logic);
     for (PTRef & predicate : impliedPredicates) {
         predicate = versionManager.targetFormulaToBase(predicate);
     }

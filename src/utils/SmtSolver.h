@@ -44,5 +44,6 @@ public:
 
 using Formulas = vec<PTRef>;
 Formulas impliedBy(Formulas candidates, PTRef assertion, Logic & logic);
+Formulas impliedBy(Formulas candidates, vec<PTRef> const & assertions, Logic & logic);
 
 #endif // GOLEM_SMTSOLVER_H
