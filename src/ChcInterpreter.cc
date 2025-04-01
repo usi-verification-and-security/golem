@@ -20,7 +20,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-using namespace osmttokens;
+using namespace opensmt::tokens;
 
 namespace {
 bool addLetFrame(const vec<char *> & names, vec<PTRef> const & args, Logic & logic, LetRecords & letRecords) {

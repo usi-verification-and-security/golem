@@ -3,7 +3,25 @@
 //
 
 #include <gtest/gtest.h>
+
 #include "ModelBasedProjection.h"
+
+#include "utils/SmtSolver.h"
+
+namespace {
+using Assignment = std::vector<std::pair<PTRef, PTRef>>;
+    auto getModel(Assignment const & values, Logic & logic) {
+        SMTSolver solver(logic);
+        for (auto const & entry : values) {
+            solver.assertProp(logic.mkEq(entry.first, entry.second));
+        }
+        auto const res = solver.check();
+        if (res != SMTSolver::Answer::SAT) {
+            throw std::logic_error("Must be consistent!");
+        }
+        return solver.getModel();
+    }
+}
 
 class MBP_RealTest : public ::testing::Test {
 protected:
@@ -30,14 +48,7 @@ protected:
         trueTerm = logic.getTerm_true();
     }
 
-    using Assignment = std::vector<std::pair<PTRef, PTRef>>;
-    auto getModel(Assignment const & values) {
-        ModelBuilder builder(logic);
-        for (auto const & entry : values) {
-            builder.addVarValue(entry.first, entry.second);
-        }
-        return builder.build();
-    }
+    auto getModel(Assignment const & values) { return ::getModel(values, logic); }
 };
 
 TEST_F(MBP_RealTest, test_AllEqualBounds) {
@@ -385,14 +396,7 @@ protected:
         minusOne = logic.getTerm_IntMinusOne();
     }
 
-    using Assignment = std::vector<std::pair<PTRef, PTRef>>;
-    auto getModel(Assignment const & values) {
-        ModelBuilder builder(logic);
-        for (auto const & entry : values) {
-            builder.addVarValue(entry.first, entry.second);
-        }
-        return builder.build();
-    }
+    auto getModel(Assignment const & values) { return ::getModel(values, logic); }
 };
 
 TEST_F(MBP_IntTest, test_oneLower_oneUpper) {

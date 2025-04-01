@@ -12,8 +12,6 @@
 
 #include <unordered_set>
 #include <iosfwd>
-class Logic;
-class ArithLogic;
 
 class ModelBasedProjection {
 private:
