@@ -27,9 +27,9 @@ std::string tryDetectLogic(ASTNode const * root) {
         return "";
     };
     for (ASTNode * child : children) {
-        const osmttokens::smt2token token = child->getToken();
+        const tokens::smt2token token = child->getToken();
         switch (token.x) {
-            case osmttokens::t_declarefun:
+            case tokens::t_declarefun:
             {
                 auto it = child->children->begin();
                 ASTNode const & name_node = **(it++); (void)name_node;
@@ -46,7 +46,7 @@ std::string tryDetectLogic(ASTNode const * root) {
                 if (examined == limit) { return decide(); }
                 break;
             }
-            case osmttokens::t_assert:
+            case tokens::t_assert:
                 return decide();
             default:
                 ;
@@ -93,7 +93,7 @@ int main( int argc, char * argv[] ) {
         const char * extension = strrchr( filename, '.' );
         if (extension != nullptr && strcmp(extension, ".smt2") == 0) {
             Smt2newContext context(fin);
-            int rval = smt2newparse(&context);
+            int rval = osmt_yyparse(&context);
             if (rval != 0) {
                 fclose(fin);
                 error("Error when parsing input file");

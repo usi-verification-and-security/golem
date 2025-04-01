@@ -572,20 +572,7 @@ FastRational mbp_fastrat_fdiv_r(FastRational const & n, FastRational const & d) 
 
 std::unique_ptr<Model> extendModel(Model & model, ModelBasedProjection::implicant_t const & implicant,
                                    std::pair<PTRef, PTRef> varValPair, Logic & logic) {
-    ModelBuilder builder(logic);
-    std::unordered_set<PTRef, PTRefHash> processedVars;
-    // TODO: Expose from OpenSMT API method to run a given hook on each encountered variable
-    for (PtAsgn lit : implicant) {
-        vec<PTRef> relevantVars = TermUtils(logic).getVars(lit.tr);
-        for (PTRef var : relevantVars) {
-            if (processedVars.find(var) == processedVars.end()) {
-                builder.addVarValue(var, model.evaluate(var));
-                processedVars.insert(var);
-            }
-        }
-    }
-    builder.addVarValue(varValPair.first, varValPair.second);
-    return builder.build();
+    return model.extend(varValPair.first, varValPair.second);
 }
 
 template<class ForwardIt, class Funct>

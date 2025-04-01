@@ -11,6 +11,7 @@
 #include "utils/StdUtils.h"
 
 #include <memory>
+#include <set>
 
 #define TRACE_LEVEL 0
 

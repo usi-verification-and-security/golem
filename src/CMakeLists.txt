@@ -2,14 +2,14 @@ include(FetchContent)
 
 # Find OpenSMT2
 SET(OPENSMT_HOME CACHE STRING "OpenSMT installation directory")
-find_package(OpenSMT 2.7.0 EXACT CONFIG PATHS ${OPENSMT_HOME} NO_DEFAULT_PATH)
+find_package(OpenSMT 2.9.1 EXACT CONFIG PATHS ${OPENSMT_HOME} NO_DEFAULT_PATH)
 
 if (OpenSMT_FOUND)
 else(OpenSMT_FOUND)
     FetchContent_Declare(
         OpenSMT
         GIT_REPOSITORY https://github.com/usi-verification-and-security/opensmt.git
-        GIT_TAG e4e6a65d437bf4f0c3501b258dec4b10d0c4189a # v2.7.0
+        GIT_TAG d80f67369a92ca20dceb9bef36c12d49e6e38a03 # v2.9.1
         GIT_SHALLOW true
         GIT_PROGRESS true
     )
@@ -81,32 +81,7 @@ target_include_directories(golem_lib PUBLIC ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOUR
 if (NOT OpenSMT_FOUND)
     target_compile_definitions(golem_lib PUBLIC OPENSMT_LOCAL_BUILD)
     #message("Directories:${opensmt_SOURCE_DIR}; ${opensmt_BINARY_DIR}")
-    target_include_directories(golem_lib PUBLIC 
-        "${opensmt_SOURCE_DIR}/src/symbols"
-        "${opensmt_SOURCE_DIR}/src/minisat/mtl"
-    ${opensmt_SOURCE_DIR}/src/minisat/core
-    ${opensmt_SOURCE_DIR}/src/common
-    ${opensmt_SOURCE_DIR}/src/sorts
-    ${opensmt_SOURCE_DIR}/src/symbols
-    ${opensmt_SOURCE_DIR}/src/options
-    ${opensmt_SOURCE_DIR}/src/api
-    ${opensmt_SOURCE_DIR}/src/tsolvers
-    ${opensmt_SOURCE_DIR}/src/tsolvers/egraph
-    ${opensmt_SOURCE_DIR}/src/tsolvers/lasolver
-    ${opensmt_SOURCE_DIR}/src/tsolvers/lrasolver
-    ${opensmt_SOURCE_DIR}/src/tsolvers/liasolver
-    ${opensmt_SOURCE_DIR}/src/cnfizers
-    ${opensmt_SOURCE_DIR}/src/pterms
-    ${opensmt_SOURCE_DIR}/src/logics
-    ${opensmt_SOURCE_DIR}/src/smtsolvers
-    ${opensmt_SOURCE_DIR}/src/parsers/smt2new
-    ${opensmt_SOURCE_DIR}/src/simplifiers
-    ${opensmt_SOURCE_DIR}/src/rewriters
-    ${opensmt_SOURCE_DIR}/src/proof
-    ${opensmt_SOURCE_DIR}/src/models
-    ${opensmt_SOURCE_DIR}/src/itehandler
-    ${opensmt_SOURCE_DIR}/src/interpolation
-    )
+    target_include_directories(golem_lib PUBLIC "${opensmt_SOURCE_DIR}/src")
     #message("GMP dirs:${GMP_INCLUDE_DIR}")
     target_include_directories(golem_lib PUBLIC ${GMP_INCLUDE_DIR})
 endif()
