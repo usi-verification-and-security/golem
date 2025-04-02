@@ -139,13 +139,6 @@ public:
     PTRef getTransitionInvariant() const;
     PTRef getInductiveInvariant() const;
     vec<PTRef> getStateVars(int version) const;
-    void retrieveDisjuncts(PTRef f, vec<PTRef> & disjuncts) const ;
-    bool isLiteral(PTRef ptr) const;
-    PTRef deMorganize(PTRef formula) const;
-
-
-
-
 
 protected:
     virtual VerificationAnswer checkPower(unsigned short power) = 0;
@@ -210,6 +203,8 @@ protected:
     PTRef computeIdentity() const;
 
     void resetExplanation();
+
+    void squashInvariants(vec<PTRef> & candidates);
 
     VerificationAnswer checkTrivialUnreachability();
 };

@@ -26,10 +26,6 @@
 const std::string TPAEngine::TPA = "tpa";
 const std::string TPAEngine::SPLIT_TPA = "split-tpa";
 
-bool TPAEngine::shouldComputeWitness() const {
-    return options.getOrDefault(Options::COMPUTE_WITNESS, "") == "true";
-}
-
 std::unique_ptr<TPABase> TPAEngine::mkSolver() {
     switch (coreAlgorithm) {
         case TPACore::BASIC:
@@ -38,19 +34,6 @@ std::unique_ptr<TPABase> TPAEngine::mkSolver() {
             return std::make_unique<TPASplit>(logic, options);
     }
     throw std::logic_error("UNREACHABLE");
-}
-
-VerificationResult TPAEngine::solve(ChcDirectedHyperGraph const & graph) {
-    auto pipeline = Transformations::TPAPreprocessing();
-    auto transformationResult = pipeline.transform(std::make_unique<ChcDirectedHyperGraph>(graph));
-    auto transformedGraph = std::move(transformationResult.first);
-    auto translator = std::move(transformationResult.second);
-    if (transformedGraph->isNormalGraph()) {
-        auto normalGraph = transformedGraph->toNormalGraph();
-        auto res = solve(*normalGraph);
-        return shouldComputeWitness() ? translator->translate(std::move(res)) : std::move(res);
-    }
-    return VerificationResult(VerificationAnswer::UNKNOWN);
 }
 
 VerificationResult TPAEngine::solve(const ChcDirectedGraph & graph) {
@@ -900,6 +883,18 @@ bool TPASplit::verifyExactPower(unsigned short power) const {
     return res == SMTSolver::Answer::UNSAT;
 }
 
+void TPABase::squashInvariants(vec<PTRef> & candidates) {
+    while (candidates.size() > 128) {
+        int j = 0;
+        for (int i = candidates.size() - 1; i >= 1 && i > j; i-- && j++) {
+            PTRef n_f = logic.mkAnd(candidates[j], candidates[i]);
+            candidates.pop();
+            candidates[j] = n_f;
+            if (candidates.size() <= 128) { break; }
+        }
+    }
+}
+
 void TPABase::houdiniCheck(PTRef invCandidates, PTRef transition, SafetyExplanation::FixedPointType alignment) {
     // RIGHT:
     //   rightInvariants /\ currentLevelTransition /\ getNextVersion(transition) =>
@@ -917,6 +912,7 @@ void TPABase::houdiniCheck(PTRef invCandidates, PTRef transition, SafetyExplanat
     }
 
     solver.push();
+    squashInvariants(candidates);
     //    invCandidates.append(conjuncts);
     //    Atr(x, x') /\ tr(x', x'') => Atr(x, x'')
     //    or
@@ -1708,7 +1704,7 @@ witness_t TransitionSystemNetworkManager::computeValidityWitness() {
                 graphInvariant = logic.mkOr(graphInvariant, loopInv);
             }
             PTRef unversionedPredicate = logic.mkUninterpFun(vertex, std::move(unversionedVars));
-            definitions[unversionedPredicate] = graphInvariant;
+            definitions[vertex] = graphInvariant;
         } else {
             return NoWitness("Unexpected situation occurred during witness computation in TPA engine");
         }
