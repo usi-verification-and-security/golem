@@ -139,6 +139,16 @@ std::vector<EId> detectLoop(const ChcDirectedGraph & graph) {
     return loop;
 }
 
+
+bool hasSelfLoops(ChcDirectedGraph const & graph) {
+    if (graph.getVertices().size() < 3) { return false; }
+    auto edges = graph.getEdges();
+    for (auto edge: edges) {
+        if (graph.getTarget(edge) == graph.getSource(edge)) { return true; }
+    }
+    return false;
+}
+
 bool isTransitionSystemDAG(ChcDirectedGraph const & graph) {
     if (graph.getVertices().size() < 3) { return false; }
     auto graphRepresentation = AdjacencyListsGraphRepresentation::from(graph);

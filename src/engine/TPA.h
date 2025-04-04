@@ -43,7 +43,7 @@ public:
         computeWitness = this->options.getOrDefault(Options::COMPUTE_WITNESS, "") == "true";
     }
 
-    using TransitionSystemEngine::solve;
+    VerificationResult solve(ChcDirectedHyperGraph const & graph) override;
     VerificationResult solve(ChcDirectedGraph const & graph) override;
 
     static const std::string TPA;
@@ -73,6 +73,7 @@ struct SafetyExplanation {
     TPAType relationType{TPAType::LESS_THAN};
     FixedPointType fixedPointType{FixedPointType::LEFT};
     PTRef safeTransitionInvariant{PTRef_Undef};
+    PTRef safetyExplanation{PTRef_Undef};
 
     /** the transition invariant is k-inductive for k = 2^{inductivnessPowerExponent}*/
     uint32_t inductivnessPowerExponent{0};
@@ -96,6 +97,7 @@ protected:
     PTRef init;
     PTRef transition;
     PTRef query;
+    PTRef min = PTRef_Undef;
     vec<PTRef> stateVariables;
     vec<PTRef> auxiliaryVariables;
     vec<PTRef> leftInvariants;
@@ -129,9 +131,12 @@ public:
      * are also safe, given the explanation found by the algorithm.
      * @return superset of initial states that are still safe
      */
+    PTRef ExplMinimisation(PTRef explCandidates, PTRef base) const;
     PTRef getSafetyExplanation() const;
     PTRef getReachedStates() const;
     unsigned getTransitionStepCount() const;
+    PTRef getGeneralTransitionInvariant() const;
+    PTRef getTransitionInvariant() const;
     PTRef getInductiveInvariant() const;
     vec<PTRef> getStateVars(int version) const;
 
