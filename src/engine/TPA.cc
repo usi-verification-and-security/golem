@@ -36,6 +36,16 @@ std::unique_ptr<TPABase> TPAEngine::mkSolver() {
     throw std::logic_error("UNREACHABLE");
 }
 
+VerificationResult TPAEngine::solve(ChcDirectedHyperGraph const & graph) {
+    if (graph.isNormalGraph()) {
+        auto normalGraph = graph.toNormalGraph();
+        auto res = solve(*normalGraph);
+        return std::move(res);
+    }
+    return VerificationResult(VerificationAnswer::UNKNOWN);
+}
+
+
 VerificationResult TPAEngine::solve(const ChcDirectedGraph & graph) {
     if (isTrivial(graph)) { return solveTrivial(graph); }
     if (isTransitionSystem(graph)) {

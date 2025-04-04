@@ -13,14 +13,14 @@
 #include "transformers/SingleLoopTransformation.h"
 
 VerificationResult TransitionSystemEngine::solve(ChcDirectedHyperGraph const & graph) {
-    // auto pipeline = Transformations::towardsTransitionSystems();
-    // auto transformationResult = pipeline.transform(std::make_unique<ChcDirectedHyperGraph>(graph));
-    // auto transformedGraph = std::move(transformationResult.first);
-    // auto translator = std::move(transformationResult.second);
-    if (graph.isNormalGraph()) {
-        auto normalGraph = graph.toNormalGraph();
+    auto pipeline = Transformations::towardsTransitionSystems();
+    auto transformationResult = pipeline.transform(std::make_unique<ChcDirectedHyperGraph>(graph));
+    auto transformedGraph = std::move(transformationResult.first);
+    auto translator = std::move(transformationResult.second);
+    if (transformedGraph->isNormalGraph()) {
+        auto normalGraph = transformedGraph->toNormalGraph();
         auto res = solve(*normalGraph);
-        return std::move(res);
+        return computeWitness ? translator->translate(std::move(res)) : std::move(res);
     }
     return VerificationResult(VerificationAnswer::UNKNOWN);
 }

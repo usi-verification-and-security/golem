@@ -43,7 +43,7 @@ public:
         computeWitness = this->options.getOrDefault(Options::COMPUTE_WITNESS, "") == "true";
     }
 
-    using TransitionSystemEngine::solve;
+    VerificationResult solve(ChcDirectedHyperGraph const & graph) override;
     VerificationResult solve(ChcDirectedGraph const & graph) override;
 
     static const std::string TPA;
