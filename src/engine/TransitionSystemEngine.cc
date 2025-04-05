@@ -12,6 +12,7 @@
 #include "transformers/BasicTransformationPipelines.h"
 #include "transformers/SingleLoopTransformation.h"
 
+namespace golem {
 VerificationResult TransitionSystemEngine::solve(ChcDirectedHyperGraph const & graph) {
     auto pipeline = Transformations::towardsTransitionSystems();
     auto transformationResult = pipeline.transform(std::make_unique<ChcDirectedHyperGraph>(graph));
@@ -44,5 +45,5 @@ VerificationResult TransitionSystemEngine::solve(ChcDirectedGraph const & graph)
 TransitionSystemVerificationResult TransitionSystemEngine::solve(TransitionSystem const &) {
     return {VerificationAnswer::UNKNOWN, {0u}};
 }
-
+} // namespace golem
 

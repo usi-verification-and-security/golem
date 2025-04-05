@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2024, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2020-2025, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
@@ -11,6 +11,7 @@
 #include <optional>
 #include <string>
 
+namespace golem {
 class Options {
     std::map<std::string, std::string> options;
 public:
@@ -53,5 +54,5 @@ class CommandLineParser {
 public:
     Options parse(int argc, char * argv[]);
 };
-
+} // namespace golem
 #endif //GOLEM_OPTIONS_H

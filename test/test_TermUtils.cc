@@ -1,9 +1,13 @@
-//
-// Created by Martin Blicha on 24.08.21.
-//
+/*
+ * Copyright (c) 2021-2025, Martin Blicha <martin.blicha@gmail.com>
+ *
+ * SPDX-License-Identifier: MIT
+ */
 
 #include <gtest/gtest.h>
 #include "TermUtils.h"
+
+using namespace golem;
 
 bool contains(vec<PTRef> const & v, PTRef p) {
     for (PTRef t : v) {

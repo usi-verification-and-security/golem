@@ -9,6 +9,7 @@
 
 #include <utility>
 
+namespace golem {
 template <typename Func>
 class ScopeGuard {
 public:
@@ -22,5 +23,6 @@ public:
 private:
     Func func;
 };
+} // namespace golem
 
 #endif //SCOPEGUARD_H

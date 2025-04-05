@@ -1,11 +1,14 @@
-//
-// Created by Martin Blicha on 15.07.20.
-//
+/*
+ * Copyright (c) 2020-2025, Martin Blicha <martin.blicha@gmail.com>
+ *
+ * SPDX-License-Identifier: MIT
+ */
 
 #include "ChcSystem.h"
 
 #include <iostream>
 
+namespace golem {
 void ChcPrinter::print(const ChcSystem & system, std::ostream & out) const {
     auto const & clauses = system.getClauses();
     for (auto const& clause : clauses) {
@@ -23,3 +26,4 @@ void ChcPrinter::print(const ChClause & clause, std::ostream & out) const {
     }
     out << '\t' << logic.printTerm(body.interpretedPart.fla) << std::endl;
 }
+} // namespace golem

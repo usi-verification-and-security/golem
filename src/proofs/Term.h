@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2023, Matias Barandiaran <matias.barandiaran03@gmail.com>
- * Copyright (c) 2024, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2024-2025, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
@@ -15,6 +15,7 @@
 #include <utility>
 #include <vector>
 
+namespace golem {
 class Term : public std::enable_shared_from_this<Term> {
 public:
     enum termType { APP, OP, TERMINAL, QUANT, LET };
@@ -213,5 +214,6 @@ public:
     Term * visit(App *) override { return nullptr; };
     Term * visit(Let *) override;
 };
+} // namespace golem
 
 #endif // GOLEM_TERM_H

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2023, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2020-2025, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
@@ -11,6 +11,7 @@
 #include <memory>
 #include <utility>
 
+namespace golem {
 void VerificationResult::printWitness(std::ostream & out, Logic & logic, const ChcDirectedHyperGraph & originalGraph,
                                        std::vector<std::shared_ptr<Term>> originalAssertions, Normalizer::Equalities const & normalizingEqualities, const std::string& format) const {
 
@@ -198,7 +199,7 @@ ValidityWitness::fromTransitionSystem(Logic & logic, ChcDirectedGraph const & gr
         subs.insert({systemVars[i], unversionedVars.last()});
     }
     PTRef graphInvariant = utils.varSubstitute(inductiveInvariant, subs);
-//    std::cout << "Graph invariant: " << logic.printTerm(graphInvariant) << std::endl;
+    //    std::cout << "Graph invariant: " << logic.printTerm(graphInvariant) << std::endl;
     auto definitions = trivialDefinitions(graph);
     definitions.insert({vertex, graphInvariant});
     return ValidityWitness(std::move(definitions));
@@ -239,4 +240,5 @@ ValidityWitness::definitions_t ValidityWitness::trivialDefinitions(ChcDirectedHy
         std::make_pair(graph.getExit(), graph.getLogic().getTerm_false())
     };
 }
+} // namespace golem
 

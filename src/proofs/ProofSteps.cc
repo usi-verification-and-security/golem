@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2023, Matias Barandiaran <matias.barandiaran03@gmail.com>
- * Copyright (c) 2024, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2024-2025, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
@@ -10,6 +10,30 @@
 #include <string>
 #include <utility>
 
+namespace {
+using namespace golem;
+std::vector<std::shared_ptr<Term>> literals(std::shared_ptr<Term> const & term) {
+    return std::vector{term};
+}
+
+std::vector<std::shared_ptr<Term>> literals(std::shared_ptr<Term> const & term1, std::shared_ptr<Term> const & term2) {
+    return std::vector{term1, term2};
+}
+
+std::vector<std::shared_ptr<Term>> args(std::shared_ptr<Term> const & term1, std::shared_ptr<Term> const & term2) {
+    return std::vector{term1, term2};
+}
+
+std::shared_ptr<Term> negate(std::shared_ptr<Term> const & arg) {
+    return std::make_shared<Op>("not", std::vector{arg});
+}
+
+std::shared_ptr<Terminal> makeName(std::string name) {
+    return std::make_shared<Terminal>(std::move(name), Terminal::UNDECLARED);
+}
+} // namespace
+
+namespace golem {
 std::string Step::printStepAlethe() const {
 
     std::stringstream ss;
@@ -96,28 +120,6 @@ std::string Step::printStepIntermediate() const {
 
     return ss.str();
 }
-
-namespace {
-std::vector<std::shared_ptr<Term>> literals(std::shared_ptr<Term> const & term) {
-    return std::vector{term};
-}
-
-std::vector<std::shared_ptr<Term>> literals(std::shared_ptr<Term> const & term1, std::shared_ptr<Term> const & term2) {
-    return std::vector{term1, term2};
-}
-
-std::vector<std::shared_ptr<Term>> args(std::shared_ptr<Term> const & term1, std::shared_ptr<Term> const & term2) {
-    return std::vector{term1, term2};
-}
-
-std::shared_ptr<Term> negate(std::shared_ptr<Term> const & arg) {
-    return std::make_shared<Op>("not", std::vector{arg});
-}
-
-std::shared_ptr<Terminal> makeName(std::string name) {
-    return std::make_shared<Terminal>(std::move(name), Terminal::UNDECLARED);
-}
-} // namespace
 
 void StepHandler::recordStep(std::vector<TermPtr> && clause, std::string rule, Step::Premises && premises) {
     notifyObservers(Step{currentStep++, Step::StepType::STEP, std::move(clause), std::move(rule), std::move(premises)});
@@ -392,26 +394,26 @@ StepHandler::SimplifyResult StepHandler::shortCircuitSimplifyITE(std::shared_ptr
 }
 
 namespace {
-// NOTE: The semantics of div and modulo operation in OpenSMT's FastRationals is different from the semantics defined by
-// SMT-LIB. We must use the computation according to SMT-LIB.
-// See notes in // https://smtlib.cs.uiowa.edu/theories-Ints.shtml
+    // NOTE: The semantics of div and modulo operation in OpenSMT's FastRationals is different from the semantics defined by
+    // SMT-LIB. We must use the computation according to SMT-LIB.
+    // See notes in // https://smtlib.cs.uiowa.edu/theories-Ints.shtml
 
-// "Regardless of sign of m,
-//  when n is positive, (div m n) is the floor of the rational number m/n;
-//  when n is negative, (div m n) is the ceiling of m/n."
-//  Remainder is then always a positive number r such that m = n * q + r, r < abs(n)
+    // "Regardless of sign of m,
+    //  when n is positive, (div m n) is the floor of the rational number m/n;
+    //  when n is negative, (div m n) is the ceiling of m/n."
+    //  Remainder is then always a positive number r such that m = n * q + r, r < abs(n)
 
-struct DivModPair {
-    FastRational div;
-    FastRational mod;
-};
-auto smtlib_divmod(FastRational const & m, FastRational const & n) -> DivModPair {
-    auto ratio = m / n;
-    auto q = n > 0 ? ratio.floor() : ratio.ceil();
-    auto r = m - n * q;
-    assert(r.isInteger() and r.sign() >= 0 and r < abs(n));
-    return {q, r};
-}
+    struct DivModPair {
+        FastRational div;
+        FastRational mod;
+    };
+    auto smtlib_divmod(FastRational const & m, FastRational const & n) -> DivModPair {
+        auto ratio = m / n;
+        auto q = n > 0 ? ratio.floor() : ratio.ceil();
+        auto r = m - n * q;
+        assert(r.isInteger() and r.sign() >= 0 and r < abs(n));
+        return {q, r};
+    }
 
 } // namespace
 
@@ -574,57 +576,57 @@ StepHandler::TermPtr StepHandler::simplifyOpDirect(std::shared_ptr<Op> const & o
 }
 
 namespace {
-class CollectVariables : public VoidVisitor {
-public:
-    std::unordered_set<std::string> varsInUse;
+    class CollectVariables : public VoidVisitor {
+    public:
+        std::unordered_set<std::string> varsInUse;
 
-    void visit(Terminal * term) override {
-        if (term->getTerminalType() == Term::VAR) {
-            auto termStr = term->printTerm();
-            varsInUse.insert(termStr);
+        void visit(Terminal * term) override {
+            if (term->getTerminalType() == Term::VAR) {
+                auto termStr = term->printTerm();
+                varsInUse.insert(termStr);
+            }
         }
-    }
 
-    void visit(Op * term) override {
-        for (auto const & arg : term->getArgs()) {
-            arg->accept(this);
+        void visit(Op * term) override {
+            for (auto const & arg : term->getArgs()) {
+                arg->accept(this);
+            }
         }
-    }
 
-    void visit(App * term) override {
-        for (auto const & arg : term->getArgs()) {
-            arg->accept(this);
+        void visit(App * term) override {
+            for (auto const & arg : term->getArgs()) {
+                arg->accept(this);
+            }
         }
-    }
-    void visit(Quant *) override { throw std::logic_error("Should not encounter quantifier at this point!"); };
-    void visit(Let *) override { throw std::logic_error("Should not encounter let terms here!"); }
-};
+        void visit(Quant *) override { throw std::logic_error("Should not encounter quantifier at this point!"); };
+        void visit(Let *) override { throw std::logic_error("Should not encounter let terms here!"); }
+    };
 
-std::pair<std::shared_ptr<Term>, bool> removeUnusedQuantifiers(std::shared_ptr<Term> const & term) {
-    if (term->getTermType() != Term::QUANT) { return {term, false}; }
-    auto quantifiedTerm = std::dynamic_pointer_cast<Quant>(term);
-    CollectVariables collector;
-    quantifiedTerm->getCoreTerm()->accept(&collector);
-    auto const & varsInUse = collector.varsInUse;
+    std::pair<std::shared_ptr<Term>, bool> removeUnusedQuantifiers(std::shared_ptr<Term> const & term) {
+        if (term->getTermType() != Term::QUANT) { return {term, false}; }
+        auto quantifiedTerm = std::dynamic_pointer_cast<Quant>(term);
+        CollectVariables collector;
+        quantifiedTerm->getCoreTerm()->accept(&collector);
+        auto const & varsInUse = collector.varsInUse;
 
-    std::vector<std::shared_ptr<Term>> newVars;
-    std::vector<std::shared_ptr<Term>> newSorts;
-    auto const & vars = quantifiedTerm->getVars();
-    auto const & sorts = quantifiedTerm->getSorts();
-    for (std::size_t i = 0; i < vars.size(); ++i) {
-        auto varStr = vars[i]->printTerm();
-        auto it = varsInUse.find(varStr);
-        if (it != varsInUse.end()) {
-            newVars.push_back(vars[i]);
-            newSorts.push_back(sorts[i]);
+        std::vector<std::shared_ptr<Term>> newVars;
+        std::vector<std::shared_ptr<Term>> newSorts;
+        auto const & vars = quantifiedTerm->getVars();
+        auto const & sorts = quantifiedTerm->getSorts();
+        for (std::size_t i = 0; i < vars.size(); ++i) {
+            auto varStr = vars[i]->printTerm();
+            auto it = varsInUse.find(varStr);
+            if (it != varsInUse.end()) {
+                newVars.push_back(vars[i]);
+                newSorts.push_back(sorts[i]);
+            }
         }
+        if (newVars.empty()) { return {quantifiedTerm->getCoreTerm(), true}; }
+        if (newVars.size() == vars.size()) { return {term, false}; }
+        return {std::make_shared<Quant>(quantifiedTerm->getQuant(), std::move(newVars), std::move(newSorts),
+                                        quantifiedTerm->getCoreTerm()),
+                true};
     }
-    if (newVars.empty()) { return {quantifiedTerm->getCoreTerm(), true}; }
-    if (newVars.size() == vars.size()) { return {term, false}; }
-    return {std::make_shared<Quant>(quantifiedTerm->getQuant(), std::move(newVars), std::move(newSorts),
-                                    quantifiedTerm->getCoreTerm()),
-            true};
-}
 
 } // namespace
 
@@ -708,14 +710,14 @@ std::size_t StepHandler::deriveLHSWithoutConstraint(std::shared_ptr<Term> const 
         // single predicate, including 0-ary predicate as a special case
         assert(predicatePremises.size() == 1);
         return predicatePremises[0];
-    } else if (simplifiedLHS->getTermType() == Term::TERMINAL and simplifiedLHS->getTerminalType() == Term::BOOL) {
-        // no predicate => constant true
-        assert(simplifiedLHS->printTerm() == "true");
-        return getOrCreateTrueStep();
-    } else {
-        assert(false);
-        throw std::logic_error("Unexpected situation during proof building");
-    }
+               } else if (simplifiedLHS->getTermType() == Term::TERMINAL and simplifiedLHS->getTerminalType() == Term::BOOL) {
+                   // no predicate => constant true
+                   assert(simplifiedLHS->printTerm() == "true");
+                   return getOrCreateTrueStep();
+               } else {
+                   assert(false);
+                   throw std::logic_error("Unexpected situation during proof building");
+               }
 }
 
 std::vector<std::pair<std::string, std::string>>
@@ -828,3 +830,4 @@ std::size_t StepHandler::getOrCreateTrueStep() {
     }
     return trueRuleStep;
 }
+} // namespace golem

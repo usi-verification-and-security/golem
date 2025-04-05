@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2022, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2020-2025, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
@@ -11,6 +11,7 @@
 #include <cstring>
 #include <cassert>
 
+namespace golem {
 const std::string Options::INPUT_FILE = "input";
 const std::string Options::LOGIC = "logic";
 const std::string Options::ENGINE = "engine";
@@ -28,40 +29,40 @@ const std::string Options::PROOF_FORMAT = "proof-format";
 
 namespace{
 
-void printUsage() {
-    std::cout <<
-        "Usage: golem [options] [-i] file\n"
-        "\n"
-        "-h,--help                  Print this help message\n"
-        "--version                  Print version number of Golem\n"
-        "-l,--logic <name>          SMT-LIB logic to use (required); possible values: QF_LRA, QF_LIA\n"
-        "-e,--engine <name>         Select engine to use; supported engines:\n"
-        "                               bmc - Bounded Model Checking (only linear systems)\n"
-        "                               dar - Dual Approximated Reachability (only linear systems)\n"
-        "                               imc - McMillan's original Interpolation-based model checking (only linear systems)\n"
-        "                               kind - basic k-induction algorithm (only transition systems)\n"
-        "                               lawi - Lazy Abstraction with Interpolants (only linear systems)\n"
-        "                               pa - basic predicate abstraction with CEGAR (any system)\n"
-        "                               pdkind - Property directed k-induction (only linear systems)\n"
-        "                               spacer - custom implementation of Spacer (any system)\n"
-        "                               split-tpa - Split Transition Power Abstraction (only linear systems)\n"
-        "                               tpa - Transition Power Abstraction (only linear systems)\n"
-        "--validate                 Internally validate computed solution\n"
-        "--print-witness            Print computed solution\n"
-        "--proof-format <name>      Proof format to use; supported formats:\n"
-        "                               legacy (default) - golem's original proof format\n"
-        "                               intermediate - intermediate proof format (includes variable instantiation)\n"
-        "                               alethe (verifiable) - alethe proof format\n"
-        "-v                         Increase verbosity (can be applied multiple times)\n"
-        "-i,--input <file>          Input file (option not required)\n"
-        "--force-ts                 Enforces solving for a single TS (in case if there is a structure of TS, it is simplified into a single TS)\n"
-        ;
-    std::cout << std::flush;
-}
+    void printUsage() {
+        std::cout <<
+            "Usage: golem [options] [-i] file\n"
+            "\n"
+            "-h,--help                  Print this help message\n"
+            "--version                  Print version number of Golem\n"
+            "-l,--logic <name>          SMT-LIB logic to use (required); possible values: QF_LRA, QF_LIA\n"
+            "-e,--engine <name>         Select engine to use; supported engines:\n"
+            "                               bmc - Bounded Model Checking (only linear systems)\n"
+            "                               dar - Dual Approximated Reachability (only linear systems)\n"
+            "                               imc - McMillan's original Interpolation-based model checking (only linear systems)\n"
+            "                               kind - basic k-induction algorithm (only transition systems)\n"
+            "                               lawi - Lazy Abstraction with Interpolants (only linear systems)\n"
+            "                               pa - basic predicate abstraction with CEGAR (any system)\n"
+            "                               pdkind - Property directed k-induction (only linear systems)\n"
+            "                               spacer - custom implementation of Spacer (any system)\n"
+            "                               split-tpa - Split Transition Power Abstraction (only linear systems)\n"
+            "                               tpa - Transition Power Abstraction (only linear systems)\n"
+            "--validate                 Internally validate computed solution\n"
+            "--print-witness            Print computed solution\n"
+            "--proof-format <name>      Proof format to use; supported formats:\n"
+            "                               legacy (default) - golem's original proof format\n"
+            "                               intermediate - intermediate proof format (includes variable instantiation)\n"
+            "                               alethe (verifiable) - alethe proof format\n"
+            "-v                         Increase verbosity (can be applied multiple times)\n"
+            "-i,--input <file>          Input file (option not required)\n"
+            "--force-ts                 Enforces solving for a single TS (in case if there is a structure of TS, it is simplified into a single TS)\n"
+            ;
+        std::cout << std::flush;
+    }
 
-bool isDisableKeyword(const char* word) {
-    return strcmp(word, "no") == 0 or strcmp(word, "false") == 0 or strcmp(word, "disable") == 0;
-}
+    bool isDisableKeyword(const char* word) {
+        return strcmp(word, "no") == 0 or strcmp(word, "false") == 0 or strcmp(word, "disable") == 0;
+    }
 }
 
 Options CommandLineParser::parse(int argc, char ** argv) {
@@ -80,23 +81,23 @@ Options CommandLineParser::parse(int argc, char ** argv) {
 
     struct option long_options[] =
         {
-            {"help", no_argument, nullptr, 'h'},
-            {"version", no_argument, &printVersion, 1},
-            {Options::ENGINE.c_str(), required_argument, nullptr, 'e'},
-            {Options::LOGIC.c_str(), required_argument, nullptr, 'l'},
-            {Options::INPUT_FILE.c_str(), required_argument, nullptr, 'i'},
-            {Options::ANALYSIS_FLOW.c_str(), required_argument, nullptr, 'f'},
-            {Options::VALIDATE_RESULT.c_str(), no_argument, &validate, 1},
-            {Options::PRINT_WITNESS.c_str(), no_argument, &printWitness, 1},
-            {Options::COMPUTE_WITNESS.c_str(), optional_argument, &computeWitness, 1},
-            {Options::LRA_ITP_ALG.c_str(), required_argument, &lraItpAlg, 0},
-            {Options::FORCED_COVERING.c_str(), optional_argument, &forcedCovering, 1},
-            {Options::VERBOSE.c_str(), optional_argument, &verbose, 1},
-            {Options::TPA_USE_QE.c_str(), optional_argument, &tpaUseQE, 1},
-            {Options::PROOF_FORMAT.c_str(), required_argument, nullptr, 'p'},
-            {Options::FORCE_TS.c_str(), no_argument, &forceTS, 1},
-            {Options::SIMPLIFY_NESTED.c_str(), no_argument, &simplifyNested, 1},
-            {0, 0, 0, 0}
+        {"help", no_argument, nullptr, 'h'},
+        {"version", no_argument, &printVersion, 1},
+        {Options::ENGINE.c_str(), required_argument, nullptr, 'e'},
+        {Options::LOGIC.c_str(), required_argument, nullptr, 'l'},
+        {Options::INPUT_FILE.c_str(), required_argument, nullptr, 'i'},
+        {Options::ANALYSIS_FLOW.c_str(), required_argument, nullptr, 'f'},
+        {Options::VALIDATE_RESULT.c_str(), no_argument, &validate, 1},
+        {Options::PRINT_WITNESS.c_str(), no_argument, &printWitness, 1},
+        {Options::COMPUTE_WITNESS.c_str(), optional_argument, &computeWitness, 1},
+        {Options::LRA_ITP_ALG.c_str(), required_argument, &lraItpAlg, 0},
+        {Options::FORCED_COVERING.c_str(), optional_argument, &forcedCovering, 1},
+        {Options::VERBOSE.c_str(), optional_argument, &verbose, 1},
+        {Options::TPA_USE_QE.c_str(), optional_argument, &tpaUseQE, 1},
+        {Options::PROOF_FORMAT.c_str(), required_argument, nullptr, 'p'},
+        {Options::FORCE_TS.c_str(), no_argument, &forceTS, 1},
+        {Options::SIMPLIFY_NESTED.c_str(), no_argument, &simplifyNested, 1},
+        {0, 0, 0, 0}
         };
 
     while (true) {
@@ -111,52 +112,52 @@ Options CommandLineParser::parse(int argc, char ** argv) {
                     std::cout << "Golem " << GOLEM_VERSION << std::endl;
                     exit(0);
                 }
-                if (long_options[option_index].flag == &computeWitness and optarg) {
-                    if (isDisableKeyword(optarg)) {
-                        computeWitness = 0;
-                    }
-                } else if (long_options[option_index].flag == &forcedCovering and optarg) {
-                    if (isDisableKeyword(optarg)) {
-                        forcedCovering = 0;
-                    } else {
-                        forcedCovering = 1;
-                    }
-                } else if (long_options[option_index].flag == &tpaUseQE) {
-                    tpaUseQE = 1;
-                } else if (long_options[option_index].flag == &lraItpAlg) {
-                    assert(optarg);
-                    lraItpAlg = std::atoi(optarg);
+            if (long_options[option_index].flag == &computeWitness and optarg) {
+                if (isDisableKeyword(optarg)) {
+                    computeWitness = 0;
                 }
-                else if (long_options[option_index].flag == &verbose) {
-                    assert(optarg);
-                    verbose = std::atoi(optarg);
-                } else if (long_options[option_index].flag == &forceTS) {
-                    forceTS = 1;
-                } else if (long_options[option_index].flag == &simplifyNested) {
-                    simplifyNested = 1;
+            } else if (long_options[option_index].flag == &forcedCovering and optarg) {
+                if (isDisableKeyword(optarg)) {
+                    forcedCovering = 0;
+                } else {
+                    forcedCovering = 1;
                 }
-                break;
+            } else if (long_options[option_index].flag == &tpaUseQE) {
+                tpaUseQE = 1;
+            } else if (long_options[option_index].flag == &lraItpAlg) {
+                assert(optarg);
+                lraItpAlg = std::atoi(optarg);
+            }
+            else if (long_options[option_index].flag == &verbose) {
+                assert(optarg);
+                verbose = std::atoi(optarg);
+            } else if (long_options[option_index].flag == &forceTS) {
+                forceTS = 1;
+            } else if (long_options[option_index].flag == &simplifyNested) {
+                simplifyNested = 1;
+            }
+            break;
             case 'e':
                 res.addOption(Options::ENGINE, optarg);
-                break;
+            break;
             case 'l':
                 res.addOption(Options::LOGIC, optarg);
-                break;
+            break;
             case 'i':
                 res.addOption(Options::INPUT_FILE, optarg);
-                break;
+            break;
             case 'f':
                 res.addOption(Options::ANALYSIS_FLOW, optarg);
-                break;
+            break;
             case 'p':
                 res.addOption(Options::PROOF_FORMAT, optarg);
-                break;
+            break;
             case 'v':
                 ++verbose;
-                break;
+            break;
             case 'h':
                 printUsage();
-                exit(0);
+            exit(0);
             default:
                 abort();
         }
@@ -196,3 +197,4 @@ Options CommandLineParser::parse(int argc, char ** argv) {
 
     return res;
 }
+} // namespace golem

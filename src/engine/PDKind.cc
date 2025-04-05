@@ -1,5 +1,6 @@
 ﻿/*
 * Copyright (c) 2023-2024, Stepan Henrych <stepan.henrych@gmail.com>
+* Copyright (c) 2023-2024, Stepan Henrych <stepan.henrych@gmail.com>
 *
 * SPDX-License-Identifier: MIT
 */
@@ -9,18 +10,14 @@
 #include "Common.h"
 #include "ModelBasedProjection.h"
 #include "TermUtils.h"
-#include "TransformationUtils.h"
-#include "transformers/BasicTransformationPipelines.h"
-#include "transformers/SingleLoopTransformation.h"
 #include "utils/ScopeGuard.h"
 #include "utils/SmtSolver.h"
 
 #include <memory>
 #include <queue>
 #include <set>
-#include <tuple>
 
-
+namespace golem {
 /**
  * Counter example formula in addition with number of steps needed to reach the counter example.
  */
@@ -34,22 +31,22 @@ struct CounterExample {
  * Tuple containing lemma and counter example.
  */
 struct IFrameElement {
-        PTRef lemma;
-        CounterExample counter_example;
+    PTRef lemma;
+    CounterExample counter_example;
 
-        IFrameElement(PTRef lemma, CounterExample counter_example) : lemma(lemma), counter_example(counter_example) {}
+    IFrameElement(PTRef lemma, CounterExample counter_example) : lemma(lemma), counter_example(counter_example) {}
 
-        bool operator==(IFrameElement const & other) const {
-            return this->lemma == other.lemma && this->counter_example.ctx == other.counter_example.ctx;
+    bool operator==(IFrameElement const & other) const {
+        return this->lemma == other.lemma && this->counter_example.ctx == other.counter_example.ctx;
+    }
+
+    bool operator<(IFrameElement const & other) const {
+        if (this->lemma == other.lemma) {
+            return this->counter_example.ctx < other.counter_example.ctx;
+        } else {
+            return this->lemma < other.lemma;
         }
-
-        bool operator<(IFrameElement const & other) const {
-            if (this->lemma == other.lemma) {
-                return this->counter_example.ctx < other.counter_example.ctx;
-            } else {
-                return this->lemma < other.lemma;
-            }
-        }
+    }
 };
 
 /**
@@ -84,13 +81,13 @@ struct Unreachable {
 using ReachabilityResult = std::variant<Reachable, Unreachable>;
 
 namespace SolverAnswer {
-struct Feasible {
-    std::unique_ptr<Model> model;
-};
-struct Infeasible {
-    PTRef interpolant;
-};
-using Answer = std::variant<Feasible, Infeasible>;
+    struct Feasible {
+        std::unique_ptr<Model> model;
+    };
+    struct Infeasible {
+        PTRef interpolant;
+    };
+    using Answer = std::variant<Feasible, Infeasible>;
 }
 
 class FrameSolver {
@@ -482,3 +479,4 @@ ReachabilityResult ReachabilityChecker::checkReachability(unsigned const from, u
     assert(false);
     throw std::logic_error("Unreachable!");
 }
+} // namespace golem

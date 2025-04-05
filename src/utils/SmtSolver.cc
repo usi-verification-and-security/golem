@@ -1,11 +1,12 @@
 /*
- * Copyright (c) 2023-2024, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2023-2025, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
 
 #include "SmtSolver.h"
 
+namespace golem {
 SMTSolver::SMTSolver(Logic & logic, WitnessProduction setup) {
     bool produceModel = setup == WitnessProduction::ONLY_MODEL || setup == WitnessProduction::MODEL_AND_INTERPOLANTS;
     bool produceInterpolants =
@@ -41,48 +42,48 @@ void SMTSolver::pop() {
 }
 
 namespace {
-Formulas impliedBy(SMTSolver & solver, Formulas candidates, Logic & logic) {
-    vec<PTRef> queries;
-    queries.capacity(candidates.size());
-    vec<PTRef> activationLiterals;
-    activationLiterals.capacity(candidates.size());
-    for (int counter = 0; counter < candidates.size(); ++counter) {
-        std::string name = ".act" + std::to_string(counter);
-        PTRef activationVariable = logic.mkBoolVar(name.c_str());
-        activationLiterals.push(activationVariable);
-        queries.push(logic.mkAnd(activationLiterals[counter], logic.mkNot(candidates[counter])));
-    }
-
-    solver.assertProp(logic.mkOr(queries));
-
-    auto disabled = 0u;
-    while (disabled < queries.size_()) {
-        solver.push();
-        solver.assertProp(logic.mkAnd(activationLiterals));
-        auto res = solver.check();
-        if (res == SMTSolver::Answer::UNSAT) { break; }
-        if (res != SMTSolver::Answer::SAT) {
-            assert(false);
-            throw std::logic_error("Solver could not solve a problem while trying to push components!");
+    Formulas impliedBy(SMTSolver & solver, Formulas candidates, Logic & logic) {
+        vec<PTRef> queries;
+        queries.capacity(candidates.size());
+        vec<PTRef> activationLiterals;
+        activationLiterals.capacity(candidates.size());
+        for (int counter = 0; counter < candidates.size(); ++counter) {
+            std::string name = ".act" + std::to_string(counter);
+            PTRef activationVariable = logic.mkBoolVar(name.c_str());
+            activationLiterals.push(activationVariable);
+            queries.push(logic.mkAnd(activationLiterals[counter], logic.mkNot(candidates[counter])));
         }
-        auto model = solver.getModel();
-        for (auto i = 0; i < activationLiterals.size(); ++i) {
-            if (logic.isNot(activationLiterals[i])) { continue; } // already disabled
-            if (model->evaluate(queries[i]) == logic.getTerm_true()) {
-                ++disabled;
-                assert(not logic.isNot(activationLiterals[i]));
-                activationLiterals[i] = logic.mkNot(activationLiterals[i]);
+
+        solver.assertProp(logic.mkOr(queries));
+
+        auto disabled = 0u;
+        while (disabled < queries.size_()) {
+            solver.push();
+            solver.assertProp(logic.mkAnd(activationLiterals));
+            auto res = solver.check();
+            if (res == SMTSolver::Answer::UNSAT) { break; }
+            if (res != SMTSolver::Answer::SAT) {
+                assert(false);
+                throw std::logic_error("Solver could not solve a problem while trying to push components!");
             }
+            auto model = solver.getModel();
+            for (auto i = 0; i < activationLiterals.size(); ++i) {
+                if (logic.isNot(activationLiterals[i])) { continue; } // already disabled
+                if (model->evaluate(queries[i]) == logic.getTerm_true()) {
+                    ++disabled;
+                    assert(not logic.isNot(activationLiterals[i]));
+                    activationLiterals[i] = logic.mkNot(activationLiterals[i]);
+                }
+            }
+            solver.pop();
         }
-        solver.pop();
-    }
 
-    Formulas implied;
-    for (auto i = 0; i < candidates.size(); ++i) {
-        if (not logic.isNot(activationLiterals[i])) { implied.push(candidates[i]); }
+        Formulas implied;
+        for (auto i = 0; i < candidates.size(); ++i) {
+            if (not logic.isNot(activationLiterals[i])) { implied.push(candidates[i]); }
+        }
+        return implied;
     }
-    return implied;
-}
 } // namespace
 
 Formulas impliedBy(Formulas candidates, PTRef assertion, Logic & logic) {
@@ -98,3 +99,4 @@ Formulas impliedBy(Formulas candidates, vec<PTRef> const & assertions, Logic & l
     }
     return impliedBy(solver, std::move(candidates), logic);
 }
+} // namespace golem

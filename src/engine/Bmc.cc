@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2024, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2020-2025, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
@@ -13,7 +13,8 @@
 #include "transformers/SingleLoopTransformation.h"
 #include "utils/SmtSolver.h"
 
-VerificationResult BMC::solve(ChcDirectedGraph const & graph) {
+namespace golem {
+VerificationResult BMC::solve(ChcDirectedGraph const &graph) {
     if (isTrivial(graph)) { return solveTrivial(graph); }
     if (isTransitionSystem(graph)) { return solveTransitionSystem(graph); }
     if (not forceTransitionSystem) { return solveGeneralLinearSystem(graph); }
@@ -25,13 +26,13 @@ VerificationResult BMC::solve(ChcDirectedGraph const & graph) {
     return needsWitness ? backtranslator->translate(res) : VerificationResult{res.answer};
 }
 
-VerificationResult BMC::solveTransitionSystem(ChcDirectedGraph const & graph) {
+VerificationResult BMC::solveTransitionSystem(ChcDirectedGraph const &graph) {
     auto ts = toTransitionSystem(graph);
     auto res = solveTransitionSystemInternal(*ts);
     return needsWitness ? translateTransitionSystemResult(res, graph, *ts) : VerificationResult{res.answer};
 }
 
-TransitionSystemVerificationResult BMC::solveTransitionSystemInternal(TransitionSystem const & system) {
+TransitionSystemVerificationResult BMC::solveTransitionSystemInternal(TransitionSystem const &system) {
     std::size_t maxLoopUnrollings = std::numeric_limits<std::size_t>::max();
     PTRef init = system.getInit();
     PTRef query = system.getQuery();
@@ -39,8 +40,8 @@ TransitionSystemVerificationResult BMC::solveTransitionSystemInternal(Transition
 
     SMTSolver solver(logic, SMTSolver::WitnessProduction::NONE);
     //    std::cout << "Adding initial states: " << logic.pp(init) << std::endl;
-    solver.assertProp(init);
-    { // Check for system with empty initial states
+    solver.assertProp(init); {
+        // Check for system with empty initial states
         auto res = solver.check();
         if (res == SMTSolver::Answer::UNSAT) {
             return TransitionSystemVerificationResult{VerificationAnswer::SAFE, logic.getTerm_false()};
@@ -56,8 +57,10 @@ TransitionSystemVerificationResult BMC::solveTransitionSystemInternal(Transition
         auto res = solver.check();
         if (res == SMTSolver::Answer::SAT) {
             if (verbosity > 0) { std::cout << "; BMC: Bug found in depth: " << currentUnrolling << std::endl; }
-            return TransitionSystemVerificationResult{.answer = VerificationAnswer::UNSAFE,
-                                                      .witness = static_cast<std::size_t>(currentUnrolling)};
+            return TransitionSystemVerificationResult{
+                .answer = VerificationAnswer::UNSAFE,
+                .witness = static_cast<std::size_t>(currentUnrolling)
+            };
         }
         if (verbosity > 1) { std::cout << "; BMC: No path of length " << currentUnrolling << " found!" << std::endl; }
         solver.pop();
@@ -69,50 +72,51 @@ TransitionSystemVerificationResult BMC::solveTransitionSystemInternal(Transition
 }
 
 namespace {
-constexpr const char * auxName = "golem_bmc";
+    constexpr const char *auxName = "golem_bmc";
 
-class BMCUtils {
-public:
-    explicit BMCUtils(Logic & logic) : logic(logic) {}
-
-    PTRef getVarFor(SymRef node, std::size_t step) {
-        return logic.mkBoolVar((auxName + std::to_string(node.x) + '#' + std::to_string(step)).c_str());
-    }
-
-private:
-    Logic & logic;
-};
-
-InvalidityWitness computeWitness(ChcDirectedGraph const & graph, Model & model, std::size_t const steps,
-                                 std::unordered_set<PTRef, PTRefHash> const & knownNodes) {
-    auto adjacencyLists = AdjacencyListsGraphRepresentation::from(graph);
-    Logic & logic = graph.getLogic();
-    PTRef trueT = logic.getTerm_true();
-    BMCUtils utils(logic);
-    std::vector<EId> errorPath;
-    PTRef errorReached = utils.getVarFor(graph.getExit(), steps);
-    if (model.evaluate(errorReached) != trueT) { return {}; }
-    auto current = graph.getExit();
-    auto remaining = steps;
-    while (remaining > 0) {
-        // figure out the predecessor;
-        for (auto eid : adjacencyLists.getIncomingEdgesFor(current)) {
-            auto source = graph.getSource(eid);
-            PTRef reached = utils.getVarFor(source, remaining - 1);
-            if (knownNodes.find(reached) == knownNodes.end()) { continue; }
-            if (model.evaluate(reached) == trueT and model.evaluate(TimeMachine(logic).sendFlaThroughTime(
-                                                         graph.getEdgeLabel(eid), remaining - 1)) == trueT) {
-                errorPath.push_back(eid);
-                current = source;
-                break; // the for loop
-            }
+    class BMCUtils {
+    public:
+        explicit BMCUtils(Logic &logic) : logic(logic) {
         }
-        --remaining;
+
+        PTRef getVarFor(SymRef node, std::size_t step) {
+            return logic.mkBoolVar((auxName + std::to_string(node.x) + '#' + std::to_string(step)).c_str());
+        }
+
+    private:
+        Logic &logic;
+    };
+
+    InvalidityWitness computeWitness(ChcDirectedGraph const &graph, Model &model, std::size_t const steps,
+                                     std::unordered_set<PTRef, PTRefHash> const &knownNodes) {
+        auto adjacencyLists = AdjacencyListsGraphRepresentation::from(graph);
+        Logic &logic = graph.getLogic();
+        PTRef trueT = logic.getTerm_true();
+        BMCUtils utils(logic);
+        std::vector<EId> errorPath;
+        PTRef errorReached = utils.getVarFor(graph.getExit(), steps);
+        if (model.evaluate(errorReached) != trueT) { return {}; }
+        auto current = graph.getExit();
+        auto remaining = steps;
+        while (remaining > 0) {
+            // figure out the predecessor;
+            for (auto eid: adjacencyLists.getIncomingEdgesFor(current)) {
+                auto source = graph.getSource(eid);
+                PTRef reached = utils.getVarFor(source, remaining - 1);
+                if (knownNodes.find(reached) == knownNodes.end()) { continue; }
+                if (model.evaluate(reached) == trueT and model.evaluate(TimeMachine(logic).sendFlaThroughTime(
+                        graph.getEdgeLabel(eid), remaining - 1)) == trueT) {
+                    errorPath.push_back(eid);
+                    current = source;
+                    break; // the for loop
+                }
+            }
+            --remaining;
+        }
+        if (errorPath.size() != steps) { return {}; }
+        std::reverse(errorPath.begin(), errorPath.end());
+        return InvalidityWitness::fromErrorPath(ErrorPath(std::move(errorPath)), graph);
     }
-    if (errorPath.size() != steps) { return {}; }
-    std::reverse(errorPath.begin(), errorPath.end());
-    return InvalidityWitness::fromErrorPath(ErrorPath(std::move(errorPath)), graph);
-}
 } // namespace
 
 /**
@@ -131,9 +135,9 @@ InvalidityWitness computeWitness(ChcDirectedGraph const & graph, Model & model, 
  * Preconditions:
  *  - There are no multiedges (No target can be reached from the same source by two different edges)
  */
-VerificationResult BMC::solveGeneralLinearSystem(ChcDirectedGraph const & graph) {
+VerificationResult BMC::solveGeneralLinearSystem(ChcDirectedGraph const &graph) {
     if (verbosity > 0) { std::cout << "BMC: Solving general system!" << std::endl; }
-    Logic & logic = graph.getLogic();
+    Logic &logic = graph.getLogic();
     BMCUtils utils(logic);
     auto adjacencyLists = AdjacencyListsGraphRepresentation::from(graph);
     TimeMachine tm(logic);
@@ -145,8 +149,7 @@ VerificationResult BMC::solveGeneralLinearSystem(ChcDirectedGraph const & graph)
 
     // TODO: Figure out how to compute CEX without this. Maybe OpenSMT should have a model that does not use default
     // values?
-    std::unordered_set<PTRef, PTRefHash> encounteredNodes;
-    {
+    std::unordered_set<PTRef, PTRefHash> encounteredNodes; {
         PTRef entry = utils.getVarFor(graph.getEntry(), 0u);
         solver.assertProp(entry);
         encounteredNodes.insert(entry);
@@ -154,9 +157,9 @@ VerificationResult BMC::solveGeneralLinearSystem(ChcDirectedGraph const & graph)
     for (std::size_t currentUnrolling = 0u; currentUnrolling < maxLoopUnrollings; ++currentUnrolling) {
         nextFrontier.clear();
         bool exitEncountered = false;
-        for (auto node : allnodes) {
+        for (auto node: allnodes) {
             vec<PTRef> predecessorTransitions;
-            for (EId eid : adjacencyLists.getIncomingEdgesFor(node)) {
+            for (EId eid: adjacencyLists.getIncomingEdgesFor(node)) {
                 auto source = graph.getSource(eid);
                 if (frontier.find(source) == frontier.end()) { continue; }
                 PTRef sourceReached = utils.getVarFor(source, currentUnrolling);
@@ -180,8 +183,10 @@ VerificationResult BMC::solveGeneralLinearSystem(ChcDirectedGraph const & graph)
             if (res == SMTSolver::Answer::SAT) {
                 if (verbosity > 0) { std::cout << "; BMC: Bug found in depth: " << currentUnrolling << std::endl; }
                 if (not needsWitness) { return {VerificationAnswer::UNSAFE, NoWitness{}}; }
-                return {VerificationAnswer::UNSAFE,
-                        computeWitness(graph, *solver.getModel(), currentUnrolling + 1, encounteredNodes)};
+                return {
+                    VerificationAnswer::UNSAFE,
+                    computeWitness(graph, *solver.getModel(), currentUnrolling + 1, encounteredNodes)
+                };
             }
             solver.pop();
         }
@@ -190,3 +195,4 @@ VerificationResult BMC::solveGeneralLinearSystem(ChcDirectedGraph const & graph)
     }
     return VerificationResult(VerificationAnswer::UNKNOWN);
 }
+} // namespace golem

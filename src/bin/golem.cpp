@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2022, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2020-2025, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
@@ -10,9 +10,7 @@
 #include "osmt_terms.h"
 #include "osmt_parser.h"
 
-#include <memory>
-
-namespace{
+namespace {
 std::string tryDetectLogic(ASTNode const * root) {
     if (not root or not root->children) { return ""; }
     auto const & children = *(root->children);
@@ -54,12 +52,14 @@ std::string tryDetectLogic(ASTNode const * root) {
     }
     return "";
 }
-}
 
 void error(std::string const & msg) {
     std::cerr << msg << '\n';
     exit(1);
 }
+} // namespace
+
+using namespace golem;
 
 int main( int argc, char * argv[] ) {
     SMTConfig c;
@@ -109,11 +109,6 @@ int main( int argc, char * argv[] ) {
             error(inputFile + " extension not recognized. File must be in smt-lib2 format (extension .smt2)");
         }
     }
-    if (options.hasOption(Options::PROOF_FORMAT)) {
-        auto formatStr = options.getOption(Options::PROOF_FORMAT).value();
-        if (not (formatStr == "alethe" or formatStr == "intermediate" or formatStr == "legacy")) {
-            error("Unsupported proof format");
-        }
-    }
+    return 0;
 }
 

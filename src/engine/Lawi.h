@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2022, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2020-2025, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
@@ -8,7 +8,9 @@
 #define GOLEM_LAWI_H
 
 #include "Engine.h"
+#include "Options.h"
 
+namespace golem {
 /*
  * Implementation of Lazy Abstraction with Interpolants (also known as IMPACT algorithm)
  *
@@ -26,10 +28,8 @@ public:
     VerificationResult solve(ChcDirectedHyperGraph const & system) override;
 
     VerificationResult solve(ChcDirectedGraph const & system);
-
-private:
-
 };
+} // namespace golem
 
 
 #endif //GOLEM_LAWI_H

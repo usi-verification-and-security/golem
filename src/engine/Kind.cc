@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2022-2025, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
@@ -8,10 +8,10 @@
 
 #include "Common.h"
 #include "TermUtils.h"
-#include "transformers/BasicTransformationPipelines.h"
 #include "TransformationUtils.h"
 #include "utils/SmtSolver.h"
 
+namespace golem {
 VerificationResult Kind::solve(ChcDirectedGraph const & graph) {
     if (isTrivial(graph)) {
         return solveTrivial(graph);
@@ -67,7 +67,7 @@ TransitionSystemVerificationResult Kind::solveTransitionSystemInternal(Transitio
         auto res = solverBase.check();
         if (res == SMTSolver::Answer::SAT) {
             if (verbosity > 0) {
-                 std::cout << "; KIND: Bug found in depth: " << k << std::endl;
+                std::cout << "; KIND: Bug found in depth: " << k << std::endl;
             }
             if (computeWitness) {
                 return TransitionSystemVerificationResult{VerificationAnswer::UNSAFE, k};
@@ -80,7 +80,7 @@ TransitionSystemVerificationResult Kind::solveTransitionSystemInternal(Transitio
         }
         solverBase.pop();
         PTRef versionedTransition = tm.sendFlaThroughTime(transition, k);
-//        std::cout << "Adding transition: " << logic.pp(versionedTransition) << std::endl;
+        //        std::cout << "Adding transition: " << logic.pp(versionedTransition) << std::endl;
         solverBase.assertProp(versionedTransition);
 
         // step forward
@@ -132,3 +132,4 @@ PTRef Kind::invariantFromBackwardInduction(TransitionSystem const & transitionSy
     PTRef originalInvariant = logic.mkNot(inductiveInvariant);
     return originalInvariant;
 }
+} // namespace golem

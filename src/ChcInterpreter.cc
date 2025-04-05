@@ -22,21 +22,22 @@
 
 using namespace opensmt::tokens;
 
+namespace golem {
 namespace {
-bool addLetFrame(const vec<char *> & names, vec<PTRef> const & args, Logic & logic, LetRecords & letRecords) {
-    assert(names.size() == args.size());
-    if (names.size() > 1) {
-        // check that they are pairwise distinct;
-        std::unordered_set<const char *, StringHash, Equal<const char *>> namesAsSet(names.begin(), names.end());
-        if (namesAsSet.size() != names.size_()) { return false; }
+    bool addLetFrame(const vec<char *> & names, vec<PTRef> const & args, Logic & logic, LetRecords & letRecords) {
+        assert(names.size() == args.size());
+        if (names.size() > 1) {
+            // check that they are pairwise distinct;
+            std::unordered_set<const char *, StringHash, Equal<const char *>> namesAsSet(names.begin(), names.end());
+            if (namesAsSet.size() != names.size_()) { return false; }
+        }
+        for (int i = 0; i < names.size(); ++i) {
+            const char * name = names[i];
+            if (logic.hasSym(name) && logic.getSym(logic.symNameToRef(name)[0]).noScoping()) { return false; }
+            letRecords.addBinding(name, args[i]);
+        }
+        return true;
     }
-    for (int i = 0; i < names.size(); ++i) {
-        const char * name = names[i];
-        if (logic.hasSym(name) && logic.getSym(logic.symNameToRef(name)[0]).noScoping()) { return false; }
-        letRecords.addBinding(name, args[i]);
-    }
-    return true;
-}
 } // namespace
 
 std::unique_ptr<ChcSystem> ChcInterpreter::interpretSystemAst(Logic & logic, const ASTNode * root) {
@@ -178,11 +179,11 @@ void ChcInterpreterContext::interpretDeclareFun(ASTNode & node) {
 }
 
 namespace {
-class QuantifiedConstraintException : public std::runtime_error {
-public:
-    QuantifiedConstraintException()
-        : std::runtime_error("Encountered quantified constraint, these are not supported!") {}
-};
+    class QuantifiedConstraintException : public std::runtime_error {
+    public:
+        QuantifiedConstraintException()
+            : std::runtime_error("Encountered quantified constraint, these are not supported!") {}
+    };
 } // namespace
 
 void ChcInterpreterContext::interpretAssert(ASTNode & node) {
@@ -449,21 +450,21 @@ void ChcInterpreterContext::doWorkAfterAnswer(VerificationResult result, ChcDire
 }
 
 namespace {
-void printAnswer(VerificationAnswer answer) {
-    switch (answer) {
-        case VerificationAnswer::SAFE: {
-            std::cout << "sat" << std::endl;
+    void printAnswer(VerificationAnswer answer) {
+        switch (answer) {
+            case VerificationAnswer::SAFE: {
+                std::cout << "sat" << std::endl;
+                break;
+            }
+            case VerificationAnswer::UNSAFE: {
+                std::cout << "unsat" << std::endl;
+                break;
+            }
+            case VerificationAnswer::UNKNOWN:
+                std::cout << "unknown" << std::endl;
             break;
         }
-        case VerificationAnswer::UNSAFE: {
-            std::cout << "unsat" << std::endl;
-            break;
-        }
-        case VerificationAnswer::UNKNOWN:
-            std::cout << "unknown" << std::endl;
-            break;
     }
-}
 } // namespace
 
 void ChcInterpreterContext::interpretCheckSat() {
@@ -592,3 +593,4 @@ std::optional<ChClause> ChcInterpreterContext::chclauseFromPTRef(PTRef ref) {
 bool ChcInterpreterContext::isUninterpretedPredicate(PTRef ref) const {
     return system->isUninterpretedPredicate(logic.getSymRef(ref));
 }
+} // namespace golem

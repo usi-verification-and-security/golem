@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2023-2025, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
@@ -33,8 +33,9 @@ PTRef Normalizer::eliminateDistincts(PTRef fla) {
     return DistinctRewriter(logic).rewrite(fla);
 }
 
-}
+} // namespace helper
 
+namespace golem {
 Transformer::TransformationResult ConstraintSimplifier::transform(std::unique_ptr<ChcDirectedHyperGraph> graph) {
 
     Logic & logic = graph->getLogic();
@@ -83,3 +84,4 @@ Transformer::TransformationResult ConstraintSimplifier::transform(std::unique_pt
     });
     return {std::move(graph), std::make_unique<BackTranslator>()};
 }
+} // namespace golem

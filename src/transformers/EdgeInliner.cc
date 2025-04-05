@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2024, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2024-2025, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
@@ -9,34 +9,35 @@
 #include "transformers/CommonUtils.h"
 #include "utils/SmtSolver.h"
 
+namespace golem {
 namespace {
-using KnownValues = std::vector<PTRef>;
-using IndexMap = std::unordered_map<PTRef, unsigned, PTRefHash>;
+    using KnownValues = std::vector<PTRef>;
+    using IndexMap = std::unordered_map<PTRef, unsigned, PTRefHash>;
 
-KnownValues computeKnownValues(PTRef fla, IndexMap const & varToIndex, Logic & logic) {
-    std::vector<PTRef> values(varToIndex.size(), PTRef_Undef);
-    auto conjuncts = TermUtils(logic).getTopLevelConjuncts(fla);
-    for (PTRef conjunct : conjuncts) {
-        if (logic.isEquality(conjunct)) {
-            PTRef lhs = logic.getPterm(conjunct)[0];
-            PTRef rhs = logic.getPterm(conjunct)[1];
-            if (logic.isConstant(lhs) or logic.isConstant(rhs)) {
-                PTRef const var = logic.isConstant(lhs) ? rhs : lhs;
-                if (logic.isVar(var) and varToIndex.find(var) != varToIndex.end()) {
-                    values[varToIndex.at(var)] = logic.isConstant(lhs) ? lhs : rhs;
+    KnownValues computeKnownValues(PTRef fla, IndexMap const & varToIndex, Logic & logic) {
+        std::vector<PTRef> values(varToIndex.size(), PTRef_Undef);
+        auto conjuncts = TermUtils(logic).getTopLevelConjuncts(fla);
+        for (PTRef conjunct : conjuncts) {
+            if (logic.isEquality(conjunct)) {
+                PTRef lhs = logic.getPterm(conjunct)[0];
+                PTRef rhs = logic.getPterm(conjunct)[1];
+                if (logic.isConstant(lhs) or logic.isConstant(rhs)) {
+                    PTRef const var = logic.isConstant(lhs) ? rhs : lhs;
+                    if (logic.isVar(var) and varToIndex.find(var) != varToIndex.end()) {
+                        values[varToIndex.at(var)] = logic.isConstant(lhs) ? lhs : rhs;
+                    }
                 }
-            }
-        } else {
-            if (logic.isVar(conjunct) or (logic.isNot(conjunct) and logic.isVar(logic.getPterm(conjunct)[0]))) {
-                PTRef var = logic.isVar(conjunct) ? conjunct : logic.getPterm(conjunct)[0];
-                if (varToIndex.find(var) != varToIndex.end()) {
-                    values[varToIndex.at(var)] = logic.isVar(conjunct) ? logic.getTerm_true() : logic.getTerm_false();
+            } else {
+                if (logic.isVar(conjunct) or (logic.isNot(conjunct) and logic.isVar(logic.getPterm(conjunct)[0]))) {
+                    PTRef var = logic.isVar(conjunct) ? conjunct : logic.getPterm(conjunct)[0];
+                    if (varToIndex.find(var) != varToIndex.end()) {
+                        values[varToIndex.at(var)] = logic.isVar(conjunct) ? logic.getTerm_true() : logic.getTerm_false();
+                    }
                 }
             }
         }
+        return values;
     }
-    return values;
-}
 }
 
 std::vector<EId> computeFeasibleTransitions(ChcDirectedHyperGraph const & graph, std::vector<EId> const & incomingEdges, EId outgoingEdge) {
@@ -288,4 +289,4 @@ PTRef EdgeInliner::BackTranslator::computeInterpolantFor(SymRef node, PTRef inco
     PTRef renamedInterpolant = utils.varSubstitute(interpolant, substitutionsMap);
     return renamedInterpolant;
 }
-
+} // namespace golem

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021-2023, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2021-2025, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
@@ -8,6 +8,7 @@
 #include "QuantifierElimination.h"
 #include <unordered_set>
 
+namespace golem {
 bool isTransitionSystem(ChcDirectedGraph const & graph) {
     auto graphRepresentation = AdjacencyListsGraphRepresentation::from(graph);
     auto reversePostorder = reversePostOrder(graph, graphRepresentation);
@@ -90,41 +91,41 @@ std::unique_ptr<TransitionSystem> toTransitionSystem(ChcDirectedGraph const & gr
 }
 
 namespace {
-// This function follows a Tarjan's strongly connected component detection algorithm:
-// https://en.wikipedia.org/wiki/Tarjan's_strongly_connected_components_algorithm
-// If some vertice is added on stack and it was already visited, then the strong connection is detected
-// It was updated to remember the nodes which participate in the loop
-// Algorithm terminates as soon as it can find the first loop
-void visit(std::unordered_set<SymRef, SymRefHash> & visitedVertices,
-           std::unordered_set<SymRef, SymRefHash> & verticesOnStack,
-           AdjacencyListsGraphRepresentation const & graphRepresentation, ChcDirectedGraph const & graph, SymRef node,
-           std::vector<EId> & loop) {
-    visitedVertices.insert(node);
-    verticesOnStack.insert(node);
-    auto const & outEdges = graphRepresentation.getOutgoingEdgesFor(node);
+    // This function follows a Tarjan's strongly connected component detection algorithm:
+    // https://en.wikipedia.org/wiki/Tarjan's_strongly_connected_components_algorithm
+    // If some vertice is added on stack and it was already visited, then the strong connection is detected
+    // It was updated to remember the nodes which participate in the loop
+    // Algorithm terminates as soon as it can find the first loop
+    void visit(std::unordered_set<SymRef, SymRefHash> & visitedVertices,
+               std::unordered_set<SymRef, SymRefHash> & verticesOnStack,
+               AdjacencyListsGraphRepresentation const & graphRepresentation, ChcDirectedGraph const & graph, SymRef node,
+               std::vector<EId> & loop) {
+        visitedVertices.insert(node);
+        verticesOnStack.insert(node);
+        auto const & outEdges = graphRepresentation.getOutgoingEdgesFor(node);
 
-    for (EId eid : outEdges) {
-        if (graph.getTarget(eid) != node) {
-            auto nextVertex = graph.getTarget(eid);
-            if (visitedVertices.find(nextVertex) == visitedVertices.end()) {
-                visit(visitedVertices, verticesOnStack, graphRepresentation, graph, nextVertex, loop);
-                if (!loop.empty()) {
-                    // Condition checks that algorithm still unrolls the loop and is still not past the loophead
-                    if (graph.getTarget(eid) != graph.getTarget(loop[0]) &&
-                        graph.getTarget(eid) == graph.getSource(loop.back())) {
-                        loop.push_back(eid);
+        for (EId eid : outEdges) {
+            if (graph.getTarget(eid) != node) {
+                auto nextVertex = graph.getTarget(eid);
+                if (visitedVertices.find(nextVertex) == visitedVertices.end()) {
+                    visit(visitedVertices, verticesOnStack, graphRepresentation, graph, nextVertex, loop);
+                    if (!loop.empty()) {
+                        // Condition checks that algorithm still unrolls the loop and is still not past the loophead
+                        if (graph.getTarget(eid) != graph.getTarget(loop[0]) &&
+                            graph.getTarget(eid) == graph.getSource(loop.back())) {
+                            loop.push_back(eid);
+                            }
+                        break;
                     }
+                } else if (verticesOnStack.find(nextVertex) != verticesOnStack.end()) {
+                    loop.push_back(eid);
                     break;
                 }
-            } else if (verticesOnStack.find(nextVertex) != verticesOnStack.end()) {
-                loop.push_back(eid);
-                break;
             }
         }
-    }
 
-    verticesOnStack.erase(node);
-}
+        verticesOnStack.erase(node);
+    }
 } // namespace
 // Returns the first loop it can find via depth-first search (Tarjan's algorithm)
 std::vector<EId> detectLoop(const ChcDirectedGraph & graph) {
@@ -177,7 +178,7 @@ EdgeVariables getVariablesFromEdge(Logic & logic, ChcDirectedGraph const & graph
         if (std::find(res.stateVars.begin(), res.stateVars.end(), var) == res.stateVars.end() and
             std::find(res.nextStateVars.begin(), res.nextStateVars.end(), var) == res.nextStateVars.end()) {
             res.auxiliaryVars.push_back(var);
-        }
+            }
     }
     return res;
 }
@@ -217,3 +218,4 @@ bool isTrivial(ChcDirectedGraph const & graph) {
     });
     return onlyTrivialEdges;
 }
+} // namespace golem

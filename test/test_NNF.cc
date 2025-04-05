@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021-2024, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2021-2025, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
@@ -8,6 +8,8 @@
 #include "TermUtils.h"
 
 #include "utils/SmtSolver.h"
+
+using namespace golem;
 
 namespace{
 bool implies(Logic & logic, PTRef antecedent, PTRef consequent) {
