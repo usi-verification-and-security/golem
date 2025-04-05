@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2022, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2020-2025, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
@@ -11,6 +11,7 @@
 #include "utils/SmtSolver.h"
 #include "utils/Timer.h"
 
+namespace golem {
 bool TransitionSystem::isWellFormed() {
     // return systemType->isStateFormula(init) && systemType->isStateFormula(query) && systemType->isTransitionFormula(transition);
     bool ok = systemType->isStateFormula(init);
@@ -182,7 +183,7 @@ PTRef KTo1Inductive::kinductiveToInductive(PTRef invariant, unsigned k, Transiti
             return qe(invariant, k, system);
         default:
             assert(false);
-            throw std::logic_error("Unreachable!");
+        throw std::logic_error("Unreachable!");
     }
 }
 
@@ -233,16 +234,16 @@ PTRef KTo1Inductive::qe(PTRef invariant, unsigned k, TransitionSystem const & sy
 
 namespace {
 
-PTRef buildFormula(unsigned index, PTRef invariant, TransitionSystem const & system) {
-    if (index == 0) { return system.getLogic().getTerm_true(); }
-    Logic & logic = system.getLogic();
-    TimeMachine timeMachine(logic);
-    PTRef previous = buildFormula(index - 1, invariant, system);
-    PTRef invariantShifted = timeMachine.sendFlaThroughTime(invariant, index - 1);
-    PTRef stepShifted = timeMachine.sendFlaThroughTime(system.getTransition(), index - 1);
-    PTRef initShifted = timeMachine.sendFlaThroughTime(system.getInit(), index);
-    return logic.mkOr(initShifted, logic.mkAnd({previous, invariantShifted, stepShifted}));
-}
+    PTRef buildFormula(unsigned index, PTRef invariant, TransitionSystem const & system) {
+        if (index == 0) { return system.getLogic().getTerm_true(); }
+        Logic & logic = system.getLogic();
+        TimeMachine timeMachine(logic);
+        PTRef previous = buildFormula(index - 1, invariant, system);
+        PTRef invariantShifted = timeMachine.sendFlaThroughTime(invariant, index - 1);
+        PTRef stepShifted = timeMachine.sendFlaThroughTime(system.getTransition(), index - 1);
+        PTRef initShifted = timeMachine.sendFlaThroughTime(system.getInit(), index);
+        return logic.mkOr(initShifted, logic.mkAnd({previous, invariantShifted, stepShifted}));
+    }
 } // namespace
 
 /**
@@ -304,4 +305,5 @@ PTRef kinductiveToInductive(PTRef invariant, unsigned k, TransitionSystem const 
     PTRef res = KTo1Inductive{KTo1Inductive::Mode::UNFOLD}.kinductiveToInductive(invariant, k, system);
     // std::cout << timer.elapsedMilliseconds() << " ms" << std::endl;
     return res;
+}
 }

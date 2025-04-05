@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2023, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2022-2025, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
@@ -10,6 +10,7 @@
 
 #include "utils/SmtSolver.h"
 
+namespace golem {
 Transformer::TransformationResult SimpleChainSummarizer::transform(std::unique_ptr<ChcDirectedHyperGraph> graph) {
     auto translator = std::make_unique<BackTranslator>(graph->getLogic(), graph->predicateRepresentation());
     while(true) {
@@ -55,7 +56,7 @@ Transformer::TransformationResult SimpleChainSummarizer::transform(std::unique_p
             return graph->getEdge(eid);
         });
         auto summaryEdge = graph->contractTrivialChain(trivialChain);
-//        std::cout << "Summary edge: " << logic.pp(summaryEdge.fla.fla) << std::endl;
+        //        std::cout << "Summary edge: " << logic.pp(summaryEdge.fla.fla) << std::endl;
         translator->addSummarizedChain({summarizedChain, summaryEdge});
     }
     return {std::move(graph), std::move(translator)};
@@ -128,3 +129,4 @@ ValidityWitness SimpleChainSummarizer::BackTranslator::translate(ValidityWitness
     }
     return ValidityWitness(std::move(definitions));
 }
+} // namespace golem

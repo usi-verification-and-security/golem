@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2022, Konstantin Britikov <britikovki@gmail.com>
- * Copyright (c) 2023-2024, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2023-2025, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
@@ -13,6 +13,7 @@
 #include "transformers/SingleLoopTransformation.h"
 #include "utils/SmtSolver.h"
 
+namespace golem {
 TransitionSystemVerificationResult IMC::solve(TransitionSystem const & system) {
     { // if I /\ F is Satisfiable, return true
         SMTSolver solver(logic, SMTSolver::WitnessProduction::NONE);
@@ -31,13 +32,13 @@ TransitionSystemVerificationResult IMC::solve(TransitionSystem const & system) {
 }
 
 namespace { // Helper method for IMC::finiteRun
-PTRef getInterpolant(SMTSolver & solver, ipartitions_t const & mask) {
-    auto itpContext = solver.getInterpolationContext();
-    vec<PTRef> itps;
-    itpContext->getSingleInterpolant(itps, mask);
-    assert(itps.size() == 1);
-    return itps[0];
-}
+    PTRef getInterpolant(SMTSolver & solver, ipartitions_t const & mask) {
+        auto itpContext = solver.getInterpolationContext();
+        vec<PTRef> itps;
+        itpContext->getSingleInterpolant(itps, mask);
+        assert(itps.size() == 1);
+        return itps[0];
+    }
 } // namespace
 
 // procedure FiniteRun(M=(I,T,F), k>0)
@@ -127,3 +128,4 @@ PTRef IMC::computeFinalInductiveInvariant(PTRef inductiveInvariant, unsigned k, 
     PTRef kinductive = logic.mkAnd(inductiveInvariant, logic.mkNot(ts.getQuery()));
     return kinductiveToInductive(kinductive, k, ts);
 }
+} // namespace golem

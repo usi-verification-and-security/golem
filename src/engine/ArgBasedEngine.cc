@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2024, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2024-2025, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
@@ -18,6 +18,7 @@
 #define TRACE(l, m)                                                                                                    \
     if (TRACE_LEVEL >= l) { std::cout << m << std::endl; }
 
+namespace golem {
 class PredicateAbstractionManager {
 public:
     explicit PredicateAbstractionManager(Logic & logic) : logic(logic) {}
@@ -311,44 +312,44 @@ private:
 };
 
 namespace {
-void increment(std::vector<std::size_t> & indices, std::vector<std::vector<ARG::NodeId>> const & allInstances) {
-    assert(not indices.empty());
-    for (int i = static_cast<int>(indices.size()) - 1; /* stopping condition in the body*/; --i) {
-        ++indices[i];
-        if (indices[i] == allInstances[i].size() and i > 0) {
-            indices[i] = 0;
-        } else {
-            break;
+    void increment(std::vector<std::size_t> & indices, std::vector<std::vector<ARG::NodeId>> const & allInstances) {
+        assert(not indices.empty());
+        for (int i = static_cast<int>(indices.size()) - 1; /* stopping condition in the body*/; --i) {
+            ++indices[i];
+            if (indices[i] == allInstances[i].size() and i > 0) {
+                indices[i] = 0;
+            } else {
+                break;
+            }
         }
     }
-}
 
-struct Checker {
-    Logic & logic;
-    SMTSolver solver;
-    ARG const & arg;
+    struct Checker {
+        Logic & logic;
+        SMTSolver solver;
+        ARG const & arg;
 
-    Checker(PTRef edgeConstraint, Logic & logic, ARG const & arg)
-        : logic(logic), solver(logic, SMTSolver::WitnessProduction::NONE), arg(arg) {
-        solver.assertProp(edgeConstraint);
-    }
-
-    bool isFeasible(std::vector<ARG::NodeId> const & sources) {
-        solver.push();
-        std::unordered_map<SymRef, int, SymRefHash> sourceCounts;
-        VersionManager versionManager{logic};
-        for (auto sourceId : sources) {
-            PTRef reachedStates = arg.getReachedStates(sourceId);
-            PTRef versionedStates =
-                versionManager.baseFormulaToSource(reachedStates, sourceCounts[arg.getPredicateSymbol(sourceId)]++);
-            solver.assertProp(versionedStates);
+        Checker(PTRef edgeConstraint, Logic & logic, ARG const & arg)
+            : logic(logic), solver(logic, SMTSolver::WitnessProduction::NONE), arg(arg) {
+            solver.assertProp(edgeConstraint);
         }
-        auto res = solver.check();
-        bool infeasible = res == SMTSolver::Answer::UNSAT;
-        solver.pop();
-        return not infeasible;
-    }
-};
+
+        bool isFeasible(std::vector<ARG::NodeId> const & sources) {
+            solver.push();
+            std::unordered_map<SymRef, int, SymRefHash> sourceCounts;
+            VersionManager versionManager{logic};
+            for (auto sourceId : sources) {
+                PTRef reachedStates = arg.getReachedStates(sourceId);
+                PTRef versionedStates =
+                    versionManager.baseFormulaToSource(reachedStates, sourceCounts[arg.getPredicateSymbol(sourceId)]++);
+                solver.assertProp(versionedStates);
+            }
+            auto res = solver.check();
+            bool infeasible = res == SMTSolver::Answer::UNSAT;
+            solver.pop();
+            return not infeasible;
+        }
+    };
 } // namespace
 
 /*********** MAIN algorithm ****************/
@@ -366,7 +367,7 @@ VerificationResult Algorithm::run() {
                 auto & maybeWitness = std::get<std::optional<InvalidityWitness>>(res.second);
                 return VerificationResult{VerificationAnswer::UNSAFE, maybeWitness.has_value()
                                                                           ? witness_t{std::move(maybeWitness).value()}
-                                                                          : witness_t{NoWitness{}}};
+                    : witness_t{NoWitness{}}};
             }
             refine(std::get<RefinementInfo>(std::move(res.second)));
             continue;
@@ -418,7 +419,7 @@ void Algorithm::computeNewUnprocessedEdges(ARG::NodeId nodeId) {
         if (std::any_of(allInstances.begin(), allInstances.end(),
                         [](auto const & nodeInstances) { return nodeInstances.empty(); })) {
             continue;
-        }
+                        }
         std::vector<std::size_t> indices(sources.size(), 0u);
         std::vector<ARG::NodeId> argSources;
         argSources.reserve(sources.size());
@@ -661,62 +662,62 @@ InterpolationTree::Result InterpolationTree::solve(Logic & logic) const {
 /*********** END of Interpolation tree ************/
 
 namespace {
-bool computeWitness(Options const & options) {
-    return options.hasOption(Options::COMPUTE_WITNESS) and options.getOption(Options::COMPUTE_WITNESS) == "true";
-}
-
-class AuxCleanupPass : public Transformer {
-public:
-    struct BackTranslator : public WitnessBackTranslator {
-        InvalidityWitness translate(InvalidityWitness witness) override { return witness; }
-        ValidityWitness translate(ValidityWitness witness) override { return witness; }
-    };
-
-    TransformationResult transform(std::unique_ptr<ChcDirectedHyperGraph> graph) override {
-        Logic & logic = graph->getLogic();
-        TermUtils utils(logic);
-        std::size_t auxVarCounter = 0;
-        graph->forEachEdge([&](auto & edge) {
-            PTRef & constraint = edge.fla.fla;
-            vec<PTRef> predicateVars;
-            // vars from head
-            {
-                auto headVars = utils.predicateArgsInOrder(graph->getNextStateVersion(edge.to));
-                for (PTRef var : headVars) {
-                    assert(logic.isVar(var));
-                    predicateVars.push(var);
-                }
-            }
-            // TODO: Implement a helper to iterate over source vertices together with instantiation counter
-            std::unordered_map<SymRef, std::size_t, SymRefHash> instanceCounter;
-            for (auto source : edge.from) {
-                PTRef sourcePredicate = graph->getStateVersion(source, instanceCounter[source]++);
-                for (PTRef var : utils.predicateArgsInOrder(sourcePredicate)) {
-                    assert(logic.isVar(var));
-                    predicateVars.push(var);
-                }
-            }
-            constraint = TrivialQuantifierElimination(logic).tryEliminateVarsExcept(predicateVars, constraint);
-            auto isVarToNormalize = [&](PTRef var) {
-                return logic.isVar(var) and
-                       std::find(predicateVars.begin(), predicateVars.end(), var) == predicateVars.end();
-            };
-            auto localVars = matchingSubTerms(logic, constraint, isVarToNormalize);
-            if (localVars.size() > 0) {
-                TermUtils::substitutions_map subst;
-                for (PTRef localVar : localVars) {
-                    SRef sort = logic.getSortRef(localVar);
-                    std::string uniq_name = "paux#" + std::to_string(auxVarCounter++);
-                    PTRef renamed = logic.mkVar(sort, uniq_name.c_str());
-                    subst.insert({localVar, renamed});
-                }
-                constraint = utils.varSubstitute(constraint, subst);
-            }
-        });
-
-        return {std::move(graph), std::make_unique<BackTranslator>()};
+    bool computeWitness(Options const & options) {
+        return options.hasOption(Options::COMPUTE_WITNESS) and options.getOption(Options::COMPUTE_WITNESS) == "true";
     }
-};
+
+    class AuxCleanupPass : public Transformer {
+    public:
+        struct BackTranslator : public WitnessBackTranslator {
+            InvalidityWitness translate(InvalidityWitness witness) override { return witness; }
+            ValidityWitness translate(ValidityWitness witness) override { return witness; }
+        };
+
+        TransformationResult transform(std::unique_ptr<ChcDirectedHyperGraph> graph) override {
+            Logic & logic = graph->getLogic();
+            TermUtils utils(logic);
+            std::size_t auxVarCounter = 0;
+            graph->forEachEdge([&](auto & edge) {
+                PTRef & constraint = edge.fla.fla;
+                vec<PTRef> predicateVars;
+                // vars from head
+                {
+                    auto headVars = utils.predicateArgsInOrder(graph->getNextStateVersion(edge.to));
+                    for (PTRef var : headVars) {
+                        assert(logic.isVar(var));
+                        predicateVars.push(var);
+                    }
+                }
+                // TODO: Implement a helper to iterate over source vertices together with instantiation counter
+                std::unordered_map<SymRef, std::size_t, SymRefHash> instanceCounter;
+                for (auto source : edge.from) {
+                    PTRef sourcePredicate = graph->getStateVersion(source, instanceCounter[source]++);
+                    for (PTRef var : utils.predicateArgsInOrder(sourcePredicate)) {
+                        assert(logic.isVar(var));
+                        predicateVars.push(var);
+                    }
+                }
+                constraint = TrivialQuantifierElimination(logic).tryEliminateVarsExcept(predicateVars, constraint);
+                auto isVarToNormalize = [&](PTRef var) {
+                    return logic.isVar(var) and
+                           std::find(predicateVars.begin(), predicateVars.end(), var) == predicateVars.end();
+                };
+                auto localVars = matchingSubTerms(logic, constraint, isVarToNormalize);
+                if (localVars.size() > 0) {
+                    TermUtils::substitutions_map subst;
+                    for (PTRef localVar : localVars) {
+                        SRef sort = logic.getSortRef(localVar);
+                        std::string uniq_name = "paux#" + std::to_string(auxVarCounter++);
+                        PTRef renamed = logic.mkVar(sort, uniq_name.c_str());
+                        subst.insert({localVar, renamed});
+                    }
+                    constraint = utils.varSubstitute(constraint, subst);
+                }
+            });
+
+            return {std::move(graph), std::make_unique<BackTranslator>()};
+        }
+    };
 } // namespace
 
 VerificationResult ARGBasedEngine::solve(const ChcDirectedHyperGraph & graph) {
@@ -850,3 +851,4 @@ vec<PTRef> ARG::computePropagatedPredicates(C const & candidates, std::vector<No
     }
     return impliedPredicates;
 }
+} // namespace golem

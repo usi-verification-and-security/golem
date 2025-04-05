@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2024, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2024-2025, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
@@ -8,7 +8,9 @@
 #define GOLEM_ENGINEFACTORY_H
 
 #include "Engine.h"
+#include "Options.h"
 
+namespace golem {
 class EngineFactory {
 public:
     EngineFactory(Logic & logic, Options const & options) : logic(logic), options(options) {}
@@ -18,5 +20,6 @@ private:
     Logic & logic;
     Options const & options;
 };
+} // namespace golem
 
 #endif // GOLEM_ENGINEFACTORY_H

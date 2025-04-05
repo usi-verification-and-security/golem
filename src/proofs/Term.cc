@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2023, Matias Barandiaran <matias.barandiaran03@gmail.com>
- * Copyright (c) 2024, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2024-2025, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
@@ -13,6 +13,7 @@
 #include <memory>
 #include <string>
 
+namespace golem {
 std::string Term::printTerm() {
     PrintVisitor printVisitor;
     this->accept(&printVisitor);
@@ -266,3 +267,4 @@ Term * Quant::accept(PointerVisitor * visitor) {
 Term * Let::accept(PointerVisitor * visitor) {
     return visitor->visit(this);
 }
+} // namespace golem

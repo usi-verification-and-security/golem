@@ -13,7 +13,6 @@
 #include "TransformationUtils.h"
 #include "TransitionSystem.h"
 #include "Witnesses.h"
-#include "transformers/BasicTransformationPipelines.h"
 #include "transformers/NestedLoopTransformation.h"
 #include "transformers/SingleLoopTransformation.h"
 #include "utils/SmtSolver.h"
@@ -23,6 +22,7 @@
 #define TRACE(l, m)                                                                                                    \
     if (TRACE_LEVEL >= l) { std::cout << m << std::endl; }
 
+namespace golem {
 const std::string TPAEngine::TPA = "tpa";
 const std::string TPAEngine::SPLIT_TPA = "split-tpa";
 
@@ -53,9 +53,9 @@ VerificationResult TPAEngine::solve(const ChcDirectedGraph & graph) {
                 return VerificationResult(res, computeValidityWitness(graph, *ts, inductiveInvariant));
             }
             case VerificationAnswer::UNKNOWN:
-            default:
-                assert(false);
-                throw std::logic_error("Unreachable!");
+                default:
+                    assert(false);
+            throw std::logic_error("Unreachable!");
         }
     } else if ((isTransitionSystemDAG(graph) && not options.hasOption(Options::FORCE_TS)) ||
                options.hasOption(Options::SIMPLIFY_NESTED)) {
@@ -68,7 +68,7 @@ VerificationResult TPAEngine::solve(const ChcDirectedGraph & graph) {
         } else {
             return solveTransitionSystemGraph(graph);
         }
-    }
+               }
     // Translate CHCGraph into transition system
     SingleLoopTransformation transformation;
     auto [ts, backtranslator] = transformation.transform(graph);
@@ -85,9 +85,9 @@ VerificationResult TPAEngine::solve(const ChcDirectedGraph & graph) {
             return backtranslator->translate({res, inductiveInvariant});
         }
         case VerificationAnswer::UNKNOWN:
-        default:
-            assert(false);
-            throw std::logic_error("Unreachable!");
+            default:
+                assert(false);
+        throw std::logic_error("Unreachable!");
     }
 }
 
@@ -1100,13 +1100,13 @@ bool TPASplit::checkExactFixedPoint(unsigned short power) {
                 switch (restrictedInvariant) {
                     case 0:
                         std::cout << "whole transition relation";
-                        break;
+                    break;
                     case 1:
                         std::cout << "transition relation restricted to init";
-                        break;
+                    break;
                     case 2:
                         std::cout << "transition relation restricted to bad";
-                        break;
+                    break;
                     default:
                         assert(false);
                 }
@@ -1146,23 +1146,23 @@ bool TPABase::verifyKinductiveInvariant(PTRef fla, unsigned long k) const {
         }
         TRACE(trace_level, "Inductive case succesfully verified")
     }
-    { // Base cases:
-        SMTSolver solver(logic, SMTSolver::WitnessProduction::NONE);
-        solver.assertProp(init);
-        for (unsigned long i = 0; i < k; ++i) {
-            solver.push();
-            solver.assertProp(logic.mkNot(getNextVersion(fla, i)));
-            auto res = solver.check();
-            if (res != SMTSolver::Answer::UNSAT) {
-                std::cerr << "k-induction verification failed; base case " << i << " does not hold!" << std::endl;
-                return false;
-            }
-            TRACE(trace_level, "Base case " << i << " succesfully verified")
-            solver.pop();
-            solver.push();
-            solver.assertProp(getNextVersion(transition, i));
+{ // Base cases:
+    SMTSolver solver(logic, SMTSolver::WitnessProduction::NONE);
+    solver.assertProp(init);
+    for (unsigned long i = 0; i < k; ++i) {
+        solver.push();
+        solver.assertProp(logic.mkNot(getNextVersion(fla, i)));
+        auto res = solver.check();
+        if (res != SMTSolver::Answer::UNSAT) {
+            std::cerr << "k-induction verification failed; base case " << i << " does not hold!" << std::endl;
+            return false;
         }
+        TRACE(trace_level, "Base case " << i << " succesfully verified")
+        solver.pop();
+        solver.push();
+        solver.assertProp(getNextVersion(transition, i));
     }
+}
     return true;
 }
 
@@ -1469,23 +1469,23 @@ void TransitionSystemNetworkManager::initNetwork() {
 
 namespace {
 
-enum class NodeState { PRE, POST };
-struct Entry {
-    NodeState state;
-    SymRef node;
-    std::optional<EId> incomingEdge; // Edge used to get into this node, valid only for PRE state
-    PTRef reached;
-};
+    enum class NodeState { PRE, POST };
+    struct Entry {
+        NodeState state;
+        SymRef node;
+        std::optional<EId> incomingEdge; // Edge used to get into this node, valid only for PRE state
+        PTRef reached;
+    };
 
-using Path = std::vector<Entry>;
+    using Path = std::vector<Entry>;
 
-std::vector<EId> extractPath(Path const & path) {
-    std::vector<EId> res;
-    for (auto const & entry : path) {
-        if (entry.state == NodeState::PRE) { res.push_back(entry.incomingEdge.value()); }
+    std::vector<EId> extractPath(Path const & path) {
+        std::vector<EId> res;
+        for (auto const & entry : path) {
+            if (entry.state == NodeState::PRE) { res.push_back(entry.incomingEdge.value()); }
+        }
+        return res;
     }
-    return res;
-}
 
 } // namespace
 
@@ -1656,7 +1656,7 @@ TransitionSystemNetworkManager::queryTransitionSystem(NetworkNode const & node, 
         }
         default:
             assert(false);
-            throw std::logic_error("Unreachable");
+        throw std::logic_error("Unreachable");
     }
 }
 
@@ -1702,7 +1702,7 @@ PTRef TPABase::getInductiveInvariant() const {
     if (explanation.relationType == TPAType::LESS_THAN) {
         PTRef transitionInvariant = explanation.safeTransitionInvariant;
         switch (explanation.fixedPointType) {
-                //  TODO: Think about properties combination, can we use left and right invariants together?
+            //  TODO: Think about properties combination, can we use left and right invariants together?
             case SafetyExplanation::FixedPointType::LEFT:
                 return logic.mkNot(QuantifierElimination(logic).keepOnly(
                     logic.mkAnd(transitionInvariant, getNextVersion(query)), getStateVars(0)));
@@ -1760,3 +1760,4 @@ ValidityWitness TPAEngine::computeValidityWitness(ChcDirectedGraph const & graph
                                                   PTRef inductiveInvariant) const {
     return ValidityWitness::fromTransitionSystem(logic, graph, ts, inductiveInvariant);
 }
+} // namespace golem

@@ -1,11 +1,11 @@
-//
-// Created by Martin Blicha on 06.03.21.
-//
+/*
+ * Copyright (c) 2021-2025, Martin Blicha <martin.blicha@gmail.com>
+ *
+ * SPDX-License-Identifier: MIT
+ */
 
-#ifndef OPENSMT_MODELBASEDPROJECTION_H
-#define OPENSMT_MODELBASEDPROJECTION_H
-
-#endif //OPENSMT_MODELBASEDPROJECTION_H
+#ifndef GOLEM_MODELBASEDPROJECTION_H
+#define GOLEM_MODELBASEDPROJECTION_H
 
 #include "osmt_solver.h"
 #include "osmt_terms.h"
@@ -13,6 +13,7 @@
 #include <unordered_set>
 #include <iosfwd>
 
+namespace golem {
 class ModelBasedProjection {
 private:
     Logic & logic;
@@ -73,3 +74,5 @@ private:
 
     ResolveResult resolve(LIABoundLower const& lower, LIABoundUpper const& upper, Model & model, ArithLogic & lialogic);
 };
+} // namespace golem
+#endif // GOLEM_MODELBASEDPROJECTION_H

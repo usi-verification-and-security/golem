@@ -1,16 +1,17 @@
 /*
- * Copyright (c) 2020 - 2022, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2020-2025, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
 
-#ifndef OPENSMT_VALIDATOR_H
-#define OPENSMT_VALIDATOR_H
+#ifndef GOLEM_VALIDATOR_H
+#define GOLEM_VALIDATOR_H
 
+#include "Witnesses.h"
 
-#include "engine/Engine.h"
 #include "graph/ChcGraph.h"
 
+namespace golem {
 struct ValidationException : public std::runtime_error {
     explicit ValidationException(const std::string & msg) : std::runtime_error(msg) {}
     explicit ValidationException(const char * msg) : std::runtime_error(msg) {}
@@ -31,6 +32,7 @@ private:
     [[nodiscard]]
     Result validateInvalidityWitness(ChcDirectedHyperGraph const & graph, InvalidityWitness const & witness) const;
 };
+} // namespace golem
 
 
-#endif //OPENSMT_VALIDATOR_H
+#endif //GOLEM_VALIDATOR_H

@@ -1,12 +1,13 @@
 
 /*
- * Copyright (c) 2022, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2022-2025, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
 
 #include "TransformationPipeline.h"
 
+namespace golem {
 Transformer::TransformationResult TransformationPipeline::transform(std::unique_ptr<ChcDirectedHyperGraph> graph) {
     BackTranslator::pipeline_t backtranslators;
     for (auto const & transformer : inner) {
@@ -31,3 +32,4 @@ ValidityWitness TransformationPipeline::BackTranslator::translate(ValidityWitnes
     }
     return witness;
 }
+} // namespace golem

@@ -9,12 +9,13 @@
 
 #include "TransformationPipeline.h"
 
-namespace Transformations {
+namespace golem::Transformations {
 
 TransformationPipeline towardsTransitionSystems();
 
 TransformationPipeline defaultTransformationPipeline();
 
-}
+} // namespace golem::Transformations
+
 
 #endif //GOLEM_BASICTRANSFORMATIONPIPELINES_H

@@ -1,74 +1,75 @@
 /*
- * Copyright (c) 2020-2022, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2020-2025, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
 
 #include "TermUtils.h"
 
+namespace golem {
 namespace {
-template<typename TKeep>
-PTRef tryEliminateVars(PTRef fla, Logic & logic, TKeep shouldKeepVar) {
-    ArithLogic & arithLogic = dynamic_cast<ArithLogic &>(logic);
-    auto res = TermUtils(logic).extractSubstitutionsAndSimplify(fla);
-    PTRef simplifiedFormula = res.result;
-    auto & substitutions = res.substitutionsUsed;
-    logic.substitutionsTransitiveClosure(substitutions);
-    // Substitutions where key is TBE (to be eliminated) var can be simply dropped.
-    // Others need to be brought back.
-    // If there is a TBE variable on RHS, we should revert the substitution so that this TBE var is eliminated instead.
-    // For now we only revert if RHS is exactly TBE var
-    Logic::SubstMap revertedSubs;
-    vec<PTRef> equalitiesToRestore;
-//    std::cout << "====================================\n";
-    for (auto const & key : substitutions.getKeys()) {
-//        std::cout << logic.pp(key) << " -> " << logic.pp(substitutions[key]) << std::endl;
-        assert(logic.isVar(key));
-        if (shouldKeepVar(key)) {
-            // If it is not a variable we wanted to eliminate, we need to insert back the equality
-            // Unless we can extract TBE var from the RHS
-            PTRef rhs = substitutions[key];
-            if (logic.isVar(rhs) and not shouldKeepVar(rhs) and
-                not revertedSubs.has(rhs)) {
-                revertedSubs.insert(rhs, key);
-            } else {
-                equalitiesToRestore.push(logic.mkEq(key, rhs));
-            }
-        } else { // Substitution of TBE var. Can ignore if Bool or Real var
-            if (arithLogic.yieldsSortInt(key)) {
-                // MB: Integer equalities can bear information about divisibility constraints
-                //     We need to keep this information
+    template<typename TKeep>
+    PTRef tryEliminateVars(PTRef fla, Logic & logic, TKeep shouldKeepVar) {
+        ArithLogic & arithLogic = dynamic_cast<ArithLogic &>(logic);
+        auto res = TermUtils(logic).extractSubstitutionsAndSimplify(fla);
+        PTRef simplifiedFormula = res.result;
+        auto & substitutions = res.substitutionsUsed;
+        logic.substitutionsTransitiveClosure(substitutions);
+        // Substitutions where key is TBE (to be eliminated) var can be simply dropped.
+        // Others need to be brought back.
+        // If there is a TBE variable on RHS, we should revert the substitution so that this TBE var is eliminated instead.
+        // For now we only revert if RHS is exactly TBE var
+        Logic::SubstMap revertedSubs;
+        vec<PTRef> equalitiesToRestore;
+        //    std::cout << "====================================\n";
+        for (auto const & key : substitutions.getKeys()) {
+            //        std::cout << logic.pp(key) << " -> " << logic.pp(substitutions[key]) << std::endl;
+            assert(logic.isVar(key));
+            if (shouldKeepVar(key)) {
+                // If it is not a variable we wanted to eliminate, we need to insert back the equality
+                // Unless we can extract TBE var from the RHS
                 PTRef rhs = substitutions[key];
-                Pterm const & term = logic.getPterm(rhs);
-                if (std::any_of(term.begin(), term.end(), [&](PTRef arg) {
-                    auto varConstant = arithLogic.splitTermToVarAndConst(arg);
-                    return not arithLogic.getNumConst(varConstant.second).isInteger();
-                })) { // There are some fractions on the RHS, better keep this substitution, just in case
-                    equalitiesToRestore.push(logic.mkEq(key, rhs));
+                if (logic.isVar(rhs) and not shouldKeepVar(rhs) and
+                    not revertedSubs.has(rhs)) {
+                    revertedSubs.insert(rhs, key);
+                    } else {
+                        equalitiesToRestore.push(logic.mkEq(key, rhs));
+                    }
+            } else { // Substitution of TBE var. Can ignore if Bool or Real var
+                if (arithLogic.yieldsSortInt(key)) {
+                    // MB: Integer equalities can bear information about divisibility constraints
+                    //     We need to keep this information
+                    PTRef rhs = substitutions[key];
+                    Pterm const & term = logic.getPterm(rhs);
+                    if (std::any_of(term.begin(), term.end(), [&](PTRef arg) {
+                        auto varConstant = arithLogic.splitTermToVarAndConst(arg);
+                        return not arithLogic.getNumConst(varConstant.second).isInteger();
+                    })) { // There are some fractions on the RHS, better keep this substitution, just in case
+                        equalitiesToRestore.push(logic.mkEq(key, rhs));
+                    }
                 }
             }
         }
+        //    std::cout << "====================================\n";
+        if (equalitiesToRestore.size() > 0) {
+            equalitiesToRestore.push(simplifiedFormula);
+            simplifiedFormula = logic.mkAnd(std::move(equalitiesToRestore));
+        }
+        if (revertedSubs.getSize() > 0) {
+            simplifiedFormula = Substitutor(logic, revertedSubs).rewrite(simplifiedFormula);
+        }
+        //    std::cout << logic.pp(simplifiedFormula) << std::endl;
+        return simplifiedFormula;
     }
-//    std::cout << "====================================\n";
-    if (equalitiesToRestore.size() > 0) {
-        equalitiesToRestore.push(simplifiedFormula);
-        simplifiedFormula = logic.mkAnd(std::move(equalitiesToRestore));
-    }
-    if (revertedSubs.getSize() > 0) {
-        simplifiedFormula = Substitutor(logic, revertedSubs).rewrite(simplifiedFormula);
-    }
-//    std::cout << logic.pp(simplifiedFormula) << std::endl;
-    return simplifiedFormula;
-}
-}
+} // namespace
 
 PTRef TrivialQuantifierElimination::tryEliminateVars(vec<PTRef> const & vars, PTRef fla) const {
     if (vars.size() == 0) { return fla; }
-    return ::tryEliminateVars(fla, logic, [&](PTRef var) { return std::find(vars.begin(), vars.end(), var) == vars.end(); });
+    return golem::tryEliminateVars(fla, logic, [&](PTRef var) { return std::find(vars.begin(), vars.end(), var) == vars.end(); });
 }
 
 PTRef TrivialQuantifierElimination::tryEliminateVarsExcept(vec<PTRef> const & vars, PTRef fla) const {
-    return ::tryEliminateVars(fla, logic, [&](PTRef var) { return std::find(vars.begin(), vars.end(), var) != vars.end(); });
+    return golem::tryEliminateVars(fla, logic, [&](PTRef var) { return std::find(vars.begin(), vars.end(), var) != vars.end(); });
 }
 
 PTRef LATermUtils::expressZeroTermFor(PTRef zeroTerm, PTRef var) {
@@ -417,71 +418,71 @@ PTRef LATermUtils::simplifyConjunction(PTRef fla) {
 }
 
 namespace {
-struct Conjunction {};
-struct Disjunction {};
+    struct Conjunction {};
+    struct Disjunction {};
 
-template<typename T>
-struct JunctionTraits {
-    static bool isBetterLowerBound(FastRational const& first, FastRational const& second) = delete;
-    static bool isBetterUpperBound(FastRational const& first, FastRational const& second) = delete;
-};
+    template<typename T>
+    struct JunctionTraits {
+        static bool isBetterLowerBound(FastRational const& first, FastRational const& second) = delete;
+        static bool isBetterUpperBound(FastRational const& first, FastRational const& second) = delete;
+    };
 
-template<>
-struct JunctionTraits<Conjunction> {
-    static bool isBetterLowerBound(FastRational const& first, FastRational const& second) { return first > second; } // higher is stronger
-    static bool isBetterUpperBound(FastRational const& first, FastRational const& second) { return first < second; } // lower is stronger
-};
+    template<>
+    struct JunctionTraits<Conjunction> {
+        static bool isBetterLowerBound(FastRational const& first, FastRational const& second) { return first > second; } // higher is stronger
+        static bool isBetterUpperBound(FastRational const& first, FastRational const& second) { return first < second; } // lower is stronger
+    };
 
-template<>
-struct JunctionTraits<Disjunction> {
-    static bool isBetterLowerBound(FastRational const& first, FastRational const& second) { return first < second; } // lower is weaker
-    static bool isBetterUpperBound(FastRational const& first, FastRational const& second) { return first > second; } // higher is weaker
-};
+    template<>
+    struct JunctionTraits<Disjunction> {
+        static bool isBetterLowerBound(FastRational const& first, FastRational const& second) { return first < second; } // lower is weaker
+        static bool isBetterUpperBound(FastRational const& first, FastRational const& second) { return first > second; } // higher is weaker
+    };
 
 
 
-template<typename T>
-void simplifyJunction(std::vector<PtAsgn> & juncts, ArithLogic & logic) {
-    std::vector<PtAsgn> tmp;
-    tmp.reserve(juncts.size());
-    MapWithKeys<PtAsgn, PTRef, PtAsgnHash> bounds;
-    for (PtAsgn literal : juncts) {
-        auto sign = literal.sgn;
-        PTRef ineq = literal.tr;
-        if (not logic.isLeq(ineq)) {
-            tmp.push_back(literal);
-            continue;
-        }
-        auto pair = logic.leqToConstantAndTerm(ineq);
-        PTRef constant = pair.first;
-        PTRef term = pair.second;
-        assert(logic.isConstant(constant) and logic.isLinearTerm(term));
-        PtAsgn key(term, sign);
-        PTRef currentValue;
-        if (bounds.peek(key, currentValue)) {
-            if (sign == l_True) { // positive literal -> lower bound
-                if (JunctionTraits<T>::isBetterLowerBound(logic.getNumConst(constant), logic.getNumConst(currentValue))) {
-                    bounds[key] = constant;
+    template<typename T>
+    void simplifyJunction(std::vector<PtAsgn> & juncts, ArithLogic & logic) {
+        std::vector<PtAsgn> tmp;
+        tmp.reserve(juncts.size());
+        MapWithKeys<PtAsgn, PTRef, PtAsgnHash> bounds;
+        for (PtAsgn literal : juncts) {
+            auto sign = literal.sgn;
+            PTRef ineq = literal.tr;
+            if (not logic.isLeq(ineq)) {
+                tmp.push_back(literal);
+                continue;
+            }
+            auto pair = logic.leqToConstantAndTerm(ineq);
+            PTRef constant = pair.first;
+            PTRef term = pair.second;
+            assert(logic.isConstant(constant) and logic.isLinearTerm(term));
+            PtAsgn key(term, sign);
+            PTRef currentValue;
+            if (bounds.peek(key, currentValue)) {
+                if (sign == l_True) { // positive literal -> lower bound
+                    if (JunctionTraits<T>::isBetterLowerBound(logic.getNumConst(constant), logic.getNumConst(currentValue))) {
+                        bounds[key] = constant;
+                    }
+                } else {
+                    assert(sign == l_False);
+                    // negative literal -> upper bound
+                    if (JunctionTraits<T>::isBetterUpperBound(logic.getNumConst(constant), logic.getNumConst(currentValue))) {
+                        bounds[key] = constant;
+                    }
                 }
             } else {
-                assert(sign == l_False);
-                // negative literal -> upper bound
-                if (JunctionTraits<T>::isBetterUpperBound(logic.getNumConst(constant), logic.getNumConst(currentValue))) {
-                    bounds[key] = constant;
-                }
+                bounds.insert(key, constant);
             }
-        } else {
-            bounds.insert(key, constant);
+        }
+        auto const & keys = bounds.getKeys();
+        if (keys.size() + tmp.size() < juncts.size()) { // something actually changed
+            for (PtAsgn key : keys) {
+                tmp.push_back(PtAsgn(logic.mkLeq(bounds[key], key.tr), key.sgn));
+            }
+            juncts = std::move(tmp);
         }
     }
-    auto const & keys = bounds.getKeys();
-    if (keys.size() + tmp.size() < juncts.size()) { // something actually changed
-        for (PtAsgn key : keys) {
-            tmp.push_back(PtAsgn(logic.mkLeq(bounds[key], key.tr), key.sgn));
-        }
-        juncts = std::move(tmp);
-    }
-}
 }
 
 void LATermUtils::simplifyDisjunction(std::vector<PtAsgn> & disjuncts) {
@@ -634,3 +635,4 @@ PTRef VersionManager::sourceFormulaToTarget(PTRef fla) const {
         return toTarget(toBase(var));
     });
 }
+} // namespace golem

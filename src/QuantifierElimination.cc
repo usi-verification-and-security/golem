@@ -11,6 +11,7 @@
 #include "utils/SmtSolver.h"
 
 namespace {
+using namespace golem;
 PTRef eliminate(Logic & logic, PTRef fla, vec<PTRef> const & vars) {
     vec<PTRef> projections;
 
@@ -40,6 +41,7 @@ PTRef eliminate(Logic & logic, PTRef fla, vec<PTRef> const & vars) {
 }
 } // namespace
 
+namespace golem {
 PTRef QuantifierElimination::keepOnly(PTRef fla, const vec<PTRef> & varsToKeep) {
     auto allVars = TermUtils(logic).getVars(fla);
     vec<PTRef> toEliminate;
@@ -57,8 +59,9 @@ PTRef QuantifierElimination::eliminate(PTRef fla, vec<PTRef> const & vars) {
     if (not std::all_of(vars.begin(), vars.end(), [this](PTRef var) { return logic.isVar(var); }) or
         not logic.hasSortBool(fla)) {
         throw std::invalid_argument("Invalid arguments to quantifier elimination");
-    }
+        }
 
     fla = TermUtils(logic).toNNF(fla);
     return ::eliminate(logic, fla, vars);
 }
+} // namespace golem

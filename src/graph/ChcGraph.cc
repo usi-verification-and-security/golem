@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2023, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2020-2025, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
@@ -14,38 +14,38 @@
 #include <map>
 #include <set>
 
-
+namespace golem {
 namespace{
 
-class DFS {
-    ChcDirectedGraph const & graph;
-    AdjacencyListsGraphRepresentation const & adjacencyRepresentation;
-    std::unordered_set<SymRef, SymRefHash> marked;
+    class DFS {
+        ChcDirectedGraph const & graph;
+        AdjacencyListsGraphRepresentation const & adjacencyRepresentation;
+        std::unordered_set<SymRef, SymRefHash> marked;
 
-    [[nodiscard]] bool isMarked(SymRef sym) const { return marked.find(sym) != marked.end(); }
-    void mark(SymRef sym) { marked.insert(sym); }
+        [[nodiscard]] bool isMarked(SymRef sym) const { return marked.find(sym) != marked.end(); }
+        void mark(SymRef sym) { marked.insert(sym); }
 
-    template<typename TPreorderAction, typename TPostorderAction>
-    void runOnVertex(SymRef sym, TPreorderAction const & preorder, TPostorderAction const & postorder) {
-        if (isMarked(sym)) { return; }
-        mark(sym);
-        preorder(sym);
-        for (EId outEdge : adjacencyRepresentation.getOutgoingEdgesFor(sym)) {
-            runOnVertex(graph.getTarget(outEdge), preorder, postorder);
+        template<typename TPreorderAction, typename TPostorderAction>
+        void runOnVertex(SymRef sym, TPreorderAction const & preorder, TPostorderAction const & postorder) {
+            if (isMarked(sym)) { return; }
+            mark(sym);
+            preorder(sym);
+            for (EId outEdge : adjacencyRepresentation.getOutgoingEdgesFor(sym)) {
+                runOnVertex(graph.getTarget(outEdge), preorder, postorder);
+            }
+            postorder(sym);
         }
-        postorder(sym);
-    }
-public:
-    DFS(ChcDirectedGraph const & graph, AdjacencyListsGraphRepresentation const & adjacencyRepresentation) :
-        graph(graph),
-        adjacencyRepresentation(adjacencyRepresentation)
-    {}
+    public:
+        DFS(ChcDirectedGraph const & graph, AdjacencyListsGraphRepresentation const & adjacencyRepresentation) :
+            graph(graph),
+            adjacencyRepresentation(adjacencyRepresentation)
+        {}
 
-    template<typename TPreorderAction, typename TPostorderAction>
-    void run(TPreorderAction const & preorder, TPostorderAction const & postorder) && {
-        runOnVertex(graph.getEntry(), preorder, postorder);
-    }
-};
+        template<typename TPreorderAction, typename TPostorderAction>
+        void run(TPreorderAction const & preorder, TPostorderAction const & postorder) && {
+            runOnVertex(graph.getEntry(), preorder, postorder);
+        }
+    };
 }
 
 std::vector<SymRef> reversePostOrder(ChcDirectedGraph const & graph, AdjacencyListsGraphRepresentation const & adjacencyRepresentation) {
@@ -275,49 +275,49 @@ void ChcDirectedHyperGraph::deleteNode(SymRef sym) {
 }
 
 namespace {
-std::vector<PTRef> getAuxiliaryVariablesFromEdge(ChcDirectedHyperGraph const & graph, EId eid) {
-    Logic & logic = graph.getLogic();
-    PTRef label = graph.getEdgeLabel(eid);
-    TermUtils utils(logic);
-    auto allVars = utils.getVars(label);
-    auto nonAuxVars = [&] {
-        std::unordered_set<PTRef, PTRefHash> acc;
-        std::unordered_map<SymRef, unsigned, SymRefHash> instanceCount;
-        auto targetVars = utils.predicateArgsInOrder(graph.predicateRepresentation().getTargetTermFor(graph.getTarget(eid)));
-        acc.insert(targetVars.begin(), targetVars.end());
-        for (auto source : graph.getSources(eid)) {
-            auto instance = instanceCount[source]++;
-            auto sourceVars = utils.predicateArgsInOrder(graph.predicateRepresentation().getSourceTermFor(source, instance));
-            acc.insert(sourceVars.begin(), sourceVars.end());
-        }
-        return acc;
-    }();
+    std::vector<PTRef> getAuxiliaryVariablesFromEdge(ChcDirectedHyperGraph const & graph, EId eid) {
+        Logic & logic = graph.getLogic();
+        PTRef label = graph.getEdgeLabel(eid);
+        TermUtils utils(logic);
+        auto allVars = utils.getVars(label);
+        auto nonAuxVars = [&] {
+            std::unordered_set<PTRef, PTRefHash> acc;
+            std::unordered_map<SymRef, unsigned, SymRefHash> instanceCount;
+            auto targetVars = utils.predicateArgsInOrder(graph.predicateRepresentation().getTargetTermFor(graph.getTarget(eid)));
+            acc.insert(targetVars.begin(), targetVars.end());
+            for (auto source : graph.getSources(eid)) {
+                auto instance = instanceCount[source]++;
+                auto sourceVars = utils.predicateArgsInOrder(graph.predicateRepresentation().getSourceTermFor(source, instance));
+                acc.insert(sourceVars.begin(), sourceVars.end());
+            }
+            return acc;
+        }();
 
-    std::vector<PTRef> auxVars;
-    for (PTRef var : allVars) {
-        if (nonAuxVars.count(var) == 0) {
-            auxVars.push_back(var);
+        std::vector<PTRef> auxVars;
+        for (PTRef var : allVars) {
+            if (nonAuxVars.count(var) == 0) {
+                auxVars.push_back(var);
+            }
         }
+        return auxVars;
     }
-    return auxVars;
-}
 
-PTRef renameAuxiliaries(ChcDirectedHyperGraph const & graph, EId incoming) {
-    PTRef incomingLabel = graph.getEdgeLabel(incoming);
-    auto incomingAuxVars = getAuxiliaryVariablesFromEdge(graph, incoming);
-    if (incomingAuxVars.empty()) { return incomingLabel; }
-    static std::size_t counter = 0;
-    Logic & logic = graph.getLogic();
-    TermUtils::substitutions_map substitutionsMap;
-    TimeMachine tm(logic);
-    for (PTRef var : incomingAuxVars) {
-        std::string newName = "gaux#" + std::to_string(counter++);
-        PTRef newVar = tm.getVarVersionZero(newName, logic.getSortRef(var));
-        substitutionsMap.insert({var, newVar});
+    PTRef renameAuxiliaries(ChcDirectedHyperGraph const & graph, EId incoming) {
+        PTRef incomingLabel = graph.getEdgeLabel(incoming);
+        auto incomingAuxVars = getAuxiliaryVariablesFromEdge(graph, incoming);
+        if (incomingAuxVars.empty()) { return incomingLabel; }
+        static std::size_t counter = 0;
+        Logic & logic = graph.getLogic();
+        TermUtils::substitutions_map substitutionsMap;
+        TimeMachine tm(logic);
+        for (PTRef var : incomingAuxVars) {
+            std::string newName = "gaux#" + std::to_string(counter++);
+            PTRef newVar = tm.getVarVersionZero(newName, logic.getSortRef(var));
+            substitutionsMap.insert({var, newVar});
+        }
+        PTRef newLabel = TermUtils(logic).varSubstitute(incomingLabel, substitutionsMap);
+        return newLabel;
     }
-    PTRef newLabel = TermUtils(logic).varSubstitute(incomingLabel, substitutionsMap);
-    return newLabel;
-}
 }
 
 DirectedHyperEdge ChcDirectedHyperGraph::mergeEdgePair(EId incoming, EId outgoing) {
@@ -623,7 +623,7 @@ WitnessInfo ChcDirectedGraph::contractConnectedVertices(std::vector<EId> edges) 
             std::find(vertices.begin(), vertices.end(), getTarget(edge)) != vertices.end()) {
             transitionRelationComponent.push(edgeTranslator.translateEdge(getEdge(edge)));
             removeEdge(edge);
-        }
+            }
     };
     PTRef transitionRelation = logic.mkOr(std::move(transitionRelationComponent));
 
@@ -703,3 +703,4 @@ WitnessInfo ChcDirectedGraph::contractConnectedVertices(std::vector<EId> edges) 
     newEdge(newRef, newRef, InterpretedFla{transitionRelation});
     return {newRef, locationVars, argVars};
 }
+} // namespace golem

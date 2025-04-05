@@ -7,10 +7,12 @@
 #ifndef GOLEM_TPA_H
 #define GOLEM_TPA_H
 
+#include "Options.h"
 #include "TransitionSystemEngine.h"
 
 #include "osmt_solver.h"
 
+namespace golem {
 class TransitionSystem;
 
 enum class ReachabilityResult { REACHABLE, UNREACHABLE };
@@ -270,5 +272,6 @@ private:
 
     bool verifyPower(unsigned short level) const;
 };
+} // namespace golem
 
 #endif // GOLEM_TPA_H

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2023, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2020-2025, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
@@ -15,12 +15,13 @@
 #include <memory>
 #include <optional>
 
+namespace golem {
 struct VId {
     std::size_t id;
 };
 
 struct EId {
-	std::size_t id;
+    std::size_t id;
 };
 
 
@@ -57,10 +58,10 @@ class AdjacencyListsGraphRepresentation {
     AdjacencyList outgoingEdges;
 
 
-	AdjacencyListsGraphRepresentation(AdjacencyList && incoming, AdjacencyList && outgoing)
-		: incomingEdges(std::move(incoming)),
-		  outgoingEdges(std::move(outgoing))
-	{}
+    AdjacencyListsGraphRepresentation(AdjacencyList && incoming, AdjacencyList && outgoing)
+        : incomingEdges(std::move(incoming)),
+          outgoingEdges(std::move(outgoing))
+    {}
 
 public:
     static AdjacencyListsGraphRepresentation from(ChcDirectedGraph const& graph);
@@ -178,7 +179,7 @@ public:
     }
 
     SymRef getTarget(EId eid) const {
-            return getEdge(eid).to;
+        return getEdge(eid).to;
     }
 
     std::unique_ptr<ChcDirectedHyperGraph> toHyperGraph() const;
@@ -411,5 +412,5 @@ bool isNonLoopNode(SymRef, AdjacencyListsGraphRepresentation const &, ChcDirecte
 bool hasHyperEdge(SymRef, AdjacencyListsGraphRepresentation const &, ChcDirectedHyperGraph const & graph);
 
 bool isSimpleNode(SymRef, AdjacencyListsGraphRepresentation const &);
-
+} // namespace golem
 #endif //GOLEM_CHCGRAPH_H

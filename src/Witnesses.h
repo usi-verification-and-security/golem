@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2023, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2020-2025, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
@@ -14,6 +14,7 @@
 #include <memory>
 #include <variant>
 
+namespace golem {
 class ErrorPath {
     std::vector<EId> path;
 public:
@@ -36,7 +37,7 @@ public:
         // Additionally, derivation step remembers its premises (ids) and edge/clause
     public:
         using id_t = EId;
-    	struct DerivationStep {
+        struct DerivationStep {
             std::size_t index {0};
             std::vector<std::size_t> premises;
             PTRef derivedFact;
@@ -158,5 +159,5 @@ struct TransitionSystemVerificationResult {
 };
 
 VerificationResult translateTransitionSystemResult(TransitionSystemVerificationResult result, ChcDirectedGraph const & graph, TransitionSystem const & ts);
-
+} // namespace golem
 #endif // GOLEM_WITNESSES_H

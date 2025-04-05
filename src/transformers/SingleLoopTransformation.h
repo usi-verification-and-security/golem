@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2023-2025, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
@@ -11,6 +11,7 @@
 #include "Witnesses.h"
 #include "graph/ChcGraph.h"
 
+namespace golem {
 /**
  * This class implements a transformation from a general linear CHC system to a transition system (defined by initial
  * states, transition relation and bad states).
@@ -70,5 +71,6 @@ public:
 
     TransformationResult transform(ChcDirectedGraph const & graph);
 };
+} // namespace golem
 
 #endif // GOLEM_SINGLELOOPTRANSFORMATION_H

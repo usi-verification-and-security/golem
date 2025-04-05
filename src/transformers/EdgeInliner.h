@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2024, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2024-2025, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
@@ -9,6 +9,7 @@
 
 #include "Transformer.h"
 
+namespace golem {
 class EdgeInliner : public Transformer {
 
 public:
@@ -48,7 +49,6 @@ public:
         PTRef computeInterpolantFor(SymRef node, PTRef incoming, PTRef outgoing) const;
     };
 };
-
-
+} // namespace golem
 
 #endif //EDGEINLINER_H

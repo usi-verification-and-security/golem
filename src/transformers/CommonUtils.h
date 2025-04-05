@@ -10,6 +10,7 @@
 #include "graph/ChcGraph.h"
 #include "Witnesses.h"
 
+namespace golem {
 class EdgeConverter {
     Logic & logic;
     TermUtils utils;
@@ -94,7 +95,6 @@ struct EdgeTranslator {
 
     PTRef translateEdge(DirectedEdge const & edge) const;
 };
-
-
+} // namespace golem
 
 #endif //GOLEM_COMMONUTILS_H

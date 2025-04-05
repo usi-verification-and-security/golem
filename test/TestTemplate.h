@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2022-2025, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
@@ -10,11 +10,14 @@
 #include "engine/Engine.h"
 #include "graph/ChcGraphBuilder.h"
 #include "transformers/ConstraintSimplifier.h"
+#include "Options.h"
 #include "Validator.h"
 
 #include <gtest/gtest.h>
 
 #include <memory>
+
+using namespace golem;
 
 class EngineTest : public ::testing::Test {
 protected:

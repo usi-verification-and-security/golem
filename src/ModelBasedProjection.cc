@@ -1,6 +1,8 @@
-//
-// Created by Martin Blicha on 06.03.21.
-//
+/*
+ * Copyright (c) 2021-2025, Martin Blicha <martin.blicha@gmail.com>
+ *
+ * SPDX-License-Identifier: MIT
+ */
 
 #include "ModelBasedProjection.h"
 
@@ -112,6 +114,7 @@ namespace{
     }
 }
 
+namespace golem {
 void ModelBasedProjection::postprocess(implicant_t & literals, ArithLogic & lalogic) {
     LATermUtils(lalogic).simplifyConjunction(literals);
 }
@@ -200,7 +203,7 @@ ModelBasedProjection::implicant_t ModelBasedProjection::projectSingleVar(PTRef v
     // "interestingEnd" points to the first literal that does not contain the var anymore
 
     // collect the lower and upper bounds, remember if they are strict or non-strict
-//    std::vector<Bound> bounds;
+    //    std::vector<Bound> bounds;
     std::vector<Bound> lBounds;
     std::vector<Bound> uBounds;
     std::vector<Bound> bounds;
@@ -303,100 +306,100 @@ ModelBasedProjection::implicant_t ModelBasedProjection::projectSingleVar(PTRef v
 }
 
 namespace{
-void collectImplicant(Logic & logic, PTRef fla, Model & model, std::vector<char> & processed, std::vector<PtAsgn>& literals,
-                      ModelBasedProjection::VarsInfo const & varsInfo) {
-    auto id = Idx(logic.getPterm(fla).getId());
-    if (id >= processed.size()) {
-        throw std::logic_error("Should not happen!");
-    }
-    if (processed[id]) { return; }
-    processed[id] = 1;
-    PTRef trueTerm = logic.getTerm_true();
-    assert(model.evaluate(fla) == trueTerm);
-    if (logic.isAtom(fla)) {
-        literals.push_back(PtAsgn(fla, l_True));
-        return;
-    }
-    if (logic.isAnd(fla)) {
-        // all children must be satisfied
-        auto size = logic.getPterm(fla).size();
-        for (int i = 0; i < size; ++i) {
-            PTRef child = logic.getPterm(fla)[i];
-            assert(model.evaluate(child) == trueTerm);
-            collectImplicant(logic, child, model, processed, literals, varsInfo);
+    void collectImplicant(Logic & logic, PTRef fla, Model & model, std::vector<char> & processed, std::vector<PtAsgn>& literals,
+                          ModelBasedProjection::VarsInfo const & varsInfo) {
+        auto id = Idx(logic.getPterm(fla).getId());
+        if (id >= processed.size()) {
+            throw std::logic_error("Should not happen!");
         }
-        return;
-    }
-    if (logic.isOr(fla)) {
-        bool hasInterestingVars = false;
-        if (varsInfo.peek(fla, hasInterestingVars)) {
-            if (not hasInterestingVars) {
-                literals.push_back(PtAsgn(fla, l_True));
-                return;
-            }
-        }
-        // at least one child must be satisfied
-        auto size = logic.getPterm(fla).size();
-        for (int i = 0; i < size; ++i) {
-            PTRef child = logic.getPterm(fla)[i];
-            if (model.evaluate(child) == trueTerm) {
-                collectImplicant(logic, child, model, processed, literals, varsInfo);
-                return;
-            }
-        }
-        assert(false);
-        throw std::logic_error("Error in processing disjunction in collectImplicant!");
-    }
-    if (logic.isNot(fla)) {
-        PTRef child = logic.getPterm(fla)[0];
-        if (logic.isAtom(child)) {
-            assert(model.evaluate(child) == logic.getTerm_false());
-            literals.push_back(PtAsgn(child, l_False));
+        if (processed[id]) { return; }
+        processed[id] = 1;
+        PTRef trueTerm = logic.getTerm_true();
+        assert(model.evaluate(fla) == trueTerm);
+        if (logic.isAtom(fla)) {
+            literals.push_back(PtAsgn(fla, l_True));
             return;
         }
-        throw std::logic_error("Formula is not in NNF in collectImplicant!");
+        if (logic.isAnd(fla)) {
+            // all children must be satisfied
+            auto size = logic.getPterm(fla).size();
+            for (int i = 0; i < size; ++i) {
+                PTRef child = logic.getPterm(fla)[i];
+                assert(model.evaluate(child) == trueTerm);
+                collectImplicant(logic, child, model, processed, literals, varsInfo);
+            }
+            return;
+        }
+        if (logic.isOr(fla)) {
+            bool hasInterestingVars = false;
+            if (varsInfo.peek(fla, hasInterestingVars)) {
+                if (not hasInterestingVars) {
+                    literals.push_back(PtAsgn(fla, l_True));
+                    return;
+                }
+            }
+            // at least one child must be satisfied
+            auto size = logic.getPterm(fla).size();
+            for (int i = 0; i < size; ++i) {
+                PTRef child = logic.getPterm(fla)[i];
+                if (model.evaluate(child) == trueTerm) {
+                    collectImplicant(logic, child, model, processed, literals, varsInfo);
+                    return;
+                }
+            }
+            assert(false);
+            throw std::logic_error("Error in processing disjunction in collectImplicant!");
+        }
+        if (logic.isNot(fla)) {
+            PTRef child = logic.getPterm(fla)[0];
+            if (logic.isAtom(child)) {
+                assert(model.evaluate(child) == logic.getTerm_false());
+                literals.push_back(PtAsgn(child, l_False));
+                return;
+            }
+            throw std::logic_error("Formula is not in NNF in collectImplicant!");
+        }
+        throw std::logic_error("Unexpected connective in formula in collectImplicant");
     }
-    throw std::logic_error("Unexpected connective in formula in collectImplicant");
-}
 
-ModelBasedProjection::VarsInfo computeVarsInfo(PTRef fla, Logic & logic, PTRef const * const beg, PTRef const * const end) {
-    Map<PTRef, bool, PTRefHash> res;
-    vec<PTRef> queue;
-    queue.push(fla);
-    while (queue.size() != 0) {
-        PTRef tr = queue.last();
-        if (res.has(tr)) {
-            queue.pop();
-            continue;
-        }
-        bool unprocessed_children = false;
-        for (int i = 0; i < logic.getPterm(tr).size(); i++) {
-            PTRef c = logic.getPterm(tr)[i];
-            if (res.has(c)) continue;
-            else {
-                queue.push(c);
-                unprocessed_children = true;
+    ModelBasedProjection::VarsInfo computeVarsInfo(PTRef fla, Logic & logic, PTRef const * const beg, PTRef const * const end) {
+        Map<PTRef, bool, PTRefHash> res;
+        vec<PTRef> queue;
+        queue.push(fla);
+        while (queue.size() != 0) {
+            PTRef tr = queue.last();
+            if (res.has(tr)) {
+                queue.pop();
+                continue;
             }
-        }
-        if (unprocessed_children == true) continue;
-        queue.pop();
-        if (logic.isVar(tr)) {
-            bool ofInterest = std::find(beg, end, tr) != end;
-            res.insert(tr, ofInterest);
-        } else if (logic.isConstant(tr)) {
-            res.insert(tr, false);
-        } else {
-            bool anyChildOfInterest = false;
-            for (int i = 0; i < logic.getPterm(tr).size() and not anyChildOfInterest; i++) {
+            bool unprocessed_children = false;
+            for (int i = 0; i < logic.getPterm(tr).size(); i++) {
                 PTRef c = logic.getPterm(tr)[i];
-                assert(res.has(c));
-                anyChildOfInterest = res[c];
+                if (res.has(c)) continue;
+                else {
+                    queue.push(c);
+                    unprocessed_children = true;
+                }
             }
-            res.insert(tr, anyChildOfInterest);
+            if (unprocessed_children == true) continue;
+            queue.pop();
+            if (logic.isVar(tr)) {
+                bool ofInterest = std::find(beg, end, tr) != end;
+                res.insert(tr, ofInterest);
+            } else if (logic.isConstant(tr)) {
+                res.insert(tr, false);
+            } else {
+                bool anyChildOfInterest = false;
+                for (int i = 0; i < logic.getPterm(tr).size() and not anyChildOfInterest; i++) {
+                    PTRef c = logic.getPterm(tr)[i];
+                    assert(res.has(c));
+                    anyChildOfInterest = res[c];
+                }
+                res.insert(tr, anyChildOfInterest);
+            }
         }
+        return res;
     }
-    return res;
-}
 
 }
 
@@ -410,15 +413,15 @@ ModelBasedProjection::implicant_t ModelBasedProjection::getImplicant(PTRef fla, 
 }
 
 namespace{
-void checkImplicant(ModelBasedProjection::implicant_t const & implicant, Logic & logic, Model & model) {
-    (void)logic; (void)model;
-    for (auto const& elem : implicant) {
-        (void)elem;
-        assert(elem.sgn == l_False or elem.sgn == l_True);
-        assert((elem.sgn == l_False and model.evaluate(elem.tr) == logic.getTerm_false())
-               or (elem.sgn == l_True and model.evaluate(elem.tr) == logic.getTerm_true()));
+    void checkImplicant(ModelBasedProjection::implicant_t const & implicant, Logic & logic, Model & model) {
+        (void)logic; (void)model;
+        for (auto const& elem : implicant) {
+            (void)elem;
+            assert(elem.sgn == l_False or elem.sgn == l_True);
+            assert((elem.sgn == l_False and model.evaluate(elem.tr) == logic.getTerm_false())
+                   or (elem.sgn == l_True and model.evaluate(elem.tr) == logic.getTerm_true()));
+        }
     }
-}
 }
 
 PTRef ModelBasedProjection::keepOnly(PTRef fla, const vec<PTRef> & varsToKeep, Model & model) {
@@ -456,7 +459,7 @@ PTRef ModelBasedProjection::project(PTRef fla, const vec<PTRef> & varsToEliminat
     // compute map to know if given term contains any variable to eliminate
     auto varsInfo = computeVarsInfo(nnf, logic, boolEndIt, tmp.end());
 
-//    auto implicant = getImplicant(nnf, model);
+    //    auto implicant = getImplicant(nnf, model);
     auto implicant = getImplicant(nnf, model, varsInfo);
 
     // separate terms that do not contain variables of interest
@@ -470,7 +473,7 @@ PTRef ModelBasedProjection::project(PTRef fla, const vec<PTRef> & varsToEliminat
     implicant_t withoutVarsToEliminate(separator, implicant.end());
     implicant.erase(separator, implicant.end());
 
-//    dumpImplicant(std::cout, implicant);
+    //    dumpImplicant(std::cout, implicant);
     checkImplicant(implicant, logic, model);
     if (logic.hasIntegers()) {
         implicant = projectIntegerVars(boolEndIt, tmp.end(), std::move(implicant), model);
@@ -484,9 +487,9 @@ PTRef ModelBasedProjection::project(PTRef fla, const vec<PTRef> & varsToEliminat
     }
     for (auto it = boolEndIt; it != tmp.end(); ++it) {
         PTRef var = *it;
-//        std::cout << "Eliminating " << logic.printTerm(var) << std::endl;
+        //        std::cout << "Eliminating " << logic.printTerm(var) << std::endl;
         implicant = projectSingleVar(var, std::move(implicant), model);
-//        dumpImplicant(std::cout, implicant);
+        //        dumpImplicant(std::cout, implicant);
         checkImplicant(implicant, logic, model);
     }
     implicant.insert(implicant.end(), withoutVarsToEliminate.begin(), withoutVarsToEliminate.end());
@@ -563,33 +566,33 @@ ModelBasedProjection::implicant_t ModelBasedProjection::projectIntegerVars(PTRef
 }
 
 namespace {
-// TODO: replace when available in FastRationals
-FastRational mbp_fastrat_fdiv_r(FastRational const & n, FastRational const & d) {
-    FastRational q = fastrat_fdiv_q(n, d);
-    FastRational u = n - (q*d);
-    return u;
-}
-
-std::unique_ptr<Model> extendModel(Model & model, ModelBasedProjection::implicant_t const & implicant,
-                                   std::pair<PTRef, PTRef> varValPair, Logic & logic) {
-    return model.extend(varValPair.first, varValPair.second);
-}
-
-template<class ForwardIt, class Funct>
-ForwardIt maxElementWithProjection(ForwardIt first, ForwardIt last, Funct f) {
-    if (first == last) return last;
-
-    ForwardIt largest = first;
-    auto valLargest = f(*first);
-    ++first;
-    for (; first != last; ++first) {
-        if (auto val = f(*first); val > valLargest) {
-            largest = first;
-            valLargest = std::move(val);
-        }
+    // TODO: replace when available in FastRationals
+    FastRational mbp_fastrat_fdiv_r(FastRational const & n, FastRational const & d) {
+        FastRational q = fastrat_fdiv_q(n, d);
+        FastRational u = n - (q*d);
+        return u;
     }
-    return largest;
-}
+
+    std::unique_ptr<Model> extendModel(Model & model, ModelBasedProjection::implicant_t const & implicant,
+                                       std::pair<PTRef, PTRef> varValPair, Logic & logic) {
+        return model.extend(varValPair.first, varValPair.second);
+    }
+
+    template<class ForwardIt, class Funct>
+    ForwardIt maxElementWithProjection(ForwardIt first, ForwardIt last, Funct f) {
+        if (first == last) return last;
+
+        ForwardIt largest = first;
+        auto valLargest = f(*first);
+        ++first;
+        for (; first != last; ++first) {
+            if (auto val = f(*first); val > valLargest) {
+                largest = first;
+                valLargest = std::move(val);
+            }
+        }
+        return largest;
+    }
 
 }
 
@@ -899,4 +902,4 @@ ModelBasedProjection::ResolveResult ModelBasedProjection::resolve(LIABoundLower 
     }
     return result;
 }
-
+} // namespace golem

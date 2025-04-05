@@ -1,12 +1,16 @@
-//
-// Created by Martin Blicha on 09.06.21.
-//
+/*
+ * Copyright (c) 2021-2025, Martin Blicha <martin.blicha@gmail.com>
+ *
+ * SPDX-License-Identifier: MIT
+ */
 
 #include <gtest/gtest.h>
 
 #include "ModelBasedProjection.h"
 
 #include "utils/SmtSolver.h"
+
+using namespace golem;
 
 namespace {
 using Assignment = std::vector<std::pair<PTRef, PTRef>>;

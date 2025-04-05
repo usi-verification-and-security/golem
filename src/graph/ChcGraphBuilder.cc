@@ -1,11 +1,12 @@
 /*
- * Copyright (c) 2020-2022, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2020-2025, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
 
 #include "ChcGraphBuilder.h"
 
+namespace golem {
 std::unique_ptr<ChcDirectedHyperGraph> ChcGraphBuilder::buildGraph(NormalizedChcSystem const & system) {
     std::vector<DirectedHyperEdge> edges;
     ChcSystem const & chcSystem = *system.normalizedSystem;
@@ -27,3 +28,4 @@ std::unique_ptr<ChcDirectedHyperGraph> ChcGraphBuilder::buildGraph(NormalizedChc
     }
     return std::make_unique<ChcDirectedHyperGraph>(std::move(edges), system.canonicalPredicateRepresentation, logic);
 }
+} // namespace golem

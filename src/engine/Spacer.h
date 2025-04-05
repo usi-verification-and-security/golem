@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021-2022, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2021-2025, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
@@ -8,7 +8,9 @@
 #define OPENSMT_SPACER_H
 
 #include "Engine.h"
+#include "Options.h"
 
+namespace golem {
 class Spacer : public Engine {
     Logic & logic;
     Options const & options;
@@ -18,6 +20,7 @@ public:
 
     [[nodiscard]] VerificationResult solve(ChcDirectedHyperGraph const & system) override;
 };
+} // namespace golem
 
 
 #endif //OPENSMT_SPACER_H

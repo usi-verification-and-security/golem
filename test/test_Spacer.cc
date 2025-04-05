@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021-2022, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2021-2025, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */

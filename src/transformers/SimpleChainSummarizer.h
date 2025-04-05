@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2023, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2022-2025, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
@@ -9,6 +9,7 @@
 
 #include "Transformer.h"
 
+namespace golem {
 class SimpleChainSummarizer : public Transformer {
 public:
     TransformationResult transform(std::unique_ptr<ChcDirectedHyperGraph> graph) override;
@@ -34,6 +35,6 @@ public:
         NonlinearCanonicalPredicateRepresentation predicateRepresentation;
     };
 };
-
+} // namespace golem
 
 #endif //GOLEM_SIMPLECHAINSUMMARIZER_H
