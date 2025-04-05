@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2023, Matias Barandiaran <matias.barandiaran03@gmail.com>
- * Copyright (c) 2024, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2024-2025, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
@@ -10,6 +10,30 @@
 #include <string>
 #include <utility>
 
+namespace {
+using namespace golem;
+std::vector<std::shared_ptr<Term>> literals(std::shared_ptr<Term> const & term) {
+    return std::vector{term};
+}
+
+std::vector<std::shared_ptr<Term>> literals(std::shared_ptr<Term> const & term1, std::shared_ptr<Term> const & term2) {
+    return std::vector{term1, term2};
+}
+
+std::vector<std::shared_ptr<Term>> args(std::shared_ptr<Term> const & term1, std::shared_ptr<Term> const & term2) {
+    return std::vector{term1, term2};
+}
+
+std::shared_ptr<Term> negate(std::shared_ptr<Term> const & arg) {
+    return std::make_shared<Op>("not", std::vector{arg});
+}
+
+std::shared_ptr<Terminal> makeName(std::string name) {
+    return std::make_shared<Terminal>(std::move(name), Terminal::UNDECLARED);
+}
+} // namespace
+
+namespace golem {
 std::string Step::printStepAlethe() const {
 
     std::stringstream ss;
@@ -96,28 +120,6 @@ std::string Step::printStepIntermediate() const {
 
     return ss.str();
 }
-
-namespace {
-std::vector<std::shared_ptr<Term>> literals(std::shared_ptr<Term> const & term) {
-    return std::vector{term};
-}
-
-std::vector<std::shared_ptr<Term>> literals(std::shared_ptr<Term> const & term1, std::shared_ptr<Term> const & term2) {
-    return std::vector{term1, term2};
-}
-
-std::vector<std::shared_ptr<Term>> args(std::shared_ptr<Term> const & term1, std::shared_ptr<Term> const & term2) {
-    return std::vector{term1, term2};
-}
-
-std::shared_ptr<Term> negate(std::shared_ptr<Term> const & arg) {
-    return std::make_shared<Op>("not", std::vector{arg});
-}
-
-std::shared_ptr<Terminal> makeName(std::string name) {
-    return std::make_shared<Terminal>(std::move(name), Terminal::UNDECLARED);
-}
-} // namespace
 
 void StepHandler::recordStep(std::vector<TermPtr> && clause, std::string rule, Step::Premises && premises) {
     notifyObservers(Step{currentStep++, Step::StepType::STEP, std::move(clause), std::move(rule), std::move(premises)});
@@ -828,3 +830,4 @@ std::size_t StepHandler::getOrCreateTrueStep() {
     }
     return trueRuleStep;
 }
+} // namespace golem

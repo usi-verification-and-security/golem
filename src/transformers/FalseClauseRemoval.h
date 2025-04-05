@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2022-2025, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
@@ -9,6 +9,7 @@
 
 #include "Transformer.h"
 
+namespace golem {
 class FalseClauseRemoval : public Transformer {
 public:
     TransformationResult transform(std::unique_ptr<ChcDirectedHyperGraph> graph) override;
@@ -19,6 +20,6 @@ public:
         ValidityWitness translate(ValidityWitness witness) override { return witness; }
     };
 };
-
+} // namespace golem
 
 #endif //GOLEM_FALSECLAUSEREMOVAL_H

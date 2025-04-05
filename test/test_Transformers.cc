@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2023, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2022-2025, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
@@ -24,6 +24,8 @@
 #include "transformers/SimpleChainSummarizer.h"
 #include "transformers/TransformationPipeline.h"
 #include "utils/SmtSolver.h"
+
+using namespace golem;
 
 class Transformer_New_Test : public LIAEngineTest {
 };

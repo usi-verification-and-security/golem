@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2023, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2022-2025, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
@@ -9,10 +9,10 @@
 #define GOLEM_TRANSFORMER_H
 
 #include "Witnesses.h"
-#include "graph/ChcGraph.h"
 
 #include <memory>
 
+namespace golem {
 class WitnessBackTranslator {
 public:
     virtual InvalidityWitness translate(InvalidityWitness witness) = 0;
@@ -39,5 +39,6 @@ public:
     virtual TransformationResult transform(std::unique_ptr<ChcDirectedHyperGraph> graph) = 0;
     virtual ~Transformer() = default;
 };
+} // namespace golem
 
 #endif //GOLEM_TRANSFORMER_H

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2022, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2020-2025, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
@@ -11,7 +11,8 @@
 #include <functional>
 #include <optional>
 
-namespace{
+namespace golem {
+namespace {
 
 class ArtPath {
     struct PathSegment {
@@ -19,6 +20,7 @@ class ArtPath {
         PTRef fla;
     };
     std::vector<PathSegment> segments;
+
 public:
     [[nodiscard]] vec<PTRef> getEdgeFormulas() const {
         vec<PTRef> edgeFlas;
@@ -37,21 +39,17 @@ public:
         return edges;
     }
 
-    void addPathSegment(EId eid, PTRef fla) {
-        segments.push_back(PathSegment{eid, fla});
-    }
+    void addPathSegment(EId eid, PTRef fla) { segments.push_back(PathSegment{eid, fla}); }
 
-    [[nodiscard]] std::size_t size() const {
-        return segments.size();
-    }
+    [[nodiscard]] std::size_t size() const { return segments.size(); }
 };
 
 class AbstractReachabilityTree {
 private:
-	struct Edge {
-		VId from;
-		VId to;
-	};
+    struct Edge {
+        VId from;
+        VId to;
+    };
     ChcDirectedGraph const & graph;
     AdjacencyListsGraphRepresentation graphRepresentation;
 
@@ -65,15 +63,16 @@ private:
     std::map<VId, std::vector<EId>> childrenOf;
     std::map<VId, EId> parentOf;
 
-
 public:
-    explicit AbstractReachabilityTree(ChcDirectedGraph const& graph)
+    explicit AbstractReachabilityTree(ChcDirectedGraph const & graph)
         : graph(graph), graphRepresentation(AdjacencyListsGraphRepresentation::from(graph)) {
         root = getNewVertex();
         toOriginalLoc.insert({root, graph.getEntry()});
     }
 
-    [[nodiscard]] bool isErrorLocation(VId vertex) const { return getOriginalLocation(vertex) == getOriginalErrorLocation(); }
+    [[nodiscard]] bool isErrorLocation(VId vertex) const {
+        return getOriginalLocation(vertex) == getOriginalErrorLocation();
+    }
     [[nodiscard]] bool sameLocation(VId v1, VId v2) const { return getOriginalLocation(v1) == getOriginalLocation(v2); }
 
     [[nodiscard]] bool isAncestor(VId ancestor, VId descendant) const;
@@ -100,8 +99,14 @@ public:
 
     [[nodiscard]] VId getRoot() const { return root; }
 
-    [[nodiscard]] SymRef getOriginalLocation(VId vertex) const { assert(toOriginalLoc.count(vertex) != 0); return toOriginalLoc.at(vertex); }
-    [[nodiscard]] EId getOriginalEdge(EId eid) const { assert(toOriginalEdge.count(eid) != 0); return toOriginalEdge.at(eid); }
+    [[nodiscard]] SymRef getOriginalLocation(VId vertex) const {
+        assert(toOriginalLoc.count(vertex) != 0);
+        return toOriginalLoc.at(vertex);
+    }
+    [[nodiscard]] EId getOriginalEdge(EId eid) const {
+        assert(toOriginalEdge.count(eid) != 0);
+        return toOriginalEdge.at(eid);
+    }
 
     void traverse(std::function<void(VId)> fun) const;
 
@@ -133,12 +138,11 @@ private:
         toOriginalLoc.insert({nv, originalLocation});
         return nv;
     }
-
 };
 
 class CoveringRelation {
 public:
-    struct RelElement{
+    struct RelElement {
         VId coveree;
         VId coverer;
 
@@ -146,6 +150,7 @@ public:
             return this->coverer == other.coverer && this->coveree == other.coveree;
         }
     };
+
 private:
     using rel_t = std::vector<RelElement>;
     // (v,w) \in inner <=> "v is covered by w (directly)" (Lab(v) \implies Lab(w))
@@ -153,8 +158,12 @@ private:
 
     AbstractReachabilityTree const & art;
 
-    [[nodiscard]] std::vector<VId> getDescendantsInclusive(VId vertex) const { return art.getDescendantsOfIncluding(vertex); }
-    [[nodiscard]] std::vector<VId> getAncestorsInclusive(VId vertex) const { return art.getAncestorsOfIncluding(vertex); }
+    [[nodiscard]] std::vector<VId> getDescendantsInclusive(VId vertex) const {
+        return art.getDescendantsOfIncluding(vertex);
+    }
+    [[nodiscard]] std::vector<VId> getAncestorsInclusive(VId vertex) const {
+        return art.getAncestorsOfIncluding(vertex);
+    }
 
 public:
     explicit CoveringRelation(AbstractReachabilityTree const & art) : art(art) {}
@@ -168,6 +177,7 @@ public:
 
 class LabelingFunction {
     std::map<VId, PTRef> labels;
+
 public:
     [[nodiscard]] PTRef getLabel(VId vertex) const {
         assert(labels.count(vertex) != 0);
@@ -186,27 +196,22 @@ public:
     }
 };
 
-
 class ImplicationChecker {
 public:
-    enum class QueryResult {VALID, INVALID, ERROR, UNKNOWN};
+    enum class QueryResult { VALID, INVALID, ERROR, UNKNOWN };
 
     explicit ImplicationChecker(Logic & logic) : logic(logic) {}
     QueryResult checkImplication(PTRef antecedent, PTRef consequent) {
         if (antecedent == consequent || antecedent == logic.getTerm_false() || consequent == logic.getTerm_true()) {
             return QueryResult::VALID;
         }
-        if (antecedent == logic.getTerm_true() || consequent == logic.getTerm_false()) {
-            return QueryResult::INVALID;
-        }
+        if (antecedent == logic.getTerm_true() || consequent == logic.getTerm_false()) { return QueryResult::INVALID; }
         auto pair = std::make_pair(antecedent, consequent);
         auto it = cache.find(pair);
-        if (it != cache.end()) {
-            return it->second;
-        }
+        if (it != cache.end()) { return it->second; }
         SMTSolver solver(logic, SMTSolver::WitnessProduction::NONE);
         PTRef negImpl = logic.mkAnd(antecedent, logic.mkNot(consequent)); // not(A->B) iff A and (not B)
-//        std::cout << logic.printTerm(negImpl) << std::endl;
+        //        std::cout << logic.printTerm(negImpl) << std::endl;
         solver.assertProp(negImpl);
         auto res = solver.check();
         switch (res) {
@@ -224,19 +229,16 @@ public:
         return QueryResult::UNKNOWN;
     }
 
-    QueryResult checkImplicationWithHints(PTRef antecedent, PTRef consequent, std::vector<std::unique_ptr<Model>>& antecedentModels) {
+    QueryResult checkImplicationWithHints(PTRef antecedent, PTRef consequent,
+                                          std::vector<std::unique_ptr<Model>> & antecedentModels) {
         if (antecedent == consequent || antecedent == logic.getTerm_false() || consequent == logic.getTerm_true()) {
             return QueryResult::VALID;
         }
-        if (antecedent == logic.getTerm_true() || consequent == logic.getTerm_false()) {
-            return QueryResult::INVALID;
-        }
+        if (antecedent == logic.getTerm_true() || consequent == logic.getTerm_false()) { return QueryResult::INVALID; }
         auto pair = std::make_pair(antecedent, consequent);
         auto it = cache.find(pair);
-        if (it != cache.end()) {
-            return it->second;
-        }
-        for (auto const& model : antecedentModels) {
+        if (it != cache.end()) { return it->second; }
+        for (auto const & model : antecedentModels) {
             assert(model->evaluate(antecedent) == logic.getTerm_true());
             if (model->evaluate(consequent) == logic.getTerm_false()) {
                 cache.insert({pair, QueryResult::INVALID});
@@ -245,7 +247,7 @@ public:
         }
         SMTSolver solver(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
         PTRef negImpl = logic.mkAnd(antecedent, logic.mkNot(consequent)); // not(A->B) iff A and (not B)
-//        std::cout << logic.printTerm(negImpl) << std::endl;
+        //        std::cout << logic.printTerm(negImpl) << std::endl;
         solver.assertProp(negImpl);
         auto res = solver.check();
         switch (res) {
@@ -269,7 +271,7 @@ private:
     std::unordered_map<std::pair<PTRef, PTRef>, QueryResult, PTRefPairHash> cache;
 };
 
-class LawiContext{
+class LawiContext {
     Logic & logic;
     ChcDirectedGraph const & graph;
     Options const & options;
@@ -291,7 +293,9 @@ class LawiContext{
     }
 
     [[nodiscard]] std::vector<VId> getAncestorsOf(VId vertex) const { return art.getAncestorsOfExcluding(vertex); }
-    [[nodiscard]] std::vector<VId> getEarlierForSameLocationAs(VId vertex) const { return art.getEarlierForSameLocationAs(vertex); }
+    [[nodiscard]] std::vector<VId> getEarlierForSameLocationAs(VId vertex) const {
+        return art.getEarlierForSameLocationAs(vertex);
+    }
     void closeAllAncestors(VId vertex) {
         for (VId ancestor : getAncestorsOf(vertex)) {
             close(ancestor);
@@ -305,7 +309,8 @@ class LawiContext{
         return implicationChecker.checkImplication(antecedent, consequent);
     }
 
-    ImplicationCheckResult checkImplicationWithHints(PTRef antecedent, PTRef consequent, std::vector<std::unique_ptr<Model>>& antecedentModels) {
+    ImplicationCheckResult checkImplicationWithHints(PTRef antecedent, PTRef consequent,
+                                                     std::vector<std::unique_ptr<Model>> & antecedentModels) {
         return implicationChecker.checkImplicationWithHints(antecedent, consequent, antecedentModels);
     }
 
@@ -346,8 +351,9 @@ class LawiContext{
     [[nodiscard]] bool useForcedCovering() const { return usingForcedCovering; }
 
     [[nodiscard]] ErrorPath buildGraphPathFromTreePath(ArtPath const & path) const;
+
 public:
-    LawiContext(Logic & logic, ChcDirectedGraph const& graph, Options const & options)
+    LawiContext(Logic & logic, ChcDirectedGraph const & graph, Options const & options)
         : logic(logic), graph(graph), options(options), art(graph), coveringRelation(art), implicationChecker(logic) {
         labels.addLabel(art.getRoot(), logic.getTerm_true());
         leavesToCheck.push_back(art.getRoot());
@@ -376,7 +382,6 @@ void LawiContext::close(VId vertex) {
     }
 }
 
-
 // Main method
 VerificationResult LawiContext::unwind() {
     bool computeWitness = options.hasOption(Options::COMPUTE_WITNESS);
@@ -387,7 +392,8 @@ VerificationResult LawiContext::unwind() {
         auto res = DFS(uncoveredVertex);
         if (res == VerificationAnswer::UNSAFE) {
             if (computeWitness) {
-                return VerificationResult(VerificationAnswer::UNSAFE, InvalidityWitness::fromErrorPath(errorPath, graph));
+                return VerificationResult(VerificationAnswer::UNSAFE,
+                                          InvalidityWitness::fromErrorPath(errorPath, graph));
             } else {
                 return VerificationResult(VerificationAnswer::UNSAFE);
             }
@@ -410,12 +416,10 @@ VerificationResult LawiContext::unwind() {
     solution.insert({graph.getEntry(), logic.getTerm_true()});
     solution.insert({graph.getExit(), logic.getTerm_false()});
     for (auto vid : graph.getVertices()) {
-        if (vid == graph.getEntry() or vid == graph.getExit()) { continue;}
+        if (vid == graph.getEntry() or vid == graph.getExit()) { continue; }
         auto it = finalLabels.find(vid);
         const PTRef definition = [&]() {
-            if (it == finalLabels.end()) {
-               return logic.getTerm_false();
-            }
+            if (it == finalLabels.end()) { return logic.getTerm_false(); }
             PTRef definition = logic.mkOr(it->second);
             if (logic.isOr(definition) or logic.isAnd(definition)) {
                 definition = simplifyUnderAssignment_Aggressive(definition, logic);
@@ -424,9 +428,7 @@ VerificationResult LawiContext::unwind() {
         }();
         auto insertRes = solution.insert(std::make_pair(vid, definition));
         assert(insertRes.second);
-        if (not insertRes.second) {
-            throw std::logic_error("Duplicate definition for a predicate encountered!");
-        }
+        if (not insertRes.second) { throw std::logic_error("Duplicate definition for a predicate encountered!"); }
     }
     return {VerificationAnswer::SAFE, ValidityWitness(std::move(solution))};
 }
@@ -445,16 +447,13 @@ VerificationAnswer LawiContext::DFS(VId vertex) {
         for (VId strengthened : res.refinedVertices) {
             close(strengthened);
         }
-    }
-    else {
+    } else {
         expand(vertex);
         auto children = art.getChildrenOf(vertex);
         // ensure the children are properly initialized
         for (VId child : children) {
             labels.addLabel(child, logic.getTerm_true());
-            if (useForcedCovering()) {
-                applyForcedCovering(child);
-            }
+            if (useForcedCovering()) { applyForcedCovering(child); }
         }
         // run on children in DFS manner
         for (VId child : children) {
@@ -468,25 +467,23 @@ VerificationAnswer LawiContext::DFS(VId vertex) {
 void LawiContext::applyForcedCovering(VId vertex) {
     auto earlierSameLocation = art.getEarlierForSameLocationAs(vertex, forceCoveringLimit);
     for (VId candidate : earlierSameLocation) {
-        if (coveringRelation.isCovered(candidate)) {
-            continue;
-        }
+        if (coveringRelation.isCovered(candidate)) { continue; }
         VId nca = art.nearestCommonAncestor(candidate, vertex);
         // check label of nca and path to child implies label of candidate
         auto path = art.getPath(nca, vertex, logic);
         auto edgeFormulas = path.getEdgeFormulas();
         auto solver = createInterpolatingSolver();
         solver->assertProp(labels.getLabel(nca));
-//        std::cout << logic.printTerm(labels.getLabel(nca)) << std::endl;
+        //        std::cout << logic.printTerm(labels.getLabel(nca)) << std::endl;
         for (PTRef edge : edgeFormulas) {
             solver->assertProp(edge);
-//            std::cout << logic.printTerm(edge) << std::endl;
+            //            std::cout << logic.printTerm(edge) << std::endl;
         }
         PTRef labelToTest = TimeMachine(logic).sendFlaThroughTime(labels.getLabel(candidate), edgeFormulas.size());
-//        std::cout << logic.printTerm(labelToTest) << std::endl;
+        //        std::cout << logic.printTerm(labelToTest) << std::endl;
         solver->assertProp(logic.mkNot(labelToTest));
-//        PTRef fla = logic.mkAnd({labels.getLabel(nca), logic.mkAnd(edgeFormulas), logic.mkNot(labelToTest)});
-//        std::cout << logic.printTerm(fla) << std::endl;
+        //        PTRef fla = logic.mkAnd({labels.getLabel(nca), logic.mkAnd(edgeFormulas), logic.mkNot(labelToTest)});
+        //        std::cout << logic.printTerm(fla) << std::endl;
         auto res = solver->check();
         if (res == SMTSolver::Answer::UNSAT) {
             // this vertex is covered by the candidate
@@ -526,11 +523,11 @@ LawiContext::RefinementResult LawiContext::refine(VId errVertex) {
      * 4. normalize to current state formulas
      * 5. if not implied by current label -> strengthen label and potentially uncover vertices
      */
-//    std::cout << "\nChecking path: " << logic.printTerm(logic.mkAnd(edgeFormulas)) << std::endl;
-//    std::cout << "\nChecking path of length " << edgeFormulas.size() << std::endl;
+    //    std::cout << "\nChecking path: " << logic.printTerm(logic.mkAnd(edgeFormulas)) << std::endl;
+    //    std::cout << "\nChecking path of length " << edgeFormulas.size() << std::endl;
     auto solver = createInterpolatingSolver();
     for (PTRef segment : edgeFormulas) {
-//    	std::cout << logic.printTerm(segment) << std::endl;
+        //    	std::cout << logic.printTerm(segment) << std::endl;
         solver->assertProp(segment);
     }
     auto res = solver->check();
@@ -538,9 +535,9 @@ LawiContext::RefinementResult LawiContext::refine(VId errVertex) {
         errorPath = buildGraphPathFromTreePath(path);
         return RefinementResult{VerificationAnswer::UNSAFE, {}};
     } else if (res == SMTSolver::Answer::UNSAT) {
-		auto edges = path.getEdges();
-		assert(not edges.empty() and art.getSource(edges.front()) == this->art.getRoot()
-			and art.isErrorLocation(art.getTarget(edges.back())));
+        auto edges = path.getEdges();
+        assert(not edges.empty() and art.getSource(edges.front()) == this->art.getRoot() and
+               art.isErrorLocation(art.getTarget(edges.back())));
         // Interpolation
         vec<PTRef> pathInterpolants = getPathInterpolants(*solver, path);
         vec<PTRef> normalizedInterpolants = normalizeInterpolants(pathInterpolants);
@@ -571,8 +568,8 @@ vec<PTRef> LawiContext::getPathInterpolants(SMTSolver & solver, ArtPath const & 
 
 // 'coveree' can be covered by 'coverer'
 void LawiContext::cover(VId coveree, VId coverer) {
-    if (coveringRelation.isCovered(coveree) || not art.sameLocation(coveree, coverer)
-        || art.isAncestor(coveree, coverer)) {
+    if (coveringRelation.isCovered(coveree) || not art.sameLocation(coveree, coverer) ||
+        art.isAncestor(coveree, coverer)) {
         return;
     }
     auto res = checkImplication(labels.getLabel(coveree), labels.getLabel(coverer));
@@ -582,7 +579,7 @@ void LawiContext::cover(VId coveree, VId coverer) {
     }
 }
 
-bool LawiContext::coverWithHints(VId coveree, VId coverer, std::vector<std::unique_ptr<Model>>& covereeModels) {
+bool LawiContext::coverWithHints(VId coveree, VId coverer, std::vector<std::unique_ptr<Model>> & covereeModels) {
     if (coveringRelation.isCovered(coveree)) { return true; }
     if (not art.sameLocation(coveree, coverer) || art.isAncestor(coveree, coverer)) { return false; }
     auto res = checkImplicationWithHints(labels.getLabel(coveree), labels.getLabel(coverer), covereeModels);
@@ -599,8 +596,10 @@ void CoveringRelation::updateWith(CoveringRelation::RelElement nElem) {
     auto descendants = this->getDescendantsInclusive(nElem.coveree);
     elements.erase(std::remove_if(elements.begin(), elements.end(),
                                   [&descendants](CoveringRelation::RelElement const & elem) {
-        return std::find(descendants.begin(), descendants.end(), elem.coverer) != descendants.end();
-    }), elements.end());
+                                      return std::find(descendants.begin(), descendants.end(), elem.coverer) !=
+                                             descendants.end();
+                                  }),
+                   elements.end());
     // add the new element of the relation
     elements.push_back(nElem);
 }
@@ -608,16 +607,16 @@ void CoveringRelation::updateWith(CoveringRelation::RelElement nElem) {
 bool CoveringRelation::isCovered(VId vertex) const {
     auto ancestors = this->getAncestorsInclusive(vertex);
     return std::any_of(ancestors.begin(), ancestors.end(), [this](VId ancestor) {
-        return std::any_of(elements.begin(), elements.end(), [ancestor](const CoveringRelation::RelElement & elem) {
-           return elem.coveree == ancestor;
-        });
+        return std::any_of(elements.begin(), elements.end(),
+                           [ancestor](const CoveringRelation::RelElement & elem) { return elem.coveree == ancestor; });
     });
 }
 
 void CoveringRelation::vertexStrengthened(VId vertex) {
-    elements.erase(std::remove_if(elements.begin(), elements.end(), [vertex](CoveringRelation::RelElement const & elem) {
-        return elem.coverer == vertex;
-    }), elements.end());
+    elements.erase(
+        std::remove_if(elements.begin(), elements.end(),
+                       [vertex](CoveringRelation::RelElement const & elem) { return elem.coverer == vertex; }),
+        elements.end());
 }
 
 std::vector<VId> AbstractReachabilityTree::expand(VId vertex) {
@@ -626,9 +625,8 @@ std::vector<VId> AbstractReachabilityTree::expand(VId vertex) {
     auto originalLocation = getOriginalLocation(vertex);
     // get all outgoing edges and create corresponding vertices in this ART
     auto outEdges = graphRepresentation.getOutgoingEdgesFor(originalLocation);
-    std::partition(outEdges.begin(), outEdges.end(), [this](EId outEdge) {
-        return graph.getTarget(outEdge) == getOriginalErrorLocation();
-    });
+    std::partition(outEdges.begin(), outEdges.end(),
+                   [this](EId outEdge) { return graph.getTarget(outEdge) == getOriginalErrorLocation(); });
     for (EId eid : outEdges) {
         auto successor = graph.getTarget(eid);
         VId nVertex = newVertexFor(successor);
@@ -663,16 +661,16 @@ std::vector<VId> AbstractReachabilityTree::getDescendantsOfIncluding(VId vertex)
 }
 
 std::vector<EId> AbstractReachabilityTree::getAncestorPathUntil(VId vertex, VId stop) const {
-	std::vector<EId> path;
-	VId current = vertex;
-	while (current != stop) {
-		assert(parentOf.count(current) != 0);
-		EId eid = parentOf.at(current);
-		path.push_back(eid);
-		current = getSource(eid);
-	}
-	std::reverse(path.begin(), path.end());
-	return path;
+    std::vector<EId> path;
+    VId current = vertex;
+    while (current != stop) {
+        assert(parentOf.count(current) != 0);
+        EId eid = parentOf.at(current);
+        path.push_back(eid);
+        current = getSource(eid);
+    }
+    std::reverse(path.begin(), path.end());
+    return path;
 }
 
 std::vector<VId> AbstractReachabilityTree::getAncestorsOfUntil(VId vertex, VId stop) const {
@@ -693,15 +691,16 @@ std::vector<VId> AbstractReachabilityTree::getAncestorsOfExcluding(VId vertex) c
 }
 
 std::vector<EId> AbstractReachabilityTree::getOutEdgesOf(VId vertex) const {
-	auto it = childrenOf.find(vertex);
-	if (it == childrenOf.end()) { return {}; }
-	return childrenOf.at(vertex);
+    auto it = childrenOf.find(vertex);
+    if (it == childrenOf.end()) { return {}; }
+    return childrenOf.at(vertex);
 }
 
 std::vector<VId> AbstractReachabilityTree::getChildrenOf(VId vertex) const {
     auto outEdges = getOutEdgesOf(vertex);
     std::vector<VId> children;
-    std::transform(outEdges.begin(), outEdges.end(), std::back_inserter(children), [this](EId outEdge) { return this->edges[outEdge.id].to; });
+    std::transform(outEdges.begin(), outEdges.end(), std::back_inserter(children),
+                   [this](EId outEdge) { return this->edges[outEdge.id].to; });
     return children;
 }
 
@@ -710,9 +709,7 @@ std::vector<VId> AbstractReachabilityTree::getEarlierForSameLocationAs(VId verte
     if (vertex.id == 0) { return res; }
     for (std::size_t id = vertex.id - 1; id > 0 && res.size() < limit; --id) {
         VId other{id};
-        if (sameLocation(vertex, other)) {
-            res.push_back(other);
-        }
+        if (sameLocation(vertex, other)) { res.push_back(other); }
     }
     return res;
 }
@@ -722,14 +719,14 @@ std::vector<VId> AbstractReachabilityTree::getEarlierForSameLocationAs(VId verte
 }
 
 std::vector<VId> AbstractReachabilityTree::getPathVertices(const ArtPath & path) const {
-	return getPathVertices(path.getEdges());
+    return getPathVertices(path.getEdges());
 }
 
 std::vector<VId> AbstractReachabilityTree::getPathVertices(const std::vector<EId> & eids) const {
-	std::vector<VId> vertices;
-	std::transform(eids.begin(), eids.end(), std::back_inserter(vertices), [this](EId eid) { return getSource(eid); });
-	vertices.push_back(getTarget(eids.back()));
-	return vertices;
+    std::vector<VId> vertices;
+    std::transform(eids.begin(), eids.end(), std::back_inserter(vertices), [this](EId eid) { return getSource(eid); });
+    vertices.push_back(getTarget(eids.back()));
+    return vertices;
 }
 
 ArtPath AbstractReachabilityTree::getPathFromInit(VId vertex, Logic & logic) const {
@@ -756,11 +753,11 @@ PTRef AbstractReachabilityTree::getLabel(EId eid) const {
 }
 
 VId AbstractReachabilityTree::getSource(EId eid) const {
-	return edges[eid.id].from;
+    return edges[eid.id].from;
 }
 
 VId AbstractReachabilityTree::getTarget(EId eid) const {
-	return edges[eid.id].to;
+    return edges[eid.id].to;
 }
 
 void AbstractReachabilityTree::traverse(std::function<void(VId)> fun) const {
@@ -782,16 +779,13 @@ VId AbstractReachabilityTree::nearestCommonAncestor(VId v1, VId v2) const {
     }
     assert(nca == root);
     return nca;
-
 }
 
 std::optional<VId> LawiContext::getUncoveredLeaf() {
     for (auto it = leavesToCheck.rbegin(); it != leavesToCheck.rend(); ++it) {
         VId vid = *it;
         assert(art.isLeaf(vid));
-        if (not coveringRelation.isCovered(vid)) {
-            return vid;
-        }
+        if (not coveringRelation.isCovered(vid)) { return vid; }
     }
     return std::nullopt;
 }
@@ -800,7 +794,7 @@ vec<PTRef> LawiContext::normalizeInterpolants(const vec<PTRef> & itps) const {
     vec<PTRef> normalized;
     TimeMachine timeMachine(logic);
     for (int i = 0; i < itps.size(); ++i) {
-        normalized.push(timeMachine.sendFlaThroughTime(itps[i], -(i+1)));
+        normalized.push(timeMachine.sendFlaThroughTime(itps[i], -(i + 1)));
     }
     return normalized;
 }
@@ -813,7 +807,7 @@ std::vector<VId> LawiContext::strengthenLabelsAlongPath(const ArtPath & path, co
         VId vertex = vertices[i + 1];
         PTRef itp = itps[i];
         PTRef currentLabel = labels.getLabel(vertex);
-//        std::cout << "Old label of " << vertex.id << " is " << logic.printTerm(currentLabel) << std::endl;
+        //        std::cout << "Old label of " << vertex.id << " is " << logic.printTerm(currentLabel) << std::endl;
         auto implCheckRes = checkImplication(currentLabel, itp);
         if (implCheckRes != decltype(implCheckRes)::VALID) {
             refinedVertices.push_back(vertex);
@@ -821,20 +815,20 @@ std::vector<VId> LawiContext::strengthenLabelsAlongPath(const ArtPath & path, co
             // label of 'vertex' has been strengthened, it might not cover other vertices anymore
             coveringRelation.vertexStrengthened(vertex);
         }
-//        std::cout << "New label of " << vertex.id << " is " << logic.printTerm(labels.getLabel(vertex)) << std::endl;
+        //        std::cout << "New label of " << vertex.id << " is " << logic.printTerm(labels.getLabel(vertex)) << std::endl;
     }
     return refinedVertices;
 }
 
 ErrorPath LawiContext::buildGraphPathFromTreePath(const ArtPath & path) const {
     auto edges = path.getEdges();
-	std::vector<EId> originalEdges;
+    std::vector<EId> originalEdges;
     std::transform(edges.begin(), edges.end(), std::back_inserter(originalEdges),
-				   [this](EId eid) { return art.getOriginalEdge(eid); });
+                   [this](EId eid) { return art.getOriginalEdge(eid); });
     return ErrorPath(std::move(originalEdges));
 }
 
-}
+} // namespace
 
 //
 // LAWI methods
@@ -848,8 +842,8 @@ VerificationResult Lawi::solve(ChcDirectedHyperGraph const & graph) {
     return VerificationResult(VerificationAnswer::UNKNOWN);
 }
 
-
 VerificationResult Lawi::solve(ChcDirectedGraph const & graph) {
     LawiContext ctx(logic, graph, options);
     return ctx.unwind();
 }
+} // namespace golem

@@ -7,11 +7,10 @@
 #ifndef GOLEM_ENGINE_H
 #define GOLEM_ENGINE_H
 
-#include "Options.h"
 #include "Witnesses.h"
 #include "graph/ChcGraph.h"
 
-
+namespace golem {
 class Engine {
 public:
     virtual VerificationResult solve(ChcDirectedHyperGraph const &) {
@@ -20,5 +19,6 @@ public:
 
     virtual ~Engine() = default;
 };
+} // namespace golem
 
 #endif //GOLEM_ENGINE_H

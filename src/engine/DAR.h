@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2024, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2024-2025, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
@@ -7,8 +7,10 @@
 #ifndef DAR_H
 #define DAR_H
 
+#include "Options.h"
 #include "TransitionSystemEngine.h"
 
+namespace golem {
 class DAR : public TransitionSystemEngine {
     Logic & logic;
 
@@ -20,5 +22,6 @@ public:
 private:
     TransitionSystemVerificationResult solve(TransitionSystem const & system) override;
 };
+} // namespace golem
 
 #endif // DAR_H

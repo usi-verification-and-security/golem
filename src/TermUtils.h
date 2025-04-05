@@ -1,11 +1,11 @@
 /*
- * Copyright (c) 2020-2022, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2020-2025, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
 
-#ifndef OPENSMT_TERMUTILS_H
-#define OPENSMT_TERMUTILS_H
+#ifndef GOLEM_TERMUTILS_H
+#define GOLEM_TERMUTILS_H
 
 #include "osmt_terms.h"
 
@@ -13,10 +13,12 @@
 #include <iostream>
 #include <sstream>
 
+namespace golem {
 class TermUtils {
     Logic & logic;
+
 public:
-    TermUtils(Logic & logic) : logic(logic) {}
+    explicit TermUtils(Logic & logic) : logic(logic) {}
 
     using substitutions_map = std::unordered_map<PTRef, PTRef, PTRefHash>;
 
@@ -24,9 +26,7 @@ public:
         return logic.isUP(term) || (logic.hasSortBool(term) && logic.getPterm(term).nargs() == 0);
     }
 
-    vec<PTRef> getVars(PTRef term) const {
-        return ::variables(logic, term);
-    }
+    vec<PTRef> getVars(PTRef term) const { return ::variables(logic, term); }
 
     std::vector<PTRef> predicateArgsInOrder(PTRef predicate) const {
         assert(isUPOrConstant(predicate));
@@ -69,11 +69,10 @@ public:
         static bool isOtherJunction(Logic & logic, PTRef term) { return logic.isAnd(term); }
     };
 
-    template<typename Junction, typename TPred>
-    vec<PTRef> getTopLevelJuncts(PTRef root, TPred predicate) const {
+    template<typename Junction, typename TPred> vec<PTRef> getTopLevelJuncts(PTRef root, TPred predicate) const {
         // Inspired by Logic::getNewFacts
         vec<PTRef> res;
-        Map<PtAsgn,bool,PtAsgnHash> isdup;
+        Map<PtAsgn, bool, PtAsgnHash> isdup;
         vec<PtAsgn> queue;
         {
             PTRef p;
@@ -82,7 +81,8 @@ public:
             queue.push(PtAsgn(p, sign));
         }
         while (queue.size() != 0) {
-            PtAsgn pta = queue.last(); queue.pop();
+            PtAsgn pta = queue.last();
+            queue.pop();
             if (isdup.has(pta)) continue;
             isdup.insert(pta, true);
             Pterm const & t = logic.getPterm(pta.tr);
@@ -102,33 +102,29 @@ public:
                 }
             } else {
                 PTRef term = pta.sgn == l_False ? logic.mkNot(pta.tr) : pta.tr;
-                if (predicate(term)) {
-                    res.push(term);
-                }
+                if (predicate(term)) { res.push(term); }
             }
         }
         return res;
     }
 
-    template<typename TPred>
-    vec<PTRef> getTopLevelConjuncts(PTRef root, TPred predicate) const {
+    template<typename TPred> vec<PTRef> getTopLevelConjuncts(PTRef root, TPred predicate) const {
         return getTopLevelJuncts<Conjunction>(root, predicate);
     }
 
     vec<PTRef> getTopLevelConjuncts(PTRef root) const {
-        return getTopLevelConjuncts(root, [](PTRef){ return true; });
+        return getTopLevelConjuncts(root, [](PTRef) { return true; });
     }
 
-    template<typename TPred>
-    vec<PTRef> getTopLevelDisjuncts(PTRef root, TPred predicate) const {
+    template<typename TPred> vec<PTRef> getTopLevelDisjuncts(PTRef root, TPred predicate) const {
         return getTopLevelJuncts<Disjunction>(root, predicate);
     }
 
     vec<PTRef> getTopLevelDisjuncts(PTRef root) const {
-        return getTopLevelDisjuncts(root, [](PTRef){ return true; });
+        return getTopLevelDisjuncts(root, [](PTRef) { return true; });
     }
 
-    PTRef conjoin (PTRef what, PTRef to);
+    PTRef conjoin(PTRef what, PTRef to);
 
     void mapFromPredicate(PTRef domain, PTRef codomain, substitutions_map & subst) const {
         assert(isUPOrConstant(domain) and isUPOrConstant(codomain));
@@ -163,9 +159,9 @@ public:
 
 class LATermUtils {
     ArithLogic & logic;
+
 public:
     LATermUtils(ArithLogic & logic) : logic(logic) {}
-
 
     /**
      * Given a term 't' and a var 'v' present in the term, returns a term 's' such that
@@ -195,15 +191,14 @@ class TimeMachine {
         TimeMachine & owner;
         Logic const & logic;
         int versioningNumber = 0;
+
     public:
         VersioningConfig(TimeMachine & machine, Logic const & logic) : owner(machine), logic(logic) {}
 
         void setVersioningNumber(int number) { versioningNumber = number; }
 
         PTRef rewrite(PTRef term) override {
-            if (logic.isVar(term)) {
-                return owner.sendVarThroughTime(term, versioningNumber);
-            }
+            if (logic.isVar(term)) { return owner.sendVarThroughTime(term, versioningNumber); }
             return term;
         }
     };
@@ -311,29 +306,26 @@ class VersionManager {
     static void ensureNoVersion(std::string & varName);
     static void removeTag(std::string & varName);
 
-    template<typename TVarTransform>
-    class VersioningConfig : public DefaultRewriterConfig {
+    template<typename TVarTransform> class VersioningConfig : public DefaultRewriterConfig {
         Logic const & logic;
         TVarTransform varTransform;
+
     public:
         VersioningConfig(Logic const & logic, TVarTransform varTransform) : logic(logic), varTransform(varTransform) {}
 
         PTRef rewrite(PTRef term) override {
-            if (logic.isVar(term)) {
-                return varTransform(term);
-            }
+            if (logic.isVar(term)) { return varTransform(term); }
             return term;
         }
     };
 
-    template<typename TVarTransform>
-    class VersioningRewriter : public Rewriter<VersioningConfig<TVarTransform>> {
+    template<typename TVarTransform> class VersioningRewriter : public Rewriter<VersioningConfig<TVarTransform>> {
     public:
-        VersioningRewriter(Logic & logic, VersioningConfig<TVarTransform> & config) : Rewriter<VersioningConfig<TVarTransform>>(logic, config) {}
+        VersioningRewriter(Logic & logic, VersioningConfig<TVarTransform> & config)
+            : Rewriter<VersioningConfig<TVarTransform>>(logic, config) {}
     };
 
-    template<typename TVarTransform>
-    PTRef rewrite(PTRef fla, TVarTransform transform) const {
+    template<typename TVarTransform> PTRef rewrite(PTRef fla, TVarTransform transform) const {
         VersioningConfig<TVarTransform> config(logic, transform);
         return VersioningRewriter<TVarTransform>(logic, config).rewrite(fla);
     }
@@ -376,21 +368,13 @@ public:
         return logic.mkVar(sort, newName.c_str());
     }
 
-    static auto versionPosition(std::string const & name) {
-        return name.rfind(instanceSeparator);
-    }
+    static auto versionPosition(std::string const & name) { return name.rfind(instanceSeparator); }
 
-    static auto tagPosition(std::string const & name) {
-        return name.rfind(tagSeparator);
-    }
+    static auto tagPosition(std::string const & name) { return name.rfind(tagSeparator); }
 
-    static bool isTaggedName(std::string const & name) {
-        return tagPosition(name) != std::string::npos;
-    }
+    static bool isTaggedName(std::string const & name) { return tagPosition(name) != std::string::npos; }
 
-    static bool isVersionedName(std::string const & name) {
-        return versionPosition(name) != std::string::npos;
-    }
+    static bool isVersionedName(std::string const & name) { return versionPosition(name) != std::string::npos; }
 
     bool isTagged(PTRef var) const {
         assert(logic.isVar(var));
@@ -414,6 +398,7 @@ public:
  */
 class LinearPredicateVersioning {
     Logic & logic;
+
 public:
     LinearPredicateVersioning(Logic & logic) : logic{logic} {}
 
@@ -426,10 +411,11 @@ public:
 class LinearCanonicalPredicateRepresentation {
     using VariableRepresentation = std::unordered_map<SymRef, std::vector<PTRef>, SymRefHash>;
     using TermRepresentation = std::unordered_map<SymRef, PTRef, SymRefHash>;
-    VariableRepresentation representation {};
-    TermRepresentation targetTerms {};
-    TermRepresentation sourceTerms {};
+    VariableRepresentation representation{};
+    TermRepresentation targetTerms{};
+    TermRepresentation sourceTerms{};
     Logic & logic;
+
 public:
     LinearCanonicalPredicateRepresentation(Logic & logic) : logic(logic) {}
 
@@ -439,26 +425,23 @@ public:
 
     PTRef getSourceTermFor(SymRef sym) const;
 
-    bool hasRepresentationFor(SymRef sym) const {
-        return representation.count(sym) > 0;
-    }
+    bool hasRepresentationFor(SymRef sym) const { return representation.count(sym) > 0; }
 };
 
 class NonlinearCanonicalPredicateRepresentation {
     using VariableRepresentation = std::unordered_map<SymRef, std::vector<PTRef>, SymRefHash>;
     using TermRepresentation = std::unordered_map<SymRef, PTRef, SymRefHash>;
-    VariableRepresentation representation {};
-    TermRepresentation targetTerms {};
-    mutable std::vector<TermRepresentation> sourceTermsByInstance {{}};
+    VariableRepresentation representation{};
+    TermRepresentation targetTerms{};
+    mutable std::vector<TermRepresentation> sourceTermsByInstance{{}};
     Logic & logic;
+
 public:
     explicit NonlinearCanonicalPredicateRepresentation(Logic & logic) : logic(logic) {}
 
     void addRepresentation(SymRef sym, std::vector<PTRef> vars);
 
-    bool hasRepresentationFor(SymRef sym) const {
-        return representation.count(sym) > 0;
-    }
+    bool hasRepresentationFor(SymRef sym) const { return representation.count(sym) > 0; }
 
     std::vector<PTRef> const & getRepresentation(SymRef sym) const {
         assert(hasRepresentationFor(sym));
@@ -472,6 +455,7 @@ public:
     class CountingProxy {
         NonlinearCanonicalPredicateRepresentation & parent;
         std::unordered_map<SymRef, unsigned, SymRefHash> counts;
+
     public:
         CountingProxy(NonlinearCanonicalPredicateRepresentation & parent) : parent(parent) {}
 
@@ -486,6 +470,7 @@ public:
 
 class TrivialQuantifierElimination {
     Logic & logic;
+
 public:
     TrivialQuantifierElimination(Logic & logic) : logic(logic) {}
 
@@ -502,5 +487,6 @@ inline vec<PTRef> operator+(vec<PTRef> const & first, vec<PTRef> const & second)
     }
     return res;
 }
+} // namespace golem
 
-#endif //OPENSMT_TERMUTILS_H
+#endif // GOLEM_TERMUTILS_H

@@ -9,6 +9,7 @@
 
 #include "include/osmt_solver.h"
 
+namespace golem {
 /**
  * Simple wrapper around OpenSMT's MainSolver and SMTConfig
  */
@@ -45,5 +46,6 @@ public:
 using Formulas = vec<PTRef>;
 Formulas impliedBy(Formulas candidates, PTRef assertion, Logic & logic);
 Formulas impliedBy(Formulas candidates, vec<PTRef> const & assertions, Logic & logic);
+} // namespace golem
 
 #endif // GOLEM_SMTSOLVER_H

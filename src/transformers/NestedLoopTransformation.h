@@ -12,6 +12,7 @@
 #include "Witnesses.h"
 #include "graph/ChcGraph.h"
 
+namespace golem {
 /**
  * This class implements a transformation from a general linear CHC system to a linear CHC system without
  * nested loops.
@@ -65,5 +66,6 @@ public:
     std::tuple<std::unique_ptr<ChcDirectedGraph>, std::unique_ptr<WitnessBackTranslator>>
     transform(ChcDirectedGraph const & graph);
 };
+} // namespace golem
 
 #endif // GOLEM_NESTED_LOOP_TRANSFORMATION_H

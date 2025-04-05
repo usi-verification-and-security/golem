@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2024, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2024-2025, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
@@ -11,6 +11,7 @@
 
 #include "utils/SmtSolver.h"
 
+namespace golem {
 class DualApproximatedReachability {
 public:
     explicit DualApproximatedReachability(TransitionSystem const & ts)
@@ -270,3 +271,4 @@ std::optional<PTRef> DualApproximatedReachability::fixpoint() const {
         std::cout << logic().pp(el) << '\n';
     }
 }
+} // namespace golem

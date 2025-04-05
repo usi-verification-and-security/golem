@@ -1,14 +1,14 @@
 /*
- * Copyright (c) 2020-2022, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2020-2025, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
 
 #include "TermUtils.h"
 
+namespace golem {
 namespace {
-template<typename TKeep>
-PTRef tryEliminateVars(PTRef fla, Logic & logic, TKeep shouldKeepVar) {
+template<typename TKeep> PTRef tryEliminateVars(PTRef fla, Logic & logic, TKeep shouldKeepVar) {
     ArithLogic & arithLogic = dynamic_cast<ArithLogic &>(logic);
     auto res = TermUtils(logic).extractSubstitutionsAndSimplify(fla);
     PTRef simplifiedFormula = res.result;
@@ -20,16 +20,15 @@ PTRef tryEliminateVars(PTRef fla, Logic & logic, TKeep shouldKeepVar) {
     // For now we only revert if RHS is exactly TBE var
     Logic::SubstMap revertedSubs;
     vec<PTRef> equalitiesToRestore;
-//    std::cout << "====================================\n";
+    //    std::cout << "====================================\n";
     for (auto const & key : substitutions.getKeys()) {
-//        std::cout << logic.pp(key) << " -> " << logic.pp(substitutions[key]) << std::endl;
+        //        std::cout << logic.pp(key) << " -> " << logic.pp(substitutions[key]) << std::endl;
         assert(logic.isVar(key));
         if (shouldKeepVar(key)) {
             // If it is not a variable we wanted to eliminate, we need to insert back the equality
             // Unless we can extract TBE var from the RHS
             PTRef rhs = substitutions[key];
-            if (logic.isVar(rhs) and not shouldKeepVar(rhs) and
-                not revertedSubs.has(rhs)) {
+            if (logic.isVar(rhs) and not shouldKeepVar(rhs) and not revertedSubs.has(rhs)) {
                 revertedSubs.insert(rhs, key);
             } else {
                 equalitiesToRestore.push(logic.mkEq(key, rhs));
@@ -41,34 +40,34 @@ PTRef tryEliminateVars(PTRef fla, Logic & logic, TKeep shouldKeepVar) {
                 PTRef rhs = substitutions[key];
                 Pterm const & term = logic.getPterm(rhs);
                 if (std::any_of(term.begin(), term.end(), [&](PTRef arg) {
-                    auto varConstant = arithLogic.splitTermToVarAndConst(arg);
-                    return not arithLogic.getNumConst(varConstant.second).isInteger();
-                })) { // There are some fractions on the RHS, better keep this substitution, just in case
+                        auto varConstant = arithLogic.splitTermToVarAndConst(arg);
+                        return not arithLogic.getNumConst(varConstant.second).isInteger();
+                    })) { // There are some fractions on the RHS, better keep this substitution, just in case
                     equalitiesToRestore.push(logic.mkEq(key, rhs));
                 }
             }
         }
     }
-//    std::cout << "====================================\n";
+    //    std::cout << "====================================\n";
     if (equalitiesToRestore.size() > 0) {
         equalitiesToRestore.push(simplifiedFormula);
         simplifiedFormula = logic.mkAnd(std::move(equalitiesToRestore));
     }
-    if (revertedSubs.getSize() > 0) {
-        simplifiedFormula = Substitutor(logic, revertedSubs).rewrite(simplifiedFormula);
-    }
-//    std::cout << logic.pp(simplifiedFormula) << std::endl;
+    if (revertedSubs.getSize() > 0) { simplifiedFormula = Substitutor(logic, revertedSubs).rewrite(simplifiedFormula); }
+    //    std::cout << logic.pp(simplifiedFormula) << std::endl;
     return simplifiedFormula;
 }
-}
+} // namespace
 
 PTRef TrivialQuantifierElimination::tryEliminateVars(vec<PTRef> const & vars, PTRef fla) const {
     if (vars.size() == 0) { return fla; }
-    return ::tryEliminateVars(fla, logic, [&](PTRef var) { return std::find(vars.begin(), vars.end(), var) == vars.end(); });
+    return golem::tryEliminateVars(fla, logic,
+                                   [&](PTRef var) { return std::find(vars.begin(), vars.end(), var) == vars.end(); });
 }
 
 PTRef TrivialQuantifierElimination::tryEliminateVarsExcept(vec<PTRef> const & vars, PTRef fla) const {
-    return ::tryEliminateVars(fla, logic, [&](PTRef var) { return std::find(vars.begin(), vars.end(), var) != vars.end(); });
+    return golem::tryEliminateVars(fla, logic,
+                                   [&](PTRef var) { return std::find(vars.begin(), vars.end(), var) != vars.end(); });
 }
 
 PTRef LATermUtils::expressZeroTermFor(PTRef zeroTerm, PTRef var) {
@@ -96,14 +95,18 @@ PTRef LATermUtils::expressZeroTermFor(PTRef zeroTerm, PTRef var) {
         }
         assert(varCoeff != PTRef_Undef);
         // now we have 't = 0' where 't = c * var + t1' => 'var = t1/-c'logic.mkC
-        PTRef res = logic.mkTimes(logic.mkPlus(otherFactors), logic.mkConst(sortRef, FastRational(-1) / logic.getNumConst(varCoeff)));
+        PTRef res = logic.mkTimes(logic.mkPlus(otherFactors),
+                                  logic.mkConst(sortRef, FastRational(-1) / logic.getNumConst(varCoeff)));
         return res;
     }
 }
 
 void TermUtils::printTermWithLets(std::ostream & out, PTRef root) {
     // true means parent and we should put it in the order; false means child and we should process it
-    struct Entry{ PTRef node; bool treatAsParent; };
+    struct Entry {
+        PTRef node;
+        bool treatAsParent;
+    };
     // collect mapping of id to let expressions
     auto toLetId = [](PTRef x) -> std::string { return "l" + std::to_string(x.x); };
     std::vector<PTRef> dfsOrder;
@@ -122,9 +125,7 @@ void TermUtils::printTermWithLets(std::ostream & out, PTRef root) {
         queue.push_back({ref, true});
         Pterm const & pterm = logic.getPterm(ref);
         for (PTRef child : pterm) {
-            if (visited.find(child) == visited.end()) {
-                queue.push_back({child, false});
-            }
+            if (visited.find(child) == visited.end()) { queue.push_back({child, false}); }
         }
     }
 
@@ -175,22 +176,21 @@ TermUtils::SimplificationResult TermUtils::extractSubstitutionsAndSimplify(PTRef
         vec<PtAsgn> current_units_vec;
         logic.getNewFacts(simp_formula, new_units);
         const auto & new_units_vec = new_units.getKeys();
-        for (PTRef key: new_units_vec) {
+        for (PTRef key : new_units_vec) {
             current_units_vec.push(PtAsgn{key, new_units[key]});
         }
 
-        auto[res, newsubsts] = logic.retrieveSubstitutions(current_units_vec);
+        auto [res, newsubsts] = logic.retrieveSubstitutions(current_units_vec);
         logic.substitutionsTransitiveClosure(newsubsts);
 
-        for (PTRef key: newsubsts.getKeys()) {
+        for (PTRef key : newsubsts.getKeys()) {
             if (!allsubsts.has(key)) {
                 const auto target = newsubsts[key];
                 allsubsts.insert(key, target);
             }
         }
 
-        if (res != l_Undef)
-            root = (res == l_True ? logic.getTerm_true() : logic.getTerm_false());
+        if (res != l_Undef) root = (res == l_True ? logic.getTerm_true() : logic.getTerm_false());
 
         PTRef new_root = Substitutor(logic, newsubsts).rewrite(root);
 
@@ -221,9 +221,7 @@ public:
 
 PTRef NNFTransformer::transform(PTRef fla) {
     auto it = transformed.find(fla);
-    if (it != transformed.end()) {
-        return it->second;
-    }
+    if (it != transformed.end()) { return it->second; }
     if (logic.isAtom(fla)) {
         transformed.insert({fla, fla});
         return fla;
@@ -265,10 +263,8 @@ PTRef NNFTransformer::transform(PTRef fla) {
         PTRef secondTransformed = transform(logic.getPterm(fla)[1]);
         PTRef firstTransformNegated = negate(firstTransformed);
         PTRef secondTransformNegated = negate(secondTransformed);
-        PTRef nfla = logic.mkAnd(
-            logic.mkOr(firstTransformNegated, secondTransformed),
-            logic.mkOr(secondTransformNegated, firstTransformed)
-        );
+        PTRef nfla = logic.mkAnd(logic.mkOr(firstTransformNegated, secondTransformed),
+                                 logic.mkOr(secondTransformNegated, firstTransformed));
         transformed.insert({fla, nfla});
         return nfla;
     }
@@ -277,11 +273,10 @@ PTRef NNFTransformer::transform(PTRef fla) {
 }
 
 PTRef NNFTransformer::negate(PTRef fla) {
-    assert(logic.isAnd(fla) or logic.isOr(fla) or logic.isAtom(fla) or (logic.isNot(fla) and logic.isAtom(logic.getPterm(fla)[0])));
+    assert(logic.isAnd(fla) or logic.isOr(fla) or logic.isAtom(fla) or
+           (logic.isNot(fla) and logic.isAtom(logic.getPterm(fla)[0])));
     auto it = negated.find(fla);
-    if (it != negated.end()) {
-        return it->second;
-    }
+    if (it != negated.end()) { return it->second; }
     if (logic.isNot(fla)) {
         assert(logic.isAtom(logic.getPterm(fla)[0]));
         PTRef nfla = logic.getPterm(fla)[0];
@@ -321,11 +316,8 @@ PTRef NNFTransformer::negate(PTRef fla) {
     throw std::logic_error("Unexpected formula in NNF transformation");
 }
 
-
 PTRef TermUtils::toNNF(PTRef fla) {
-    if (not logic.hasSortBool(fla)) {
-        throw std::invalid_argument("toNNF called with non-boolean formula!");
-    }
+    if (not logic.hasSortBool(fla)) { throw std::invalid_argument("toNNF called with non-boolean formula!"); }
     NNFTransformer nnfTransformer(logic);
     return nnfTransformer.toNNF(fla);
 }
@@ -356,7 +348,7 @@ bool LATermUtils::termContainsVar(PTRef term, PTRef var) {
 }
 
 bool LATermUtils::atomContainsVar(PTRef atom, PTRef var) {
-    if (logic.isBoolAtom(atom) or logic.isConstant(atom)) { return false;}
+    if (logic.isBoolAtom(atom) or logic.isConstant(atom)) { return false; }
     assert(logic.isLeq(atom) || logic.isNumEq(atom));
     if (logic.isNumEq(atom)) {
         PTRef lhs = logic.getPterm(atom)[0];
@@ -420,28 +412,30 @@ namespace {
 struct Conjunction {};
 struct Disjunction {};
 
-template<typename T>
-struct JunctionTraits {
-    static bool isBetterLowerBound(FastRational const& first, FastRational const& second) = delete;
-    static bool isBetterUpperBound(FastRational const& first, FastRational const& second) = delete;
+template<typename T> struct JunctionTraits {
+    static bool isBetterLowerBound(FastRational const & first, FastRational const & second) = delete;
+    static bool isBetterUpperBound(FastRational const & first, FastRational const & second) = delete;
 };
 
-template<>
-struct JunctionTraits<Conjunction> {
-    static bool isBetterLowerBound(FastRational const& first, FastRational const& second) { return first > second; } // higher is stronger
-    static bool isBetterUpperBound(FastRational const& first, FastRational const& second) { return first < second; } // lower is stronger
+template<> struct JunctionTraits<Conjunction> {
+    static bool isBetterLowerBound(FastRational const & first, FastRational const & second) {
+        return first > second;
+    } // higher is stronger
+    static bool isBetterUpperBound(FastRational const & first, FastRational const & second) {
+        return first < second;
+    } // lower is stronger
 };
 
-template<>
-struct JunctionTraits<Disjunction> {
-    static bool isBetterLowerBound(FastRational const& first, FastRational const& second) { return first < second; } // lower is weaker
-    static bool isBetterUpperBound(FastRational const& first, FastRational const& second) { return first > second; } // higher is weaker
+template<> struct JunctionTraits<Disjunction> {
+    static bool isBetterLowerBound(FastRational const & first, FastRational const & second) {
+        return first < second;
+    } // lower is weaker
+    static bool isBetterUpperBound(FastRational const & first, FastRational const & second) {
+        return first > second;
+    } // higher is weaker
 };
 
-
-
-template<typename T>
-void simplifyJunction(std::vector<PtAsgn> & juncts, ArithLogic & logic) {
+template<typename T> void simplifyJunction(std::vector<PtAsgn> & juncts, ArithLogic & logic) {
     std::vector<PtAsgn> tmp;
     tmp.reserve(juncts.size());
     MapWithKeys<PtAsgn, PTRef, PtAsgnHash> bounds;
@@ -460,13 +454,15 @@ void simplifyJunction(std::vector<PtAsgn> & juncts, ArithLogic & logic) {
         PTRef currentValue;
         if (bounds.peek(key, currentValue)) {
             if (sign == l_True) { // positive literal -> lower bound
-                if (JunctionTraits<T>::isBetterLowerBound(logic.getNumConst(constant), logic.getNumConst(currentValue))) {
+                if (JunctionTraits<T>::isBetterLowerBound(logic.getNumConst(constant),
+                                                          logic.getNumConst(currentValue))) {
                     bounds[key] = constant;
                 }
             } else {
                 assert(sign == l_False);
                 // negative literal -> upper bound
-                if (JunctionTraits<T>::isBetterUpperBound(logic.getNumConst(constant), logic.getNumConst(currentValue))) {
+                if (JunctionTraits<T>::isBetterUpperBound(logic.getNumConst(constant),
+                                                          logic.getNumConst(currentValue))) {
                     bounds[key] = constant;
                 }
             }
@@ -482,7 +478,7 @@ void simplifyJunction(std::vector<PtAsgn> & juncts, ArithLogic & logic) {
         juncts = std::move(tmp);
     }
 }
-}
+} // namespace
 
 void LATermUtils::simplifyDisjunction(std::vector<PtAsgn> & disjuncts) {
     simplifyJunction<Disjunction>(disjuncts, logic);
@@ -495,16 +491,14 @@ void LATermUtils::simplifyConjunction(std::vector<PtAsgn> & conjuncts) {
 PTRef TimeMachine::versionedFormulaToUnversioned(PTRef fla) const {
     class Config : public DefaultRewriterConfig {
         Logic const & logic;
-        TimeMachine const& tm;
+        TimeMachine const & tm;
 
     public:
         Config(Logic const & logic, TimeMachine const & tm) : logic(logic), tm(tm) {}
 
         PTRef rewrite(PTRef term) override {
             if (logic.isVar(term)) {
-                if (tm.isVersioned(term)) {
-                    return tm.getUnversioned(term);
-                }
+                if (tm.isVersioned(term)) { return tm.getUnversioned(term); }
             }
             return term;
         }
@@ -519,17 +513,15 @@ void NonlinearCanonicalPredicateRepresentation::addRepresentation(SymRef sym, st
     assert(not hasRepresentationFor(sym));
     VersionManager manager(logic);
     vec<PTRef> sourceVars(vars.size());
-    std::transform(vars.begin(), vars.end(), sourceVars.begin(), [&manager](PTRef var){
-        return manager.toSource(var);
-    });
+    std::transform(vars.begin(), vars.end(), sourceVars.begin(),
+                   [&manager](PTRef var) { return manager.toSource(var); });
     PTRef sourceTerm = logic.insertTerm(sym, std::move(sourceVars));
     assert(sourceTermsByInstance.size() >= 1);
     this->sourceTermsByInstance[0].insert({sym, sourceTerm});
 
     vec<PTRef> targetVars(vars.size());
-    std::transform(vars.begin(), vars.end(), targetVars.begin(), [&manager](PTRef var){
-        return manager.toTarget(var);
-    });
+    std::transform(vars.begin(), vars.end(), targetVars.begin(),
+                   [&manager](PTRef var) { return manager.toTarget(var); });
     PTRef targetTerm = logic.insertTerm(sym, std::move(targetVars));
     this->targetTerms.insert({sym, targetTerm});
 
@@ -542,20 +534,15 @@ PTRef NonlinearCanonicalPredicateRepresentation::getTargetTermFor(SymRef sym) co
 }
 
 PTRef NonlinearCanonicalPredicateRepresentation::getSourceTermFor(SymRef sym, unsigned instanceCount) const {
-    if (instanceCount >= sourceTermsByInstance.size()) {
-        sourceTermsByInstance.resize(instanceCount + 1);
-    }
+    if (instanceCount >= sourceTermsByInstance.size()) { sourceTermsByInstance.resize(instanceCount + 1); }
     auto & terms = sourceTermsByInstance[instanceCount];
     auto it = terms.find(sym);
-    if (it != terms.end()) {
-        return it->second;
-    }
+    if (it != terms.end()) { return it->second; }
     // Create new representation for this instance
     auto const & vars = representation.at(sym);
     vec<PTRef> nVars(vars.size());
-    std::transform(vars.begin(), vars.end(), nVars.begin(), [this, instanceCount](PTRef var){
-        return VersionManager(logic).toSource(var, instanceCount);
-    });
+    std::transform(vars.begin(), vars.end(), nVars.begin(),
+                   [this, instanceCount](PTRef var) { return VersionManager(logic).toSource(var, instanceCount); });
     PTRef instanceSourceTerm = logic.insertTerm(sym, std::move(nVars));
     terms.insert({sym, instanceSourceTerm});
     return instanceSourceTerm;
@@ -565,15 +552,14 @@ void LinearCanonicalPredicateRepresentation::addRepresentation(SymRef sym, std::
     assert(not hasRepresentationFor(sym));
     TimeMachine timeMachine(logic);
     vec<PTRef> sourceVars(vars.size());
-    std::transform(vars.begin(), vars.end(), sourceVars.begin(), [&timeMachine](PTRef var){
-        return timeMachine.getVarVersionZero(var);
-    });
+    std::transform(vars.begin(), vars.end(), sourceVars.begin(),
+                   [&timeMachine](PTRef var) { return timeMachine.getVarVersionZero(var); });
     PTRef sourceTerm = logic.insertTerm(sym, std::move(sourceVars));
     sourceTerms.insert({sym, sourceTerm});
 
     vec<PTRef> targetVars(vars.size());
-    std::transform(vars.begin(), vars.end(), targetVars.begin(), [&timeMachine](PTRef var){
-        return timeMachine.sendVarThroughTime(timeMachine.getVarVersionZero(var),1);
+    std::transform(vars.begin(), vars.end(), targetVars.begin(), [&timeMachine](PTRef var) {
+        return timeMachine.sendVarThroughTime(timeMachine.getVarVersionZero(var), 1);
     });
     PTRef targetTerm = logic.insertTerm(sym, std::move(targetVars));
     this->targetTerms.insert({sym, targetTerm});
@@ -593,9 +579,7 @@ PTRef LinearCanonicalPredicateRepresentation::getSourceTermFor(SymRef sym) const
 
 void VersionManager::ensureNoVersion(std::string & varName) {
     auto pos = versionPosition(varName);
-    if (pos == std::string::npos) {
-        return;
-    }
+    if (pos == std::string::npos) { return; }
     varName.erase(pos);
 }
 
@@ -606,31 +590,22 @@ void VersionManager::removeTag(std::string & varName) {
 }
 
 PTRef VersionManager::baseFormulaToSource(PTRef fla, unsigned int instance) const {
-    return rewrite(fla, [instance, this](PTRef var) {
-       return toSource(var, instance);
-    });
+    return rewrite(fla, [instance, this](PTRef var) { return toSource(var, instance); });
 }
 
 PTRef VersionManager::baseFormulaToTarget(PTRef fla) const {
-    return rewrite(fla, [this](PTRef var) {
-        return toTarget(var);
-    });
+    return rewrite(fla, [this](PTRef var) { return toTarget(var); });
 }
 
 PTRef VersionManager::sourceFormulaToBase(PTRef fla) const {
-    return rewrite(fla, [this](PTRef var) {
-        return toBase(var);
-    });
+    return rewrite(fla, [this](PTRef var) { return toBase(var); });
 }
 
 PTRef VersionManager::targetFormulaToBase(PTRef fla) const {
-    return rewrite(fla, [this](PTRef var) {
-        return toBase(var);
-    });
+    return rewrite(fla, [this](PTRef var) { return toBase(var); });
 }
 
 PTRef VersionManager::sourceFormulaToTarget(PTRef fla) const {
-    return rewrite(fla, [this](PTRef var) {
-        return toTarget(toBase(var));
-    });
+    return rewrite(fla, [this](PTRef var) { return toTarget(toBase(var)); });
 }
+} // namespace golem

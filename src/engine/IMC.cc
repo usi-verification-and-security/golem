@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2022, Konstantin Britikov <britikovki@gmail.com>
- * Copyright (c) 2023-2024, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2023-2025, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
@@ -13,6 +13,7 @@
 #include "transformers/SingleLoopTransformation.h"
 #include "utils/SmtSolver.h"
 
+namespace golem {
 TransitionSystemVerificationResult IMC::solve(TransitionSystem const & system) {
     { // if I /\ F is Satisfiable, return true
         SMTSolver solver(logic, SMTSolver::WitnessProduction::NONE);
@@ -127,3 +128,4 @@ PTRef IMC::computeFinalInductiveInvariant(PTRef inductiveInvariant, unsigned k, 
     PTRef kinductive = logic.mkAnd(inductiveInvariant, logic.mkNot(ts.getQuery()));
     return kinductiveToInductive(kinductive, k, ts);
 }
+} // namespace golem

@@ -1,11 +1,12 @@
 /*
- * Copyright (c) 2020-2022, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2020-2025, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
 
 #include "Normalizer.h"
 
+namespace golem {
 NormalizedChcSystem Normalizer::normalize(const ChcSystem & system) {
     this->canonicalPredicateRepresentation.addRepresentation(logic.getSym_true(), {});
     std::vector<ChClause> normalized;
@@ -130,5 +131,6 @@ ChcBody Normalizer::normalize(const ChcBody & body) {
     newInterpretedPart = TermUtils(logic).varSubstitute(newInterpretedPart, subst);
     return ChcBody{InterpretedFla{newInterpretedPart}, std::move(newUninterpretedPart)};
 }
+} // namespace golem
 
 

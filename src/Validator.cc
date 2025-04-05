@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020 - 2022, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2020-2025, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
@@ -8,13 +8,14 @@
 
 #include "utils/SmtSolver.h"
 
+namespace golem {
 Validator::Result Validator::validate(ChcDirectedHyperGraph const & graph, VerificationResult const & result) {
     if (not result.hasWitness()) { return Validator::Result::NOT_VALIDATED; }
     switch (result.getAnswer()) {
         case VerificationAnswer::SAFE:
             return validateValidityWitness(graph, result.getValidityWitness());
         case VerificationAnswer::UNSAFE:
-                return validateInvalidityWitness(graph, result.getInvalidityWitness());
+            return validateInvalidityWitness(graph, result.getInvalidityWitness());
         default:
             return Validator::Result::NOT_VALIDATED;
     }
@@ -127,4 +128,4 @@ Validator::validateInvalidityWitness(ChcDirectedHyperGraph const & graph, Invali
     }
     return Validator::Result::VALIDATED;
 }
-
+} // namespace golem

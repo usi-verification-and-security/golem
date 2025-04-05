@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021-2023, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2021-2025, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
@@ -8,6 +8,7 @@
 #include "QuantifierElimination.h"
 #include <unordered_set>
 
+namespace golem {
 bool isTransitionSystem(ChcDirectedGraph const & graph) {
     auto graphRepresentation = AdjacencyListsGraphRepresentation::from(graph);
     auto reversePostorder = reversePostOrder(graph, graphRepresentation);
@@ -217,3 +218,4 @@ bool isTrivial(ChcDirectedGraph const & graph) {
     });
     return onlyTrivialEdges;
 }
+} // namespace golem

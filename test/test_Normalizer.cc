@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2022-2025, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
@@ -9,6 +9,7 @@
 #include "Normalizer.h"
 #include "graph/ChcGraphBuilder.h"
 
+using namespace golem;
 
 TEST(NormalizerTest, test_boolean_equal_to_constant) {
     ArithLogic logic {opensmt::Logic_t::QF_LIA};

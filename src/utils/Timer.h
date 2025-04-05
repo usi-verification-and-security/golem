@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2024, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2024-2025, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
@@ -9,6 +9,7 @@
 
 #include <chrono>
 
+namespace golem {
 struct Timer {
     Timer() : start(std::chrono::high_resolution_clock::now()) {}
     [[nodiscard]] auto elapsedMilliseconds() const {
@@ -19,6 +20,7 @@ struct Timer {
 private:
     std::chrono::high_resolution_clock::time_point start;
 };
+} // namespace golem
 
 #define MEASURE(statement)                                                                                             \
     Timer timer;                                                                                                       \

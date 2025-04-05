@@ -1,18 +1,18 @@
 /*
- * Copyright (c) 2020-2022, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2020-2025, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
 
-#ifndef OPENSMT_NORMALIZER_H
-#define OPENSMT_NORMALIZER_H
+#ifndef GOLEM_NORMALIZER_H
+#define GOLEM_NORMALIZER_H
 
 #include "ChcSystem.h"
 #include "TermUtils.h"
 
 #include <memory>
-#include <unordered_map>
 
+namespace golem {
 struct NormalizedChcSystem{
     std::unique_ptr<ChcSystem> normalizedSystem;
     NonlinearCanonicalPredicateRepresentation canonicalPredicateRepresentation;
@@ -70,6 +70,7 @@ public:
     auto const & getNormalizingEqualities() const { return normalizingEqualities; };
 
 };
+} // namespace golem
 
 
-#endif //OPENSMT_NORMALIZER_H
+#endif // GOLEM_NORMALIZER_H

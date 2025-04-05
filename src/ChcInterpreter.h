@@ -1,11 +1,11 @@
 /*
- * Copyright (c) 2020-2022, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2020-2025, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
 
-#ifndef OPENSMT_CHCINTERPRETER_H
-#define OPENSMT_CHCINTERPRETER_H
+#ifndef GOLEM_CHCINTERPRETER_H
+#define GOLEM_CHCINTERPRETER_H
 
 #include "ChcSystem.h"
 #include "Normalizer.h"
@@ -19,12 +19,13 @@
 #include <memory>
 #include <optional>
 
+namespace golem {
 class LetBinder {
     PTRef currentValue;
     std::vector<PTRef> * shadowedValues;
 
 public:
-    LetBinder(PTRef val) : currentValue(val), shadowedValues(nullptr) {}
+    explicit LetBinder(PTRef val) : currentValue(val), shadowedValues(nullptr) {}
     ~LetBinder() { delete shadowedValues; }
     LetBinder(const LetBinder &) = delete;
     LetBinder & operator=(const LetBinder &) = delete;
@@ -148,5 +149,6 @@ public:
 private:
     Options const & opts;
 };
+} // namespace golem
 
-#endif // OPENSMT_CHCINTERPRETER_H
+#endif // GOLEM_CHCINTERPRETER_H

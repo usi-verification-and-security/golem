@@ -16,6 +16,7 @@
 #include "Spacer.h"
 #include "TPA.h"
 
+namespace golem {
 std::unique_ptr<Engine> EngineFactory::getEngine(std::string_view engine) && {
     if (engine == "spacer") {
         return std::make_unique<Spacer>(logic, options);
@@ -41,3 +42,4 @@ std::unique_ptr<Engine> EngineFactory::getEngine(std::string_view engine) && {
         throw std::invalid_argument("Unknown engine specified");
     }
 }
+} // namespace golem

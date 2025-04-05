@@ -1,18 +1,19 @@
-//
-// Created by Martin Blicha on 06.03.21.
-//
+/*
+ * Copyright (c) 2021-2025, Martin Blicha <martin.blicha@gmail.com>
+ *
+ * SPDX-License-Identifier: MIT
+ */
 
-#ifndef OPENSMT_MODELBASEDPROJECTION_H
-#define OPENSMT_MODELBASEDPROJECTION_H
-
-#endif //OPENSMT_MODELBASEDPROJECTION_H
+#ifndef GOLEM_MODELBASEDPROJECTION_H
+#define GOLEM_MODELBASEDPROJECTION_H
 
 #include "osmt_solver.h"
 #include "osmt_terms.h"
 
-#include <unordered_set>
 #include <iosfwd>
+#include <unordered_set>
 
+namespace golem {
 class ModelBasedProjection {
 private:
     Logic & logic;
@@ -27,12 +28,13 @@ public:
     PTRef keepOnly(PTRef fla, vec<PTRef> const & varsToKeep, Model & model);
 
     using implicant_t = std::vector<PtAsgn>;
+
 private:
     implicant_t projectSingleVar(PTRef var, implicant_t implicant, Model & model);
 
-    implicant_t getImplicant(PTRef var, Model & model, VarsInfo const&);
+    implicant_t getImplicant(PTRef var, Model & model, VarsInfo const &);
 
-    void dumpImplicant(std::ostream& out, implicant_t const & implicant);
+    void dumpImplicant(std::ostream & out, implicant_t const & implicant);
 
     void postprocess(implicant_t & literals, ArithLogic & logic);
 
@@ -45,7 +47,7 @@ private:
 
     using div_constraints_t = std::vector<DivisibilityConstraint>;
 
-    implicant_t projectIntegerVars(PTRef* beg, PTRef* end, implicant_t implicant, Model & model);
+    implicant_t projectIntegerVars(PTRef * beg, PTRef * end, implicant_t implicant, Model & model);
 
     void processDivConstraints(PTRef var, div_constraints_t & divConstraints, implicant_t & implicant, Model & model);
 
@@ -71,5 +73,8 @@ private:
         bool hasDivConstraint;
     };
 
-    ResolveResult resolve(LIABoundLower const& lower, LIABoundUpper const& upper, Model & model, ArithLogic & lialogic);
+    ResolveResult resolve(LIABoundLower const & lower, LIABoundUpper const & upper, Model & model,
+                          ArithLogic & lialogic);
 };
+} // namespace golem
+#endif // GOLEM_MODELBASEDPROJECTION_H

@@ -13,7 +13,6 @@
 #include "TransformationUtils.h"
 #include "TransitionSystem.h"
 #include "Witnesses.h"
-#include "transformers/BasicTransformationPipelines.h"
 #include "transformers/NestedLoopTransformation.h"
 #include "transformers/SingleLoopTransformation.h"
 #include "utils/SmtSolver.h"
@@ -23,6 +22,7 @@
 #define TRACE(l, m)                                                                                                    \
     if (TRACE_LEVEL >= l) { std::cout << m << std::endl; }
 
+namespace golem {
 const std::string TPAEngine::TPA = "tpa";
 const std::string TPAEngine::SPLIT_TPA = "split-tpa";
 
@@ -1702,7 +1702,7 @@ PTRef TPABase::getInductiveInvariant() const {
     if (explanation.relationType == TPAType::LESS_THAN) {
         PTRef transitionInvariant = explanation.safeTransitionInvariant;
         switch (explanation.fixedPointType) {
-                //  TODO: Think about properties combination, can we use left and right invariants together?
+            //  TODO: Think about properties combination, can we use left and right invariants together?
             case SafetyExplanation::FixedPointType::LEFT:
                 return logic.mkNot(QuantifierElimination(logic).keepOnly(
                     logic.mkAnd(transitionInvariant, getNextVersion(query)), getStateVars(0)));
@@ -1760,3 +1760,4 @@ ValidityWitness TPAEngine::computeValidityWitness(ChcDirectedGraph const & graph
                                                   PTRef inductiveInvariant) const {
     return ValidityWitness::fromTransitionSystem(logic, graph, ts, inductiveInvariant);
 }
+} // namespace golem

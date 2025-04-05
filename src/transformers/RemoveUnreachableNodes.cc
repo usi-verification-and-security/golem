@@ -6,12 +6,10 @@
 
 #include "RemoveUnreachableNodes.h"
 
+namespace golem {
 namespace {
-std::vector<SymRef> computeBackwardUnreachable(
-    ChcDirectedHyperGraph const & graph,
-    AdjacencyListsGraphRepresentation const & adjacencyLists
-    )
-{
+std::vector<SymRef> computeBackwardUnreachable(ChcDirectedHyperGraph const & graph,
+                                               AdjacencyListsGraphRepresentation const & adjacencyLists) {
     std::unordered_set<SymRef, SymRefHash> backwardReachable;
     std::vector<SymRef> queue;
     queue.push_back(graph.getExit());
@@ -24,27 +22,20 @@ std::vector<SymRef> computeBackwardUnreachable(
             auto const & sources = graph.getSources(incomingId);
             for (auto source : sources) {
                 auto inserted = backwardReachable.insert(source);
-                if (inserted.second) {
-                    queue.push_back(source);
-                }
+                if (inserted.second) { queue.push_back(source); }
             }
         }
     }
 
     std::vector<SymRef> backwardUnreachable;
     for (auto node : adjacencyLists.getNodes()) {
-        if (backwardReachable.find(node) == backwardReachable.end()) {
-            backwardUnreachable.push_back(node);
-        }
+        if (backwardReachable.find(node) == backwardReachable.end()) { backwardUnreachable.push_back(node); }
     }
     return backwardUnreachable;
 }
 
-std::vector<SymRef> computeForwardUnreachable(
-    ChcDirectedHyperGraph const & graph,
-    AdjacencyListsGraphRepresentation const & adjacencyLists
-    )
-{
+std::vector<SymRef> computeForwardUnreachable(ChcDirectedHyperGraph const & graph,
+                                              AdjacencyListsGraphRepresentation const & adjacencyLists) {
     std::vector<SymRef> queue;
     std::unordered_set<SymRef, SymRefHash> forwardReachable;
     forwardReachable.insert(graph.getEntry());
@@ -56,9 +47,8 @@ std::vector<SymRef> computeForwardUnreachable(
             auto target = graph.getTarget(eid);
             if (forwardReachable.count(target)) { continue; }
             auto const & sources = graph.getSources(eid);
-            bool allSourcesReachable = std::all_of(sources.begin(), sources.end(), [&](auto source) {
-                return forwardReachable.count(source);
-            });
+            bool allSourcesReachable = std::all_of(sources.begin(), sources.end(),
+                                                   [&](auto source) { return forwardReachable.count(source); });
             if (allSourcesReachable) {
                 forwardReachable.insert(target);
                 queue.push_back(target);
@@ -68,14 +58,12 @@ std::vector<SymRef> computeForwardUnreachable(
 
     std::vector<SymRef> forwardUnreachable;
     for (auto node : adjacencyLists.getNodes()) {
-        if (forwardReachable.find(node) == forwardReachable.end()) {
-            forwardUnreachable.push_back(node);
-        }
+        if (forwardReachable.find(node) == forwardReachable.end()) { forwardUnreachable.push_back(node); }
     }
     return forwardUnreachable;
 }
 
-}
+} // namespace
 
 Transformer::TransformationResult RemoveUnreachableNodes::transform(std::unique_ptr<ChcDirectedHyperGraph> graph) {
     auto adjacencyLists = AdjacencyListsGraphRepresentation::from(*graph);
@@ -86,25 +74,29 @@ Transformer::TransformationResult RemoveUnreachableNodes::transform(std::unique_
         // All edges can be removed
         // We return empty graph, and remember all removed vertices for backtranslation
         auto allNodes = adjacencyLists.getNodes();
-        allNodes.erase(std::remove_if(allNodes.begin(), allNodes.end(), [&](SymRef node) {
-            return node == graph->getEntry() or node == graph->getExit();
-        }), allNodes.end());
-        auto backtranslator = adjacencyLists.getIncomingEdgesFor(graph->getExit()).empty() ?
-            std::make_unique<BackTranslator>(graph->getLogic(), std::vector<SymRef>{}, std::move(allNodes)) :
-            std::make_unique<BackTranslator>(graph->getLogic(), std::move(allNodes), std::vector<SymRef>{});
-        return {
-            ChcDirectedHyperGraph::makeEmpty(logic),
-            std::move(backtranslator)
-        };
+        allNodes.erase(
+            std::remove_if(allNodes.begin(), allNodes.end(),
+                           [&](SymRef node) { return node == graph->getEntry() or node == graph->getExit(); }),
+            allNodes.end());
+        auto backtranslator =
+            adjacencyLists.getIncomingEdgesFor(graph->getExit()).empty()
+                ? std::make_unique<BackTranslator>(graph->getLogic(), std::vector<SymRef>{}, std::move(allNodes))
+                : std::make_unique<BackTranslator>(graph->getLogic(), std::move(allNodes), std::vector<SymRef>{});
+        return {ChcDirectedHyperGraph::makeEmpty(logic), std::move(backtranslator)};
     }
 
     auto backwardUnreachable = computeBackwardUnreachable(*graph, adjacencyLists);
-    for (auto node : backwardUnreachable) { graph->deleteNode(node); }
+    for (auto node : backwardUnreachable) {
+        graph->deleteNode(node);
+    }
     if (not backwardUnreachable.empty()) { adjacencyLists = AdjacencyListsGraphRepresentation::from(*graph); }
     auto forwardUnreachable = computeForwardUnreachable(*graph, adjacencyLists);
-    for (auto node : forwardUnreachable) { graph->deleteNode(node); }
+    for (auto node : forwardUnreachable) {
+        graph->deleteNode(node);
+    }
 
-    return {std::move(graph), std::make_unique<BackTranslator>(logic, std::move(forwardUnreachable), std::move(backwardUnreachable))};
+    return {std::move(graph),
+            std::make_unique<BackTranslator>(logic, std::move(forwardUnreachable), std::move(backwardUnreachable))};
 }
 
 ValidityWitness RemoveUnreachableNodes::BackTranslator::translate(ValidityWitness witness) {
@@ -120,3 +112,4 @@ ValidityWitness RemoveUnreachableNodes::BackTranslator::translate(ValidityWitnes
     }
     return ValidityWitness(std::move(definitions));
 }
+} // namespace golem

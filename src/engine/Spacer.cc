@@ -6,8 +6,8 @@
 
 #include "Spacer.h"
 
-#include "utils/SmtSolver.h"
 #include "ModelBasedProjection.h"
+#include "utils/SmtSolver.h"
 
 #include <queue>
 #include <unordered_map>
@@ -15,14 +15,16 @@
 
 #define TRACE_LEVEL 0
 
-#define TRACE(l,m) if (TRACE_LEVEL >= l) { std::cout << m << std::endl; }
+#define TRACE(l, m)                                                                                                    \
+    if (TRACE_LEVEL >= l) { std::cout << m << std::endl; }
 
+namespace golem {
 class ApproxMap {
 public:
     vec<PTRef> getComponents(SymRef vid, std::size_t bound) const {
         vec<PTRef> res;
-        (const_cast<ApproxMap*>(this))->ensureBound(bound);
-        auto const& boundMap = innerMap[bound];
+        (const_cast<ApproxMap *>(this))->ensureBound(bound);
+        auto const & boundMap = innerMap[bound];
         auto it = boundMap.find(vid);
         if (it != boundMap.end()) {
             res.capacity(it->second.size());
@@ -44,14 +46,13 @@ public:
         ensureBound(bound);
         auto const & boundMap = innerMap[bound];
         auto it = boundMap.find(vid);
-        if (it != boundMap.end()) {
-            return it->second.find(summary) != it->second.end();
-        }
+        if (it != boundMap.end()) { return it->second.find(summary) != it->second.end(); }
         return false;
     }
 
 private:
-    std::vector<std::unordered_map<SymRef, std::unordered_set<PTRef, PTRefHash>, SymRefHash>> innerMap; // bound -> vertex -> elements of approximation
+    /// bound -> vertex -> elements of approximation
+    std::vector<std::unordered_map<SymRef, std::unordered_set<PTRef, PTRefHash>, SymRefHash>> innerMap;
 
     void ensureBound(std::size_t bound) {
         while (innerMap.size() <= bound) {
@@ -60,13 +61,9 @@ private:
     }
 };
 
-class UnderApproxMap : public ApproxMap {
+class UnderApproxMap : public ApproxMap {};
 
-};
-
-class OverApproxMap : public ApproxMap {
-
-};
+class OverApproxMap : public ApproxMap {};
 
 struct ProofObligation {
     SymRef vertex;
@@ -74,16 +71,14 @@ struct ProofObligation {
     PTRef constraint;
 };
 
-bool operator<(ProofObligation const& pob1, ProofObligation const& pob2) {
+bool operator<(ProofObligation const & pob1, ProofObligation const & pob2) {
     // TODO: Does it make sense to break ties using vertices?
-    return pob1.bound < pob2.bound or
-           (pob1.bound == pob2.bound and pob1.vertex.x < pob2.vertex.x);
+    return pob1.bound < pob2.bound or (pob1.bound == pob2.bound and pob1.vertex.x < pob2.vertex.x);
 }
 
 // TODO: why we need both operators??
-bool operator>(ProofObligation const& pob1, ProofObligation const& pob2) {
-    return pob1.bound > pob2.bound or
-           (pob1.bound == pob2.bound and pob1.vertex.x > pob2.vertex.x);
+bool operator>(ProofObligation const & pob1, ProofObligation const & pob2) {
+    return pob1.bound > pob2.bound or (pob1.bound == pob2.bound and pob1.vertex.x > pob2.vertex.x);
 }
 
 struct PriorityQueue {
@@ -92,6 +87,7 @@ struct PriorityQueue {
     ProofObligation const & peek() const { return pqueue.top(); }
     void pop() { pqueue.pop(); }
     [[nodiscard]] bool empty() const { return pqueue.empty(); }
+
 private:
     std::priority_queue<ProofObligation, std::vector<ProofObligation>, std::greater<>> pqueue;
 };
@@ -114,12 +110,16 @@ public:
 
     void newDerivation(DerivedFact fact, EId edge, std::vector<ID> premises);
 
-    Entry const & getEntry(ID index) const { assert(index < table.size()); return table.at(index); }
+    Entry const & getEntry(ID index) const {
+        assert(index < table.size());
+        return table.at(index);
+    }
 
     // DEBUG
     void print(Logic & logic) const {
         for (auto const & entry : *this) {
-            std::cout << logic.printSym(entry.derivedFact.node) << " " << logic.pp(entry.derivedFact.fact) << " " << entry.incomingEdge.id << " | ";
+            std::cout << logic.printSym(entry.derivedFact.node) << " " << logic.pp(entry.derivedFact.fact) << " "
+                      << entry.incomingEdge.id << " | ";
             for (auto premise : entry.premises) {
                 std::cout << premise << " ";
             }
@@ -135,7 +135,6 @@ public:
 
     const_iterator begin() const { return table.begin(); }
     const_iterator end() const { return table.end(); }
-
 };
 
 bool operator==(DerivationDatabase::DerivedFact const & first, DerivationDatabase::DerivedFact const & second) {
@@ -144,9 +143,7 @@ bool operator==(DerivationDatabase::DerivedFact const & first, DerivationDatabas
 
 DerivationDatabase::ID DerivationDatabase::getIdFor(DerivationDatabase::DerivedFact fact) const {
     for (std::size_t i = 0u; i < table.size(); ++i) {
-        if (table[i].derivedFact == fact) {
-            return i;
-        }
+        if (table[i].derivedFact == fact) { return i; }
     }
     throw std::logic_error("Given fact not found in the database of derived facts");
 }
@@ -171,21 +168,13 @@ class SpacerContext {
     // Helper data structures to get the versioning right
     ChcDirectedHyperGraph::VertexInstances vertexInstances;
 
-    void addMaySummary(SymRef vid, std::size_t bound, PTRef summary) {
-        over.insert(vid, bound, summary);
-    }
+    void addMaySummary(SymRef vid, std::size_t bound, PTRef summary) { over.insert(vid, bound, summary); }
 
-    void addMustSummary(SymRef vid, std::size_t bound, PTRef summary) {
-        under.insert(vid, bound, summary);
-    }
+    void addMustSummary(SymRef vid, std::size_t bound, PTRef summary) { under.insert(vid, bound, summary); }
 
-    PTRef getMustSummary(SymRef vid, std::size_t bound) const {
-        return logic.mkOr(under.getComponents(vid, bound));
-    }
+    PTRef getMustSummary(SymRef vid, std::size_t bound) const { return logic.mkOr(under.getComponents(vid, bound)); }
 
-    PTRef getMaySummary(SymRef vid, std::size_t bound) const {
-        return logic.mkAnd(over.getComponents(vid, bound));
-    }
+    PTRef getMaySummary(SymRef vid, std::size_t bound) const { return logic.mkAnd(over.getComponents(vid, bound)); }
 
     PTRef getEdgeMustSummary(EId eid, std::size_t bound) const;
 
@@ -210,8 +199,7 @@ class SpacerContext {
 
     bool tryPushComponents(SymRef, std::size_t, PTRef);
 
-
-    enum class QueryAnswer : char {UNKNOWN, SAT, UNSAT, ERROR};
+    enum class QueryAnswer : char { UNKNOWN, SAT, UNSAT, ERROR };
     struct QueryResult {
         QueryAnswer answer;
         std::unique_ptr<Model> model;
@@ -235,6 +223,7 @@ class SpacerContext {
     void logNewFactIntoDatabase(PTRef fact, SymRef vertex, std::size_t sourceLevel, EId eid, Model & model);
 
     InvalidityWitness reconstructInvalidityWitness() const;
+
 public:
     SpacerContext(Logic & logic, ChcDirectedHyperGraph const & graph, bool logProof);
 
@@ -242,24 +231,30 @@ public:
 };
 
 VerificationResult Spacer::solve(ChcDirectedHyperGraph const & system) {
-    bool logProof = options.hasOption(Options::COMPUTE_WITNESS) and options.getOption(Options::COMPUTE_WITNESS) == "true";
+    bool logProof =
+        options.hasOption(Options::COMPUTE_WITNESS) and options.getOption(Options::COMPUTE_WITNESS) == "true";
     return SpacerContext(logic, system, logProof).run();
 }
 
 SpacerContext::SpacerContext(Logic & logic, ChcDirectedHyperGraph const & graph, bool logProof)
-    : logic(logic), graph(graph), adjacencyLists(AdjacencyListsGraphRepresentation::from(graph)), logProof(logProof), vertexInstances(graph) {
+    : logic(logic),
+      graph(graph),
+      adjacencyLists(AdjacencyListsGraphRepresentation::from(graph)),
+      logProof(logProof),
+      vertexInstances(graph) {
     auto vertices = graph.getVertices();
     for (auto vid : vertices) {
         PTRef toInsert = vid == graph.getEntry() ? logic.getTerm_true() : logic.getTerm_false();
         addMaySummary(vid, 0, toInsert);
         addMustSummary(vid, 0, toInsert);
     }
-    database.newDerivation({.fact = logic.getTerm_true(), .node = graph.getEntry()}, {static_cast<std::size_t>(-1)}, {});
+    database.newDerivation({.fact = logic.getTerm_true(), .node = graph.getEntry()}, {static_cast<std::size_t>(-1)},
+                           {});
 }
 
 VerificationResult SpacerContext::run() {
     std::size_t currentBound = 1;
-    while(true) {
+    while (true) {
         addMaySummary(graph.getEntry(), currentBound, logic.getTerm_true());
         addMustSummary(graph.getEntry(), currentBound, logic.getTerm_true());
         TRACE(1, "Checking bound safety for " << currentBound)
@@ -270,9 +265,8 @@ VerificationResult SpacerContext::run() {
             case BoundedSafetyResult::SAFE: {
                 auto inductiveResult = isInductive(currentBound);
                 if (inductiveResult.answer == InductiveCheckAnswer::INDUCTIVE) {
-                    ValidityWitness::definitions_t solution{
-                        {graph.getEntry(), logic.getTerm_true()}, {graph.getExit(), logic.getTerm_false()}
-                    };
+                    ValidityWitness::definitions_t solution{{graph.getEntry(), logic.getTerm_true()},
+                                                            {graph.getExit(), logic.getTerm_false()}};
                     auto inductiveLevel = inductiveResult.inductiveLevel;
                     for (auto vid : graph.getVertices()) {
                         if (vid == graph.getEntry() or vid == graph.getExit()) { continue; }
@@ -298,7 +292,6 @@ VerificationResult SpacerContext::run() {
     }
 }
 
-
 std::vector<EId> const & SpacerContext::incomingEdges(SymRef v) const {
     return adjacencyLists.getIncomingEdgesFor(v);
 }
@@ -309,7 +302,7 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
     PriorityQueue pqueue;
     pqueue.push(ProofObligation{query, currentBound, logic.getTerm_true()});
     lowestChangedLevel = currentBound;
-    while(not pqueue.empty()) {
+    while (not pqueue.empty()) {
         TRACE(2, "Examining proof obligation " << pqueue.peek().vertex.x)
         auto const & pob = pqueue.peek();
         if (pob.vertex == graph.getEntry()) {
@@ -328,14 +321,13 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
         std::vector<ProofObligation> newProofObligations;
         for (EId edgeId : edges) {
             auto newProofObligation = computePredecessor(edgeId, pob);
-            if (newProofObligation.has_value()) {
-                newProofObligations.push_back(newProofObligation.value());
-            }
+            if (newProofObligation.has_value()) { newProofObligations.push_back(newProofObligation.value()); }
         }
         if (newProofObligations.empty()) {
             // all edges are blocked; compute new lemma blocking the current proof obligation
             // TODO:
-            vec<PTRef> edgeRepresentations; edgeRepresentations.capacity(edges.size());
+            vec<PTRef> edgeRepresentations;
+            edgeRepresentations.capacity(edges.size());
             for (EId eid : edges) {
                 edgeRepresentations.push(getEdgeMaySummary(eid, pob.bound - 1));
             }
@@ -345,15 +337,15 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
                 throw std::logic_error("All edges should have been blocked, but they are not!");
             }
             PTRef newLemma = VersionManager(logic).targetFormulaToBase(res.interpolant);
-            TRACE(2, "Learnt new lemma for " << pob.vertex.x << " at level " << pob.bound << " - " << logic.pp(newLemma))
+            TRACE(2,
+                  "Learnt new lemma for " << pob.vertex.x << " at level " << pob.bound << " - " << logic.pp(newLemma))
             addMaySummary(pob.vertex, pob.bound, newLemma);
-            if (pob.bound < lowestChangedLevel) {
-                lowestChangedLevel = pob.bound;
-            }
+            if (pob.bound < lowestChangedLevel) { lowestChangedLevel = pob.bound; }
             pqueue.pop(); // This POB has been successfully blocked
         } else {
-            for (auto const& npob : newProofObligations) {
-                TRACE(2,"Pushing new proof obligation " << logic.pp(npob.constraint) << " for " << npob.vertex.x << " at level " << npob.bound)
+            for (auto const & npob : newProofObligations) {
+                TRACE(2, "Pushing new proof obligation " << logic.pp(npob.constraint) << " for " << npob.vertex.x
+                                                         << " at level " << npob.bound)
                 pqueue.push(npob);
             }
         }
@@ -374,17 +366,13 @@ SpacerContext::QueryResult SpacerContext::sat(PTRef A, PTRef B) const {
     if (res == SMTSolver::Answer::SAT) {
         qres.answer = QueryAnswer::SAT;
         qres.model = solver.getModel();
-    }
-    else if (res == SMTSolver::Answer::UNSAT) {
+    } else if (res == SMTSolver::Answer::UNSAT) {
         qres.answer = QueryAnswer::UNSAT;
-    }
-    else if (res == SMTSolver::Answer::UNKNOWN) {
+    } else if (res == SMTSolver::Answer::UNKNOWN) {
         qres.answer = QueryAnswer::UNKNOWN;
-    }
-    else if (res == SMTSolver::Answer::ERROR) {
+    } else if (res == SMTSolver::Answer::ERROR) {
         qres.answer = QueryAnswer::ERROR;
-    }
-    else {
+    } else {
         assert(false);
         throw std::logic_error("Unreachable code!");
     }
@@ -400,22 +388,18 @@ SpacerContext::ItpQueryResult SpacerContext::interpolatingSat(PTRef A, PTRef B) 
     ItpQueryResult qres;
     if (res == SMTSolver::Answer::SAT) {
         qres.answer = QueryAnswer::SAT;
-    }
-    else if (res == SMTSolver::Answer::UNSAT) {
+    } else if (res == SMTSolver::Answer::UNSAT) {
         qres.answer = QueryAnswer::UNSAT;
         auto itpCtx = solver.getInterpolationContext();
         std::vector<PTRef> itps;
         ipartitions_t mask = 1;
         itpCtx->getSingleInterpolant(itps, mask);
         qres.interpolant = itps[0];
-    }
-    else if (res == SMTSolver::Answer::UNKNOWN) {
+    } else if (res == SMTSolver::Answer::UNKNOWN) {
         qres.answer = QueryAnswer::UNKNOWN;
-    }
-    else if (res == SMTSolver::Answer::ERROR) {
+    } else if (res == SMTSolver::Answer::ERROR) {
         qres.answer = QueryAnswer::ERROR;
-    }
-    else {
+    } else {
         assert(false);
         throw std::logic_error("Unreachable code!");
     }
@@ -446,7 +430,8 @@ bool SpacerContext::checkMustReachability(std::vector<EId> const & edges, ProofO
                 PTRef definitelyReachable = VersionManager(logic).targetFormulaToBase(newMustSummary);
                 addMustSummary(pob.vertex, pob.bound, definitelyReachable);
                 if (logProof) {
-                    logNewFactIntoDatabase(definitelyReachable, pob.vertex, pob.bound - 1, edges[counter], *checkRes.model);
+                    logNewFactIntoDatabase(definitelyReachable, pob.vertex, pob.bound - 1, edges[counter],
+                                           *checkRes.model);
                 }
                 return true;
             }
@@ -473,7 +458,8 @@ std::optional<ProofObligation> SpacerContext::computePredecessor(EId eid, ProofO
     auto sourceBound = pob.bound - 1;
     auto const & sources = graph.getSources(eid);
     assert(not sources.empty());
-    if (sources.size() == 1) { // Edge with single source, we only need to check if pob is reachable with over-approximation
+    if (sources.size() == 1) {
+        // Edge with single source, we only need to check if pob is reachable with over-approximation
         PTRef maySummary = getEdgeMaySummary(eid, sourceBound);
         auto res = sat(maySummary, pob.constraint);
         if (res.answer == QueryAnswer::SAT) {
@@ -504,15 +490,17 @@ std::optional<ProofObligation> SpacerContext::computePredecessor(EId eid, ProofO
 
     // Find the first source vertex such that over-approximating it (instead of under-approximating it) makes the edge feasible
     std::size_t vertexToRefine = 0; // vertex that is the last one to be over-approximated
-    while(true) {
+    while (true) {
         PTRef mixedEdgeSummary = getEdgeMixedSummary(eid, sourceBound, vertexToRefine);
         auto res = sat(mixedEdgeSummary, pob.constraint);
         if (res.answer == QueryAnswer::SAT) {
             assert(res.model);
             // When this source is over-approximated and the edge becomes feasible -> extract next proof obligation
             auto source = sources[vertexToRefine];
-            auto predicateVars = TermUtils(logic).getVars(graph.getStateVersion(source, vertexInstances.getInstanceNumber(eid, vertexToRefine)));
-            PTRef newConstraint = projectFormula(logic.mkAnd(mixedEdgeSummary, pob.constraint), predicateVars, *res.model);
+            auto predicateVars = TermUtils(logic).getVars(
+                graph.getStateVersion(source, vertexInstances.getInstanceNumber(eid, vertexToRefine)));
+            PTRef newConstraint =
+                projectFormula(logic.mkAnd(mixedEdgeSummary, pob.constraint), predicateVars, *res.model);
             PTRef newPob = VersionManager(logic).sourceFormulaToTarget(newConstraint); // ensure POB is target fla
             TRACE(2, "New proof obligation generated")
             return ProofObligation{sources[vertexToRefine], sourceBound, newPob};
@@ -532,27 +520,25 @@ SpacerContext::InductiveCheckResult SpacerContext::isInductive(std::size_t maxLe
     std::size_t minLevel = lowestChangedLevel;
     for (std::size_t level = minLevel; level <= maxLevel; ++level) {
         bool inductive = true;
-//        std::cout << "Checking level " << level << std::endl;
+        //        std::cout << "Checking level " << level << std::endl;
         for (auto vid : graph.getVertices()) {
             if (vid == graph.getEntry()) { continue; }
-//            std::cout << " Checking vertex " << vid.id << std::endl;
+            //            std::cout << " Checking vertex " << vid.id << std::endl;
             // encode body as disjunction over all the incoming edges
             vec<PTRef> edgeRepresentations;
             for (EId eid : incomingEdges(vid)) {
                 edgeRepresentations.push(getEdgeMaySummary(eid, level));
-//                std::cout << "Representation of edge " << eid.id << " at level " << level << " is " << logic.printTerm(edgeRepresentations.last()) << std::endl;
+                //                std::cout << "Representation of edge " << eid.id << " at level " << level << " is " << logic.printTerm(edgeRepresentations.last()) << std::endl;
             }
             PTRef body = logic.mkOr(edgeRepresentations);
-//            std::cout << "Body representation of " << vid.id << " at level " << level << " is " << logic.printTerm(body) << std::endl;
+            //            std::cout << "Body representation of " << vid.id << " at level " << level << " is " << logic.printTerm(body) << std::endl;
             // Figure out which components of the may summary are implied by body at level n and so can be pushed to level n+1
-//            std::cout << "Need to check " << maySummaryComponents.size() << " components for vertex " << vid.id << std::endl;
+            //            std::cout << "Need to check " << maySummaryComponents.size() << " components for vertex " << vid.id << std::endl;
             bool allPushed = tryPushComponents(vid, level, body);
             inductive = inductive and allPushed;
             // TODO does it make sense to push other vertices if I already know the current level is not inductive?
         }
-        if (inductive) {
-            return InductiveCheckResult{InductiveCheckAnswer::INDUCTIVE, level};
-        }
+        if (inductive) { return InductiveCheckResult{InductiveCheckAnswer::INDUCTIVE, level}; }
     }
     return InductiveCheckResult{InductiveCheckAnswer::NOT_INDUCTIVE, 0};
 }
@@ -573,7 +559,7 @@ bool SpacerContext::tryPushComponents(SymRef vid, std::size_t level, PTRef body)
             continue;
         }
         PTRef nextStateComponent = VersionManager(logic).baseFormulaToTarget(component);
-//        std::cout << " Checking component " << logic.printTerm(nextStateComponent) << std::endl;
+        //        std::cout << " Checking component " << logic.printTerm(nextStateComponent) << std::endl;
         solver.push();
         solver.insertFormula(logic.mkNot(nextStateComponent));
         auto res = solver.check();
@@ -593,9 +579,7 @@ bool SpacerContext::tryPushComponents(SymRef vid, std::size_t level, PTRef body)
     vec<PTRef> targetCandidates;
     targetCandidates.capacity(maySummaryComponents.size());
     for (PTRef const component : maySummaryComponents) {
-        if (over.has(vid, level + 1, component)) {
-            continue;
-        }
+        if (over.has(vid, level + 1, component)) { continue; }
         targetCandidates.push(VersionManager(logic).baseFormulaToTarget(component));
     }
     std::size_t const candidatesCount = targetCandidates.size_();
@@ -609,62 +593,59 @@ bool SpacerContext::tryPushComponents(SymRef vid, std::size_t level, PTRef body)
     return pushed.size_() == candidatesCount;
 }
 
-
-
-
-PTRef SpacerContext::projectFormula(PTRef fla, const vec<PTRef> &toVars, Model & model) const {
+PTRef SpacerContext::projectFormula(PTRef fla, const vec<PTRef> & toVars, Model & model) const {
     assert(std::all_of(toVars.begin(), toVars.end(), [this](PTRef var) { return logic.isVar(var); }));
-//    std::cout << "Projecting " << logic.printTerm(fla) << " to variables ";
-//    std::for_each(toVars.begin(), toVars.end(), [&](PTRef var) { std::cout << logic.printTerm(var) << ' '; });
-//    std::cout << std::endl;
+    //    std::cout << "Projecting " << logic.printTerm(fla) << " to variables ";
+    //    std::for_each(toVars.begin(), toVars.end(), [&](PTRef var) { std::cout << logic.printTerm(var) << ' '; });
+    //    std::cout << std::endl;
     auto varsInFla = TermUtils(logic).getVars(fla);
 
     vec<PTRef> toEliminate;
     for (PTRef var : varsInFla) {
         auto it = std::find(toVars.begin(), toVars.end(), var);
-        if (it == toVars.end()) {
-            toEliminate.push(var);
-        }
+        if (it == toVars.end()) { toEliminate.push(var); }
     }
     ModelBasedProjection mbp(logic);
     PTRef res = mbp.project(fla, toEliminate, model);
-//    std::cout << "\nResult is " << logic.printTerm(res) << std::endl;
+    //    std::cout << "\nResult is " << logic.printTerm(res) << std::endl;
     return res;
 }
 
 PTRef SpacerContext::getEdgeMustSummary(EId eid, std::size_t bound) const {
-//    std::cout << "Must summary:\n ";
+    //    std::cout << "Must summary:\n ";
     PTRef edgeLabel = graph.getEdgeLabel(eid); // Edge labels are versioned
-//    std::cout << "Edge label: " << logic.pp(edgeLabel) << '\n';
+    //    std::cout << "Edge label: " << logic.pp(edgeLabel) << '\n';
     vec<PTRef> bodyComponents{edgeLabel};
-//    std::cout << "Edge sources:\n";
+    //    std::cout << "Edge sources:\n";
     auto const & sources = graph.getSources(eid);
     for (unsigned sourceIndex = 0; sourceIndex < sources.size(); ++sourceIndex) {
         auto source = sources[sourceIndex];
         PTRef mustSummary = getMustSummary(source, bound);
-        PTRef summaryAsSource = VersionManager(logic).baseFormulaToSource(mustSummary, vertexInstances.getInstanceNumber(eid, sourceIndex));
-//        std::cout << source.id << " with summary " << logic.pp(summaryAsSource) << '\n';
+        PTRef summaryAsSource =
+            VersionManager(logic).baseFormulaToSource(mustSummary, vertexInstances.getInstanceNumber(eid, sourceIndex));
+        //        std::cout << source.id << " with summary " << logic.pp(summaryAsSource) << '\n';
         bodyComponents.push(summaryAsSource);
     }
-//    std::cout << std::flush;
+    //    std::cout << std::flush;
     return logic.mkAnd(std::move(bodyComponents));
 }
 
 PTRef SpacerContext::getEdgeMaySummary(EId eid, std::size_t bound) const {
-//    std::cout << "May summary:\n ";
+    //    std::cout << "May summary:\n ";
     PTRef edgeLabel = graph.getEdgeLabel(eid);
-//    std::cout << "Edge label: " << logic.pp(edgeLabel) << '\n';
+    //    std::cout << "Edge label: " << logic.pp(edgeLabel) << '\n';
     vec<PTRef> bodyComponents{edgeLabel};
-//    std::cout << "Edge sources:\n";
+    //    std::cout << "Edge sources:\n";
     auto const & sources = graph.getSources(eid);
     for (unsigned sourceIndex = 0; sourceIndex < sources.size(); ++sourceIndex) {
         auto source = sources[sourceIndex];
         PTRef maySummary = getMaySummary(source, bound);
-        PTRef summaryAsSource = VersionManager(logic).baseFormulaToSource(maySummary, vertexInstances.getInstanceNumber(eid, sourceIndex));
-//        std::cout << source.id << " with summary " << logic.pp(summaryAsSource) << '\n';
+        PTRef summaryAsSource =
+            VersionManager(logic).baseFormulaToSource(maySummary, vertexInstances.getInstanceNumber(eid, sourceIndex));
+        //        std::cout << source.id << " with summary " << logic.pp(summaryAsSource) << '\n';
         bodyComponents.push(summaryAsSource);
     }
-//    std::cout << std::flush;
+    //    std::cout << std::flush;
     return logic.mkAnd(std::move(bodyComponents));
 }
 
@@ -675,12 +656,14 @@ PTRef SpacerContext::getEdgeMixedSummary(EId eid, std::size_t bound, std::size_t
     components.capacity(static_cast<int>(sourceCount) + 1);
     for (std::size_t i = 0; i <= lastMayIndex; ++i) {
         PTRef maySummary = getMaySummary(sources[i], bound);
-        PTRef summaryAsSource = VersionManager(logic).baseFormulaToSource(maySummary, vertexInstances.getInstanceNumber(eid, i));
+        PTRef summaryAsSource =
+            VersionManager(logic).baseFormulaToSource(maySummary, vertexInstances.getInstanceNumber(eid, i));
         components.push(summaryAsSource);
     }
     for (std::size_t i = lastMayIndex + 1; i < sources.size(); ++i) {
         PTRef mustSummary = getMustSummary(sources[i], bound);
-        PTRef summaryAsSource = VersionManager(logic).baseFormulaToSource(mustSummary, vertexInstances.getInstanceNumber(eid, i));
+        PTRef summaryAsSource =
+            VersionManager(logic).baseFormulaToSource(mustSummary, vertexInstances.getInstanceNumber(eid, i));
         components.push(summaryAsSource);
     }
     components.push(graph.getEdgeLabel(eid));
@@ -707,9 +690,7 @@ void SpacerContext::logNewFactIntoDatabase(PTRef fact, SymRef vertex, std::size_
             }
         }
         assert(found);
-        if (not found) {
-            throw std::logic_error("Unreachable!");
-        }
+        if (not found) { throw std::logic_error("Unreachable!"); }
     }
     database.newDerivation(newFact, edgeId, std::move(premises));
 }
@@ -722,8 +703,7 @@ struct Entry {
 };
 
 void computePremiseInstances(DerivationDatabase::Entry const & databaseEntry, Entry & entry,
-                             DerivationDatabase const & database,
-                             ChcDirectedHyperGraph const & graph,
+                             DerivationDatabase const & database, ChcDirectedHyperGraph const & graph,
                              ChcDirectedHyperGraph::VertexInstances const & vertexInstances) {
     // Simplest way: Compute a model for a formula consisting of
     //  1. Constraint of the edge
@@ -743,7 +723,7 @@ void computePremiseInstances(DerivationDatabase::Entry const & databaseEntry, En
         PTRef premiseConstraint = versionManager.baseFormulaToSource(premiseEntry.derivedFact.fact, instanceNumber);
         sourcePredicates.push(graph.getStateVersion(premiseEntry.derivedFact.node, instanceNumber));
         solver.assertProp(premiseConstraint);
-//        std::cout << logic.pp(premiseConstraint) << '\n';
+        //        std::cout << logic.pp(premiseConstraint) << '\n';
     }
     PTRef edgeConstraint = graph.getEdgeLabel(edge);
     PTRef factInstance = entry.factInstance;
@@ -759,24 +739,24 @@ void computePremiseInstances(DerivationDatabase::Entry const & databaseEntry, En
         solver.assertProp(edgeConstraint);
     }
     auto res = solver.check();
-    if (res != SMTSolver::Answer::SAT) {
-        throw std::logic_error("Error in computing derivation!");
-    }
+    if (res != SMTSolver::Answer::SAT) { throw std::logic_error("Error in computing derivation!"); }
     auto model = solver.getModel();
-    std::transform(sourcePredicates.begin(), sourcePredicates.end(), std::back_inserter(entry.premiseInstances), [&](PTRef premise){
-        auto vars = TermUtils(logic).predicateArgsInOrder(premise);
-        vec<PTRef> evaluatedVars(vars.size());
-        std::transform(vars.begin(), vars.end(), evaluatedVars.begin(), [&](PTRef var){ return model->evaluate(var); });
-        PTRef premiseInstance = logic.insertTerm(logic.getSymRef(premise), std::move(evaluatedVars));
-//        std::cout << logic.pp(premise) << " -> " << logic.pp(premiseInstance) << std::endl;
-        return premiseInstance;
-    });
+    std::transform(sourcePredicates.begin(), sourcePredicates.end(), std::back_inserter(entry.premiseInstances),
+                   [&](PTRef premise) {
+                       auto vars = TermUtils(logic).predicateArgsInOrder(premise);
+                       vec<PTRef> evaluatedVars(vars.size());
+                       std::transform(vars.begin(), vars.end(), evaluatedVars.begin(),
+                                      [&](PTRef var) { return model->evaluate(var); });
+                       PTRef premiseInstance = logic.insertTerm(logic.getSymRef(premise), std::move(evaluatedVars));
+                       //        std::cout << logic.pp(premise) << " -> " << logic.pp(premiseInstance) << std::endl;
+                       return premiseInstance;
+                   });
 }
-}
+} // namespace
 
 InvalidityWitness SpacerContext::reconstructInvalidityWitness() const {
     if (not logProof) { return {}; }
-//    database.print(logic);
+    //    database.print(logic);
     // We make a DFS style traversal of the database, starting from the derivation of FALSE
     // After the premises of a derived fact has been processed, we can add the fact to the InvalidityWitness
     InvalidityWitness::Derivation witnessingDerivation;
@@ -810,11 +790,12 @@ InvalidityWitness SpacerContext::reconstructInvalidityWitness() const {
         step.index = witnessingDerivation.size();
         step.derivedFact = entry.factInstance;
         step.clauseId = databaseEntry.incomingEdge;
-        std::transform(entry.premiseInstances.begin(), entry.premiseInstances.end(), std::back_inserter(step.premises), [&](auto id) {
-            auto it = derivationSteps.find(id);
-            assert(it != derivationSteps.end());
-            return it->second;
-        });
+        std::transform(entry.premiseInstances.begin(), entry.premiseInstances.end(), std::back_inserter(step.premises),
+                       [&](auto id) {
+                           auto it = derivationSteps.find(id);
+                           assert(it != derivationSteps.end());
+                           return it->second;
+                       });
         if (databaseEntry.derivedFact.node == graph.getExit()) { // MB: Patch the final derivation step
             assert(step.derivedFact == logic.getTerm_true());
             step.derivedFact = logic.getTerm_false();
@@ -827,3 +808,4 @@ InvalidityWitness SpacerContext::reconstructInvalidityWitness() const {
     witness.setDerivation(std::move(witnessingDerivation));
     return witness;
 }
+} // namespace golem

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2023, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2022-2025, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
@@ -8,6 +8,7 @@
 
 #include "utils/SmtSolver.h"
 
+namespace golem {
 Transformer::TransformationResult MultiEdgeMerger::transform(std::unique_ptr<ChcDirectedHyperGraph> graph) {
     auto backtranslator = std::make_unique<BackTranslator>(graph->getLogic(), graph->predicateRepresentation());
     backtranslator->mergedEdges = graph->mergeMultiEdges();
@@ -83,3 +84,4 @@ InvalidityWitness MultiEdgeMerger::BackTranslator::translate(InvalidityWitness w
 ValidityWitness MultiEdgeMerger::BackTranslator::translate(ValidityWitness witness) {
     return witness;
 }
+} // namespace golem

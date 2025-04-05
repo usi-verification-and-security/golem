@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2022-2025, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
@@ -9,6 +9,7 @@
 
 #include "Transformer.h"
 
+namespace golem {
 class RemoveUnreachableNodes : public Transformer {
 public:
     TransformationResult transform(std::unique_ptr<ChcDirectedHyperGraph> graph) override;
@@ -19,16 +20,16 @@ public:
         std::vector<SymRef> backwardUnreachableFromFalse;
 
     public:
-        BackTranslator(Logic & logic, std::vector<SymRef> && unreachableFromTrue, std::vector<SymRef> && backwardUnreachableFromFalse) :
-            logic(logic),
-            unreachableFromTrue(std::move(unreachableFromTrue)),
-            backwardUnreachableFromFalse(std::move(backwardUnreachableFromFalse))
-            {}
+        BackTranslator(Logic & logic, std::vector<SymRef> && unreachableFromTrue,
+                       std::vector<SymRef> && backwardUnreachableFromFalse)
+            : logic(logic),
+              unreachableFromTrue(std::move(unreachableFromTrue)),
+              backwardUnreachableFromFalse(std::move(backwardUnreachableFromFalse)) {}
 
         InvalidityWitness translate(InvalidityWitness witness) override { return witness; }
         ValidityWitness translate(ValidityWitness witness) override;
     };
 };
+} // namespace golem
 
-
-#endif //GOLEM_REMOVEUNREACHABLENODES_H
+#endif // GOLEM_REMOVEUNREACHABLENODES_H

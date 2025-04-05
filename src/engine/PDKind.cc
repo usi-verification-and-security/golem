@@ -1,26 +1,23 @@
 ﻿/*
-* Copyright (c) 2023-2024, Stepan Henrych <stepan.henrych@gmail.com>
-*
-* SPDX-License-Identifier: MIT
-*/
+ * Copyright (c) 2023-2024, Stepan Henrych <stepan.henrych@gmail.com>
+ * Copyright (c) 2025, Martin Blicha <martin.blicha@gmail.com>
+ *
+ * SPDX-License-Identifier: MIT
+ */
 
 #include "PDKind.h"
 
 #include "Common.h"
 #include "ModelBasedProjection.h"
 #include "TermUtils.h"
-#include "TransformationUtils.h"
-#include "transformers/BasicTransformationPipelines.h"
-#include "transformers/SingleLoopTransformation.h"
 #include "utils/ScopeGuard.h"
 #include "utils/SmtSolver.h"
 
 #include <memory>
 #include <queue>
 #include <set>
-#include <tuple>
 
-
+namespace golem {
 /**
  * Counter example formula in addition with number of steps needed to reach the counter example.
  */
@@ -34,22 +31,22 @@ struct CounterExample {
  * Tuple containing lemma and counter example.
  */
 struct IFrameElement {
-        PTRef lemma;
-        CounterExample counter_example;
+    PTRef lemma;
+    CounterExample counter_example;
 
-        IFrameElement(PTRef lemma, CounterExample counter_example) : lemma(lemma), counter_example(counter_example) {}
+    IFrameElement(PTRef lemma, CounterExample counter_example) : lemma(lemma), counter_example(counter_example) {}
 
-        bool operator==(IFrameElement const & other) const {
-            return this->lemma == other.lemma && this->counter_example.ctx == other.counter_example.ctx;
+    bool operator==(IFrameElement const & other) const {
+        return this->lemma == other.lemma && this->counter_example.ctx == other.counter_example.ctx;
+    }
+
+    bool operator<(IFrameElement const & other) const {
+        if (this->lemma == other.lemma) {
+            return this->counter_example.ctx < other.counter_example.ctx;
+        } else {
+            return this->lemma < other.lemma;
         }
-
-        bool operator<(IFrameElement const & other) const {
-            if (this->lemma == other.lemma) {
-                return this->counter_example.ctx < other.counter_example.ctx;
-            } else {
-                return this->lemma < other.lemma;
-            }
-        }
+    }
 };
 
 /**
@@ -66,11 +63,12 @@ struct PushResult {
     unsigned n;
     bool is_invalid;
     unsigned steps_to_ctx;
-    PushResult(InductionFrame i_frame,
-               InductionFrame new_i_frame,
-               unsigned n,
-               bool is_invalid,
-               unsigned steps_to_ctx) : i_frame(std::move(i_frame)), new_i_frame(std::move(new_i_frame)), n(n), is_invalid(is_invalid), steps_to_ctx(steps_to_ctx) {}
+    PushResult(InductionFrame i_frame, InductionFrame new_i_frame, unsigned n, bool is_invalid, unsigned steps_to_ctx)
+        : i_frame(std::move(i_frame)),
+          new_i_frame(std::move(new_i_frame)),
+          n(n),
+          is_invalid(is_invalid),
+          steps_to_ctx(steps_to_ctx) {}
 };
 
 struct Reachable {
@@ -91,7 +89,7 @@ struct Infeasible {
     PTRef interpolant;
 };
 using Answer = std::variant<Feasible, Infeasible>;
-}
+} // namespace SolverAnswer
 
 class FrameSolver {
 public:
@@ -101,6 +99,7 @@ public:
     }
     SolverAnswer::Answer checkFeasibility(PTRef state);
     void addLemma(PTRef lemma);
+
 private:
     Logic & logic;
     PTRef transition;
@@ -114,9 +113,7 @@ private:
  */
 class RFrames {
 public:
-    explicit RFrames(Logic & logic, PTRef transition) : logic(logic), transition(transition) {
-        ensureReadyFor(0);
-    }
+    explicit RFrames(Logic & logic, PTRef transition) : logic(logic), transition(transition) { ensureReadyFor(0); }
 
     SolverAnswer::Answer queryWithTransitionAt(std::size_t k, PTRef state);
     void addLemma(std::size_t k, PTRef lemma) {
@@ -149,8 +146,10 @@ private:
 
     ReachabilityResult reachable(unsigned k, PTRef formula);
     [[nodiscard]] ReachabilityResult zeroStepReachability(PTRef state);
+
 public:
-    ReachabilityChecker(Logic & logic, TransitionSystem const & system) : r_frames(logic, system.getTransition()), logic(logic), system(system) {
+    ReachabilityChecker(Logic & logic, TransitionSystem const & system)
+        : r_frames(logic, system.getTransition()), logic(logic), system(system) {
         zeroStepSolver = std::make_unique<SMTSolver>(logic, SMTSolver::WitnessProduction::ONLY_INTERPOLANTS);
         zeroStepSolver->getConfig().setSimplifyInterpolant(4);
         zeroStepSolver->assertProp(system.getInit());
@@ -163,12 +162,14 @@ public:
     Context(Logic & logic, bool computeWitness) : logic(logic), computeWitness(computeWitness) {}
 
     TransitionSystemVerificationResult solve(TransitionSystem const & system);
+
 private:
     Logic & logic;
     bool computeWitness;
 
     [[nodiscard]]
-    PushResult push(TransitionSystem const & system, InductionFrame & iframe, unsigned n, unsigned k, ReachabilityChecker & reachability_checker) const;
+    PushResult push(TransitionSystem const & system, InductionFrame & iframe, unsigned n, unsigned k,
+                    ReachabilityChecker & reachability_checker) const;
 
     [[nodiscard]]
     PTRef getInvariant(InductionFrame const & iframe, unsigned int k, TransitionSystem const & system) const;
@@ -192,10 +193,11 @@ TransitionSystemVerificationResult Context::solve(TransitionSystem const & syste
         solver.assertProp(query);
         res = solver.check();
         if (res == SMTSolver::Answer::SAT) {
-            return TransitionSystemVerificationResult{.answer = VerificationAnswer::UNSAFE, .witness = static_cast<std::size_t>(0)};
+            return TransitionSystemVerificationResult{.answer = VerificationAnswer::UNSAFE,
+                                                      .witness = static_cast<std::size_t>(0)};
         }
     }
-    
+
     unsigned n = 0;
     PTRef p = logic.mkNot(query);
     InductionFrame inductionFrame;
@@ -209,7 +211,8 @@ TransitionSystemVerificationResult Context::solve(TransitionSystem const & syste
 
         if (res.is_invalid) {
             auto steps_to_ctx = res.steps_to_ctx;
-            return TransitionSystemVerificationResult{.answer = VerificationAnswer::UNSAFE, .witness = static_cast<std::size_t>(steps_to_ctx)};
+            return TransitionSystemVerificationResult{.answer = VerificationAnswer::UNSAFE,
+                                                      .witness = static_cast<std::size_t>(steps_to_ctx)};
         }
         if (res.i_frame == res.new_i_frame) {
             if (computeWitness) {
@@ -236,13 +239,14 @@ PTRef generalize(Logic & logic, Model & model, std::vector<PTRef> const & stateV
 /**
  * Check if p is invariant by iteratively constructing k-inductive strengthening of p.
  */
-PushResult Context::push(TransitionSystem const & system, InductionFrame & iframe, unsigned const n, unsigned const k, ReachabilityChecker & reachability_checker) const {
+PushResult Context::push(TransitionSystem const & system, InductionFrame & iframe, unsigned const n, unsigned const k,
+                         ReachabilityChecker & reachability_checker) const {
     // Create a queue q and initialize it with iframe.
     std::queue<IFrameElement> q;
     for (auto e : iframe) {
         q.push(e);
     }
-    
+
     // Initialize used variables.
     TimeMachine tm{logic};
     PTRef transition = system.getTransition();
@@ -252,7 +256,7 @@ PushResult Context::push(TransitionSystem const & system, InductionFrame & ifram
     int steps_to_ctx = 0;
 
     PTRef kTransition = [&]() {
-        vec<PTRef> transitions {transition};
+        vec<PTRef> transitions{transition};
         for (unsigned currentUnrolling = 1; currentUnrolling < k; ++currentUnrolling) {
             transitions.push(tm.sendFlaThroughTime(transition, static_cast<int>(currentUnrolling)));
         }
@@ -261,11 +265,11 @@ PushResult Context::push(TransitionSystem const & system, InductionFrame & ifram
 
     SMTSolver kinductionChecker(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
     kinductionChecker.assertProp(kTransition);
-    
+
     while (not invalid && not q.empty()) {
         IFrameElement obligation = q.front();
         q.pop();
-        
+
         PTRef iframe_abs = [&]() {
             vec<PTRef> iframe_abs_vec;
             for (auto e : iframe) {
@@ -276,7 +280,7 @@ PushResult Context::push(TransitionSystem const & system, InductionFrame & ifram
 
         // Create transition T[F_ABS]^k by definition.
         PTRef transitionRestriction = [&]() -> PTRef {
-            vec<PTRef> frameComponents {iframe_abs};
+            vec<PTRef> frameComponents{iframe_abs};
             for (unsigned currentUnrolling = 1; currentUnrolling < k; ++currentUnrolling) {
                 frameComponents.push(tm.sendFlaThroughTime(iframe_abs, static_cast<int>(currentUnrolling)));
             }
@@ -302,7 +306,6 @@ PushResult Context::push(TransitionSystem const & system, InductionFrame & ifram
         }
         auto inductionFailureWitness = kinductionChecker.getModel();
 
-
         // Check if f_cex is reachable.
         kinductionChecker.pop();
         kinductionChecker.push();
@@ -311,13 +314,16 @@ PushResult Context::push(TransitionSystem const & system, InductionFrame & ifram
         auto res2 = kinductionChecker.check();
 
         if (res2 == SMTSolver::Answer::SAT) {
-            CounterExample g_cex(generalize(logic, *kinductionChecker.getModel(), system.getStateVars(), kTransition, f_cex), obligation.counter_example.num_of_steps + k);
+            CounterExample g_cex(
+                generalize(logic, *kinductionChecker.getModel(), system.getStateVars(), kTransition, f_cex),
+                obligation.counter_example.num_of_steps + k);
             // Remember num of steps for each cex, g_cex is f_cex + k
             auto reach_res = reachability_checker.checkReachability(n - k + 1, n, g_cex.ctx);
             if (std::holds_alternative<Reachable>(reach_res)) {
                 // g_cex is reachable, return invalid.
                 invalid = true;
-                steps_to_ctx = g_cex.num_of_steps + std::get<Reachable>(reach_res).steps; // This is needed for invalidity proof
+                steps_to_ctx =
+                    g_cex.num_of_steps + std::get<Reachable>(reach_res).steps; // This is needed for invalidity proof
                 continue;
             } else {
                 // Eliminate g_cex.
@@ -332,14 +338,17 @@ PushResult Context::push(TransitionSystem const & system, InductionFrame & ifram
         }
 
         // Analyze the induction failure.
-        PTRef g_cti = generalize(logic, *inductionFailureWitness, system.getStateVars(), kTransition, versioned_not_fabs);
+        PTRef g_cti =
+            generalize(logic, *inductionFailureWitness, system.getStateVars(), kTransition, versioned_not_fabs);
         auto reach_res = reachability_checker.checkReachability(n - k + 1, n, g_cti);
         if (std::holds_alternative<Reachable>(reach_res)) {
             // Insert weaker obligation : (not f_cex, f_cex).
-            reach_res = reachability_checker.checkReachability(n + 1, std::get<Reachable>(reach_res).steps + k, not_fabs);
+            reach_res =
+                reachability_checker.checkReachability(n + 1, std::get<Reachable>(reach_res).steps + k, not_fabs);
             assert(std::holds_alternative<Reachable>(reach_res));
             np = std::min<std::size_t>(np, std::get<Reachable>(reach_res).steps);
-            IFrameElement newObligation = IFrameElement(logic.mkNot(obligation.counter_example.ctx), obligation.counter_example);
+            IFrameElement newObligation =
+                IFrameElement(logic.mkNot(obligation.counter_example.ctx), obligation.counter_example);
             iframe.insert(newObligation);
             newIframe.insert(newObligation);
         } else {
@@ -362,7 +371,7 @@ PushResult Context::push(TransitionSystem const & system, InductionFrame & ifram
  */
 PTRef Context::getInvariant(const InductionFrame & iframe, unsigned int k, TransitionSystem const & system) const {
     std::vector<PTRef> lemmas;
-    for(auto o : iframe) {
+    for (auto o : iframe) {
         lemmas.push_back(o.lemma);
     }
     PTRef kinvariant = logic.mkAnd(lemmas);
@@ -371,7 +380,7 @@ PTRef Context::getInvariant(const InductionFrame & iframe, unsigned int k, Trans
 
 ReachabilityResult ReachabilityChecker::zeroStepReachability(PTRef state) {
     auto & solver = *this->zeroStepSolver;
-    ScopeGuard guard{[&](){ solver.pop(); }};
+    ScopeGuard guard{[&]() { solver.pop(); }};
     solver.push();
     solver.assertProp(state);
     auto res = solver.check();
@@ -410,15 +419,11 @@ SolverAnswer::Answer FrameSolver::checkFeasibility(PTRef state) {
         return SolverAnswer::Infeasible{itps[0]};
     }
     throw std::logic_error{"Unexpected result from SMT solver"};
-
 }
 
 void FrameSolver::addLemma(PTRef lemma) {
     lemmas.push(lemma);
 }
-
-
-
 
 /**
  * Recursively checks if formula is reachable in k steps from initial states by updating and using the reachability frame.
@@ -427,26 +432,26 @@ void FrameSolver::addLemma(PTRef lemma) {
  */
 ReachabilityResult ReachabilityChecker::reachable(unsigned k, PTRef formula) {
     // Check reachability from initial states in 0 steps.
-    if (k == 0) {
-        return zeroStepReachability(formula);
-    }
+    if (k == 0) { return zeroStepReachability(formula); }
 
     TimeMachine tm{logic};
-    PTRef versioned_formula = tm.sendFlaThroughTime(formula, 1); // Send the formula through time by one, so it matches the pattern init_0 transition_0-1 formula_1.
+    PTRef versioned_formula = tm.sendFlaThroughTime(
+        formula, 1); // Send the formula through time by one, so it matches the pattern init_0 transition_0-1 formula_1.
     while (true) {
         // Check if formula is reachable from r_frames[k-1] in 1 step.
-        auto answer = r_frames.queryWithTransitionAt(k-1, versioned_formula);
+        auto answer = r_frames.queryWithTransitionAt(k - 1, versioned_formula);
 
         // If is reachable, create a generalization of such states and check if they are reachable in k-1 steps.
         if (std::holds_alternative<SolverAnswer::Feasible>(answer)) {
-            PTRef g = generalize(logic, *std::get<SolverAnswer::Feasible>(answer).model, system.getStateVars(),system.getTransition(), versioned_formula);
-            auto reach_res = reachable(k-1, g);
+            PTRef g = generalize(logic, *std::get<SolverAnswer::Feasible>(answer).model, system.getStateVars(),
+                                 system.getTransition(), versioned_formula);
+            auto reach_res = reachable(k - 1, g);
             // If is reachable return true, else update the reachability frame.
             if (std::holds_alternative<Reachable>(reach_res)) {
                 return reach_res;
             } else {
                 PTRef explanation = std::get<Unreachable>(reach_res).explanation;
-                r_frames.addLemma(k-1, explanation);
+                r_frames.addLemma(k - 1, explanation);
             }
         } else {
             assert(std::holds_alternative<SolverAnswer::Infeasible>(answer));
@@ -471,9 +476,7 @@ ReachabilityResult ReachabilityChecker::checkReachability(unsigned const from, u
     assert(from <= to);
     for (unsigned i = from; i <= to; i++) {
         auto reach_res = reachable(i, formula);
-        if (std::holds_alternative<Reachable>(reach_res)) {
-            return Reachable{i};
-        }
+        if (std::holds_alternative<Reachable>(reach_res)) { return Reachable{i}; }
         if (i == to) {
             assert(std::holds_alternative<Unreachable>(reach_res));
             return reach_res;
@@ -482,3 +485,4 @@ ReachabilityResult ReachabilityChecker::checkReachability(unsigned const from, u
     assert(false);
     throw std::logic_error("Unreachable!");
 }
+} // namespace golem

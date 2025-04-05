@@ -9,6 +9,7 @@
 
 #include "Transformer.h"
 
+namespace golem {
 class MultiEdgeMerger : public Transformer {
 public:
     TransformationResult transform(std::unique_ptr<ChcDirectedHyperGraph> graph) override;
@@ -29,5 +30,6 @@ public:
         NonlinearCanonicalPredicateRepresentation predicateRepresentation;
     };
 };
+} // namespace golem
 
 #endif // GOLEM_MULTIEDGEMERGER_H

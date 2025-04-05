@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2023-2025, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
@@ -9,6 +9,7 @@
 
 #include "Transformer.h"
 
+namespace golem {
 /**
  * This transformation removes all direct edges from entry to exit nodes, unless one of such edges has a satisfiable
  * label. In such a case, the transformation returns the trivial graph with only this edge.
@@ -33,5 +34,6 @@ public:
 
     TransformationResult transform(std::unique_ptr<ChcDirectedHyperGraph> graph) override;
 };
+} // namespace golem
 
 #endif // GOLEM_TRIVIALEDGEPRUNER_H

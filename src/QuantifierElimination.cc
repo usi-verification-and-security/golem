@@ -1,8 +1,8 @@
 /*
-* Copyright (c) 2021-2025, Martin Blicha <martin.blicha@gmail.com>
-*
-* SPDX-License-Identifier: MIT
-*/
+ * Copyright (c) 2021-2025, Martin Blicha <martin.blicha@gmail.com>
+ *
+ * SPDX-License-Identifier: MIT
+ */
 
 #include "QuantifierElimination.h"
 
@@ -11,6 +11,7 @@
 #include "utils/SmtSolver.h"
 
 namespace {
+using namespace golem;
 PTRef eliminate(Logic & logic, PTRef fla, vec<PTRef> const & vars) {
     vec<PTRef> projections;
 
@@ -40,6 +41,7 @@ PTRef eliminate(Logic & logic, PTRef fla, vec<PTRef> const & vars) {
 }
 } // namespace
 
+namespace golem {
 PTRef QuantifierElimination::keepOnly(PTRef fla, const vec<PTRef> & varsToKeep) {
     auto allVars = TermUtils(logic).getVars(fla);
     vec<PTRef> toEliminate;
@@ -62,3 +64,4 @@ PTRef QuantifierElimination::eliminate(PTRef fla, vec<PTRef> const & vars) {
     fla = TermUtils(logic).toNNF(fla);
     return ::eliminate(logic, fla, vars);
 }
+} // namespace golem

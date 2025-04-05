@@ -1,6 +1,11 @@
+/*
+ * Copyright (c) 2025, Martin Blicha <martin.blicha@gmail.com>
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 #include "TestTemplate.h"
 #include "engine/PDKind.h"
-
 
 class PDKindTest : public LIAEngineTest {
 };

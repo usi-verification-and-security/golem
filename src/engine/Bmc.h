@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2022, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2020-2025, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
@@ -8,8 +8,10 @@
 #define GOLEM_BMC_H
 
 #include "Engine.h"
+#include "Options.h"
 #include "TransitionSystem.h"
 
+namespace golem {
 class BMC : public Engine {
     Logic & logic;
     // Options const & options;
@@ -39,5 +41,6 @@ private:
     TransitionSystemVerificationResult solveTransitionSystemInternal(TransitionSystem const & system);
     VerificationResult solveGeneralLinearSystem(ChcDirectedGraph const & graph);
 };
+} // namespace golem
 
 #endif // GOLEM_BMC_H

@@ -1,14 +1,12 @@
 /*
  * Copyright (c) 2022, Konstantin Britikov <britikovki@gmail.com>
- * Copyright (c) 2022, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2022-2025, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
 
 #include "TestTemplate.h"
 #include "engine/IMC.h"
-
-
 
 class IMCTest : public LIAEngineTest {};
 

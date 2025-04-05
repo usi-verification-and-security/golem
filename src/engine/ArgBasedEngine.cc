@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2024, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2024-2025, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
@@ -18,6 +18,7 @@
 #define TRACE(l, m)                                                                                                    \
     if (TRACE_LEVEL >= l) { std::cout << m << std::endl; }
 
+namespace golem {
 class PredicateAbstractionManager {
 public:
     explicit PredicateAbstractionManager(Logic & logic) : logic(logic) {}
@@ -850,3 +851,4 @@ vec<PTRef> ARG::computePropagatedPredicates(C const & candidates, std::vector<No
     }
     return impliedPredicates;
 }
+} // namespace golem

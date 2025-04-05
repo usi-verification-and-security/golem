@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2022-2025, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
@@ -7,14 +7,14 @@
 #ifndef GOLEM_KIND_H
 #define GOLEM_KIND_H
 
-
-
+# include "Options.h"
 #include "TransitionSystemEngine.h"
 #include "TransitionSystem.h"
 
+namespace golem {
 class Kind : public TransitionSystemEngine {
     Logic & logic;
-//    Options const & options;
+    //    Options const & options;
     int verbosity {0};
 public:
 
@@ -34,6 +34,7 @@ private:
     PTRef invariantFromBackwardInduction(TransitionSystem const & transitionSystem, unsigned long k) const;
 
 };
+} // namespace golem
 
 
 #endif //GOLEM_KIND_H

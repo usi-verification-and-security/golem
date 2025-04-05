@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2022, Konstantin Britikov <britikovki@gmail.com>
- * Copyright (c) 2023-2024, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2023-2025, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
@@ -8,11 +8,13 @@
 #ifndef GOLEM_IMC_H
 #define GOLEM_IMC_H
 
+#include "Options.h"
 #include "TransitionSystem.h"
 #include "TransitionSystemEngine.h"
 
 #include "osmt_solver.h"
 
+namespace golem {
 class IMC : public TransitionSystemEngine {
     Logic & logic;
     // Options const & options;
@@ -35,5 +37,6 @@ private:
 
     bool implies(PTRef antecedent, PTRef consequent) const;
 };
+} // namespace golem
 
 #endif // GOLEM_IMC_H

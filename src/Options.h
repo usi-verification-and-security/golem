@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2024, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2020-2025, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
@@ -11,12 +11,12 @@
 #include <optional>
 #include <string>
 
+namespace golem {
 class Options {
     std::map<std::string, std::string> options;
+
 public:
-    void addOption(std::string key, std::string value) {
-        options.emplace(std::move(key), std::move(value));
-    }
+    void addOption(std::string key, std::string value) { options.emplace(std::move(key), std::move(value)); }
 
     [[nodiscard]] std::optional<std::string> getOption(std::string const & key) const {
         auto it = options.find(key);
@@ -53,5 +53,5 @@ class CommandLineParser {
 public:
     Options parse(int argc, char * argv[]);
 };
-
-#endif //GOLEM_OPTIONS_H
+} // namespace golem
+#endif // GOLEM_OPTIONS_H

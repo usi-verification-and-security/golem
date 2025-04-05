@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2023, Matias Barandiaran <matias.barandiaran03@gmail.com>
- * Copyright (c) 2024, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2024-2025, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
@@ -15,6 +15,7 @@
 #include <memory>
 #include <utility>
 
+namespace golem {
 class Step {
 public:
     enum class StepType : char { ASSUME, STEP, ANCHOR };
@@ -147,5 +148,6 @@ private:
     // Assumes that arguments are already simplified
     TermPtr simplifyOpDirect(std::shared_ptr<Op> const & op);
 };
+} // namespace golem
 
 #endif // GOLEM_PROOFSTEPS_H

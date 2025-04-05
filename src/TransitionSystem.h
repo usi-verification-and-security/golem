@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2022, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2020-2025, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
@@ -12,6 +12,7 @@
 #include <memory>
 #include <vector>
 
+namespace golem {
 class SystemType {
 
     std::vector<PTRef> stateVars;
@@ -89,5 +90,6 @@ private:
 };
 
 PTRef kinductiveToInductive(PTRef invariant, unsigned k, TransitionSystem const & system);
+} // namespace golem
 
 #endif // GOLEM_TRANSITIONSYSTEM_H

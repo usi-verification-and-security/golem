@@ -1,9 +1,13 @@
-//
-// Created by Martin Blicha on 12.06.21.
-//
+/*
+ * Copyright (c) 2021-2025, Martin Blicha <martin.blicha@gmail.com>
+ *
+ * SPDX-License-Identifier: MIT
+ */
 
 #include <gtest/gtest.h>
 #include "QuantifierElimination.h"
+
+using namespace golem;
 
 class QE_RealTest : public ::testing::Test {
 protected:

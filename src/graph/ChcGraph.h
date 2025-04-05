@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2023, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2020-2025, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
@@ -15,22 +15,34 @@
 #include <memory>
 #include <optional>
 
+namespace golem {
 struct VId {
     std::size_t id;
 };
 
 struct EId {
-	std::size_t id;
+    std::size_t id;
 };
 
+inline bool operator==(VId first, VId second) {
+    return first.id == second.id;
+}
+inline bool operator!=(VId first, VId second) {
+    return not(first == second);
+}
+inline bool operator<(VId first, VId second) {
+    return first.id < second.id;
+}
 
-inline bool operator ==(VId first, VId second) { return first.id == second.id; }
-inline bool operator !=(VId first, VId second) { return not(first == second); }
-inline bool operator <(VId first, VId second) { return first.id < second.id; }
-
-inline bool operator ==(EId first, EId second) { return first.id == second.id; }
-inline bool operator !=(EId first, EId second) { return not(first == second); }
-inline bool operator <(EId first, EId second) { return first.id < second.id; }
+inline bool operator==(EId first, EId second) {
+    return first.id == second.id;
+}
+inline bool operator!=(EId first, EId second) {
+    return not(first == second);
+}
+inline bool operator<(EId first, EId second) {
+    return first.id < second.id;
+}
 
 struct DirectedHyperEdge {
     std::vector<SymRef> from;
@@ -56,15 +68,12 @@ class AdjacencyListsGraphRepresentation {
     AdjacencyList incomingEdges;
     AdjacencyList outgoingEdges;
 
-
-	AdjacencyListsGraphRepresentation(AdjacencyList && incoming, AdjacencyList && outgoing)
-		: incomingEdges(std::move(incoming)),
-		  outgoingEdges(std::move(outgoing))
-	{}
+    AdjacencyListsGraphRepresentation(AdjacencyList && incoming, AdjacencyList && outgoing)
+        : incomingEdges(std::move(incoming)), outgoingEdges(std::move(outgoing)) {}
 
 public:
-    static AdjacencyListsGraphRepresentation from(ChcDirectedGraph const& graph);
-    static AdjacencyListsGraphRepresentation from(ChcDirectedHyperGraph const& graph);
+    static AdjacencyListsGraphRepresentation from(ChcDirectedGraph const & graph);
+    static AdjacencyListsGraphRepresentation from(ChcDirectedHyperGraph const & graph);
     [[nodiscard]] std::vector<EId> const & getIncomingEdgesFor(SymRef sym) const {
         assert(incomingEdges.count(sym) > 0);
         return incomingEdges.at(sym);
@@ -94,8 +103,8 @@ struct EdgeHasher {
         // From Boost hash_combine
         std::hash<std::size_t> hasher;
         std::size_t res = 0;
-        res ^= hasher(pair.first.x) + 0x9e3779b9 + (res<<6) + (res>>2);
-        res ^= hasher(pair.second.x) + 0x9e3779b9 + (res<<6) + (res>>2);
+        res ^= hasher(pair.first.x) + 0x9e3779b9 + (res << 6) + (res >> 2);
+        res ^= hasher(pair.second.x) + 0x9e3779b9 + (res << 6) + (res >> 2);
         return res;
     }
 };
@@ -133,7 +142,7 @@ class ChcDirectedGraph {
     std::map<EId, DirectedEdge> edges;
     LinearCanonicalPredicateRepresentation predicates;
     Logic & logic;
-    mutable std::size_t freeId {0};
+    mutable std::size_t freeId{0};
 
     // graph transformations
     friend class NestedLoopTransformation;
@@ -142,8 +151,8 @@ class ChcDirectedGraph {
 
 public:
     ChcDirectedGraph(std::vector<DirectedEdge> const & edges, LinearCanonicalPredicateRepresentation predicates,
-                     Logic & logic) :
-         predicates(std::move(predicates)), logic(logic) {
+                     Logic & logic)
+        : predicates(std::move(predicates)), logic(logic) {
         std::size_t maxId = 0;
         for (auto & edge : edges) {
             maxId = std::max(maxId, edge.id.id);
@@ -156,7 +165,7 @@ public:
     std::vector<EId> getEdges() const;
 
     Logic & getLogic() const { return logic; }
-    void toDot(std::ostream& out, bool full = false) const;
+    void toDot(std::ostream & out, bool full = false) const;
     ChcDirectedGraph reverse() const;
     DirectedEdge reverseEdge(DirectedEdge const & edge, TermUtils const & utils) const;
 
@@ -169,34 +178,24 @@ public:
 
     PTRef getNextStateVersion(SymRef sym) const { return predicates.getTargetTermFor(sym); }
 
-    PTRef getEdgeLabel(EId eid) const {
-        return getEdge(eid).fla.fla;
-    }
+    PTRef getEdgeLabel(EId eid) const { return getEdge(eid).fla.fla; }
 
-    SymRef getSource(EId eid) const {
-        return getEdge(eid).from;
-    }
+    SymRef getSource(EId eid) const { return getEdge(eid).from; }
 
-    SymRef getTarget(EId eid) const {
-            return getEdge(eid).to;
-    }
+    SymRef getTarget(EId eid) const { return getEdge(eid).to; }
 
     std::unique_ptr<ChcDirectedHyperGraph> toHyperGraph() const;
 
-    template<typename TAction>
-    void forEachEdge(TAction action) const {
+    template<typename TAction> void forEachEdge(TAction action) const {
         for (auto const & edge : edges) {
             action(edge.second);
         }
     }
 
 private:
-    DirectedEdge const & getEdge(EId eid) const {
-        return edges.at(eid);
-    }
+    DirectedEdge const & getEdge(EId eid) const { return edges.at(eid); }
 
-    template<typename TPred>
-    void deleteMatchingEdges(TPred predicate) {
+    template<typename TPred> void deleteMatchingEdges(TPred predicate) {
         for (auto it = edges.cbegin(); it != edges.cend(); /* no increment */) {
             if (predicate(it->second)) {
                 it = edges.erase(it);
@@ -206,45 +205,37 @@ private:
         }
     }
 
-    EId freshId() const { return EId{freeId++};}
+    EId freshId() const { return EId{freeId++}; }
 
     void newEdge(SymRef from, SymRef to, InterpretedFla label) {
         EId eid = freshId();
         edges.emplace(eid, DirectedEdge{.from = from, .to = to, .fla = label, .id = eid});
     }
 
-    void updateEdgeLabel(EId edge, InterpretedFla label) {
-        edges[edge].fla  = label;
-    }
+    void updateEdgeLabel(EId edge, InterpretedFla label) { edges[edge].fla = label; }
 
-    void updateEdgeSource(EId edge, SymRef source) {
-        edges[edge].from  = source;
-    }
+    void updateEdgeSource(EId edge, SymRef source) { edges[edge].from = source; }
 
-    void updateEdgeTarget(EId edge, SymRef target) {
-        edges[edge].to  = target;
-    }
+    void updateEdgeTarget(EId edge, SymRef target) { edges[edge].to = target; }
 
-    void removeEdge(EId edge){
+    void removeEdge(EId edge) {
         const auto it = edges.find(edge);
-        if (it != edges.end())
-            edges.erase(it);
+        if (it != edges.end()) edges.erase(it);
     }
-
 };
-
 
 class ChcDirectedHyperGraph {
     std::map<EId, DirectedHyperEdge> edges;
     NonlinearCanonicalPredicateRepresentation predicates;
     Logic & logic;
-    mutable std::size_t freeId {0};
+    mutable std::size_t freeId{0};
 
     EId freshId() const { return EId{freeId++}; }
 
 public:
     class VertexInstances {
         std::map<EId, std::vector<unsigned>> instanceCounter;
+
     public:
         explicit VertexInstances(ChcDirectedHyperGraph const & graph);
 
@@ -261,11 +252,9 @@ public:
         std::vector<std::pair<DirectedHyperEdge, std::pair<std::size_t, std::size_t>>> replacing;
     };
 
-    ChcDirectedHyperGraph(std::vector<DirectedHyperEdge> edges,
-                          NonlinearCanonicalPredicateRepresentation predicates,
-                          Logic & logic) :
-        predicates(std::move(predicates)), logic(logic)
-    {
+    ChcDirectedHyperGraph(std::vector<DirectedHyperEdge> edges, NonlinearCanonicalPredicateRepresentation predicates,
+                          Logic & logic)
+        : predicates(std::move(predicates)), logic(logic) {
         for (auto & edge : edges) {
             EId eid = freshId();
             edge.id = eid;
@@ -283,25 +272,19 @@ public:
     SymRef getEntry() const { return logic.getSym_true(); }
     SymRef getExit() const { return logic.getSym_false(); }
 
-    PTRef getStateVersion(SymRef sym, unsigned instance = 0) const { return predicates.getSourceTermFor(sym, instance); }
+    PTRef getStateVersion(SymRef sym, unsigned instance = 0) const {
+        return predicates.getSourceTermFor(sym, instance);
+    }
 
     PTRef getNextStateVersion(SymRef sym) const { return predicates.getTargetTermFor(sym); }
 
-    DirectedHyperEdge const & getEdge(EId eid) const {
-        return edges.at(eid);
-    }
+    DirectedHyperEdge const & getEdge(EId eid) const { return edges.at(eid); }
 
-    PTRef getEdgeLabel(EId eid) const {
-        return getEdge(eid).fla.fla;
-    }
+    PTRef getEdgeLabel(EId eid) const { return getEdge(eid).fla.fla; }
 
-    std::vector<SymRef> const & getSources(EId eid) const {
-        return getEdge(eid).from;
-    }
+    std::vector<SymRef> const & getSources(EId eid) const { return getEdge(eid).from; }
 
-    SymRef getTarget(EId eid) const {
-        return getEdge(eid).to;
-    }
+    SymRef getTarget(EId eid) const { return getEdge(eid).to; }
     DirectedHyperEdge contractTrivialChain(std::vector<EId> const & trivialChain);
     VertexContractionResult contractVertex(SymRef sym);
 
@@ -310,15 +293,13 @@ public:
     using MergedEdges = std::vector<std::pair<std::vector<DirectedHyperEdge>, DirectedHyperEdge>>;
     MergedEdges mergeMultiEdges();
 
-    template<typename TAction>
-    void forEachEdge(TAction action) const {
+    template<typename TAction> void forEachEdge(TAction action) const {
         for (auto const & entry : edges) {
             action(entry.second);
         }
     }
 
-    template<typename TAction>
-    void forEachEdge(TAction action) {
+    template<typename TAction> void forEachEdge(TAction action) {
         for (auto & entry : edges) {
             action(entry.second);
         }
@@ -348,8 +329,7 @@ private:
         return eid;
     }
 
-    template<typename TPred>
-    void deleteMatchingEdges(TPred predicate) {
+    template<typename TPred> void deleteMatchingEdges(TPred predicate) {
         for (auto it = edges.cbegin(); it != edges.cend(); /* no increment */) {
             if (predicate(it->second)) {
                 it = edges.erase(it);
@@ -368,10 +348,13 @@ private:
     PTRef mergeTrivialChainLabels(std::vector<EId> const & chain) const;
 };
 
-std::optional<EId> getSelfLoopFor(SymRef, ChcDirectedGraph const & graph, AdjacencyListsGraphRepresentation const & adjacencyRepresentation);
+std::optional<EId> getSelfLoopFor(SymRef, ChcDirectedGraph const & graph,
+                                  AdjacencyListsGraphRepresentation const & adjacencyRepresentation);
 
-std::vector<SymRef> reversePostOrder(ChcDirectedGraph const & graph, AdjacencyListsGraphRepresentation const & adjacencyRepresentation);
-std::vector<SymRef> postOrder(ChcDirectedGraph const & graph, AdjacencyListsGraphRepresentation const & adjacencyRepresentation);
+std::vector<SymRef> reversePostOrder(ChcDirectedGraph const & graph,
+                                     AdjacencyListsGraphRepresentation const & adjacencyRepresentation);
+std::vector<SymRef> postOrder(ChcDirectedGraph const & graph,
+                              AdjacencyListsGraphRepresentation const & adjacencyRepresentation);
 
 class ReverseDFS {
     ChcDirectedHyperGraph const & graph;
@@ -394,11 +377,10 @@ class ReverseDFS {
         }
         postorder(sym);
     }
+
 public:
-    ReverseDFS(ChcDirectedHyperGraph const & graph, AdjacencyListsGraphRepresentation const & adjacencyRepresentation) :
-        graph(graph),
-        adjacencyRepresentation(adjacencyRepresentation)
-    {}
+    ReverseDFS(ChcDirectedHyperGraph const & graph, AdjacencyListsGraphRepresentation const & adjacencyRepresentation)
+        : graph(graph), adjacencyRepresentation(adjacencyRepresentation) {}
 
     template<typename TPreorderAction, typename TPostorderAction>
     void run(TPreorderAction const & preorder, TPostorderAction const & postorder) && {
@@ -411,5 +393,5 @@ bool isNonLoopNode(SymRef, AdjacencyListsGraphRepresentation const &, ChcDirecte
 bool hasHyperEdge(SymRef, AdjacencyListsGraphRepresentation const &, ChcDirectedHyperGraph const & graph);
 
 bool isSimpleNode(SymRef, AdjacencyListsGraphRepresentation const &);
-
-#endif //GOLEM_CHCGRAPH_H
+} // namespace golem
+#endif // GOLEM_CHCGRAPH_H

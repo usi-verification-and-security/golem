@@ -1,9 +1,11 @@
-//
-// Created by Martin Blicha on 15.07.20.
-//
+/*
+ * Copyright (c) 2020-2025, Martin Blicha <martin.blicha@gmail.com>
+ *
+ * SPDX-License-Identifier: MIT
+ */
 
-#ifndef OPENSMT_CHCSYSTEM_H
-#define OPENSMT_CHCSYSTEM_H
+#ifndef GOLEM_CHCSYSTEM_H
+#define GOLEM_CHCSYSTEM_H
 
 #include "osmt_terms.h"
 
@@ -11,6 +13,7 @@
 #include <unordered_set>
 #include <iosfwd>
 
+namespace golem {
 struct UninterpretedPredicate {
     PTRef predicate;
 };
@@ -91,7 +94,6 @@ public:
 class PTRefToCHC {
 public:
     static ChcHead constructHead(PTRef head) { return ChcHead{head};}
-//    static ChcHead constructEmptyHead() { return ChcHead{PTRef_Undef};}
     static ChcBody constructBody(PTRef interpreted, std::vector<PTRef> const & uninterpreted) {
         return constructBody(interpreted, uninterpreted.begin(), uninterpreted.end());
     }
@@ -104,5 +106,5 @@ public:
         return ChcBody{{interpreted}, std::move(uninterpretedPart)};
     }
 };
-
-#endif //OPENSMT_CHCSYSTEM_H
+} // namespace golem
+#endif // GOLEM_CHCSYSTEM_H

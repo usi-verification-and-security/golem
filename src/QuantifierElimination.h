@@ -9,6 +9,7 @@
 
 #include "osmt_terms.h"
 
+namespace golem {
 /*
  * A utility for precise elimination of (existential) quantifiers from a formula.
  *
@@ -25,5 +26,6 @@ public:
 private:
     Logic & logic;
 };
+} // namespace golem
 
-#endif //OPENSMT_QUANTIFIERELIMINATION_H
+#endif // OPENSMT_QUANTIFIERELIMINATION_H

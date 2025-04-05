@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2024, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2020-2025, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
@@ -13,6 +13,7 @@
 #include "transformers/SingleLoopTransformation.h"
 #include "utils/SmtSolver.h"
 
+namespace golem {
 VerificationResult BMC::solve(ChcDirectedGraph const & graph) {
     if (isTrivial(graph)) { return solveTrivial(graph); }
     if (isTransitionSystem(graph)) { return solveTransitionSystem(graph); }
@@ -40,7 +41,8 @@ TransitionSystemVerificationResult BMC::solveTransitionSystemInternal(Transition
     SMTSolver solver(logic, SMTSolver::WitnessProduction::NONE);
     //    std::cout << "Adding initial states: " << logic.pp(init) << std::endl;
     solver.assertProp(init);
-    { // Check for system with empty initial states
+    {
+        // Check for system with empty initial states
         auto res = solver.check();
         if (res == SMTSolver::Answer::UNSAT) {
             return TransitionSystemVerificationResult{VerificationAnswer::SAFE, logic.getTerm_false()};
@@ -190,3 +192,4 @@ VerificationResult BMC::solveGeneralLinearSystem(ChcDirectedGraph const & graph)
     }
     return VerificationResult(VerificationAnswer::UNKNOWN);
 }
+} // namespace golem

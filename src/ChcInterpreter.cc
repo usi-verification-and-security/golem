@@ -22,6 +22,7 @@
 
 using namespace opensmt::tokens;
 
+namespace golem {
 namespace {
 bool addLetFrame(const vec<char *> & names, vec<PTRef> const & args, Logic & logic, LetRecords & letRecords) {
     assert(names.size() == args.size());
@@ -592,3 +593,4 @@ std::optional<ChClause> ChcInterpreterContext::chclauseFromPTRef(PTRef ref) {
 bool ChcInterpreterContext::isUninterpretedPredicate(PTRef ref) const {
     return system->isUninterpretedPredicate(logic.getSymRef(ref));
 }
+} // namespace golem

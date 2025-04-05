@@ -1,11 +1,12 @@
 /*
- * Copyright (c) 2023-2024, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2023-2025, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
 
 #include "SmtSolver.h"
 
+namespace golem {
 SMTSolver::SMTSolver(Logic & logic, WitnessProduction setup) {
     bool produceModel = setup == WitnessProduction::ONLY_MODEL || setup == WitnessProduction::MODEL_AND_INTERPOLANTS;
     bool produceInterpolants =
@@ -98,3 +99,4 @@ Formulas impliedBy(Formulas candidates, vec<PTRef> const & assertions, Logic & l
     }
     return impliedBy(solver, std::move(candidates), logic);
 }
+} // namespace golem

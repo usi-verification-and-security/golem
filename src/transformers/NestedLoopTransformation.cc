@@ -11,6 +11,7 @@
 #include "graph/ChcGraph.h"
 #include "utils/SmtSolver.h"
 
+namespace golem {
 std::tuple<std::unique_ptr<ChcDirectedGraph>, std::unique_ptr<NestedLoopTransformation::WitnessBackTranslator>>
 NestedLoopTransformation::transform(ChcDirectedGraph const & graph) {
     auto vertices = graph.getVertices();
@@ -204,3 +205,4 @@ NestedLoopTransformation::WitnessBackTranslator::getVarsForVertex(WitnessInfo wt
     }
     return vars;
 }
+} // namespace golem

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2023, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2022-2025, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
@@ -9,6 +9,7 @@
 
 #include "Transformer.h"
 
+namespace golem {
 /*
  * Transformation pass that eliminates some nodes from the graph, using contraction.
  *
@@ -51,5 +52,6 @@ class SimpleNodeEliminator : public NodeEliminator {
 public:
     SimpleNodeEliminator() : NodeEliminator(SimpleNodeEliminatorPredicate()) {}
 };
+} // namespace golem
 
 #endif //GOLEM_NODEELIMINATOR_H

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2023-2025, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
@@ -10,6 +10,7 @@
 #include "TransformationUtils.h"
 #include "utils/SmtSolver.h"
 
+namespace golem {
 SingleLoopTransformation::TransformationResult SingleLoopTransformation::transform(const ChcDirectedGraph & graph) {
     Logic & logic = graph.getLogic();
     TimeMachine timeMachine(logic);
@@ -215,3 +216,4 @@ SingleLoopTransformation::WitnessBackTranslator::getVarsForVertex(SymRef vertex)
     }
     return vars;
 }
+} // namespace golem

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2024, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2024-2025, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
@@ -9,6 +9,7 @@
 #include "transformers/CommonUtils.h"
 #include "utils/SmtSolver.h"
 
+namespace golem {
 namespace {
 using KnownValues = std::vector<PTRef>;
 using IndexMap = std::unordered_map<PTRef, unsigned, PTRefHash>;
@@ -37,9 +38,10 @@ KnownValues computeKnownValues(PTRef fla, IndexMap const & varToIndex, Logic & l
     }
     return values;
 }
-}
+} // namespace
 
-std::vector<EId> computeFeasibleTransitions(ChcDirectedHyperGraph const & graph, std::vector<EId> const & incomingEdges, EId outgoingEdge) {
+std::vector<EId> computeFeasibleTransitions(ChcDirectedHyperGraph const & graph, std::vector<EId> const & incomingEdges,
+                                            EId outgoingEdge) {
     std::vector<EId> feasibleTransitions;
     if (incomingEdges.empty()) { return feasibleTransitions; }
     auto & logic = graph.getLogic();
@@ -51,7 +53,8 @@ std::vector<EId> computeFeasibleTransitions(ChcDirectedHyperGraph const & graph,
     }
     assert(graph.getSources(outgoingEdge).size() == 1);
     auto vertex = graph.getSources(outgoingEdge).front();
-    assert(std::all_of(incomingEdges.begin(), incomingEdges.end(), [&](EId eid){ return graph.getTarget(eid) == vertex; }));
+    assert(std::all_of(incomingEdges.begin(), incomingEdges.end(),
+                       [&](EId eid) { return graph.getTarget(eid) == vertex; }));
     TermUtils utils(logic);
     auto sourceVars = utils.predicateArgsInOrder(graph.getStateVersion(vertex));
     std::unordered_map<PTRef, unsigned, PTRefHash> varToIndex;
@@ -72,12 +75,12 @@ std::vector<EId> computeFeasibleTransitions(ChcDirectedHyperGraph const & graph,
         assert(targetValues.size() == sourceValues.size());
         bool feasible = true;
         for (auto i = 0u; i < sourceValues.size(); ++i) {
-            feasible &= sourceValues[i] == PTRef_Undef or targetValues[i] == PTRef_Undef or sourceValues[i] == targetValues[i];
+            feasible &=
+                sourceValues[i] == PTRef_Undef or targetValues[i] == PTRef_Undef or sourceValues[i] == targetValues[i];
         }
         if (feasible) { feasibleTransitions.push_back(incomingEdge); }
     }
     return feasibleTransitions;
-
 }
 
 Transformer::TransformationResult EdgeInliner::transform(std::unique_ptr<ChcDirectedHyperGraph> graph) {
@@ -98,9 +101,8 @@ Transformer::TransformationResult EdgeInliner::transform(std::unique_ptr<ChcDire
                 auto computePredecessors = [&](SymRef node) {
                     auto const & predecessorsIds = adjacencyLists.getIncomingEdgesFor(node);
                     std::vector<DirectedHyperEdge> predecessors;
-                    std::transform(predecessorsIds.begin(), predecessorsIds.end(), std::back_inserter(predecessors), [&](EId eid) {
-                        return graph->getEdge(eid);
-                    });
+                    std::transform(predecessorsIds.begin(), predecessorsIds.end(), std::back_inserter(predecessors),
+                                   [&](EId eid) { return graph->getEdge(eid); });
                     return predecessors;
                 };
                 if (feasibleTransitions.empty()) {
@@ -109,11 +111,15 @@ Transformer::TransformationResult EdgeInliner::transform(std::unique_ptr<ChcDire
                     graph->deleteEdges({edge.id});
                 } else if (feasibleTransitions.size() == 1) {
                     auto predecessor = feasibleTransitions[0];
-                    if (graph->getSources(predecessor).size() != 1 or graph->getSources(predecessor).front() == graph->getTarget(predecessor)) { continue; }
+                    if (graph->getSources(predecessor).size() != 1 or
+                        graph->getSources(predecessor).front() == graph->getTarget(predecessor)) {
+                        continue;
+                    }
                     // Only one way how to get here, combine the two edge and remove this one
                     auto predecessors = computePredecessors(source);
                     auto newEdge = graph->inlineEdge(edge.id, predecessor);
-                    backtranslator->notifyEdgeReplaced(newEdge, edge, graph->getEdge(predecessor), std::move(predecessors));
+                    backtranslator->notifyEdgeReplaced(newEdge, edge, graph->getEdge(predecessor),
+                                                       std::move(predecessors));
                 }
                 somethingChanged = true;
                 // recompute necessary information
@@ -130,7 +136,7 @@ InvalidityWitness EdgeInliner::BackTranslator::translate(InvalidityWitness witne
         if (std::holds_alternative<Deletion>(entry)) { continue; }
         auto const & replacementInfo = std::get<Replacement>(entry);
         bool replacementUsed = true;
-        while(replacementUsed) {
+        while (replacementUsed) {
             replacementUsed = false;
             auto & derivation = witness.getDerivation();
             for (auto it = derivation.begin(); it != derivation.end(); ++it) {
@@ -139,8 +145,7 @@ InvalidityWitness EdgeInliner::BackTranslator::translate(InvalidityWitness witne
                     std::size_t index = it - derivation.begin();
                     auto newDerivation = replaceSummarizingStep(
                         derivation, index, {replacementInfo.predecessor, replacementInfo.removedEdge},
-                        replacementInfo.addedEdge, predicateRepresentation, logic
-                    );
+                        replacementInfo.addedEdge, predicateRepresentation, logic);
                     witness.setDerivation(std::move(newDerivation));
                     replacementUsed = true;
                     break;
@@ -151,7 +156,11 @@ InvalidityWitness EdgeInliner::BackTranslator::translate(InvalidityWitness witne
     return witness;
 }
 
-#define SANITY_CHECK(cond) if (not (cond)) { assert(false); return ValidityWitness{}; }
+#define SANITY_CHECK(cond)                                                                                             \
+    if (not(cond)) {                                                                                                   \
+        assert(false);                                                                                                 \
+        return ValidityWitness{};                                                                                      \
+    }
 ValidityWitness EdgeInliner::BackTranslator::translate(ValidityWitness witness) {
     if (entries.empty()) { return witness; }
     auto definitions = witness.getDefinitions();
@@ -164,9 +173,7 @@ ValidityWitness EdgeInliner::BackTranslator::translate(ValidityWitness witness) 
             auto source = deletedEdge.from.front();
             auto target = deletedEdge.to;
             SANITY_CHECK(predecessors.count(deletedEdge.id) > 0);
-            if (definitions.find(source) == definitions.end()) {
-                definitions.insert({source, logic.getTerm_true()});
-            }
+            if (definitions.find(source) == definitions.end()) { definitions.insert({source, logic.getTerm_true()}); }
             // Compute an interpolant between the predecessors and the edge, conjoin to existing interpretation
             if (predecessors.at(deletedEdge.id).empty()) {
                 definitions.at(source) = logic.getTerm_false();
@@ -181,9 +188,7 @@ ValidityWitness EdgeInliner::BackTranslator::translate(ValidityWitness witness) 
                 PTRef & currentInterpretation = definitions.at(source);
                 currentInterpretation = logic.mkAnd(currentInterpretation, interpolant);
             }
-            if (definitions.find(target) == definitions.end()) {
-                definitions.insert({target, logic.getTerm_true()});
-            }
+            if (definitions.find(target) == definitions.end()) { definitions.insert({target, logic.getTerm_true()}); }
             continue;
         }
         assert(std::holds_alternative<Replacement>(entry));
@@ -209,7 +214,8 @@ ValidityWitness EdgeInliner::BackTranslator::translate(ValidityWitness witness) 
             }
         }
         PTRef incomingConstraint = logic.mkOr(std::move(incoming));
-        PTRef outgoingConstraint = logic.mkAnd(replacementInfo.removedEdge.fla.fla, logic.mkNot(manager.baseFormulaToTarget(definitions.at(target))));
+        PTRef outgoingConstraint = logic.mkAnd(replacementInfo.removedEdge.fla.fla,
+                                               logic.mkNot(manager.baseFormulaToTarget(definitions.at(target))));
         PTRef interpolant = computeInterpolantFor(mid, incomingConstraint, outgoingConstraint);
         PTRef & existingInterpretation = definitions.at(mid);
         existingInterpretation = logic.mkAnd(existingInterpretation, interpolant);
@@ -225,8 +231,7 @@ void EdgeInliner::BackTranslator::notifyEdgeDeleted(DirectedHyperEdge const & de
 
 void EdgeInliner::BackTranslator::notifyEdgeReplaced(DirectedHyperEdge const & newEdge,
                                                      DirectedHyperEdge const & removedEdge,
-                                                     DirectedHyperEdge const & predecessor,
-                                                     Predecessors predecessors) {
+                                                     DirectedHyperEdge const & predecessor, Predecessors predecessors) {
     entries.emplace_back(Replacement{.addedEdge = newEdge, .removedEdge = removedEdge, .predecessor = predecessor});
     assert(this->predecessors.find(removedEdge.id) == this->predecessors.end());
     this->predecessors.insert({removedEdge.id, std::move(predecessors)});
@@ -288,4 +293,4 @@ PTRef EdgeInliner::BackTranslator::computeInterpolantFor(SymRef node, PTRef inco
     PTRef renamedInterpolant = utils.varSubstitute(interpolant, substitutionsMap);
     return renamedInterpolant;
 }
-
+} // namespace golem

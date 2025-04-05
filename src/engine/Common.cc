@@ -2,6 +2,7 @@
 
 #include "utils/SmtSolver.h"
 
+namespace golem {
 VerificationResult solveTrivial(ChcDirectedGraph const & graph) {
     Logic & logic = graph.getLogic();
     // All edges should be between entry and exit, check if any of them has a satisfiable label
@@ -33,3 +34,4 @@ VerificationResult solveTrivial(ChcDirectedGraph const & graph) {
     // Here we know that no edge is satisfiable
     return {VerificationAnswer::SAFE, ValidityWitness::trivialWitness(graph)};
 }
+} // namespace golem

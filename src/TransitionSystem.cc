@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2022, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2020-2025, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
@@ -11,6 +11,7 @@
 #include "utils/SmtSolver.h"
 #include "utils/Timer.h"
 
+namespace golem {
 bool TransitionSystem::isWellFormed() {
     // return systemType->isStateFormula(init) && systemType->isStateFormula(query) && systemType->isTransitionFormula(transition);
     bool ok = systemType->isStateFormula(init);
@@ -305,3 +306,4 @@ PTRef kinductiveToInductive(PTRef invariant, unsigned k, TransitionSystem const 
     // std::cout << timer.elapsedMilliseconds() << " ms" << std::endl;
     return res;
 }
+} // namespace golem

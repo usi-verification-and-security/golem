@@ -9,6 +9,7 @@
 
 #include "Engine.h"
 
+namespace golem {
 class TransitionSystemEngine : public Engine {
 public:
     VerificationResult solve(ChcDirectedHyperGraph const &) override;
@@ -18,5 +19,6 @@ public:
 protected:
     bool computeWitness{false};
 };
+} // namespace golem
 
 #endif //TRANSITIONSYSTEMENGINE_H

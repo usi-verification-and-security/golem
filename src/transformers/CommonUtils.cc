@@ -9,6 +9,7 @@
 
 #include "utils/SmtSolver.h"
 
+namespace golem {
 using DerivationStep = InvalidityWitness::Derivation::DerivationStep;
 
 InvalidityWitness::Derivation replaceSummarizingStep(
@@ -284,3 +285,4 @@ PTRef EdgeTranslator::translateEdge(DirectedEdge const & edge) const {
                           updatedLocation};
     return logic.mkAnd(std::move(components));
 }
+} // namespace golem

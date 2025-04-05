@@ -15,7 +15,7 @@
 #include "SimpleChainSummarizer.h"
 #include "TrivialEdgePruner.h"
 
-namespace Transformations {
+namespace golem::Transformations {
 
 namespace {
 
@@ -82,4 +82,4 @@ TransformationPipeline defaultTransformationPipeline() {
     stages.push_back(std::make_unique<TrivialEdgePruner>());
     return TransformationPipeline(std::move(stages));
 }
-} // namespace Transformations
+} // namespace golem::Transformations

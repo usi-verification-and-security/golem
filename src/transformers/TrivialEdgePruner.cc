@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2023-2025, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
@@ -8,6 +8,7 @@
 
 #include "utils/SmtSolver.h"
 
+namespace golem {
 Transformer::TransformationResult TrivialEdgePruner::transform(std::unique_ptr<ChcDirectedHyperGraph> graph) {
     std::vector<EId> directEdges;
     graph->forEachEdge([&](auto const & edge) {
@@ -54,3 +55,4 @@ ValidityWitness TrivialEdgePruner::BackTranslator::translate(ValidityWitness wit
     assert(not satisfiableEdge);
     return witness;
 }
+} // namespace golem

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2023-2025, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
 */
@@ -7,6 +7,8 @@
 #include "TestTemplate.h"
 #include "TransformationUtils.h"
 #include <gtest/gtest.h>
+
+using namespace golem;
 
 class TransformationUtils_Test : public LIAEngineTest {
 };

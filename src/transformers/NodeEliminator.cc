@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2023, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2022-2025, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
@@ -9,6 +9,7 @@
 #include "CommonUtils.h"
 #include "utils/SmtSolver.h"
 
+namespace golem {
 void NodeEliminator::BackTranslator::notifyRemovedVertex(SymRef sym, ContractionResult && contractionResult) {
     assert(nodeInfo.count(sym) == 0);
     removedNodes.push_back(sym);
@@ -185,3 +186,4 @@ ValidityWitness NodeEliminator::BackTranslator::translate(ValidityWitness witnes
     }
     return ValidityWitness(std::move(definitions));
 }
+} // namespace golem

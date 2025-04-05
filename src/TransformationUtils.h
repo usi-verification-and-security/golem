@@ -1,11 +1,11 @@
 /*
- * Copyright (c) 2020-2023, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2020-2025, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
 
-#ifndef OPENSMT_TRANSFORMATIONUTILS_H
-#define OPENSMT_TRANSFORMATIONUTILS_H
+#ifndef GOLEM_TRANSFORMATIONUTILS_H
+#define GOLEM_TRANSFORMATIONUTILS_H
 
 #include "TransitionSystem.h"
 #include "Witnesses.h"
@@ -13,6 +13,7 @@
 
 #include <memory>
 
+namespace golem {
 bool isTransitionSystem(ChcDirectedGraph const & graph);
 
 bool isTransitionSystemDAG(ChcDirectedGraph const & graph);
@@ -35,5 +36,6 @@ PTRef transitionFormulaInSystemType(SystemType const & systemType, EdgeVariables
                                     Logic & logic);
 
 std::vector<EId> detectLoop(const ChcDirectedGraph & graph);
+} // namespace golem
 
-#endif // OPENSMT_TRANSFORMATIONUTILS_H
+#endif // GOLEM_TRANSFORMATIONUTILS_H

@@ -1,3 +1,8 @@
+src/ModelBasedProjection.cc
+src/ModelBasedProjection.h
+src/Options.h
+src/TermUtils.cc
+src/TermUtils.h
 src/TransformationUtils.cc
 src/TransformationUtils.h
 src/TransitionSystem.cc
@@ -13,6 +18,12 @@ src/engine/DAR.cc
 src/engine/DAR.h
 src/engine/IMC.cc
 src/engine/IMC.h
+src/engine/Lawi.cc
+src/engine/Lawi.h
+src/engine/PDKind.cc
+src/engine/PDKind.h
+src/engine/Spacer.cc
+src/engine/Spacer.h
 src/engine/TPA.cc
 src/engine/TPA.h
 src/engine/Common.cc
@@ -22,17 +33,24 @@ src/engine/EngineFactory.h
 src/engine/ArgBasedEngine.cc
 src/engine/ArgBasedEngine.h
 
+src/graph/ChcGraph.cc
+src/graph/ChcGraph.h
+
 src/proofs/ProofSteps.cc
 src/proofs/ProofSteps.h
 src/proofs/Term.cc
 src/proofs/Term.h
 
+src/transformers/EdgeInliner.cc
+src/transformers/EdgeInliner.h
 src/transformers/MultiEdgeMerger.cc
 src/transformers/MultiEdgeMerger.h
 src/transformers/SingleLoopTransformation.cc
 src/transformers/SingleLoopTransformation.h
 src/transformers/NestedLoopTransformation.cc
 src/transformers/NestedLoopTransformation.h
+src/transformers/RemoveUnreachableNodes.cc
+src/transformers/RemoveUnreachableNodes.h
 src/transformers/TrivialEdgePruner.cc
 src/transformers/TrivialEdgePruner.h
 
