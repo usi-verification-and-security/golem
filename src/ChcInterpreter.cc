@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2024, Martin Blicha <martin.blicha@gmail.com>
+ * Copyright (c) 2020-2025, Martin Blicha <martin.blicha@gmail.com>
  *
  * SPDX-License-Identifier: MIT
  */
@@ -12,10 +12,12 @@
 #include "graph/ChcGraphBuilder.h"
 #include "proofs/Term.h"
 #include "transformers/BasicTransformationPipelines.h"
+#include "utils/ScopeGuard.h"
 
 #include <csignal>
 #include <memory>
 
+#include <sys/mman.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -483,30 +485,41 @@ void ChcInterpreterContext::interpretCheckSat() {
     // This if is needed to run the portfolio of multiple engines
     auto engineName = opts.getOrDefault(Options::ENGINE, "spacer");
     if (engineName.find(',') != std::string::npos) {
-        std::string tmp;
         std::vector<std::string> engines;
         std::stringstream ss(engineName);
-        while (getline(ss, tmp, ',')) {
-            engines.push_back(tmp);
+        std::string token;
+        while (std::getline(ss, token, ',')) {
+            engines.push_back(token);
         }
-
         pid_t parent = getpid();
         std::vector<pid_t> processes;
+        void * mptr = mmap(nullptr, sizeof(pid_t), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+        if (mptr == MAP_FAILED) {
+            reportError("Problem setting up multi-engine run");
+            exit(1);
+        }
+        pid_t * winner_pid = static_cast<pid_t *>(mptr);
+        *winner_pid = -1;
         for (uint i = 0; i < engines.size(); i++) {
             if (getpid() == parent) { processes.push_back(fork()); }
             if (processes[i] == 0) {
                 // child process
                 auto result = solve(engines[i], *hypergraph);
                 if (result.getAnswer() == VerificationAnswer::UNKNOWN) { exit(1); }
-                printAnswer(result.getAnswer());
-                if (hasWorkAfterAnswer()) {
-                    doWorkAfterAnswer(std::move(result), *originalGraph, *translator,
-                                      normalizer.getNormalizingEqualities());
+                if (__sync_bool_compare_and_swap(winner_pid, -1, getpid())) {
+                    printAnswer(result.getAnswer());
+                    if (hasWorkAfterAnswer()) {
+                        doWorkAfterAnswer(std::move(result), *originalGraph, *translator,
+                                          normalizer.getNormalizingEqualities());
+                    }
+                    exit(0);
+                } else {
+                    exit(1); // Exit with error so that the main process would not kill the child working on witness
                 }
-                return;
             }
         }
 
+        auto guard = ScopeGuard{[&]() { munmap(winner_pid, sizeof(pid_t)); }};
         while (true) {
             int status;
             // Parent process waits until at least one child finishes
