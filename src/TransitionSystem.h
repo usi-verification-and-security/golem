@@ -17,12 +17,11 @@ class SystemType {
 
     std::vector<PTRef> stateVars;
     std::vector<PTRef> nextStateVars;
-    std::vector<PTRef> auxiliaryVars; // Allowed in the transition relation
+    std::vector<PTRef> auxiliaryVars; // Allowed in transition relation, but also in the initital states or bad states
 
     Logic & logic;
 
 public:
-    SystemType(std::vector<SRef> stateVarTypes, Logic & logic);
     SystemType(std::vector<SRef> stateVarTypes, std::vector<SRef> auxiliaryVarTypes, Logic & logic);
     SystemType(std::vector<PTRef> stateVars, std::vector<PTRef> auxiliaryVars, Logic & logic);
     SystemType(vec<PTRef> const & stateVars, vec<PTRef> const & auxiliaryVars, Logic & logic);

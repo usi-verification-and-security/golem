@@ -83,15 +83,18 @@ SystemType::SystemType(vec<PTRef> const & stateVars, vec<PTRef> const & auxiliar
     std::ranges::copy(auxiliaryVars, std::back_inserter(this->auxiliaryVars));
 }
 
+namespace {
+using namespace std;
+bool isSubsetOf(auto const & subset, auto const & superset) {
+    return ranges::all_of(subset, [&](PTRef elem) { return ranges::find(superset, elem) != end(superset); });
+}
+} // namespace
+
 bool SystemType::isStateFormula(PTRef fla) const {
-    auto const & currentStateVars = stateVars;
+    std::vector<PTRef> allowedVars = stateVars;
+    allowedVars.insert(allowedVars.end(), auxiliaryVars.begin(), auxiliaryVars.end());
     vec<PTRef> vars = TermUtils(logic).getVars(fla);
-    for (PTRef var : vars) {
-        if (std::ranges::find(currentStateVars, var) == std::end(currentStateVars)) {
-            return false;
-        }
-    }
-    return true;
+    return isSubsetOf(vars, allowedVars);
 }
 
 bool SystemType::isTransitionFormula(PTRef fla) const {
@@ -101,9 +104,7 @@ bool SystemType::isTransitionFormula(PTRef fla) const {
     allVars.insert(allVars.end(), nextStateVars.begin(), nextStateVars.end());
     allVars.insert(allVars.end(), auxiliaryVars.begin(), auxiliaryVars.end());
     vec<PTRef> vars = TermUtils(logic).getVars(fla);
-    return std::ranges::all_of(vars, [&allVars](PTRef var) {
-        return std::ranges::find(allVars, var) != std::end(allVars);
-    });
+    return isSubsetOf(vars, allVars);
 }
 
 PTRef TransitionSystem::getInit() const {

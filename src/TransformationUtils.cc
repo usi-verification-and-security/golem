@@ -36,19 +36,31 @@ bool isTransitionSystem(ChcDirectedGraph const & graph) {
 
 std::unique_ptr<TransitionSystem> toTransitionSystem(ChcDirectedGraph const & graph) {
     Logic & logic = graph.getLogic();
-    auto adjacencyRepresentation = AdjacencyListsGraphRepresentation::from(graph);
-    auto vertices = reversePostOrder(graph, adjacencyRepresentation);
+    auto const adjacencyRepresentation = AdjacencyListsGraphRepresentation::from(graph);
+    auto const vertices = reversePostOrder(graph, adjacencyRepresentation);
     assert(vertices.size() == 3);
-    auto loopNode = vertices[1];
-    EId loopEdge = getSelfLoopFor(loopNode, graph, adjacencyRepresentation).value();
-    auto edgeVars = getVariablesFromEdge(logic, graph, loopEdge);
+    auto systemVariables = [&]() -> EdgeVariables {
+        EdgeVariables variables;
+        graph.forEachEdge([&](DirectedEdge const & edge) {
+            auto edgeVars = getVariablesFromEdge(logic, graph, edge.id);
+            if (edge.from == edge.to) {
+                variables.stateVars = std::move(edgeVars.stateVars);
+                variables.nextStateVars = std::move(edgeVars.nextStateVars);
+                std::ranges::move(edgeVars.auxiliaryVars, std::back_inserter(variables.auxiliaryVars));
+            } else {
+                std::ranges::move(edgeVars.auxiliaryVars, std::back_inserter(variables.auxiliaryVars));
+            }
+        });
+        return variables;
+    }();
+
     // Now we can continue building the transition system
-    auto systemType = systemTypeFrom(edgeVars.stateVars, edgeVars.auxiliaryVars, logic);
+    auto systemType = systemTypeFrom(systemVariables.stateVars, systemVariables.auxiliaryVars, logic);
     auto stateVars = systemType->getStateVars();
     auto nextStateVars = systemType->getNextStateVars();
     auto auxiliaryVars = systemType->getAuxiliaryVars();
-    assert(stateVars.size() == edgeVars.stateVars.size());
-    assert(nextStateVars.size() == edgeVars.nextStateVars.size());
+    assert(stateVars.size() == systemVariables.stateVars.size());
+    assert(nextStateVars.size() == systemVariables.nextStateVars.size());
     PTRef init = PTRef_Undef;
     PTRef transitionRelation = PTRef_Undef;
     PTRef bad = PTRef_Undef;
@@ -63,30 +75,35 @@ std::unique_ptr<TransitionSystem> toTransitionSystem(ChcDirectedGraph const & gr
         TermUtils utils(logic);
         if (isInit) {
             std::unordered_map<PTRef, PTRef, PTRefHash> subMap;
-            std::transform(edgeVars.nextStateVars.begin(), edgeVars.nextStateVars.end(), stateVars.begin(),
-                           std::inserter(subMap, subMap.end()),
+            init = TrivialQuantifierElimination(logic).tryEliminateVarsExcept(systemVariables.nextStateVars, fla);
+            std::transform(systemVariables.nextStateVars.begin(), systemVariables.nextStateVars.end(),
+                           stateVars.begin(), std::inserter(subMap, subMap.end()),
                            [](PTRef key, PTRef value) { return std::make_pair(key, value); });
-            init = utils.varSubstitute(fla, subMap);
-            init = QuantifierElimination(logic).keepOnly(init, stateVars);
+            std::transform(systemVariables.auxiliaryVars.begin(), systemVariables.auxiliaryVars.end(),
+                           auxiliaryVars.begin(), std::inserter(subMap, subMap.end()),
+                           [](PTRef key, PTRef value) { return std::make_pair(key, value); });
+            init = utils.varSubstitute(init, subMap);
             //            std::cout << logic.printTerm(init) << std::endl;
         }
         if (isLoop) {
-            transitionRelation = transitionFormulaInSystemType(*systemType, edgeVars, fla, logic);
+            transitionRelation = transitionFormulaInSystemType(*systemType, systemVariables, fla, logic);
             //            std::cout << logic.printTerm(transitionRelation) << std::endl;
         }
         if (isEnd) {
+            bad = TrivialQuantifierElimination(logic).tryEliminateVarsExcept(systemVariables.stateVars, fla);
             std::unordered_map<PTRef, PTRef, PTRefHash> subMap;
-            std::transform(edgeVars.stateVars.begin(), edgeVars.stateVars.end(), stateVars.begin(),
+            std::transform(systemVariables.stateVars.begin(), systemVariables.stateVars.end(), stateVars.begin(),
                            std::inserter(subMap, subMap.end()),
                            [](PTRef key, PTRef value) { return std::make_pair(key, value); });
-            bad = utils.varSubstitute(fla, subMap);
-            bad = QuantifierElimination(logic).keepOnly(bad, stateVars);
+            std::transform(systemVariables.auxiliaryVars.begin(), systemVariables.auxiliaryVars.end(),
+                           auxiliaryVars.begin(), std::inserter(subMap, subMap.end()),
+                           [](PTRef key, PTRef value) { return std::make_pair(key, value); });
+            bad = utils.varSubstitute(bad, subMap);
             //            std::cout << logic.printTerm(bad) << std::endl;
         }
     });
     assert(init != PTRef_Undef && transitionRelation != PTRef_Undef && bad != PTRef_Undef);
-    auto ts = std::unique_ptr<TransitionSystem>(
-        new TransitionSystem(logic, std::move(systemType), init, transitionRelation, bad));
+    auto ts = std::make_unique<TransitionSystem>(logic, std::move(systemType), init, transitionRelation, bad);
     return ts;
 }
 
