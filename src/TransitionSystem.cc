@@ -84,14 +84,12 @@ SystemType::SystemType(vec<PTRef> const & stateVars, vec<PTRef> const & auxiliar
 }
 
 bool SystemType::isStateFormula(PTRef fla) const {
-    auto const & currentStateVars = stateVars;
+    std::vector<PTRef> allowedVars = stateVars;
+    allowedVars.insert(allowedVars.end(), auxiliaryVars.begin(), auxiliaryVars.end());
     vec<PTRef> vars = TermUtils(logic).getVars(fla);
-    for (PTRef var : vars) {
-        if (std::ranges::find(currentStateVars, var) == std::end(currentStateVars)) {
-            return false;
-        }
-    }
-    return true;
+    return std::ranges::all_of(vars, [&allowedVars](PTRef var) {
+        return std::ranges::find(allowedVars, var) != std::end(allowedVars);
+    });
 }
 
 bool SystemType::isTransitionFormula(PTRef fla) const {
