@@ -24,7 +24,10 @@ namespace {
         //    std::cout << "====================================\n";
         for (auto const & key : substitutions.getKeys()) {
             //        std::cout << logic.pp(key) << " -> " << logic.pp(substitutions[key]) << std::endl;
-            assert(logic.isVar(key));
+            if (not logic.isVar(key)) { // TODO: Handle array terms (selects) properly in substitutions
+                equalitiesToRestore.push(logic.mkEq(key, substitutions[key]));
+                continue;
+            }
             if (shouldKeepVar(key)) {
                 // If it is not a variable we wanted to eliminate, we need to insert back the equality
                 // Unless we can extract TBE var from the RHS
