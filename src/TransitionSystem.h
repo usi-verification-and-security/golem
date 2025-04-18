@@ -27,13 +27,13 @@ public:
     SystemType(std::vector<PTRef> stateVars, std::vector<PTRef> auxiliaryVars, Logic & logic);
     SystemType(vec<PTRef> const & stateVars, vec<PTRef> const & auxiliaryVars, Logic & logic);
 
-    bool isStateFormula(PTRef fla) const;
+    [[nodiscard]] bool isStateFormula(PTRef fla) const;
 
-    bool isTransitionFormula(PTRef fla) const;
+    [[nodiscard]] bool isTransitionFormula(PTRef fla) const;
 
-    std::vector<PTRef> const & getStateVars() const { return stateVars; }
-    std::vector<PTRef> const & getNextStateVars() const { return nextStateVars; }
-    std::vector<PTRef> const & getAuxiliaryVars() const { return auxiliaryVars; }
+    [[nodiscard]] std::vector<PTRef> const & getStateVars() const { return stateVars; }
+    [[nodiscard]] std::vector<PTRef> const & getNextStateVars() const { return nextStateVars; }
+    [[nodiscard]] std::vector<PTRef> const & getAuxiliaryVars() const { return auxiliaryVars; }
 };
 
 class TransitionSystem {
@@ -57,24 +57,24 @@ public:
         if (not isWellFormed()) { throw std::logic_error("Transition system not created correctly"); }
     }
 
-    PTRef getInit() const;
-    PTRef getQuery() const;
-    PTRef getTransition() const;
+    [[nodiscard]] PTRef getInit() const;
+    [[nodiscard]] PTRef getQuery() const;
+    [[nodiscard]] PTRef getTransition() const;
 
-    Logic & getLogic() const;
+    [[nodiscard]] Logic & getLogic() const;
 
-    std::vector<PTRef> getStateVars() const;
-    std::vector<PTRef> getNextStateVars() const;
-    std::vector<PTRef> getAuxiliaryVars() const;
+    [[nodiscard]] std::vector<PTRef> getStateVars() const;
+    [[nodiscard]] std::vector<PTRef> getNextStateVars() const;
+    [[nodiscard]] std::vector<PTRef> getAuxiliaryVars() const;
 
-    static TransitionSystem reverse(TransitionSystem const & original);
+    static TransitionSystem reverse(TransitionSystem const &);
 
-    static PTRef reverseTransitionRelation(TransitionSystem const & original);
+    static PTRef reverseTransitionRelation(TransitionSystem const &);
 
 private:
-    bool isWellFormed();
+    [[nodiscard]] bool isWellFormed() const;
 
-    PTRef toNextStateVar(PTRef var) const;
+    [[nodiscard]] PTRef toNextStateVar(PTRef var) const;
 };
 
 struct KTo1Inductive {
