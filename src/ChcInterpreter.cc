@@ -597,6 +597,11 @@ std::optional<ChClause> ChcInterpreterContext::chclauseFromPTRef(PTRef ref) {
     vec<PTRef> interpretedArgs;
     std::for_each(uninterpretedEnd, disjuncts.end(), [&interpretedArgs](PTRef arg) { interpretedArgs.push(arg); });
     PTRef interpretedPart = logic.mkAnd(interpretedArgs);
+    if (matchingSubTerms(logic, interpretedPart, [&](PTRef term) {
+            return this->isUninterpretedPredicate(term);
+        }).size() > 0) {
+        return std::nullopt;
+    }
 
     ChcBody body = PTRefToCHC::constructBody(interpretedPart, positiveEnd, uninterpretedEnd);
 
