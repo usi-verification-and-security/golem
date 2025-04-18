@@ -45,3 +45,32 @@ TEST_F(TransformationUtils_Test, test_DAGWithExtraEdge) {
     EXPECT_FALSE(isTransitionSystemDAG(*graph)); // Because of the extra edge from entry to exit
 }
 
+TEST_F(TransformationUtils_Test, test_TransitionSystemWithUnusedStateVariableInTransiotion) {
+    SymRef s1 = mkPredicateSymbol("s1", {intSort(), intSort()});
+    PTRef current = instantiatePredicate(s1, {x, y});
+    PTRef next = instantiatePredicate(s1, {xp, yp});
+    std::vector<ChClause> clauses{
+        {
+            ChcHead{UninterpretedPredicate{next}},
+            ChcBody{{logic->mkEq(xp, zero)}, {}}},
+        {
+            ChcHead{UninterpretedPredicate{next}},
+            ChcBody{{logic->mkEq(xp, logic->mkPlus(x, one))}, {UninterpretedPredicate{current}}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{logic->getTerm_false()}},
+            ChcBody{{logic->mkAnd(logic->mkLt(x, zero), logic->mkEq(y, zero))}, {UninterpretedPredicate{current}}}
+        }
+    };
+    for (auto const & clause : clauses) { system.addClause(clause); }
+
+    Logic & logic = *this->logic;
+    auto normalizedSystem = Normalizer(logic).normalize(system);
+    auto hypergraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
+    ASSERT_TRUE(hypergraph->isNormalGraph());
+    auto graph = hypergraph->toNormalGraph();
+    ASSERT_TRUE(isTransitionSystem(*graph));
+    auto ts = toTransitionSystem(*graph);
+    ASSERT_EQ(ts->getStateVars().size(), 2);
+}
+
