@@ -99,4 +99,31 @@ protected:
     SRef realSort() const { return logic->getSort_real(); }
 };
 
+class ALIAEngineTest : public EngineTest {
+protected:
+    PTRef zero;
+    PTRef one;
+    PTRef two;
+    PTRef x, xp;
+    PTRef y, yp;
+    PTRef a;
+
+    ALIAEngineTest() {
+        logic = std::make_unique<ArithLogic>(opensmt::Logic_t::QF_ALIA);
+        zero = logic->getTerm_IntZero();
+        one = logic->getTerm_IntOne();
+        two = logic->mkIntConst(2);
+        x = mkIntVar("x");
+        xp = mkIntVar("xp");
+        y = mkIntVar("y");
+        yp = mkIntVar("yp");
+        a = logic->mkVar(arraySort(), "a", true);
+    }
+
+    PTRef mkIntVar(char const * const name) { return logic->mkIntVar(name); }
+
+    SRef intSort() const { return logic->getSort_int(); }
+    SRef arraySort() const { return logic->getArraySort(intSort(), intSort()); }
+};
+
 #endif //GOLEM_TESTTEMPLATE_H

@@ -1178,3 +1178,30 @@ TEST_F(Transformer_New_Test, test_EdgeInliner_OutgoingLoop) {
     auto [transformedGraph, translator] = TransformationPipeline(std::move(stages)).transform(std::move(hyperGraph));
     ASSERT_EQ(transformedGraph->getEdges().size(), 1);
 }
+
+class Transformer_ArrayTest : public ALIAEngineTest {
+};
+
+TEST_F(Transformer_ArrayTest, test_ConstraintSimplifier_SimplifiesToFalse) {
+    PTRef b = logic->mkBoolVar("b");
+    // b = true and not (a[1] = 0) and (a[x] = 0) and (not (b and x != 1) => false
+    std::vector<ChClause> clauses{
+        {
+            ChcHead{UninterpretedPredicate{logic->getTerm_false()}},
+            ChcBody{{logic->mkAnd({
+                b,
+                logic->mkNot(logic->mkEq(logic->mkSelect({a, one}), zero)),
+                logic->mkEq(logic->mkSelect({a, x}), zero),
+                logic->mkNot(logic->mkAnd(b, logic->mkNot(logic->mkEq(x, one))))
+            })}, {}}
+        }};
+
+    for (auto const & clause : clauses) { system.addClause(clause); }
+
+    Logic & logic = *this->logic;
+    auto normalizedSystem = Normalizer(logic).normalize(system);
+    auto hyperGraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
+    auto [transformedGraph, translator] = ConstraintSimplifier().transform(std::move(hyperGraph));
+    ASSERT_EQ(transformedGraph->getEdges().size(), 1);
+    ASSERT_EQ(transformedGraph->getEdges().front().fla.fla, logic.getTerm_false());
+}

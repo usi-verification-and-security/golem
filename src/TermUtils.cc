@@ -18,21 +18,24 @@ template<typename TKeep> PTRef tryEliminateVars(PTRef fla, Logic & logic, TKeep 
     // Others need to be brought back.
     // If there is a TBE variable on RHS, we should revert the substitution so that this TBE var is eliminated instead.
     // For now we only revert if RHS is exactly TBE var
-    Logic::SubstMap revertedSubs;
+    Logic::SubstMap substitutionsToReapply;
     vec<PTRef> equalitiesToRestore;
-    //    std::cout << "====================================\n";
+    std::size_t nonvarKeys = 0;
+    std::unordered_set<PTRef, PTRefHash> eliminatedVars;
+    // std::cout << "====================================\n";
     for (auto const & key : substitutions.getKeys()) {
         //        std::cout << logic.pp(key) << " -> " << logic.pp(substitutions[key]) << std::endl;
         if (not logic.isVar(key)) { // TODO: Handle array terms (selects) properly in substitutions
             equalitiesToRestore.push(logic.mkEq(key, substitutions[key]));
+            ++nonvarKeys;
             continue;
         }
         if (shouldKeepVar(key)) {
             // If it is not a variable we wanted to eliminate, we need to insert back the equality
             // Unless we can extract TBE var from the RHS
             PTRef rhs = substitutions[key];
-            if (logic.isVar(rhs) and not shouldKeepVar(rhs) and not revertedSubs.has(rhs)) {
-                revertedSubs.insert(rhs, key);
+            if (logic.isVar(rhs) and not shouldKeepVar(rhs) and not substitutionsToReapply.has(rhs)) {
+                substitutionsToReapply.insert(rhs, key);
             } else {
                 equalitiesToRestore.push(logic.mkEq(key, rhs));
             }
@@ -42,22 +45,32 @@ template<typename TKeep> PTRef tryEliminateVars(PTRef fla, Logic & logic, TKeep 
                 //     We need to keep this information
                 PTRef rhs = substitutions[key];
                 Pterm const & term = logic.getPterm(rhs);
+                // TODO: This should not be needed anymore with OpenSMT 2.9
                 if (std::any_of(term.begin(), term.end(), [&](PTRef arg) {
                         auto varConstant = arithLogic.splitTermToVarAndConst(arg);
                         return not arithLogic.getNumConst(varConstant.second).isInteger();
                     })) { // There are some fractions on the RHS, better keep this substitution, just in case
                     equalitiesToRestore.push(logic.mkEq(key, rhs));
+                    continue;
                 }
             }
+            eliminatedVars.insert(key);
         }
     }
-    //    std::cout << "====================================\n";
+    // std::cout << "====================================\n";
     if (equalitiesToRestore.size() > 0) {
         equalitiesToRestore.push(simplifiedFormula);
         simplifiedFormula = logic.mkAnd(std::move(equalitiesToRestore));
     }
-    if (revertedSubs.getSize() > 0) { simplifiedFormula = Substitutor(logic, revertedSubs).rewrite(simplifiedFormula); }
-    //    std::cout << logic.pp(simplifiedFormula) << std::endl;
+    if (nonvarKeys > 0) {
+        for (PTRef var : eliminatedVars) {
+            substitutionsToReapply.insert(var, substitutions[var]);
+        }
+    }
+    if (substitutionsToReapply.getSize() > 0) {
+        simplifiedFormula = Substitutor(logic, substitutionsToReapply).rewrite(simplifiedFormula);
+    }
+    // std::cout << logic.pp(simplifiedFormula) << std::endl;
     return simplifiedFormula;
 }
 } // namespace
