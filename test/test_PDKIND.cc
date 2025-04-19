@@ -219,7 +219,7 @@ TEST_F(PDKindTest, test_PDKIND_RegressionUnsafe) {
 
     std::vector<ChClause> clauses {
         {
-            ChcHead{UninterpretedPredicate{next}},
+            ChcHead{UninterpretedPredicate{current}},
             ChcBody{{logic->mkAnd({logic->mkEq(x2, zero), logic->mkEq(x3, zero), logic->mkEq(x1, zero), logic->mkEq(x0, logic->getTerm_false())})}, {}}
         },
         {
