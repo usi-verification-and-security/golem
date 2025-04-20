@@ -72,6 +72,8 @@ int main( int argc, char * argv[] ) {
             return std::make_unique<ArithLogic>(opensmt::Logic_t::QF_LRA);
         } else if (logic_str == std::string("QF_LIA")) {
             return std::make_unique<ArithLogic>(opensmt::Logic_t::QF_LIA);
+        } else if (logic_str == std::string("QF_ALIA")) {
+            return std::make_unique<ArithLogic>(opensmt::Logic_t::QF_ALIA);
         } else {
             error("Unknown logic specified: " + logic_str);
             exit(1);
