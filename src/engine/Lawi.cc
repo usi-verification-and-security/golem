@@ -835,6 +835,7 @@ ErrorPath LawiContext::buildGraphPathFromTreePath(const ArtPath & path) const {
 //
 
 VerificationResult Lawi::solve(ChcDirectedHyperGraph const & graph) {
+    if (logic.hasArrays()) { return VerificationResult{VerificationAnswer::UNKNOWN}; }
     if (graph.isNormalGraph()) {
         auto normalGraph = graph.toNormalGraph();
         return solve(*normalGraph);

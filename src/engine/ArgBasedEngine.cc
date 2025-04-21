@@ -721,6 +721,7 @@ public:
 } // namespace
 
 VerificationResult ARGBasedEngine::solve(const ChcDirectedHyperGraph & graph) {
+    if (graph.getLogic().hasArrays()) { return VerificationResult{VerificationAnswer::UNKNOWN}; }
     auto graphCopy = std::make_unique<ChcDirectedHyperGraph>(graph);
     AuxCleanupPass pass;
     auto cleanedGraph = pass.transform(std::move(graphCopy));

@@ -231,6 +231,7 @@ public:
 };
 
 VerificationResult Spacer::solve(ChcDirectedHyperGraph const & system) {
+    if (logic.hasArrays()) { return VerificationResult{VerificationAnswer::UNKNOWN}; }
     bool logProof =
         options.hasOption(Options::COMPUTE_WITNESS) and options.getOption(Options::COMPUTE_WITNESS) == "true";
     return SpacerContext(logic, system, logProof).run();

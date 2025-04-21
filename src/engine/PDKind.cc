@@ -176,6 +176,7 @@ private:
 };
 
 TransitionSystemVerificationResult PDKind::solve(TransitionSystem const & system) {
+    if (logic.hasArrays()) { return TransitionSystemVerificationResult{VerificationAnswer::UNKNOWN, 0u}; }
     return Context(logic, computeWitness).solve(system);
 }
 

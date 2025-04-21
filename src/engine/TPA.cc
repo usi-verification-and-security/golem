@@ -38,6 +38,7 @@ std::unique_ptr<TPABase> TPAEngine::mkSolver() {
 
 VerificationResult TPAEngine::solve(const ChcDirectedGraph & graph) {
     if (isTrivial(graph)) { return solveTrivial(graph); }
+    if (logic.hasArrays()) { return VerificationResult{VerificationAnswer::UNKNOWN}; }
     if (isTransitionSystem(graph)) {
         auto ts = toTransitionSystem(graph);
         auto solver = mkSolver();

@@ -23,6 +23,7 @@ TransitionSystemVerificationResult IMC::solve(TransitionSystem const & system) {
             return TransitionSystemVerificationResult{VerificationAnswer::UNSAFE, 0u};
         }
     }
+    if (logic.hasArrays()) { return TransitionSystemVerificationResult{VerificationAnswer::UNKNOWN, 0u}; }
     std::size_t maxLoopUnrollings = std::numeric_limits<std::size_t>::max();
     for (uint32_t k = 1; k < maxLoopUnrollings; ++k) {
         auto res = finiteRun(system, k);

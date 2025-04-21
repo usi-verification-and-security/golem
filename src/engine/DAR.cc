@@ -55,6 +55,7 @@ TransitionSystemVerificationResult DAR::solve(TransitionSystem const & system) {
             return TransitionSystemVerificationResult{VerificationAnswer::UNSAFE, 0u};
         }
     }
+    if (logic.hasArrays()) { return TransitionSystemVerificationResult{VerificationAnswer::UNKNOWN, 0u}; }
     return DualApproximatedReachability(system).run();
 }
 
