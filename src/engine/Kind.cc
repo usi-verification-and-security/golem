@@ -12,6 +12,15 @@
 #include "utils/SmtSolver.h"
 
 namespace golem {
+
+class BSE {
+public:
+    explicit BSE(Logic & logic) : logic(logic) {}
+    VerificationResult run(ChcDirectedGraph const & graph);
+private:
+    Logic & logic;
+};
+
 VerificationResult Kind::solve(ChcDirectedGraph const & graph) {
     if (isTrivial(graph)) {
         return solveTrivial(graph);
@@ -19,7 +28,7 @@ VerificationResult Kind::solve(ChcDirectedGraph const & graph) {
     if (isTransitionSystem(graph)) {
         return solveTransitionSystem(graph);
     }
-    return VerificationResult(VerificationAnswer::UNKNOWN);
+    return BSE{logic}.run(graph);
 }
 
 VerificationResult Kind::solveTransitionSystem(ChcDirectedGraph const & graph) {
@@ -132,4 +141,57 @@ PTRef Kind::invariantFromBackwardInduction(TransitionSystem const & transitionSy
     PTRef originalInvariant = logic.mkNot(inductiveInvariant);
     return originalInvariant;
 }
+
+VerificationResult BSE::run(ChcDirectedGraph const & graph) {
+    // Simple version of backward symbolic execution:
+    // Start from false, and try to move backward, for each node reached, test if it feasible.
+    // If not, do not continue from that node
+    // If init is reached and feasible => UNSAT
+    // If no nodes left => SAT
+
+    struct ARGNode {
+        SymRef predicate;
+        PTRef fla;
+    };
+
+    auto isFeasible = [&](PTRef fla) {
+        SMTSolver solver{logic, SMTSolver::WitnessProduction::NONE};
+        solver.assertProp(fla);
+        auto const res = solver.check();
+        return res == SMTSolver::Answer::SAT;
+    };
+
+    auto adjacencyLists = AdjacencyListsGraphRepresentation::from(graph);
+    std::deque<ARGNode> queue;
+    auto inQueue = [&](ARGNode const & candidate) {
+        return std::find_if(queue.begin(), queue.end(), [&](ARGNode const & other) {
+            return candidate.predicate == other.predicate and candidate.fla == other.fla;
+        }) != queue.end();
+    };
+    queue.push_back(ARGNode{.predicate =  graph.getExit(), .fla = logic.getTerm_true()});
+    TimeMachine tm(logic);
+    while (not queue.empty()) {
+        ARGNode toExpand = queue.front();
+        queue.pop_front();
+        PTRef shiftedFla = tm.sendFlaThroughTime(toExpand.fla, 1);
+        for (EId eid : adjacencyLists.getIncomingEdgesFor(toExpand.predicate)) {
+            auto source = graph.getSource(eid);
+            PTRef fla = logic.mkAnd(shiftedFla, graph.getEdgeLabel(eid));
+            auto vars = TermUtils(logic).predicateArgsInOrder(graph.getStateVersion(source));
+            PTRef simplified = TrivialQuantifierElimination(logic).tryEliminateVarsExcept(vars, fla);
+            ARGNode newNode{.predicate =  source, .fla = simplified};
+            if (not inQueue(newNode)) {
+                if (isFeasible(simplified)) {
+                    if (source == graph.getEntry()) {
+                        return {VerificationAnswer::UNSAFE, NoWitness{}};
+                    }
+                queue.push_back(newNode);
+                }
+            }
+        }
+    }
+    return {VerificationAnswer::SAFE, NoWitness{}};
+}
+
+
 } // namespace golem
