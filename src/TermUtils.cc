@@ -70,6 +70,11 @@ PTRef TrivialQuantifierElimination::tryEliminateVarsExcept(vec<PTRef> const & va
                                    [&](PTRef var) { return std::find(vars.begin(), vars.end(), var) != vars.end(); });
 }
 
+PTRef TrivialQuantifierElimination::tryEliminateVarsExcept(std::vector<PTRef> const & vars, PTRef fla) const {
+    return golem::tryEliminateVars(fla, logic,
+                                   [&](PTRef var) { return std::find(vars.begin(), vars.end(), var) != vars.end(); });
+}
+
 PTRef LATermUtils::expressZeroTermFor(PTRef zeroTerm, PTRef var) {
     assert(logic.isLinearTerm(zeroTerm) and logic.isNumVar(var));
     assert(termContainsVar(zeroTerm, var));

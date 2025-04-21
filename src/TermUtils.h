@@ -472,11 +472,13 @@ class TrivialQuantifierElimination {
     Logic & logic;
 
 public:
-    TrivialQuantifierElimination(Logic & logic) : logic(logic) {}
+    explicit TrivialQuantifierElimination(Logic & logic) : logic(logic) {}
 
-    PTRef tryEliminateVars(vec<PTRef> const & vars, PTRef fla) const;
+    [[nodiscard]] PTRef tryEliminateVars(vec<PTRef> const & vars, PTRef fla) const;
 
-    PTRef tryEliminateVarsExcept(vec<PTRef> const & vars, PTRef fla) const;
+    [[nodiscard]] PTRef tryEliminateVarsExcept(vec<PTRef> const & vars, PTRef fla) const;
+
+    [[nodiscard]] PTRef tryEliminateVarsExcept(std::vector<PTRef> const & vars, PTRef fla) const;
 };
 
 inline vec<PTRef> operator+(vec<PTRef> const & first, vec<PTRef> const & second) {
