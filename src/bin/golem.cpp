@@ -16,13 +16,10 @@ std::string tryDetectLogic(ASTNode const * root) {
     auto const & children = *(root->children);
     bool hasReals = false;
     bool hasIntegers = false;
-    unsigned short examined = 0;
-    constexpr unsigned short limit = 5;
-    auto decide = [&] {
-        if (hasReals ^ hasIntegers) {
-            return hasReals ? "QF_LRA" : "QF_LIA";
-        }
-        return "";
+    bool hasArrays = false;
+    auto decide = [&]() -> std::string {
+        if (hasReals and hasIntegers) { return ""; }
+        return std::string("QF_") + (hasArrays ? "A" : "") + "L" + (hasIntegers ? "I" : "R") + "A";
     };
     for (ASTNode * child : children) {
         const tokens::smt2token token = child->getToken();
@@ -34,14 +31,22 @@ std::string tryDetectLogic(ASTNode const * root) {
                 ASTNode const & args_node = **(it++);
                 ASTNode const & ret_node  = **(it++); (void)ret_node;
                 assert(it == child->children->end());
-                for (auto argNode : *(args_node.children)) {
+                auto checkForRealsAndInts = [&](ASTNode const * const node) {
+                        hasReals = hasReals or strcmp(node->getValue(), "Real") == 0;
+                        hasIntegers = hasIntegers or strcmp(node->getValue(), "Int") == 0;
+                };
+                for (ASTNode const * const argNode : *(args_node.children)) {
                     if (argNode->getType() == SYM_T) {
-                        hasReals = hasReals or strcmp(argNode->getValue(), "Real") == 0;
-                        hasIntegers = hasIntegers or strcmp(argNode->getValue(), "Int") == 0;
+                        checkForRealsAndInts(argNode);
+                    } else if (argNode->getType() == LID_T and argNode->children) {
+                        for (ASTNode const * const node : *(argNode->children)) {
+                            if (node->getType() == SYM_T) {
+                                hasArrays = hasArrays or strcmp(node->getValue(), "Array") == 0;
+                                checkForRealsAndInts(node);
+                            }
+                        }
                     }
                 }
-                ++examined;
-                if (examined == limit) { return decide(); }
                 break;
             }
             case tokens::t_assert:
