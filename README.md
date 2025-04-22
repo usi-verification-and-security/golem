@@ -94,6 +94,5 @@ golem --engine split-tpa,spacer,lawi --input <file>
 Golem supports internal validation of witnesses for its answer using `--validate` option.
 Witness for `sat` is a model, an interpretation of the predicates.
 Witness for `unsat` is a proof.
-This option is still experimental. For example, `tpa/split-tpa` does not always produce the witness yet.
  
 To obtain the produced model or proof of unsatisfiability, use `--print-witness`.
