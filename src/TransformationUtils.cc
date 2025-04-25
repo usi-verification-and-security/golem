@@ -107,6 +107,25 @@ std::unique_ptr<TransitionSystem> toTransitionSystem(ChcDirectedGraph const & gr
     return ts;
 }
 
+std::unique_ptr<TransitionSystem> ensureNoAuxiliaryVariablesInInitAndQuery(std::unique_ptr<TransitionSystem> ts) {
+    auto auxVars = ts->getAuxiliaryVars();
+    if (auxVars.empty()) { return ts; }
+    Logic & logic = ts->getLogic();
+    auto auxInInit = opensmt::matchingSubTerms(ts->getLogic(), ts->getInit(), [&](PTRef subterm) {
+        return logic.isVar(subterm) and std::find(auxVars.begin(), auxVars.end(), subterm) != auxVars.end();
+    });
+    auto auxInQuery = opensmt::matchingSubTerms(ts->getLogic(), ts->getQuery(), [&](PTRef subterm) {
+        return logic.isVar(subterm) and std::find(auxVars.begin(), auxVars.end(), subterm) != auxVars.end();
+    });
+    PTRef newInit = ts->getInit();
+    if (auxInInit.size() > 0) { newInit = QuantifierElimination(logic).eliminate(newInit, auxInInit); }
+    PTRef newQuery = ts->getQuery();
+    if (auxInQuery.size() > 0) { newQuery = QuantifierElimination(logic).eliminate(newQuery, auxInQuery); }
+    if (newInit == ts->getInit() and newQuery == ts->getQuery()) { return ts; }
+    auto stateType = std::make_unique<SystemType>(ts->getStateVars(), auxVars, logic);
+    return std::make_unique<TransitionSystem>(logic, std::move(stateType), newInit, ts->getTransition(), newQuery);
+}
+
 namespace {
 // This function follows a Tarjan's strongly connected component detection algorithm:
 // https://en.wikipedia.org/wiki/Tarjan's_strongly_connected_components_algorithm

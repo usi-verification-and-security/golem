@@ -33,6 +33,7 @@ VerificationResult Kind::solve(ChcDirectedGraph const & graph) {
 
 VerificationResult Kind::solveTransitionSystem(ChcDirectedGraph const & graph) {
     auto ts = toTransitionSystem(graph);
+    ts = ensureNoAuxiliaryVariablesInInitAndQuery(std::move(ts));
     auto res = solveTransitionSystemInternal(*ts);
     return computeWitness ? translateTransitionSystemResult(res, graph, *ts) : VerificationResult(res.answer);
 }

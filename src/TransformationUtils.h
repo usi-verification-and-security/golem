@@ -22,6 +22,8 @@ bool isTrivial(ChcDirectedGraph const & graph);
 
 std::unique_ptr<TransitionSystem> toTransitionSystem(ChcDirectedGraph const & graph);
 
+std::unique_ptr<TransitionSystem> ensureNoAuxiliaryVariablesInInitAndQuery(std::unique_ptr<TransitionSystem> ts);
+
 struct EdgeVariables {
     std::vector<PTRef> stateVars;
     std::vector<PTRef> nextStateVars;
