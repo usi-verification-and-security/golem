@@ -41,6 +41,7 @@ VerificationResult TPAEngine::solve(const ChcDirectedGraph & graph) {
     if (logic.hasArrays()) { return VerificationResult{VerificationAnswer::UNKNOWN}; }
     if (isTransitionSystem(graph)) {
         auto ts = toTransitionSystem(graph);
+        ts = ensureNoAuxiliaryVariablesInInitAndQuery(std::move(ts));
         auto solver = mkSolver();
         auto res = solver->solveTransitionSystem(*ts);
         if (not shouldComputeWitness()) { return VerificationResult(res); }
