@@ -143,7 +143,8 @@ void ValidityWitness::print(std::ostream & out, ChcDirectedHyperGraph const & gr
     for (auto && [symbol, definition] : interpretations) {
         if (logic.isTrue(symbol) or logic.isFalse(symbol)) { continue; }
         out << "  (define-fun " << logic.protectName(symbol) << " (";
-        PTRef predicate = VersionManager(logic).sourceFormulaToBase(graph.getStateVersion(symbol));
+        PTRef const stateVersion = graph.getStateVersion(symbol);
+        PTRef const predicate = logic.getSym(symbol).nargs() == 0 ? stateVersion : VersionManager(logic).sourceFormulaToBase(stateVersion);
         const auto & args = TermUtils(logic).predicateArgsInOrder(predicate);
         for (std::size_t i = 0; i < args.size(); ++i) {
             auto sortString = logic.printSort(logic.getSortRef(args[i]));
