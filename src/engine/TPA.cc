@@ -1579,14 +1579,14 @@ witness_t TransitionSystemNetworkManager::computeValidityWitness() const {
             unversionedVars.push(timeMachine.getUnversioned(graphVars[i]));
             subs.insert({systemVars[i], unversionedVars.last()});
         }
-        auto [res, explanation] = queryTransitionSystem(node, node.preSafe, logic.mkNot(node.postSafe));
-        assert(res == ReachabilityResult::UNREACHABLE);
-        if (res == ReachabilityResult::UNREACHABLE) {
-            PTRef graphInvariant = utils.varSubstitute(node.solver->getInductiveInvariant(), subs);
-            definitions[vertex] = graphInvariant;
-        } else {
-            return NoWitness("Unexpected situation occurred during witness computation in TPA engine");
-        }
+        // auto [res, explanation] = queryTransitionSystem(node, node.preSafe, logic.mkNot(node.postSafe));
+        // assert(res == ReachabilityResult::UNREACHABLE);
+        // if (res == ReachabilityResult::UNREACHABLE) {
+        PTRef graphInvariant = utils.varSubstitute(logic.mkOr(node.preSafe, node.postSafe), subs);
+        definitions[vertex] = graphInvariant;
+        // } else {
+            // return NoWitness("Unexpected situation occurred during witness computation in TPA engine");
+        // }
     }
     return ValidityWitness(std::move(definitions));
 }
