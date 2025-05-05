@@ -41,6 +41,7 @@ target_sources(golem_lib
     PRIVATE engine/Lawi.cc
     PRIVATE engine/PDKind.cc
     PRIVATE engine/Spacer.cc
+    PRIVATE engine/SymbolicExecution.cc
     PRIVATE engine/TPA.cc
     PRIVATE engine/TransitionSystemEngine.cc
     PRIVATE TransitionSystem.cc
