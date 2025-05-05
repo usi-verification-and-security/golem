@@ -8,6 +8,25 @@
 
 namespace golem {
 namespace {
+struct ShiftedVar {
+    PTRef var;
+    PTRef shift;
+};
+std::optional<ShiftedVar> tryAsShiftedVar(PTRef term, ArithLogic & logic) {
+    if (not logic.yieldsSortNum(term)) { return std::nullopt; }
+    if (logic.isVar(term)) { return ShiftedVar{.var = term, .shift = logic.getZeroForSort(logic.getSortRef(term))}; }
+    if (logic.isPlus(term)) {
+        auto const & pterm = logic.getPterm(term);
+        if (pterm.size() != 2) { return std::nullopt; }
+        PTRef arg1 = pterm[0];
+        PTRef arg2 = pterm[1];
+        if (logic.isVar(arg1) and logic.isNumConst(arg2)) { return ShiftedVar{.var = arg1, .shift = arg2}; }
+        if (logic.isVar(arg2) and logic.isNumConst(arg1)) { return ShiftedVar{.var = arg2, .shift = arg1}; }
+        return std::nullopt;
+    }
+    return std::nullopt;
+}
+
 template<typename TKeep> PTRef tryEliminateVars(PTRef fla, Logic & logic, TKeep shouldKeepVar) {
     ArithLogic & arithLogic = dynamic_cast<ArithLogic &>(logic);
     auto res = TermUtils(logic).extractSubstitutionsAndSimplify(fla);
@@ -34,11 +53,21 @@ template<typename TKeep> PTRef tryEliminateVars(PTRef fla, Logic & logic, TKeep 
             // If it is not a variable we wanted to eliminate, we need to insert back the equality
             // Unless we can extract TBE var from the RHS
             PTRef rhs = substitutions[key];
-            if (logic.isVar(rhs) and not shouldKeepVar(rhs) and not substitutionsToReapply.has(rhs)) {
+            auto canUseVarForSubstitution = [&](PTRef var) {
+                assert(arithLogic.isVar(var));
+                return not shouldKeepVar(var) and not substitutionsToReapply.has(var);
+            };
+            if (logic.isVar(rhs) and canUseVarForSubstitution(rhs)) {
                 substitutionsToReapply.insert(rhs, key);
-            } else {
-                equalitiesToRestore.push(logic.mkEq(key, rhs));
+                continue;
             }
+            if (auto shiftedVar = tryAsShiftedVar(rhs, arithLogic);
+                shiftedVar and canUseVarForSubstitution(shiftedVar->var)) {
+                substitutionsToReapply.insert(shiftedVar->var, arithLogic.mkMinus(key, shiftedVar->shift));
+                continue;
+            }
+            equalitiesToRestore.push(logic.mkEq(key, rhs));
+            continue;
         } else { // Substitution of TBE var. Can ignore if Bool or Real var
             if (arithLogic.yieldsSortInt(key)) {
                 // MB: Integer equalities can bear information about divisibility constraints

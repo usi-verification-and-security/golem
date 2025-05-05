@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: MIT
  */
 
+#include <TermUtils.h>
 #include <gtest/gtest.h>
 #include "QuantifierElimination.h"
 
@@ -70,4 +71,53 @@ TEST_F(QE_RealTest, test_strictInequalities) {
     // The result is equivalent to x > 0, but we are missing arithmetic simplifications to get it to that form
     // Current result is x >= 0 and x > 0 which is equivalent to x > 0;
     EXPECT_EQ(res, logic.mkAnd(logic.mkLt(zero, x), logic.mkLeq(zero, x)));
+}
+
+class TrivialQE_IntTest : public ::testing::Test {
+protected:
+    ArithLogic logic {opensmt::Logic_t::QF_LIA};
+    PTRef x;
+    PTRef y;
+    PTRef xp;
+    PTRef yp;
+    PTRef zero;
+    PTRef one;
+    TrivialQE_IntTest() :
+    x {logic.mkIntVar("x")},
+    y {logic.mkIntVar("y")},
+    xp {logic.mkIntVar("xp")},
+    yp {logic.mkIntVar("yp")},
+    zero {logic.getTerm_IntZero()},
+    one {logic.getTerm_IntOne()}
+    { }
+};
+
+TEST_F(TrivialQE_IntTest, test_TwoIncrementedVariables) {
+    PTRef base = logic.mkEq(x,y);
+    PTRef inc1 = logic.mkEq(xp, logic.mkPlus(x, one));
+    PTRef inc2 = logic.mkEq(yp, logic.mkPlus(y, one));
+    PTRef fla = logic.mkAnd({base, inc1, inc2});
+    PTRef res = TrivialQuantifierElimination(logic).tryEliminateVarsExcept(vec{xp, yp}, fla);
+    // std::cout << logic.printTerm(res) << std::endl;
+    EXPECT_EQ(res, logic.mkEq(xp, yp));
+}
+
+TEST_F(TrivialQE_IntTest, test_TwoDecrementedVariables) {
+    PTRef base = logic.mkEq(x,y);
+    PTRef dec1 = logic.mkEq(xp, logic.mkMinus(x, one));
+    PTRef dec2 = logic.mkEq(yp, logic.mkMinus(y, one));
+    PTRef fla = logic.mkAnd({base, dec1, dec2});
+    PTRef res = TrivialQuantifierElimination(logic).tryEliminateVarsExcept(vec{xp, yp}, fla);
+    // std::cout << logic.printTerm(res) << std::endl;
+    EXPECT_EQ(res, logic.mkEq(xp, yp));
+}
+
+TEST_F(TrivialQE_IntTest, test_BooleanVaribles) {
+    PTRef b1 = logic.mkBoolVar("b1");
+    PTRef b2 = logic.mkBoolVar("b2");
+    PTRef fla = logic.mkEq(b1,b2);
+    PTRef res1 = TrivialQuantifierElimination(logic).tryEliminateVarsExcept(vec{b1}, fla);
+    EXPECT_EQ(res1, logic.getTerm_true());
+    PTRef res2 = TrivialQuantifierElimination(logic).tryEliminateVarsExcept(vec{b2}, fla);
+    EXPECT_EQ(res2, logic.getTerm_true());
 }
