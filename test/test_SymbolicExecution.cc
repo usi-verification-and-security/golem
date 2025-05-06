@@ -14,6 +14,7 @@ class SETest : public LIAEngineTest {
 };
 
 TEST_F(SETest, test_Simple_Unsafe) {
+    options.addOption(Options::COMPUTE_WITNESS, "true");
     SymRef inv_sym = mkPredicateSymbol("Inv", {intSort()});
     PTRef inv = instantiatePredicate(inv_sym, {x});
     PTRef invp = instantiatePredicate(inv_sym, {xp});
@@ -33,7 +34,7 @@ TEST_F(SETest, test_Simple_Unsafe) {
     };
 
     SymbolicExecution engine(*logic, options);
-    solveSystem(clauses, engine, VerificationAnswer::UNSAFE, false);
+    solveSystem(clauses, engine, VerificationAnswer::UNSAFE);
 }
 
 TEST_F(SETest, test_Simple_Safe) {
@@ -61,6 +62,7 @@ TEST_F(SETest, test_Simple_Safe) {
 
 TEST_F(SETest, test_BeyondTransitionSystem_Unsafe)
 {
+    options.addOption(Options::COMPUTE_WITNESS, "true");
     SymRef s1 = mkPredicateSymbol("s1", {intSort(), intSort()});
     SymRef s2 = mkPredicateSymbol("s2", {intSort(), intSort()});
     PTRef current1 = instantiatePredicate(s1, {x,y});
@@ -99,5 +101,5 @@ TEST_F(SETest, test_BeyondTransitionSystem_Unsafe)
             ChcBody{{logic->mkAnd(logic->mkGt(y, zero), logic->mkEq(x, logic->mkIntConst(10)))}, {UninterpretedPredicate{current1}}}
         }};
     SymbolicExecution engine(*logic, options);
-    solveSystem(clauses, engine, VerificationAnswer::UNSAFE, false);
+    solveSystem(clauses, engine, VerificationAnswer::UNSAFE);
 }
