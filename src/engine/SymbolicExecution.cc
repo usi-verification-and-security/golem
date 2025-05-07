@@ -6,6 +6,7 @@
 
 #include "SymbolicExecution.h"
 
+#include "QuantifierElimination.h"
 #include "graph/ChcGraph.h"
 #include "utils/SmtSolver.h"
 
@@ -43,6 +44,7 @@ private:
     [[nodiscard]] bool computeWitness() const { return options.getOrDefault(Options::COMPUTE_WITNESS, "false") == "true"; }
 
     [[nodiscard]] InvalidityWitness getInvalidityWitness(EId errorEid, State::id_t errorPredecessorId, Predecessors const & predecessors) const;
+    [[nodiscard]] ValidityWitness getValidityWitness(Predecessors const & predecessors) const;
 
     std::unique_ptr<ChcDirectedGraph> graph;
     Options const & options;
@@ -62,6 +64,31 @@ InvalidityWitness DirectForwardSymbolicExecution::getInvalidityWitness(EId error
     std::ranges::reverse(errorPath);
     ErrorPath const path{std::move(errorPath)};
     return InvalidityWitness::fromErrorPath(path, *graph);
+}
+
+ValidityWitness DirectForwardSymbolicExecution::getValidityWitness(Predecessors const & predecessors) const {
+    Logic & logic = graph->getLogic();
+    // Collect all instances of CHC predicates
+    // We need to get representation only over state variables
+    // Note that we need a disjunction of all predicate instances, but these may have existentially quantified
+    // auxiliary variables which may clash. So we need to eliminate auxiliary variable for each instance separately
+    // \exists x P(x) \lor \exists x Q(x) is NOT equivalent to \exists x : P(x) \lor Q(x)
+    std::unordered_map<SymRef, std::vector<PTRef>, SymRefHash> reachedStates;
+    for (auto const & state : predecessors.states) {
+        PTRef stateWithMaybeAuxiliaryVariables = state.state;
+        PTRef stateOnlyOverStateVariables = QuantifierElimination(logic).keepOnly(
+            stateWithMaybeAuxiliaryVariables,
+            TermUtils(logic).predicateArgsInOrder(graph->getStateVersion(state.node))
+        );
+        reachedStates[state.node].push_back(stateOnlyOverStateVariables);
+    }
+    ValidityWitness::definitions_t definitions = ValidityWitness::trivialDefinitions(*graph);
+    for (auto const & [predicate, states] : reachedStates) {
+        PTRef versionedDefinition = logic.mkOr(states);
+        definitions.emplace(predicate, TimeMachine(logic).versionedFormulaToUnversioned(versionedDefinition));
+    }
+    return ValidityWitness(std::move(definitions));
+
 }
 
 VerificationResult DirectForwardSymbolicExecution::run() {
@@ -128,6 +155,7 @@ VerificationResult DirectForwardSymbolicExecution::run() {
             }
         }
     }
+    if (computeWitness()) { return VerificationResult{VerificationAnswer::SAFE, getValidityWitness(predecessors)}; }
     return VerificationResult{VerificationAnswer::SAFE};
 }
 

@@ -38,6 +38,7 @@ TEST_F(SETest, test_Simple_Unsafe) {
 }
 
 TEST_F(SETest, test_Simple_Safe) {
+    options.addOption(Options::COMPUTE_WITNESS, "true");
     SymRef inv_sym = mkPredicateSymbol("Inv", {intSort(), intSort()});
     PTRef inv = instantiatePredicate(inv_sym, {x, y});
     PTRef invp = instantiatePredicate(inv_sym, {xp, yp});
@@ -57,7 +58,7 @@ TEST_F(SETest, test_Simple_Safe) {
     };
 
     SymbolicExecution engine(*logic, options);
-    solveSystem(clauses, engine, VerificationAnswer::SAFE, false);
+    solveSystem(clauses, engine, VerificationAnswer::SAFE);
 }
 
 TEST_F(SETest, test_BeyondTransitionSystem_Unsafe)
