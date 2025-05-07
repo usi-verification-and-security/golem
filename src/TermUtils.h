@@ -140,10 +140,13 @@ public:
 
     void printTermWithLets(std::ostream & out, PTRef term);
 
-    PTRef simplifyMax(PTRef root) {
+    [[nodiscard]] PTRef simplifyMax(PTRef const root) const {
         if (logic.isAnd(root) or logic.isOr(root)) {
-            root = ::rewriteMaxArityAggresive(logic, root);
-            return ::simplifyUnderAssignment_Aggressive(root, logic);
+            PTRef const flattened = ::rewriteMaxArityAggresive(logic, root);
+            if (logic.isAnd(flattened) or logic.isOr(flattened)) {
+                return ::simplifyUnderAssignment_Aggressive(flattened, logic);
+            }
+            return flattened;
         }
         return root;
     }
