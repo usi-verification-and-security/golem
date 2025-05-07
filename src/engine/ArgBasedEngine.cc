@@ -381,17 +381,12 @@ VerificationResult Algorithm::run() {
     }
     if (not computeWitness) { return VerificationResult{VerificationAnswer::SAFE}; }
     // compute invariants
-    ValidityWitness::definitions_t definitions;
     Logic & logic = clauses.getLogic();
+    ValidityWitness::definitions_t definitions;
+    definitions.emplace(clauses.getEntry(), logic.getTerm_true());
+    definitions.emplace(clauses.getExit(), logic.getTerm_false());
     for (SymRef symbol : clauses.getVertices()) {
-        if (symbol == logic.getSym_true()) {
-            definitions.emplace(symbol, logic.getTerm_true());
-            continue;
-        }
-        if (symbol == logic.getSym_false()) {
-            definitions.emplace(symbol, logic.getTerm_false());
-            continue;
-        }
+        if (symbol == clauses.getEntry() or symbol == clauses.getExit()) { continue; }
         auto const & argNodeIds = arg.getInstancesFor(symbol);
         vec<PTRef> reachedStates;
         for (ARG::NodeId nodeId : argNodeIds) {
