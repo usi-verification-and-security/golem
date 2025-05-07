@@ -44,6 +44,7 @@ void printUsage() {
            "                             lawi - Lazy Abstraction with Interpolants (only linear systems)\n"
            "                             pa - basic predicate abstraction with CEGAR (any system)\n"
            "                             pdkind - Property directed k-induction (only linear systems)\n"
+           "                             se - forward symbolic execution (only linear system)\n"
            "                             spacer - custom implementation of Spacer (any system)\n"
            "                             split-tpa - Split Transition Power Abstraction (only linear systems)\n"
            "                             tpa - Transition Power Abstraction (only linear systems)\n"

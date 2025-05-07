@@ -14,6 +14,7 @@
 #include "Lawi.h"
 #include "PDKind.h"
 #include "Spacer.h"
+#include "SymbolicExecution.h"
 #include "TPA.h"
 
 namespace golem {
@@ -38,6 +39,8 @@ std::unique_ptr<Engine> EngineFactory::getEngine(std::string_view engine) && {
         return std::make_unique<PDKind>(logic, options);
     } else if (engine == "pa") {
         return std::make_unique<ARGBasedEngine>(logic, options);
+    } else if (engine == "se") {
+        return std::make_unique<SymbolicExecution>(logic, options);
     } else {
         throw std::invalid_argument("Unknown engine specified");
     }
