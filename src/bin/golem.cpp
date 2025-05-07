@@ -21,6 +21,10 @@ std::string tryDetectLogic(ASTNode const * root) {
         if (hasReals and hasIntegers) { return ""; }
         return std::string("QF_") + (hasArrays ? "A" : "") + "L" + (hasIntegers ? "I" : "R") + "A";
     };
+    auto checkForRealsAndInts = [&](ASTNode const * const node) {
+            hasReals = hasReals or strcmp(node->getValue(), "Real") == 0;
+            hasIntegers = hasIntegers or strcmp(node->getValue(), "Int") == 0;
+    };
     for (ASTNode * child : children) {
         const tokens::smt2token token = child->getToken();
         switch (token.x) {
@@ -31,10 +35,6 @@ std::string tryDetectLogic(ASTNode const * root) {
                 ASTNode const & args_node = **(it++);
                 ASTNode const & ret_node  = **(it++); (void)ret_node;
                 assert(it == child->children->end());
-                auto checkForRealsAndInts = [&](ASTNode const * const node) {
-                        hasReals = hasReals or strcmp(node->getValue(), "Real") == 0;
-                        hasIntegers = hasIntegers or strcmp(node->getValue(), "Int") == 0;
-                };
                 for (ASTNode const * const argNode : *(args_node.children)) {
                     if (argNode->getType() == SYM_T) {
                         checkForRealsAndInts(argNode);
@@ -50,12 +50,26 @@ std::string tryDetectLogic(ASTNode const * root) {
                 break;
             }
             case tokens::t_assert:
-                return decide();
+            {
+                if (hasIntegers or hasReals) { return decide(); }
+                // check the sorts of quantified variables
+                auto it = child->children->begin();
+                if ((**it).getType() == FORALL_T) {
+                    ASTNode const * qvars = *(**it).children->begin();
+                    assert(qvars and qvars->getType() == SVL_T);
+                    for (ASTNode const * qvar : *qvars->children) {
+                        assert(qvar and qvar->getType() == SV_T);
+                        ASTNode const * sortNode = *qvar->children->begin();
+                        checkForRealsAndInts(sortNode);
+                    }
+                }
+                break;
+            }
             default:
                 ;
         }
     }
-    return "";
+    return decide();
 }
 
 void error(std::string const & msg) {
