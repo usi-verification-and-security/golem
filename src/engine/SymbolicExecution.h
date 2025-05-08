@@ -21,5 +21,4 @@ public:
 };
 } // namespace golem
 
-
 #endif // GOLEM_SYMBOLICEXECUTION_H

@@ -38,20 +38,25 @@ struct Predecessors {
 class DirectForwardSymbolicExecution {
 public:
     explicit DirectForwardSymbolicExecution(std::unique_ptr<ChcDirectedGraph> graph, Options const & options)
-    : graph(std::move(graph)), options(options) {}
+        : graph(std::move(graph)), options(options) {}
     VerificationResult run();
-private:
-    [[nodiscard]] bool computeWitness() const { return options.getOrDefault(Options::COMPUTE_WITNESS, "false") == "true"; }
 
-    [[nodiscard]] InvalidityWitness getInvalidityWitness(EId errorEid, State::id_t errorPredecessorId, Predecessors const & predecessors) const;
+private:
+    [[nodiscard]] bool computeWitness() const {
+        return options.getOrDefault(Options::COMPUTE_WITNESS, "false") == "true";
+    }
+
+    [[nodiscard]] InvalidityWitness getInvalidityWitness(EId errorEid, State::id_t errorPredecessorId,
+                                                         Predecessors const & predecessors) const;
     [[nodiscard]] ValidityWitness getValidityWitness(Predecessors const & predecessors) const;
 
     std::unique_ptr<ChcDirectedGraph> graph;
     Options const & options;
 };
 
-InvalidityWitness DirectForwardSymbolicExecution::getInvalidityWitness(EId errorEid, State::id_t errorPredecessorId, Predecessors const & predecessors) const {
-    std::vector<EId> errorPath {errorEid};
+InvalidityWitness DirectForwardSymbolicExecution::getInvalidityWitness(EId errorEid, State::id_t errorPredecessorId,
+                                                                       Predecessors const & predecessors) const {
+    std::vector<EId> errorPath{errorEid};
     State::id_t currentId = errorPredecessorId;
     while (true) {
         State const & state = predecessors.states.at(currentId);
@@ -78,8 +83,7 @@ ValidityWitness DirectForwardSymbolicExecution::getValidityWitness(Predecessors 
         PTRef stateWithMaybeAuxiliaryVariables = state.state;
         PTRef stateOnlyOverStateVariables = QuantifierElimination(logic).keepOnly(
             stateWithMaybeAuxiliaryVariables,
-            TermUtils(logic).predicateArgsInOrder(graph->getStateVersion(state.node))
-        );
+            TermUtils(logic).predicateArgsInOrder(graph->getStateVersion(state.node)));
         reachedStates[state.node].push_back(stateOnlyOverStateVariables);
     }
     ValidityWitness::definitions_t definitions = ValidityWitness::trivialDefinitions(*graph);
@@ -88,7 +92,6 @@ ValidityWitness DirectForwardSymbolicExecution::getValidityWitness(Predecessors 
         definitions.emplace(predicate, TimeMachine(logic).versionedFormulaToUnversioned(versionedDefinition));
     }
     return ValidityWitness(std::move(definitions));
-
 }
 
 VerificationResult DirectForwardSymbolicExecution::run() {
@@ -98,6 +101,7 @@ VerificationResult DirectForwardSymbolicExecution::run() {
             const auto [_, inserted] = nodes[node].insert(state);
             return inserted ? InsertionResult::NEW : InsertionResult::DUPLICATE;
         }
+
     private:
         std::unordered_map<SymRef, std::unordered_set<PTRef, PTRefHash>, SymRefHash> nodes;
     };
@@ -110,7 +114,7 @@ VerificationResult DirectForwardSymbolicExecution::run() {
     TermUtils utils(logic);
     State::id_t nextId = 0u;
 
-    State entry {graph->getEntry(), logic.getTerm_true(), nextId++};
+    State entry{graph->getEntry(), logic.getTerm_true(), nextId++};
     q.emplace_back(entry);
     nodes.tryInsert(entry.node, entry.state);
     predecessors.states.push_back(entry);
@@ -126,7 +130,10 @@ VerificationResult DirectForwardSymbolicExecution::run() {
                 solver.assertProp(label);
                 auto res = solver.check();
                 if (res == SMTSolver::Answer::SAT) {
-                    if (computeWitness()) { return VerificationResult{VerificationAnswer::UNSAFE, getInvalidityWitness(eid, currentState.id, predecessors)}; }
+                    if (computeWitness()) {
+                        return VerificationResult{VerificationAnswer::UNSAFE,
+                                                  getInvalidityWitness(eid, currentState.id, predecessors)};
+                    }
                     return VerificationResult{VerificationAnswer::UNSAFE};
                 }
                 if (res != SMTSolver::Answer::UNSAT) { return VerificationResult{VerificationAnswer::UNKNOWN}; }
@@ -141,10 +148,8 @@ VerificationResult DirectForwardSymbolicExecution::run() {
             switch (insertionResult) {
                 case InsertionResult::NEW: {
                     // TODO: Lightweight feasibility check?
-                    State nextState {target, newState, nextId++};
-                    if (computeWitness()) {
-                        predecessors.add(nextState, currentState.id, eid);
-                    }
+                    State nextState{target, newState, nextId++};
+                    if (computeWitness()) { predecessors.add(nextState, currentState.id, eid); }
                     q.push_back(nextState);
                     break;
                 }
@@ -161,12 +166,8 @@ VerificationResult DirectForwardSymbolicExecution::run() {
 
 } // namespace
 
-
-
 VerificationResult SymbolicExecution::solve(ChcDirectedHyperGraph const & graph) {
-    if (graph.isNormalGraph()) {
-        return DirectForwardSymbolicExecution(graph.toNormalGraph(), options).run();
-    }
+    if (graph.isNormalGraph()) { return DirectForwardSymbolicExecution(graph.toNormalGraph(), options).run(); }
     return VerificationResult{VerificationAnswer::UNKNOWN};
 }
 } // namespace golem

@@ -22,6 +22,8 @@ src/engine/Lawi.cc
 src/engine/Lawi.h
 src/engine/PDKind.cc
 src/engine/PDKind.h
+src/engine/SymbolicExecution.cc
+src/engine/SymbolicExecution.h
 src/engine/Spacer.cc
 src/engine/Spacer.h
 src/engine/TPA.cc
