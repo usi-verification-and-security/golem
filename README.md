@@ -65,11 +65,14 @@ It works on transition system, but it can handle linear systems of Horn clauses 
 The PA engine is a simple prototype of a [predicate abstraction](https://link.springer.com/chapter/10.1007/3-540-63166-6_10) with [CEGAR](https://link.springer.com/chapter/10.1007/10722167_15).
 The implementation is still rather naive, but the algorithm can handle all (even nonlinear) CHC systems.
 
-
 ### Property-directed k-induction
 
 The implementation of PDKIND follows the description of the algorithm in [this paper](https://ieeexplore.ieee.org/document/7886665).
 It works on transition system, but it can handle linear systems of Horn clauses by first transforming them into a simple transition system.
+
+### Symbolic Execution
+Following the description from [this paper](https://link.springer.com/chapter/10.1007/978-3-031-50524-9_13), symbolic execution engine implements a *forward* exploration of the reachability graph where reachable nodes are characterized precisely by their path formula (non-current-state variables are implicitly existentially quantified).
+Current implementation supports only linear CHC systems.
 
 ### Transition Power Abstraction
 
