@@ -42,6 +42,18 @@ void SMTSolver::pop() {
 }
 
 namespace {
+Formulas checkEntailmentOneByOne(SMTSolver & solver, Formulas candidates, Logic & logic) {
+    Formulas implied;
+    for (PTRef candidate : candidates) {
+        solver.push();
+        solver.assertProp(logic.mkNot(candidate));
+        auto const res = solver.check();
+        if (res == SMTSolver::Answer::UNSAT) { implied.push(candidate); }
+        solver.pop();
+    }
+    return implied;
+}
+
 Formulas impliedBy(SMTSolver & solver, Formulas candidates, Logic & logic) {
     vec<PTRef> queries;
     queries.capacity(candidates.size());
@@ -98,5 +110,19 @@ Formulas impliedBy(Formulas candidates, vec<PTRef> const & assertions, Logic & l
         solver.assertProp(assertion);
     }
     return impliedBy(solver, std::move(candidates), logic);
+}
+
+Formulas checkEntailmentOneByOne(Formulas candidates, PTRef assertion, Logic & logic) {
+    SMTSolver solver(logic, SMTSolver::WitnessProduction::NONE);
+    solver.assertProp(assertion);
+    return checkEntailmentOneByOne(solver, std::move(candidates), logic);
+}
+
+Formulas checkEntailmentOneByOne(Formulas candidates, vec<PTRef> const & assertions, Logic & logic) {
+    SMTSolver solver(logic, SMTSolver::WitnessProduction::NONE);
+    for (PTRef const assertion : assertions) {
+        solver.assertProp(assertion);
+    }
+    return checkEntailmentOneByOne(solver, std::move(candidates), logic);
 }
 } // namespace golem

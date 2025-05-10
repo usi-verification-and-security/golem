@@ -841,7 +841,7 @@ vec<PTRef> ARG::computePropagatedPredicates(C const & candidates, std::vector<No
         PTRef versionedPredicate = versionManager.baseFormulaToTarget(candidate);
         candidatesVec.push(versionedPredicate);
     }
-    auto impliedPredicates = impliedBy(std::move(candidatesVec), assertions, logic);
+    auto impliedPredicates = checkEntailmentOneByOne(std::move(candidatesVec), assertions, logic);
     for (PTRef & predicate : impliedPredicates) {
         predicate = versionManager.targetFormulaToBase(predicate);
     }

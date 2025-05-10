@@ -46,6 +46,9 @@ public:
 using Formulas = vec<PTRef>;
 Formulas impliedBy(Formulas candidates, PTRef assertion, Logic & logic);
 Formulas impliedBy(Formulas candidates, vec<PTRef> const & assertions, Logic & logic);
+
+Formulas checkEntailmentOneByOne(Formulas candidates, PTRef assertion, Logic & logic);
+Formulas checkEntailmentOneByOne(Formulas candidates, vec<PTRef> const & assertions, Logic & logic);
 } // namespace golem
 
 #endif // GOLEM_SMTSOLVER_H
