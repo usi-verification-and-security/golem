@@ -412,9 +412,7 @@ VerificationResult LawiContext::unwind() {
         }
     });
     // computed interpretations
-    std::unordered_map<SymRef, PTRef, SymRefHash> solution;
-    solution.insert({graph.getEntry(), logic.getTerm_true()});
-    solution.insert({graph.getExit(), logic.getTerm_false()});
+    auto solution = ValidityWitness::trivialDefinitions(graph);
     for (auto vid : graph.getVertices()) {
         if (vid == graph.getEntry() or vid == graph.getExit()) { continue; }
         auto it = finalLabels.find(vid);
@@ -422,7 +420,7 @@ VerificationResult LawiContext::unwind() {
             if (it == finalLabels.end()) { return logic.getTerm_false(); }
             PTRef definition = logic.mkOr(it->second);
             if (logic.isOr(definition) or logic.isAnd(definition)) {
-                definition = simplifyUnderAssignment_Aggressive(definition, logic);
+                definition = TermUtils(logic).simplifyMax(definition);
             }
             return TimeMachine(logic).versionedFormulaToUnversioned(definition);
         }();
