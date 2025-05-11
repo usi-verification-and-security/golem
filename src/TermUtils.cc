@@ -432,7 +432,7 @@ PTRef LATermUtils::simplifyDisjunction(PTRef fla) {
     for (PtAsgn lit : disjuncts) {
         args.push(lit.sgn == l_False ? logic.mkNot(lit.tr) : lit.tr);
     }
-    return logic.mkOr(args);
+    return logic.mkOr(std::move(args));
 }
 
 PTRef LATermUtils::simplifyConjunction(PTRef fla) {
@@ -455,7 +455,7 @@ PTRef LATermUtils::simplifyConjunction(PTRef fla) {
     for (PtAsgn lit : conjuncts) {
         args.push(lit.sgn == l_False ? logic.mkNot(lit.tr) : lit.tr);
     }
-    return logic.mkOr(args);
+    return logic.mkAnd(std::move(args));
 }
 
 namespace {
