@@ -75,18 +75,17 @@ std::shared_ptr<Term> InstantiateVisitor::visit(Terminal * term) {
     auto val = term->getVal();
     auto type = term->getType();
     if (type != Term::VAR) { return std::make_shared<Terminal>(val, type); }
-    for (std::pair<std::string, std::string> const & pair : instPairs) {
-        if (val == pair.first) {
-            if (pair.second == "true" or pair.second == "false") {
-                return std::make_shared<Terminal>(pair.second, Term::BOOL);
-            } else if (pair.second.find('.') != std::string::npos) {
-                return std::make_shared<Terminal>(pair.second, Term::REAL);
-            } else {
-                return std::make_shared<Terminal>(pair.second, Term::INT);
-            }
+    auto it = instPairs.find(val);
+    if (it != instPairs.end()) {
+        auto const & newVal = it->second;
+        if (newVal == "true" or newVal == "false") { return std::make_shared<Terminal>(newVal, Term::BOOL); }
+        if (newVal.find('.') != std::string::npos) {
+            return std::make_shared<Terminal>(newVal, Term::REAL);
+        } else {
+            return std::make_shared<Terminal>(newVal, Term::INT);
         }
     }
-    return std::make_shared<Terminal>(val, type);
+    return term->asSharedPtr();
 }
 
 std::shared_ptr<Term> InstantiateVisitor::visit(Op * term) {

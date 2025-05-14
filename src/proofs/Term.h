@@ -11,7 +11,7 @@
 #include <memory>
 #include <sstream>
 #include <string>
-#include <unordered_set>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -36,8 +36,8 @@ class Terminal : public Term {
 
 public:
     Terminal(std::string val, terminalType t) : val(std::move(val)), type(t) {}
-    std::string const & getVal() { return val; }
-    terminalType const & getType() { return type; }
+    std::string const & getVal() const { return val; }
+    terminalType const & getType() const { return type; }
     termType getTermType() const override { return TERMINAL; }
     terminalType getTerminalType() const override { return type; }
 
@@ -134,10 +134,10 @@ public:
 };
 
 class InstantiateVisitor : public LogicVisitor {
-    std::vector<std::pair<std::string, std::string>> instPairs;
+    std::unordered_map<std::string, std::string> instPairs;
 
 public:
-    explicit InstantiateVisitor(std::vector<std::pair<std::string, std::string>> instPairs)
+    explicit InstantiateVisitor(std::unordered_map<std::string, std::string> instPairs)
         : instPairs(std::move(instPairs)) {}
     explicit InstantiateVisitor() = default;
 
@@ -193,7 +193,7 @@ public:
     void visit(Op *) override;
     void visit(App *) override;
     void visit(Let *) override;
-    std::string getString() { return ss.str(); }
+    std::string getString() const { return ss.str(); }
 };
 
 class PointerVisitor {

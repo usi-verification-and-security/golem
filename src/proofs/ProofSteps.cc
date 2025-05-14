@@ -74,7 +74,7 @@ std::string Step::printStepAlethe() const {
     if (not args.empty()) {
         ss << " :args (";
         for (std::size_t i = 0; i < args.size(); i++) {
-            ss << "(:= " << args[i].first << " " << args[i].second << ")";
+            ss << args[i];
             if (i != args.size() - 1) { ss << " "; }
         }
         ss << ")";
@@ -103,7 +103,7 @@ std::string Step::printStepIntermediate() const {
     if (not args.empty()) {
         ss << " :args (";
         for (std::size_t i = 0; i < args.size(); i++) {
-            ss << "(:= " << args[i].first << " " << args[i].second << ")";
+            ss << args[i];
             if (i != args.size() - 1) { ss << " "; }
         }
         ss << ")";
@@ -125,9 +125,8 @@ void StepHandler::recordStep(std::vector<TermPtr> && clause, std::string rule, S
     notifyObservers(Step{currentStep++, Step::StepType::STEP, std::move(clause), std::move(rule), std::move(premises)});
 }
 
-void StepHandler::recordForallInstStep(std::vector<TermPtr> && clause, InstantiationPairs && instantiationPairs) {
-    notifyObservers(
-        Step{currentStep++, Step::StepType::STEP, std::move(clause), "forall_inst", std::move(instantiationPairs)});
+void StepHandler::recordForallInstStep(std::vector<TermPtr> && clause, std::vector<std::string> && values) {
+    notifyObservers(Step{currentStep++, Step::StepType::STEP, std::move(clause), "forall_inst", std::move(values)});
 }
 
 void StepHandler::recordAssumption(std::vector<std::shared_ptr<Term>> && clause) {
@@ -143,12 +142,19 @@ void StepHandler::buildIntermediateProof() {
 
         if (step.premises.empty()) { continue; }
 
-        auto clause = originalAssertions[step.clauseId.id];
-        auto instPairs = getInstPairs(i, normalizingEqualities[step.clauseId.id]);
+        auto const clause = originalAssertions[step.clauseId.id];
+        auto const instPairs = getInstPairs(i, normalizingEqualities[step.clauseId.id]);
 
         auto instantiated = clause;
         if (not instPairs.empty()) {
-            notifyObservers(Step(currentStep, Step::StepType::STEP, literals(clause), "forall_inst", instPairs));
+            assert(clause->getTermType() == Term::QUANT);
+            auto quantifiedTerm = std::dynamic_pointer_cast<Quant>(clause);
+            std::vector<std::string> args;
+            for (auto const & varTerm : quantifiedTerm->getVars()) {
+                assert(instPairs.contains(varTerm->printTerm()));
+                args.push_back(instPairs.at(varTerm->printTerm()));
+            }
+            notifyObservers(Step(currentStep, Step::StepType::STEP, literals(clause), "forall_inst", std::move(args)));
             currentStep++;
             InstantiateVisitor instantiateVisitor(instPairs);
             instantiated = clause->accept(&instantiateVisitor);
@@ -630,15 +636,15 @@ std::pair<std::shared_ptr<Term>, bool> removeUnusedQuantifiers(std::shared_ptr<T
 
 } // namespace
 
-StepHandler::TermPtr StepHandler::instantiationSteps(std::size_t i, TermPtr quantifiedTerm) {
+StepHandler::TermPtr StepHandler::instantiationSteps(std::size_t i, TermPtr const & quantifiedTerm) {
 
     auto const & step = derivation[i];
 
-    std::shared_ptr<Term> namedAssumption = makeName("@a" + std::to_string(step.clauseId.id));
+    std::size_t quantStep = step.clauseId.id;
+    std::shared_ptr<Term> namedAssumption = makeName("@a" + std::to_string(quantStep));
     std::shared_ptr<Term> instantiationReNamedTerm = makeName("@i" + std::to_string(i - 1));
 
     auto [clearedTerm, hasChanged] = removeUnusedQuantifiers(quantifiedTerm);
-    std::size_t quantStep = step.clauseId.id;
 
     if (hasChanged) {
         recordStep(literals(std::make_shared<Op>("=", std::vector{namedAssumption, clearedTerm})), "qnt_rm_unused", {});
@@ -654,6 +660,13 @@ StepHandler::TermPtr StepHandler::instantiationSteps(std::size_t i, TermPtr quan
 
     if (instPairs.empty()) { return clearedTerm; }
 
+    std::vector<std::string> args;
+    assert(clearedTerm->getTermType() == Term::QUANT);
+    auto const asQuantifiedTerm = std::dynamic_pointer_cast<Quant>(clearedTerm);
+    for (auto const & varTerm : asQuantifiedTerm->getVars()) {
+        assert(instPairs.contains(varTerm->printTerm()));
+        args.push_back(instPairs.at(varTerm->printTerm()));
+    }
     InstantiateVisitor instantiateVisitor(instPairs);
     auto instantiatedTerm = clearedTerm->accept(&instantiateVisitor);
     recordForallInstStep(
@@ -662,7 +675,7 @@ StepHandler::TermPtr StepHandler::instantiationSteps(std::size_t i, TermPtr quan
                            std::make_shared<Op>(
                                "!", literals(instantiatedTerm,
                                              makeName(":named " + instantiationReNamedTerm->printTerm())))))),
-        std::move(instPairs));
+        std::move(args));
 
     recordStep(literals(negate(namedAssumption), instantiationReNamedTerm), "or", Step::Premises{currentStep - 1});
     recordStep(literals(instantiationReNamedTerm), "resolution", Step::Premises{currentStep - 1, quantStep});
@@ -720,8 +733,8 @@ std::size_t StepHandler::deriveLHSWithoutConstraint(std::shared_ptr<Term> const 
     }
 }
 
-std::vector<std::pair<std::string, std::string>>
-StepHandler::getInstPairs(std::size_t stepIndex, vec<Normalizer::Equality> const & stepNormEq) {
+StepHandler::InstantiationPairs StepHandler::getInstPairs(std::size_t const stepIndex,
+                                                          vec<Normalizer::Equality> const & stepNormEq) {
     struct VarValPair {
         PTRef var;
         PTRef val;
@@ -735,7 +748,7 @@ StepHandler::getInstPairs(std::size_t stepIndex, vec<Normalizer::Equality> const
     TermUtils utils(logic);
 
     auto premises = step.premises;
-    premises.erase(std::remove(premises.begin(), premises.end(), 0), premises.end());
+    std::erase(premises, 0);
 
     std::unordered_map<SymRef, std::size_t, SymRefHash> vertexInstance;
 
@@ -781,7 +794,7 @@ StepHandler::getInstPairs(std::size_t stepIndex, vec<Normalizer::Equality> const
         substitutionsMap.insert({varVal.var, varVal.val});
     }
     auto auxVars = matchingSubTerms(logic, originalConstraint, [&](PTRef term) {
-        return logic.isVar(term) and substitutionsMap.find(term) == substitutionsMap.end();
+        return logic.isVar(term) and not substitutionsMap.contains(term);
     });
 
     if (auxVars.size() > 0) {
@@ -804,7 +817,7 @@ StepHandler::getInstPairs(std::size_t stepIndex, vec<Normalizer::Equality> const
                 throw std::logic_error("Auxiliary variable should have been found in normalizing equalities");
             }
             PTRef originalVar = it->originalArg;
-            if (processedOriginalArguments.find(originalVar) == processedOriginalArguments.end()) {
+            if (not processedOriginalArguments.contains(originalVar)) {
                 processedOriginalArguments.insert(originalVar);
                 instPairsBeforeNormalization.push_back({originalVar, val});
             }
@@ -815,10 +828,9 @@ StepHandler::getInstPairs(std::size_t stepIndex, vec<Normalizer::Equality> const
     // For now we assume we have all the variables as arguments of some predicate in the original system.
     // Thus, we can ignore non-variable terms.
     // NOTE: This approach does not work in all cases, but should work in all reasonable cases
-    std::vector<std::pair<std::string, std::string>> res;
-    res.reserve(instPairsBeforeNormalization.size());
+    InstantiationPairs res;
     for (auto && [var, val] : instPairsBeforeNormalization) {
-        if (logic.isVar(var)) { res.emplace_back(logic.getSymName(var), logic.printTerm(val)); }
+        if (logic.isVar(var)) { res.emplace(logic.getSymName(var), logic.printTerm(val)); }
     }
     return res;
 }

@@ -33,14 +33,14 @@ private:
     std::vector<std::shared_ptr<Term>> clause;
     std::string rule;
     Premises premises;
-    std::vector<std::pair<std::string, std::string>> args;
+    std::vector<std::string> args;
 
 public:
     Step(std::size_t stepId, StepType type, std::vector<std::shared_ptr<Term>> clause, std::string rule,
          Premises premises)
         : stepId(stepId), type(type), clause(std::move(clause)), rule(std::move(rule)), premises(std::move(premises)) {}
     Step(std::size_t stepId, StepType type, std::vector<std::shared_ptr<Term>> clause, std::string rule,
-         std::vector<std::pair<std::string, std::string>> args)
+         std::vector<std::string> args)
         : stepId(stepId), type(type), clause(std::move(clause)), rule(std::move(rule)), args(std::move(args)) {}
     Step(std::size_t stepId, StepType type, std::vector<std::shared_ptr<Term>> clause, std::string rule)
         : stepId(stepId), type(type), clause(std::move(clause)), rule(std::move(rule)) {}
@@ -118,12 +118,12 @@ public:
     }
 
 private:
-    using InstantiationPairs = std::vector<std::pair<std::string, std::string>>;
+    using InstantiationPairs = std::unordered_map<std::string, std::string>;
     using TermPtr = std::shared_ptr<Term>;
-    InstantiationPairs getInstPairs(std::size_t it, vec<Normalizer::Equality> const & stepNormEq);
+    InstantiationPairs getInstPairs(std::size_t stepIndex, vec<Normalizer::Equality> const & stepNormEq);
 
     /** Records steps to derive instantiated term and returns this term */
-    TermPtr instantiationSteps(std::size_t i, TermPtr quantifiedTerm);
+    TermPtr instantiationSteps(std::size_t i, TermPtr const & quantifiedTerm);
     void buildAssumptionSteps();
     std::size_t deriveLHSWithoutConstraint(std::shared_ptr<Term> const & simplifiedLHS,
                                            std::vector<std::size_t> predicatePremises);
@@ -138,7 +138,8 @@ private:
 
     std::size_t lastStep() const { return currentStep - 1; }
     void recordStep(std::vector<std::shared_ptr<Term>> && clause, std::string rule, Step::Premises && premises);
-    void recordForallInstStep(std::vector<std::shared_ptr<Term>> && clause, InstantiationPairs && instantiationPairs);
+    void recordForallInstStep(std::vector<std::shared_ptr<Term>> && clause,
+                              std::vector<std::string> && instantiationPairs);
     void recordAssumption(std::vector<std::shared_ptr<Term>> && clause);
 
     /** Simplifies term by evaluating operations on constants, records the simplification steps */
