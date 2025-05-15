@@ -12,7 +12,7 @@
 #include <utility>
 
 namespace golem {
-void VerificationResult::printWitness(std::ostream & out, Logic & logic, const ChcDirectedHyperGraph & originalGraph,
+void VerificationResult::printWitness(std::ostream & out, ArithLogic & logic, const ChcDirectedHyperGraph & originalGraph,
                                        std::vector<std::shared_ptr<Term>> originalAssertions, Normalizer::Equalities const & normalizingEqualities, const std::string& format) const {
 
     if (not hasWitness()) { return; }

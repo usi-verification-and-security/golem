@@ -42,7 +42,7 @@ bool addLetFrame(const vec<char *> & names, vec<PTRef> const & args, Logic & log
 }
 } // namespace
 
-std::unique_ptr<ChcSystem> ChcInterpreter::interpretSystemAst(Logic & logic, const ASTNode * root) {
+std::unique_ptr<ChcSystem> ChcInterpreter::interpretSystemAst(ArithLogic & logic, const ASTNode * root) {
     ChcInterpreterContext ctx(logic, opts);
     return ctx.interpretSystemAst(root);
 }

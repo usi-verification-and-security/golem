@@ -87,7 +87,7 @@ class StepHandler {
     InvalidityWitness::Derivation derivation;
     std::vector<std::shared_ptr<Term>> originalAssertions;
     Normalizer::Equalities const & normalizingEqualities;
-    Logic & logic;
+    ArithLogic & logic;
     ChcDirectedHyperGraph originalGraph;
 
     std::vector<Observer *> observers;
@@ -98,7 +98,7 @@ class StepHandler {
 
 public:
     StepHandler(InvalidityWitness::Derivation derivation, std::vector<std::shared_ptr<Term>> originalAssertions,
-                Normalizer::Equalities const & normalizingEqualities, Logic & logic,
+                Normalizer::Equalities const & normalizingEqualities, ArithLogic & logic,
                 ChcDirectedHyperGraph originalGraph)
         : derivation(std::move(derivation)),
           originalAssertions(std::move(originalAssertions)),

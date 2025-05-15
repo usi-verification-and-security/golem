@@ -88,7 +88,7 @@ public:
 class ChcInterpreterContext {
 public:
     std::unique_ptr<ChcSystem> interpretSystemAst(const ASTNode * root);
-    ChcInterpreterContext(Logic & logic, Options const & opts) : logic(logic), opts(opts) {}
+    ChcInterpreterContext(ArithLogic & logic, Options const & opts) : logic(logic), opts(opts) {}
 
     std::vector<std::string> operators = {"+", "-",  "/",  "*", "and", "or",  "=>",  "not",
                                           "=", ">=", "<=", ">", "<",   "ite", "mod", "div"};
@@ -101,7 +101,7 @@ public:
     }
 
 private:
-    Logic & logic;
+    ArithLogic & logic;
     Options const & opts;
     std::unique_ptr<ChcSystem> system;
     std::vector<std::shared_ptr<Term>> originalAssertions;
@@ -142,7 +142,7 @@ private:
 
 class ChcInterpreter {
 public:
-    std::unique_ptr<ChcSystem> interpretSystemAst(Logic & logic, const ASTNode * root);
+    std::unique_ptr<ChcSystem> interpretSystemAst(ArithLogic & logic, const ASTNode * root);
 
     explicit ChcInterpreter(Options const & opts) : opts(opts) {}
 

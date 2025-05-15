@@ -86,7 +86,7 @@ int main( int argc, char * argv[] ) {
     CommandLineParser parser;
     auto options = parser.parse(argc, argv);
     auto inputFile = options.getOrDefault(Options::INPUT_FILE, "");
-    auto logicFromString = [](std::string const & logic_str) -> std::unique_ptr<Logic> {
+    auto logicFromString = [](std::string const & logic_str) -> std::unique_ptr<ArithLogic> {
         if (logic_str == std::string("QF_LRA")) {
             return std::make_unique<ArithLogic>(opensmt::Logic_t::QF_LRA);
         } else if (logic_str == std::string("QF_LIA")) {
