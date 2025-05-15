@@ -1,0 +1,5 @@
+(set-logic HORN)
+(declare-fun Q (Real) Bool)
+(assert (forall ((x Real)) (=> (> x (- 10.0)) (Q x))))
+(assert (forall ((x Real)) (=> (and (Q x) (= x (- 2.0))) false)))
+(check-sat)

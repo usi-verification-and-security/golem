@@ -31,6 +31,36 @@ std::shared_ptr<Term> negate(std::shared_ptr<Term> const & arg) {
 std::shared_ptr<Terminal> makeName(std::string name) {
     return std::make_shared<Terminal>(std::move(name), Terminal::UNDECLARED);
 }
+
+std::string positiveNumberToString(FastRational const & num, Term::terminalType type) {
+    assert(isNonNegative(num));
+    std::stringstream ss;
+    ss << num.get_str();
+    if (type == Term::terminalType::REAL and num.isInteger()) { ss << ".0"; }
+    return ss.str();
+}
+
+std::string numberToString(FastRational && num, Term::terminalType type) {
+    if (isNegative(num)) {
+        num.negate();
+        return "(- " + positiveNumberToString(num, type) + ")";
+    }
+    return positiveNumberToString(num, type);
+}
+
+std::shared_ptr<Terminal> numberAsTerminal(FastRational && num, Term::terminalType type) {
+    return std::make_shared<Terminal>(numberToString(std::move(num), type), type);
+}
+
+// Workaround for the fact that OpenSMT prints integers in real aritmetic as numerals, not decimals
+std::string printConstant(PTRef constant, ArithLogic const & logic) {
+    assert(logic.isConstant(constant));
+    if (logic.yieldsSortReal(constant)) {
+        FastRational number = logic.getNumConst(constant);
+        return numberToString(std::move(number), Term::terminalType::REAL);
+    }
+    return logic.printTerm(constant);
+}
 } // namespace
 
 namespace golem {
@@ -427,17 +457,18 @@ StepHandler::TermPtr StepHandler::simplifyOpDirect(std::shared_ptr<Op> const & o
     auto const & op = opTerm->getOp();
     auto const & args = opTerm->getArgs();
 
-    auto argAsNumber = [](auto const & arg) -> FastRational {
+    auto argAsNumber = [this](auto const & arg) -> FastRational {
         assert(arg->getTerminalType() == Term::REAL or arg->getTerminalType() == Term::INT);
         auto const & str = std::dynamic_pointer_cast<Terminal>(arg)->getVal();
+        SRef type = arg->getTerminalType() == Term::REAL ? logic.getSort_real() : logic.getSort_int();
         // We have negated numbers represented in SMT-LIB format :(
         if (str.rfind("(-", 0) == 0) {
             auto positive = str.substr(3);
             assert(positive.size() > 0);
             positive.pop_back();
-            return -FastRational(positive.c_str());
+            return -logic.getNumConst(logic.mkConst(type, positive));
         }
-        return FastRational(str.c_str());
+        return logic.getNumConst(logic.mkConst(type, str));
     };
     auto argsAsNumbers = [&]() -> std::pair<FastRational, FastRational> {
         assert(args.size() == 2);
@@ -445,14 +476,6 @@ StepHandler::TermPtr StepHandler::simplifyOpDirect(std::shared_ptr<Op> const & o
     };
 
     auto boolToString = [](bool b) { return b ? "true" : "false"; };
-
-    auto numberAsTerminal = [](FastRational && num, Term::terminalType type) {
-        if (isNegative(num)) {
-            num.negate();
-            return std::make_shared<Terminal>("(- " + num.get_str() + ")", type);
-        }
-        return std::make_shared<Terminal>(num.get_str(), type);
-    };
 
     TermPtr simplified;
     std::string rule;
@@ -830,7 +853,7 @@ StepHandler::InstantiationPairs StepHandler::getInstPairs(std::size_t const step
     // NOTE: This approach does not work in all cases, but should work in all reasonable cases
     InstantiationPairs res;
     for (auto && [var, val] : instPairsBeforeNormalization) {
-        if (logic.isVar(var)) { res.emplace(logic.getSymName(var), logic.printTerm(val)); }
+        if (logic.isVar(var)) { res.emplace(logic.getSymName(var), printConstant(val, logic)); }
     }
     return res;
 }

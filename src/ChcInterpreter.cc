@@ -254,8 +254,8 @@ std::shared_ptr<Term> ChcInterpreterContext::ASTtoTerm(const ASTNode & node) {
             args.push_back(arg_term);
         }
         assert(not args.empty());
-        if (op == "-" or op == "+") {
-            if (args.size() <= 1) { return std::make_shared<Terminal>("(- " + args[0]->printTerm() + ")", Term::INT); }
+        if (op == "-" and args.size() == 1 and args[0]->getTermType() == Term::termType::TERMINAL) {
+            return std::make_shared<Terminal>("(- " + args[0]->printTerm() + ")", args[0]->getTerminalType());
         }
         if (isOperator(op)) {
             return std::make_shared<Op>(op, args);
