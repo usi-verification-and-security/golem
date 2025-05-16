@@ -456,11 +456,11 @@ public:
     PTRef getSourceTermFor(SymRef sym, unsigned instanceCount = 0) const;
 
     class CountingProxy {
-        NonlinearCanonicalPredicateRepresentation & parent;
+        NonlinearCanonicalPredicateRepresentation const & parent;
         std::unordered_map<SymRef, unsigned, SymRefHash> counts;
 
     public:
-        CountingProxy(NonlinearCanonicalPredicateRepresentation & parent) : parent(parent) {}
+        explicit CountingProxy(NonlinearCanonicalPredicateRepresentation const & parent) : parent(parent) {}
 
         PTRef getSourceTermFor(SymRef sym) {
             auto count = counts[sym]++;
@@ -468,7 +468,7 @@ public:
         }
     };
 
-    CountingProxy createCountingProxy() { return CountingProxy(*this); }
+    CountingProxy createCountingProxy() const { return CountingProxy(*this); }
 };
 
 class TrivialQuantifierElimination {

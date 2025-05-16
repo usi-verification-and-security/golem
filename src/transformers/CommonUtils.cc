@@ -153,15 +153,13 @@ InvalidityWitness::Derivation expandStepWithHyperEdge(
     const PTRef targetPredicate = predicateRepresentation.getTargetTermFor(replacingEdge.to);
     utils.mapFromPredicate(targetPredicate, summarizedStep.derivedFact, subst);
     {
-        // TODO: Better way to compute instances correctly?
-        std::unordered_map<SymRef, std::size_t, SymRefHash> instanceCounter;
+        auto countingProxy = predicateRepresentation.createCountingProxy();
         for (auto i = 0u; i < summarizedStep.premises.size(); ++i) {
             PTRef derivedFact = derivation[summarizedStep.premises[i]].derivedFact;
             if (logic.getSymRef(derivedFact) != replacingEdge.from[i]) {
                 throw std::logic_error("Order of nodes does not match!");
             }
-            PTRef sourcePredicate = predicateRepresentation.getSourceTermFor(replacingEdge.from[i],
-                                                                             instanceCounter[replacingEdge.from[i]]++);
+            PTRef sourcePredicate = countingProxy.getSourceTermFor(replacingEdge.from[i]);
             utils.mapFromPredicate(sourcePredicate, derivedFact, subst);
         }
     }

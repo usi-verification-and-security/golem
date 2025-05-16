@@ -283,8 +283,9 @@ public:
     PTRef getEdgeLabel(EId eid) const { return getEdge(eid).fla.fla; }
 
     std::vector<SymRef> const & getSources(EId eid) const { return getEdge(eid).from; }
-
     SymRef getTarget(EId eid) const { return getEdge(eid).to; }
+    std::vector<PTRef> getSourceTerms(EId eid) const;
+
     DirectedHyperEdge contractTrivialChain(std::vector<EId> const & trivialChain);
     VertexContractionResult contractVertex(SymRef sym);
 

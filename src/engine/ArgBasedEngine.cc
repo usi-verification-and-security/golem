@@ -227,7 +227,7 @@ private:
     std::map<NodeId, PTRef> nodeToSymbolInstance;
     NodeId rootId{0};
 
-    explicit InterpolationTree() {}
+    explicit InterpolationTree() = default;
 
     NodeId createNode(NodeId parent, EId clauseId) {
         Node node{.id = nodes.size(), .parent = parent, .children = {}, .label = PTRef_Undef, .clauseId = clauseId};
@@ -683,10 +683,7 @@ public:
                     predicateVars.push(var);
                 }
             }
-            // TODO: Implement a helper to iterate over source vertices together with instantiation counter
-            std::unordered_map<SymRef, std::size_t, SymRefHash> instanceCounter;
-            for (auto source : edge.from) {
-                PTRef sourcePredicate = graph->getStateVersion(source, instanceCounter[source]++);
+            for (PTRef const sourcePredicate : graph->getSourceTerms(edge.id)) {
                 for (PTRef var : utils.predicateArgsInOrder(sourcePredicate)) {
                     assert(logic.isVar(var));
                     predicateVars.push(var);

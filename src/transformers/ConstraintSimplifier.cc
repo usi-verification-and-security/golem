@@ -48,10 +48,7 @@ Transformer::TransformationResult ConstraintSimplifier::transform(std::unique_pt
         constraint = normalizer.eliminateDistincts(constraint);
 
         vec<PTRef> stateVars;
-        // TODO: Implement a helper to iterate over source vertices together with instantiation counter
-        std::unordered_map<SymRef, std::size_t, SymRefHash> instanceCounter;
-        for (auto source : edge.from) {
-            PTRef sourcePredicate = graph->getStateVersion(source, instanceCounter[source]++);
+        for (auto sourcePredicate : graph->getSourceTerms(edge.id)) {
             for (PTRef var : utils.predicateArgsInOrder(sourcePredicate)) {
                 assert(logic.isVar(var));
                 stateVars.push(var);

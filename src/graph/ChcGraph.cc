@@ -283,13 +283,11 @@ std::vector<PTRef> getAuxiliaryVariablesFromEdge(ChcDirectedHyperGraph const & g
     auto nonAuxVars = [&] {
         std::unordered_set<PTRef, PTRefHash> acc;
         std::unordered_map<SymRef, unsigned, SymRefHash> instanceCount;
-        auto targetVars =
-            utils.predicateArgsInOrder(graph.predicateRepresentation().getTargetTermFor(graph.getTarget(eid)));
+        auto targetVars = utils.predicateArgsInOrder(graph.getNextStateVersion(graph.getTarget(eid)));
         acc.insert(targetVars.begin(), targetVars.end());
         for (auto source : graph.getSources(eid)) {
             auto instance = instanceCount[source]++;
-            auto sourceVars =
-                utils.predicateArgsInOrder(graph.predicateRepresentation().getSourceTermFor(source, instance));
+            auto sourceVars = utils.predicateArgsInOrder(graph.getStateVersion(source, instance));
             acc.insert(sourceVars.begin(), sourceVars.end());
         }
         return acc;
@@ -457,6 +455,17 @@ std::vector<DirectedHyperEdge> ChcDirectedHyperGraph::getEdges() const {
     std::vector<DirectedHyperEdge> retEdges;
     forEachEdge([&](DirectedHyperEdge const & edge) { retEdges.push_back(edge); });
     return retEdges;
+}
+
+std::vector<PTRef> ChcDirectedHyperGraph::getSourceTerms(EId eid) const {
+    auto const & sources = getSources(eid);
+    std::vector<PTRef> sourceTerms;
+    sourceTerms.reserve(sources.size());
+    NonlinearCanonicalPredicateRepresentation::CountingProxy proxy = predicateRepresentation().createCountingProxy();
+    for (auto source : sources) {
+        sourceTerms.push_back(proxy.getSourceTermFor(source));
+    }
+    return sourceTerms;
 }
 
 ChcDirectedHyperGraph::VertexContractionResult ChcDirectedHyperGraph::contractVertex(SymRef sym) {
