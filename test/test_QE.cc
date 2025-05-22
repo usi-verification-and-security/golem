@@ -75,7 +75,7 @@ TEST_F(QE_RealTest, test_strictInequalities) {
 
 class TrivialQE_IntTest : public ::testing::Test {
 protected:
-    ArithLogic logic {opensmt::Logic_t::QF_LIA};
+    ArithLogic logic {opensmt::Logic_t::QF_ALIA};
     PTRef x;
     PTRef y;
     PTRef xp;
@@ -120,4 +120,15 @@ TEST_F(TrivialQE_IntTest, test_BooleanVaribles) {
     EXPECT_EQ(res1, logic.getTerm_true());
     PTRef res2 = TrivialQuantifierElimination(logic).tryEliminateVarsExcept(vec{b2}, fla);
     EXPECT_EQ(res2, logic.getTerm_true());
+}
+
+TEST_F(TrivialQE_IntTest, test_ShiftedVarAndArrayAccess) {
+    SRef const arraySort = logic.getArraySort(logic.getSort_int(), logic.getSort_int());
+    PTRef const s1 = logic.mkVar(arraySort, "s1");
+    PTRef const s2 = logic.mkIntVar("s2");
+    PTRef const a1 = logic.mkIntVar("a1");
+    PTRef const a2 = logic.mkIntVar("a2");
+    PTRef const fla = logic.mkAnd({logic.mkEq(a1,a2), logic.mkEq(logic.mkPlus(s2, one), a1), logic.mkEq(logic.mkSelect({s1, a2}), one)});
+    PTRef const res = TrivialQuantifierElimination(logic).tryEliminateVarsExcept(vec{s1,s2}, fla);
+    EXPECT_EQ(res, logic.mkEq(logic.mkSelect({s1, logic.mkPlus(s2, one)}), one));
 }

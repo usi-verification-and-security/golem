@@ -97,6 +97,7 @@ template<typename TKeep> PTRef tryEliminateVars(PTRef fla, Logic & logic, TKeep 
         }
     }
     if (substitutionsToReapply.getSize() > 0) {
+        logic.substitutionsTransitiveClosure(substitutionsToReapply);
         simplifiedFormula = Substitutor(logic, substitutionsToReapply).rewrite(simplifiedFormula);
     }
     // std::cout << logic.pp(simplifiedFormula) << std::endl;
