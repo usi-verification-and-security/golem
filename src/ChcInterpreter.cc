@@ -469,6 +469,64 @@ void printAnswer(VerificationAnswer answer) {
 }
 } // namespace
 
+void ChcInterpreterContext::solveWithMultipleEngines(std::string const & engineStr,
+                                                     std::unique_ptr<ChcDirectedHyperGraph> hyperGraph,
+                                                     std::unique_ptr<ChcDirectedHyperGraph> originalGraph,
+                                                     std::unique_ptr<WitnessBackTranslator> translator,
+                                                     Normalizer::Equalities const & normalizingEqualities) {
+    std::vector<std::string> engines;
+    std::stringstream ss(engineStr);
+    std::string token;
+    while (std::getline(ss, token, ',')) {
+        engines.push_back(token);
+    }
+    pid_t const parent = getpid();
+    std::vector<pid_t> processes;
+    void * mptr = mmap(nullptr, sizeof(pid_t), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+    if (mptr == MAP_FAILED) {
+        reportError("Problem setting up multi-engine run");
+        exit(1);
+    }
+    pid_t * winner_pid = static_cast<pid_t *>(mptr);
+    *winner_pid = -1;
+    for (uint i = 0; i < engines.size(); i++) {
+        if (getpid() == parent) { processes.push_back(fork()); }
+        if (processes[i] == 0) {
+            // child process
+            auto result = solve(engines[i], *hyperGraph);
+            if (result.getAnswer() == VerificationAnswer::UNKNOWN) { exit(1); }
+            if (__sync_bool_compare_and_swap(winner_pid, -1, getpid())) {
+                printAnswer(result.getAnswer());
+                if (hasWorkAfterAnswer()) {
+                    doWorkAfterAnswer(std::move(result), *originalGraph, *translator, normalizingEqualities);
+                }
+                exit(0);
+            } else {
+                exit(1); // Exit with error so that the main process would not kill the child working on witness
+            }
+        }
+    }
+
+    auto guard = ScopeGuard{[&]() { munmap(winner_pid, sizeof(pid_t)); }};
+    while (true) {
+        int status;
+        // Parent process waits until at least one child finishes
+        pid_t done = wait(&status);
+        if (done == -1) {
+            // If all the children processes are finished, we stop
+            if (errno == ECHILD) return;
+        } else {
+            // If some child process encountered error, we continue, otherwise if it returned
+            // SAT/UNSAT we stop all other children and exit the parent process
+            if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) { continue; }
+            for (auto k_p : processes) {
+                kill(k_p, SIGKILL);
+            }
+            return;
+        }
+    }
+}
+
 void ChcInterpreterContext::interpretCheckSat() {
     Normalizer normalizer(logic);
     auto normalizedSystem = normalizer.normalize(*system);
@@ -485,58 +543,9 @@ void ChcInterpreterContext::interpretCheckSat() {
     // This if is needed to run the portfolio of multiple engines
     auto engineName = opts.getOrDefault(Options::ENGINE, "spacer");
     if (engineName.find(',') != std::string::npos) {
-        std::vector<std::string> engines;
-        std::stringstream ss(engineName);
-        std::string token;
-        while (std::getline(ss, token, ',')) {
-            engines.push_back(token);
-        }
-        pid_t parent = getpid();
-        std::vector<pid_t> processes;
-        void * mptr = mmap(nullptr, sizeof(pid_t), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
-        if (mptr == MAP_FAILED) {
-            reportError("Problem setting up multi-engine run");
-            exit(1);
-        }
-        pid_t * winner_pid = static_cast<pid_t *>(mptr);
-        *winner_pid = -1;
-        for (uint i = 0; i < engines.size(); i++) {
-            if (getpid() == parent) { processes.push_back(fork()); }
-            if (processes[i] == 0) {
-                // child process
-                auto result = solve(engines[i], *hypergraph);
-                if (result.getAnswer() == VerificationAnswer::UNKNOWN) { exit(1); }
-                if (__sync_bool_compare_and_swap(winner_pid, -1, getpid())) {
-                    printAnswer(result.getAnswer());
-                    if (hasWorkAfterAnswer()) {
-                        doWorkAfterAnswer(std::move(result), *originalGraph, *translator,
-                                          normalizer.getNormalizingEqualities());
-                    }
-                    exit(0);
-                } else {
-                    exit(1); // Exit with error so that the main process would not kill the child working on witness
-                }
-            }
-        }
-
-        auto guard = ScopeGuard{[&]() { munmap(winner_pid, sizeof(pid_t)); }};
-        while (true) {
-            int status;
-            // Parent process waits until at least one child finishes
-            pid_t done = wait(&status);
-            if (done == -1) {
-                // If all the children processes are finished, we stop
-                if (errno == ECHILD) return;
-            } else {
-                // If some child process encountered error, we continue, otherwise if it returned
-                // SAT/UNSAT we stop all other children and exit the parent process
-                if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) { continue; }
-                for (auto k_p : processes) {
-                    kill(k_p, SIGKILL);
-                }
-                return;
-            }
-        }
+        solveWithMultipleEngines(engineName, std::move(hypergraph), std::move(originalGraph), std::move(translator),
+                                 normalizer.getNormalizingEqualities());
+        return;
     }
 
     auto result = solve(engineName, *hypergraph);

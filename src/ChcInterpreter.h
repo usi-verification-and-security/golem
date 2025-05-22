@@ -120,13 +120,18 @@ private:
 
     VerificationResult solve(std::string const & engine, ChcDirectedHyperGraph const & hyperGraph);
 
-    bool hasWorkAfterAnswer() const;
+    [[nodiscard]] bool hasWorkAfterAnswer() const;
 
     void doWorkAfterAnswer(VerificationResult result, ChcDirectedHyperGraph const & originalGraph,
                            WitnessBackTranslator & translator,
                            Normalizer::Equalities const & normalizingEqualities) const;
 
-    SRef sortFromASTNode(ASTNode const & node) const;
+    void solveWithMultipleEngines(std::string const & engines, std::unique_ptr<ChcDirectedHyperGraph> hyperGraph,
+                                  std::unique_ptr<ChcDirectedHyperGraph> originalGraph,
+                                  std::unique_ptr<WitnessBackTranslator> translator,
+                                  Normalizer::Equalities const & normalizingEqualities);
+
+    [[nodiscard]] SRef sortFromASTNode(ASTNode const & node) const;
 
     PTRef parseTopLevelAssertion(ASTNode const & node);
     PTRef parseTerm(ASTNode const & node);
