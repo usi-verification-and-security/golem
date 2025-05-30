@@ -140,6 +140,7 @@ void InvalidityWitness::print(std::ostream & out, Logic & logic) const {
 
 void ValidityWitness::print(std::ostream & out, ChcDirectedHyperGraph const & graph) const {
     Logic & logic = graph.getLogic();
+    out << "(\n";
     for (auto && [symbol, definition] : interpretations) {
         if (logic.isTrue(symbol) or logic.isFalse(symbol)) { continue; }
         out << "  (define-fun " << logic.protectName(symbol) << " (";
@@ -156,6 +157,7 @@ void ValidityWitness::print(std::ostream & out, ChcDirectedHyperGraph const & gr
         TermUtils(logic).printTermWithLets(out, definition);
         out << ")\n";
     }
+    out << ")\n";
 }
 
 ErrorPath ErrorPath::fromTransitionSystem(const ChcDirectedGraph & graph, std::size_t unrollings) {
