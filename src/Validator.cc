@@ -7,6 +7,7 @@
 #include "Validator.h"
 
 #include "utils/SmtSolver.h"
+#include "utils/StdUtils.h"
 
 namespace golem {
 Validator::Result Validator::validate(ChcDirectedHyperGraph const & graph, VerificationResult const & result) {
@@ -26,6 +27,20 @@ Validator::Result Validator::validateValidityWitness(ChcDirectedHyperGraph const
     auto definitions = witness.getDefinitions();
     assert(definitions.find(graph.getEntry()) != definitions.end());
     assert(definitions.find(graph.getExit()) != definitions.end());
+
+    VersionManager versionManager(logic);
+    // Check that definitions do not contain any auxiliary variables
+    for (auto const & [vertex, definition] : definitions) {
+        auto defVars = TermUtils(logic).getVars(definition);
+        PTRef stateVersion = graph.getStateVersion(vertex);
+        if (logic.getPterm(stateVersion).size() == 0) {
+            if (defVars.size() > 0) { return Result::NOT_VALIDATED; }
+            continue;
+        }
+        auto predicateVars = TermUtils(logic).predicateArgsInOrder(versionManager.sourceFormulaToBase(stateVersion));
+        if (not isSubsetOf(defVars, predicateVars)) { return Result::NOT_VALIDATED; }
+    }
+
     // get correct interpretation for each node
     auto getInterpretation = [&](SymRef symbol) -> PTRef {
         auto const it = definitions.find(symbol);
@@ -37,7 +52,6 @@ Validator::Result Validator::validateValidityWitness(ChcDirectedHyperGraph const
     };
 
     ChcDirectedHyperGraph::VertexInstances vertexInstances(graph);
-    VersionManager versionManager(logic);
     auto edges = graph.getEdges();
     for (auto const & edge : edges) {
         vec<PTRef> bodyComponents;

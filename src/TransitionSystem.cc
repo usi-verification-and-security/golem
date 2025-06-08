@@ -9,6 +9,7 @@
 #include "QuantifierElimination.h"
 #include "TermUtils.h"
 #include "utils/SmtSolver.h"
+#include "utils/StdUtils.h"
 #include "utils/Timer.h"
 
 namespace golem {
@@ -82,13 +83,6 @@ SystemType::SystemType(vec<PTRef> const & stateVars, vec<PTRef> const & auxiliar
     std::ranges::copy(stateVars, std::back_inserter(this->stateVars));
     std::ranges::copy(auxiliaryVars, std::back_inserter(this->auxiliaryVars));
 }
-
-namespace {
-using namespace std;
-bool isSubsetOf(auto const & subset, auto const & superset) {
-    return ranges::all_of(subset, [&](PTRef elem) { return ranges::find(superset, elem) != end(superset); });
-}
-} // namespace
 
 bool SystemType::isStateFormula(PTRef fla) const {
     std::vector<PTRef> allowedVars = stateVars;

@@ -7,6 +7,7 @@
 #ifndef GOLEM_STDUTILS_H
 #define GOLEM_STDUTILS_H
 
+#include <algorithm>
 #include <optional>
 
 namespace golem {
@@ -15,6 +16,11 @@ std::optional<typename MapT::mapped_type> tryGetValue(MapT const & map, typename
     auto it = map.find(key);
     return it == map.end() ? std::nullopt : std::optional<typename MapT::mapped_type>{it->second};
 }
+
+bool isSubsetOf(auto const & subset, auto const & superset) {
+    return std::ranges::all_of(subset, [&](PTRef elem) { return std::ranges::find(superset, elem) != end(superset); });
+}
+
 } // namespace golem
 
 #endif // GOLEM_STDUTILS_H
