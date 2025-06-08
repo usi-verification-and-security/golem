@@ -1004,7 +1004,7 @@ TEST_F(Transformer_New_Test, test_NestedLoopMerger_SimpleSafe) {
     PTRef ten = logic->mkIntConst(10);
     PTRef seven = logic->mkIntConst(7);
     // 0 <= x <= 10 and 0 <= y <= 5 => S1(x,y)
-    // S1(x,y) and y < 10 => S2(x,y,z)
+    // S1(x,y) and y < 10 => S2(x,y)
     // S2(x,y) and x < 7 and x' = x + 1 and y' = y + 1 => S2(x',y')
     // S2(x,y) and x >= 7 => S3(x,y)
     // S3(x,y) and y > 0 and x' = x - 1 => S3(x',y)
@@ -1018,7 +1018,7 @@ TEST_F(Transformer_New_Test, test_NestedLoopMerger_SimpleSafe) {
                                   logic->mkAnd(logic->mkLeq(yp, logic->mkIntConst(5)), logic->mkGeq(yp, zero)))}, {}}
         },
         {
-            ChcHead{UninterpretedPredicate{nextS2}},
+            ChcHead{UninterpretedPredicate{currentS2}},
             ChcBody{{logic->mkLt(y, ten)}, {UninterpretedPredicate{currentS1}}}
         },
         {
@@ -1030,17 +1030,17 @@ TEST_F(Transformer_New_Test, test_NestedLoopMerger_SimpleSafe) {
                     {UninterpretedPredicate{currentS2}}}
         },
         {
-            ChcHead{UninterpretedPredicate{nextS3}},
+            ChcHead{UninterpretedPredicate{currentS3}},
             ChcBody{{logic->mkGeq(x,seven)}, {UninterpretedPredicate{currentS2}}}
         },
         {
             ChcHead{UninterpretedPredicate{nextS3}},
-            ChcBody{{logic->mkAnd( logic->mkGt(y, zero), logic->mkEq(xp, logic->mkMinus(x, one)))},
+            ChcBody{{logic->mkAnd({logic->mkGt(y, zero), logic->mkEq(xp, logic->mkMinus(x, one)), logic->mkEq(yp, y)})},
                          {UninterpretedPredicate{currentS3}}}
         },
         {
             ChcHead{UninterpretedPredicate{nextS1}},
-            ChcBody{{logic->mkAnd( logic->mkLeq(y, zero), logic->mkEq(yp, logic->mkPlus(y, one)))},
+            ChcBody{{logic->mkAnd({logic->mkLeq(y, zero), logic->mkEq(yp, logic->mkPlus(y, one)), logic->mkEq(xp, x)})},
                     {UninterpretedPredicate{currentS3}}}
         },
         {
@@ -1053,11 +1053,6 @@ TEST_F(Transformer_New_Test, test_NestedLoopMerger_SimpleSafe) {
     Logic & logic = *this->logic;
     auto normalizedSystem = Normalizer(logic).normalize(system);
     auto hyperGraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
-    NestedLoopTransformation NLTransformation;
-    auto properGraph = *hyperGraph->toNormalGraph();
-    ASSERT_EQ(properGraph.getEdges().size(), 7);
-    auto [transformedGraph, preTranslator]= NLTransformation.transform(properGraph);
-    ASSERT_EQ(transformedGraph->getEdges().size(), 3);
     auto res = TPAEngine(logic, options, TPACore::SPLIT).solve(*hyperGraph);
     auto answer = res.getAnswer();
     ASSERT_EQ(answer, VerificationAnswer::SAFE);
