@@ -31,6 +31,7 @@ public:
 
 private:
     [[nodiscard]] TransitionSystemVerificationResult solve(TransitionSystem const & system) override;
+    std::unique_ptr<TransitionSystem> dealWithAuxiliaryVariables(std::unique_ptr<TransitionSystem>) override;
 };
 } // namespace golem
 

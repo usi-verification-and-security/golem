@@ -10,6 +10,7 @@
 #include "Common.h"
 #include "ModelBasedProjection.h"
 #include "TermUtils.h"
+#include "TransformationUtils.h"
 #include "utils/ScopeGuard.h"
 #include "utils/SmtSolver.h"
 
@@ -178,6 +179,10 @@ private:
 TransitionSystemVerificationResult PDKind::solve(TransitionSystem const & system) {
     if (logic.hasArrays()) { return TransitionSystemVerificationResult{VerificationAnswer::UNKNOWN, 0u}; }
     return Context(logic, computeWitness).solve(system);
+}
+
+std::unique_ptr<TransitionSystem> PDKind::dealWithAuxiliaryVariables(std::unique_ptr<TransitionSystem> ts) {
+    return ensureNoAuxiliaryVariablesInQuery(std::move(ts));
 }
 
 TransitionSystemVerificationResult Context::solve(TransitionSystem const & system) {

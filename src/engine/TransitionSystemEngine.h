@@ -17,6 +17,7 @@ public:
     virtual TransitionSystemVerificationResult solve(TransitionSystem const &);
 
 protected:
+    virtual std::unique_ptr<TransitionSystem> dealWithAuxiliaryVariables(std::unique_ptr<TransitionSystem>);
     bool computeWitness{false};
 };
 } // namespace golem

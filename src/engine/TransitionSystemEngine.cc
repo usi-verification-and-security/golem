@@ -32,6 +32,7 @@ VerificationResult TransitionSystemEngine::solve(ChcDirectedGraph const & graph)
     }
     if (isTransitionSystem(graph)) {
         auto ts = toTransitionSystem(graph);
+        ts = dealWithAuxiliaryVariables(std::move(ts));
         auto res = solve(*ts);
         return computeWitness ? translateTransitionSystemResult(res, graph, *ts) : VerificationResult(res.answer);
     }
@@ -45,5 +46,10 @@ VerificationResult TransitionSystemEngine::solve(ChcDirectedGraph const & graph)
 TransitionSystemVerificationResult TransitionSystemEngine::solve(TransitionSystem const &) {
     return {VerificationAnswer::UNKNOWN, {0u}};
 }
+
+std::unique_ptr<TransitionSystem> TransitionSystemEngine::dealWithAuxiliaryVariables(std::unique_ptr<TransitionSystem> ts) {
+    return ensureNoAuxiliaryVariablesInInitAndQuery(std::move(ts));
+}
+
 } // namespace golem
 
