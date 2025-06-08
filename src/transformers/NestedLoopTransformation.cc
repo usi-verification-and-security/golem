@@ -128,15 +128,13 @@ NestedLoopTransformation::WitnessBackTranslator::translateInvariant(ValidityWitn
         }
     }
 
-    ValidityWitness::definitions_t vertexInvariants;
-    for (auto inv : wtns.getDefinitions()) {
-        vertexInvariants.insert(inv);
-    }
+    ValidityWitness::definitions_t newDefinitions = wtns.getDefinitions();
     for (auto v : loopContractionInfos) {
         PTRef mergedInv = wtns.getDefinitions().at(v.loopVertex);
+        newDefinitions.erase(v.loopVertex);
         for (auto vertex : oldVertices) {
             if (vertex == initialGraph.getEntry() or vertex == initialGraph.getExit()) { continue; }
-            if (v.locations.find(vertex) == v.locations.end()) { continue; }
+            if (not v.locations.contains(vertex)) { continue; }
             PTRef locationVar = timeMachine.getUnversioned(v.locations.at(vertex));
             substitutions.at(locationVar) = logic.getTerm_true();
             auto vertexInvariant = utils.varSubstitute(mergedInv, substitutions);
@@ -186,15 +184,11 @@ NestedLoopTransformation::WitnessBackTranslator::translateInvariant(ValidityWitn
                 varSubstitutions.insert({timeMachine.getUnversioned(positionVar), logic.getPterm(basePredicate)[i]});
             }
             vertexInvariant = utils.varSubstitute(vertexInvariant, varSubstitutions);
-            if (vertexInvariants.find(vertex) != vertexInvariants.end()) {
-                vertexInvariants[vertex] = vertexInvariant;
-            } else {
-                vertexInvariants.insert({vertex, vertexInvariant});
-            }
-            // std::cout << logic.printSym(vertex) << " -> " << logic.pp(vertexInvariant) << std::endl;
+            assert(not newDefinitions.contains(vertex));
+            newDefinitions.insert({vertex, vertexInvariant});
         }
     }
-    return ValidityWitness(std::move(vertexInvariants));
+    return ValidityWitness(std::move(newDefinitions));
 }
 
 std::unordered_set<PTRef, PTRefHash>
