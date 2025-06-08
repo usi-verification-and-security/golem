@@ -40,7 +40,7 @@ jobs:
                 password: $DOCKERHUB_PASSWORD
             environment:
                 CMAKE_BUILD_TYPE: Release
-                FLAGS: -Wall -Wextra -Werror
+                FLAGS: -Wall -Wextra -Werror -Wno-free-nonheap-object # -Wno-free-nonheap-object added to work around false positive of GCC
 
         steps:
             - checkout
