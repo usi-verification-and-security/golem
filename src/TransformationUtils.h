@@ -24,6 +24,8 @@ std::unique_ptr<TransitionSystem> toTransitionSystem(ChcDirectedGraph const & gr
 
 std::unique_ptr<TransitionSystem> ensureNoAuxiliaryVariablesInInitAndQuery(std::unique_ptr<TransitionSystem> ts);
 
+std::unique_ptr<TransitionSystem> ensureNoAuxiliaryVariablesInQuery(std::unique_ptr<TransitionSystem> ts);
+
 struct EdgeVariables {
     std::vector<PTRef> stateVars;
     std::vector<PTRef> nextStateVars;
