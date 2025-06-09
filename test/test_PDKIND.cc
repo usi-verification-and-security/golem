@@ -249,3 +249,41 @@ TEST_F(PDKindTest, test_PDKIND_RegressionUnsafe) {
     PDKind engine(*logic, options);
     solveSystem(clauses, engine, VerificationAnswer::UNSAFE, true);
 }
+
+TEST_F(PDKindTest, test_PDKIND_AuxiliaryInQuery) {
+    Options options;
+    options.addOption(Options::COMPUTE_WITNESS, "true");
+    SymRef s = mkPredicateSymbol("s", {intSort()});
+    PTRef x = mkIntVar("x");
+    PTRef xp = mkIntVar("xp");
+    PTRef aux = mkIntVar("aux");
+
+    PTRef current = instantiatePredicate(s, {x});
+    PTRef next = instantiatePredicate(s, {xp});
+    // x = 0 => s(x)
+    // s(x) and xp = x + 1 => s(xp)
+    // s(x) and x < 0 and aux != 0 => false
+
+    std::vector<ChClause> clauses {
+        {
+            ChcHead{UninterpretedPredicate{current}},
+            ChcBody{{logic->mkEq(x, zero)}, {}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{next}},
+            ChcBody{{logic->mkEq(xp, logic->mkPlus(x, one))},
+                    {UninterpretedPredicate{current}}
+            }
+        },
+        {
+            ChcHead{UninterpretedPredicate{logic->getTerm_false()}},
+            ChcBody{{logic->mkAnd({
+                        logic->mkLt(x, zero),
+                        logic->mkNot(logic->mkEq(aux, zero))
+                    })},
+                    {UninterpretedPredicate{current}}}
+        }
+    };
+    PDKind engine(*logic, options);
+    solveSystem(clauses, engine, VerificationAnswer::SAFE, true);
+}
