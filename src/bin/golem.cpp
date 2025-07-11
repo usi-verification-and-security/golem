@@ -6,6 +6,7 @@
 
 #include "ChcInterpreter.h"
 #include "Options.h"
+#include <termination/Frontend.h>
 
 #include "osmt_terms.h"
 #include "osmt_parser.h"
@@ -112,6 +113,11 @@ int main( int argc, char * argv[] ) {
         }
 
         const char * extension = strrchr( filename, '.' );
+        if (extension != nullptr and strcmp(extension, ".ari") == 0) {
+            fclose(fin);
+            termination::run(inputFile, options);
+            return 0;
+        }
         if (extension != nullptr && strcmp(extension, ".smt2") == 0) {
             Smt2newContext context(fin);
             int rval = osmt_yyparse(&context);

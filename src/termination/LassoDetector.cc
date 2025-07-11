@@ -115,6 +115,7 @@ LassoDetector::Answer LassoDetector::find_lasso(TransitionSystem const & system)
     // TODO: preprocessing
 
     auto engine = EngineFactory(logic, options).getEngine(options.getOrDefault(Options::ENGINE, "spacer"));
+    if (std::stoi(options.getOrDefault(Options::VERBOSE, "0")) > 0) { std::cout << "; Searching for lasso!\n"; }
     auto res = engine->solve(*hypergraph);
     switch (res.getAnswer()) {
         case VerificationAnswer::SAFE:
