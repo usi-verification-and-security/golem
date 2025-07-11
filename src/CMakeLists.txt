@@ -59,6 +59,7 @@ target_sources(golem_lib
     PRIVATE QuantifierElimination.cc
     PRIVATE graph/ChcGraph.cc
     PRIVATE graph/ChcGraphBuilder.cc
+    PRIVATE termination/Frontend.cc
     PRIVATE termination/LassoDetector.cc
     PRIVATE transformers/BasicTransformationPipelines.cc
     PRIVATE transformers/CommonUtils.cc
