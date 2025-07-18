@@ -9,6 +9,7 @@
 namespace golem {
 NormalizedChcSystem Normalizer::normalize(const ChcSystem & system) {
     this->canonicalPredicateRepresentation.addRepresentation(logic.getSym_true(), {});
+    this->canonicalPredicateRepresentation.addRepresentation(logic.getSym_false(), {});
     std::vector<ChClause> normalized;
     auto const& clauses = system.getClauses();
     for (auto const & clause : clauses) {
