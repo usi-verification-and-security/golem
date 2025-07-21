@@ -10,6 +10,7 @@
 #include "Transformer.h"
 
 namespace golem {
+
 class RemoveUnreachableNodes : public Transformer {
 public:
     TransformationResult transform(std::unique_ptr<ChcDirectedHyperGraph> graph) override;
@@ -30,6 +31,25 @@ public:
         ValidityWitness translate(ValidityWitness witness) override;
     };
 };
+
+// For termination, we want to have an option that eliminates only forward unreachable nodes
+class RemoveForwardUnreachableNodes : public Transformer {
+public:
+    TransformationResult transform(std::unique_ptr<ChcDirectedHyperGraph> graph) override;
+
+    class BackTranslator : public WitnessBackTranslator {
+        Logic & logic;
+        std::vector<SymRef> unreachableFromTrue;
+
+    public:
+        BackTranslator(Logic & logic, std::vector<SymRef> && unreachableFromTrue)
+            : logic(logic), unreachableFromTrue(std::move(unreachableFromTrue)) {}
+
+        InvalidityWitness translate(InvalidityWitness witness) override { return witness; }
+        ValidityWitness translate(ValidityWitness witness) override;
+    };
+};
+
 } // namespace golem
 
 #endif // GOLEM_REMOVEUNREACHABLENODES_H

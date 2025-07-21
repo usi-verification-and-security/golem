@@ -112,4 +112,37 @@ ValidityWitness RemoveUnreachableNodes::BackTranslator::translate(ValidityWitnes
     }
     return ValidityWitness(std::move(definitions));
 }
+
+Transformer::TransformationResult
+RemoveForwardUnreachableNodes::transform(std::unique_ptr<ChcDirectedHyperGraph> graph) {
+    auto adjacencyLists = AdjacencyListsGraphRepresentation::from(*graph);
+    auto & logic = graph->getLogic();
+
+    if (adjacencyLists.getOutgoingEdgesFor(graph->getEntry()).empty()) {
+        // All edges can be removed, we return empty graph, and remember all removed vertices for backtranslation
+        auto allNodes = adjacencyLists.getNodes();
+        std::erase_if(allNodes, [&](SymRef node) { return node == graph->getEntry() or node == graph->getExit(); });
+        auto backtranslator = std::make_unique<BackTranslator>(graph->getLogic(), std::move(allNodes));
+        return {ChcDirectedHyperGraph::makeEmpty(logic), std::move(backtranslator)};
+    }
+
+    auto forwardUnreachable = computeForwardUnreachable(*graph, adjacencyLists);
+    for (auto node : forwardUnreachable) {
+        graph->deleteNode(node);
+    }
+
+    return {std::move(graph), std::make_unique<BackTranslator>(logic, std::move(forwardUnreachable))};
+}
+
+ValidityWitness RemoveForwardUnreachableNodes::BackTranslator::translate(ValidityWitness witness) {
+    if (unreachableFromTrue.empty()) { return witness; }
+    auto definitions = witness.getDefinitions();
+
+    for (auto node : unreachableFromTrue) {
+        assert(not definitions.contains(node));
+        definitions.insert({node, logic.getTerm_false()});
+    }
+    return ValidityWitness(std::move(definitions));
+}
+
 } // namespace golem
