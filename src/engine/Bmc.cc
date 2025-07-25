@@ -134,7 +134,7 @@ InvalidityWitness computeWitness(ChcDirectedGraph const & graph, Model & model, 
  *  - There are no multiedges (No target can be reached from the same source by two different edges)
  */
 VerificationResult BMC::solveGeneralLinearSystem(ChcDirectedGraph const & graph) {
-    if (verbosity > 0) { std::cout << "BMC: Solving general system!" << std::endl; }
+    if (verbosity > 0) { std::cout << "; BMC: Solving general system!" << std::endl; }
     Logic & logic = graph.getLogic();
     BMCUtils utils(logic);
     auto adjacencyLists = AdjacencyListsGraphRepresentation::from(graph);
