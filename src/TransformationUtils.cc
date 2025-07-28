@@ -34,11 +34,27 @@ bool isTransitionSystem(ChcDirectedGraph const & graph) {
     return true;
 }
 
-std::unique_ptr<TransitionSystem> toTransitionSystem(ChcDirectedGraph const & graph) {
+bool isTransitionSystemWithoutQuery(ChcDirectedGraph const & graph) {
+    auto graphRepresentation = AdjacencyListsGraphRepresentation::from(graph);
+    auto reversePostorder = reversePostOrder(graph, graphRepresentation);
+    // TS has 2 vertices: Init, Body
+    if (reversePostorder.size() != 2) { return false; }
+    if (reversePostorder[0] != graph.getEntry()) { return false; }
+    // TS without query has 2 edges: From Init to Body, self-loop on Body
+    auto beg = reversePostorder[0];
+    auto loop = reversePostorder[1];
+    auto const & begOutEdges = graphRepresentation.getOutgoingEdgesFor(beg);
+    if (begOutEdges.size() != 1 or graph.getTarget(begOutEdges[0]) != loop) { return false; }
+    auto const & loopOutEdges = graphRepresentation.getOutgoingEdgesFor(loop);
+    if (loopOutEdges.size() != 1 or graph.getTarget(loopOutEdges[0]) != loop) { return false; }
+    return true;
+}
+
+std::unique_ptr<TransitionSystem> toTransitionSystem(ChcDirectedGraph const & graph, bool allowNoQuery) {
     Logic & logic = graph.getLogic();
     auto const adjacencyRepresentation = AdjacencyListsGraphRepresentation::from(graph);
     auto const vertices = reversePostOrder(graph, adjacencyRepresentation);
-    assert(vertices.size() == 3);
+    assert((vertices.size() == 3 and not allowNoQuery) or (vertices.size() == 2 and allowNoQuery));
     auto systemVariables = [&]() -> EdgeVariables {
         EdgeVariables variables;
         graph.forEachEdge([&](DirectedEdge const & edge) {
@@ -102,7 +118,10 @@ std::unique_ptr<TransitionSystem> toTransitionSystem(ChcDirectedGraph const & gr
             //            std::cout << logic.printTerm(bad) << std::endl;
         }
     });
-    assert(init != PTRef_Undef && transitionRelation != PTRef_Undef && bad != PTRef_Undef);
+    assert(init != PTRef_Undef);
+    assert(transitionRelation != PTRef_Undef);
+    if (allowNoQuery and bad == PTRef_Undef) { bad = logic.getTerm_true(); }
+    assert(bad != PTRef_Undef);
     auto ts = std::make_unique<TransitionSystem>(logic, std::move(systemType), init, transitionRelation, bad);
     return ts;
 }

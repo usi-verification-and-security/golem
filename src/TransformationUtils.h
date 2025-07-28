@@ -16,11 +16,13 @@
 namespace golem {
 bool isTransitionSystem(ChcDirectedGraph const & graph);
 
+bool isTransitionSystemWithoutQuery(ChcDirectedGraph const & graph);
+
 bool isTransitionSystemDAG(ChcDirectedGraph const & graph);
 
 bool isTrivial(ChcDirectedGraph const & graph);
 
-std::unique_ptr<TransitionSystem> toTransitionSystem(ChcDirectedGraph const & graph);
+std::unique_ptr<TransitionSystem> toTransitionSystem(ChcDirectedGraph const & graph, bool allowNoQuery = false);
 
 std::unique_ptr<TransitionSystem> ensureNoAuxiliaryVariablesInInitAndQuery(std::unique_ptr<TransitionSystem> ts);
 
