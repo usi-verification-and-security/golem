@@ -43,6 +43,11 @@ src/proofs/ProofSteps.h
 src/proofs/Term.cc
 src/proofs/Term.h
 
+src/termination/Frontend.cc
+src/termination/Frontend.h
+src/termination/LassoDetector.cc
+src/termination/LassoDetector.h
+
 src/transformers/EdgeInliner.cc
 src/transformers/EdgeInliner.h
 src/transformers/MultiEdgeMerger.cc
