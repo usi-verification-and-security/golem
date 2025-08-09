@@ -446,38 +446,42 @@ void run(std::string const & filename, Options const & options) {
     if (input.bad()) { throw std::logic_error{"Unable to process input file: " + filename}; }
     ITS its = parseITS(input);
     ArithLogic logic(Logic_t::QF_LIA);
-    auto chcs = its.asChcs(logic);
-    // ChcPrinter{logic, std::cout}.print(chcs);
-    Normalizer normalizer(logic);
-    auto normalizedSystem = normalizer.normalize(chcs);
+    try {
+        auto chcs = its.asChcs(logic);
+        // ChcPrinter{logic, std::cout}.print(chcs);
+        Normalizer normalizer(logic);
+        auto normalizedSystem = normalizer.normalize(chcs);
 
-    auto hypergraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
-    assert(hypergraph->isNormalGraph());
-    TransformationPipeline::pipeline_t stages;
-    stages.push_back(std::make_unique<ConstraintSimplifier>());
-    stages.push_back(std::make_unique<SimpleChainSummarizer>());
-    stages.push_back(std::make_unique<RemoveForwardUnreachableNodes>());
-    stages.push_back(std::make_unique<SimpleNodeEliminator>());
-    stages.push_back(std::make_unique<EdgeInliner>());
-    stages.push_back(std::make_unique<FalseClauseRemoval>());
-    stages.push_back(std::make_unique<MultiEdgeMerger>());
-    stages.push_back(std::make_unique<SimpleChainSummarizer>());
-    stages.push_back(std::make_unique<TrivialEdgePruner>());
-    auto [transformedGraph, _] = TransformationPipeline(std::move(stages)).transform(std::move(hypergraph));
-    assert(transformedGraph->isNormalGraph());
-    auto graph = transformedGraph->toNormalGraph();
-    auto ts = [&]() -> std::unique_ptr<TransitionSystem> {
-        if (isTransitionSystemWithoutQuery(*graph)) { return toTransitionSystem(*graph, true); }
-        auto [ts, bt] = SingleLoopTransformation{}.transform(*graph);
-        return std::move(ts);
-    }();
-    auto res = LassoDetector{options}.find_lasso(*ts);
-    if (res == LassoDetector::Answer::LASSO) {
-        std::cout << "NO" << std::endl;
-    } else if (res == LassoDetector::Answer::NO_LASSO) {
-        std::cout << "MAYBE\n;(no lasso exists)" << std::endl;
-    } else {
-        std::cout << "ERROR (when searching for lasso in the system)" << std::endl;
+        auto hypergraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
+        assert(hypergraph->isNormalGraph());
+        TransformationPipeline::pipeline_t stages;
+        stages.push_back(std::make_unique<ConstraintSimplifier>());
+        stages.push_back(std::make_unique<SimpleChainSummarizer>());
+        stages.push_back(std::make_unique<RemoveForwardUnreachableNodes>());
+        stages.push_back(std::make_unique<SimpleNodeEliminator>());
+        stages.push_back(std::make_unique<EdgeInliner>());
+        stages.push_back(std::make_unique<FalseClauseRemoval>());
+        stages.push_back(std::make_unique<MultiEdgeMerger>());
+        stages.push_back(std::make_unique<SimpleChainSummarizer>());
+        stages.push_back(std::make_unique<TrivialEdgePruner>());
+        auto [transformedGraph, _] = TransformationPipeline(std::move(stages)).transform(std::move(hypergraph));
+        assert(transformedGraph->isNormalGraph());
+        auto graph = transformedGraph->toNormalGraph();
+        auto ts = [&]() -> std::unique_ptr<TransitionSystem> {
+            if (isTransitionSystemWithoutQuery(*graph)) { return toTransitionSystem(*graph, true); }
+            auto [ts, bt] = SingleLoopTransformation{}.transform(*graph);
+            return std::move(ts);
+        }();
+        auto res = LassoDetector{options}.find_lasso(*ts);
+        if (res == LassoDetector::Answer::LASSO) {
+            std::cout << "NO" << std::endl;
+        } else if (res == LassoDetector::Answer::NO_LASSO) {
+            std::cout << "MAYBE\n;(no lasso exists)" << std::endl;
+        } else {
+            std::cout << "ERROR (when searching for lasso in the system)" << std::endl;
+        }
+    } catch (LANonLinearException const &) {
+        std::cout << "MAYBE\n;(Nonlinear arithmetic expression in the input)" << std::endl;
     }
 }
 
