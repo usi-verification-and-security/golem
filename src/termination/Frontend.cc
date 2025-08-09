@@ -96,7 +96,7 @@ struct Location {
 };
 
 struct Expr {
-    enum struct Kind { And, Or, Eq, Leq, Add, Mul, Var, Const } kind;
+    enum struct Kind { And, Or, Eq, Leq, Geq, Lt, Gt, Add, Sub, Mul, Var, Const } kind;
     std::vector<std::shared_ptr<Expr>> children;
     std::string value;
 };
@@ -278,11 +278,13 @@ Rule ITS::parseRule(SExpression const & expr) {
     auto const & args = asSubExpressions(expr);
     if (args.empty() or asAtom(args[0]) != "rule") throw std::runtime_error("Expected rule");
 
-    if (args.size() != 5)
-        throw std::runtime_error("Rule should have 5 elements after 'rule': lhs, rhs, \":guard\", guard_expr");
+    if (args.size() < 3) throw std::runtime_error("Rule must define source and target term!");
 
     Location lhs = parseLocationInstance(args[1]);
     Location rhs = parseLocationInstance(args[2]);
+    if (args.size() == 3) { return {lhs, rhs, nullptr}; }
+
+    if (args.size() != 5) throw std::runtime_error("Invalid rule format: invalid guard!");
 
     if (asAtom(args[3]) != ":guard") throw std::runtime_error("Expected :guard keyword");
     auto parsedGuard = parseExpr(args[4]);
@@ -318,10 +320,18 @@ std::shared_ptr<Expr> ITS::parseExpr(SExpression const & expr) {
         kind = Expr::Kind::Eq;
     else if (op == "+")
         kind = Expr::Kind::Add;
+    else if (op == "-")
+        kind = Expr::Kind::Sub;
     else if (op == "*")
         kind = Expr::Kind::Mul;
     else if (op == "<=")
         kind = Expr::Kind::Leq;
+    else if (op == ">=")
+        kind = Expr::Kind::Geq;
+    else if (op == "<")
+        kind = Expr::Kind::Lt;
+    else if (op == ">")
+        kind = Expr::Kind::Gt;
     else
         throw std::runtime_error("Unknown operator: " + op);
 
@@ -352,12 +362,20 @@ PTRef translate(ArithLogic & logic, Expr const & expr) {
             return logic.mkIntVar(expr.value.c_str());
         case Expr::Kind::Add:
             return logic.mkPlus(translate(logic, expr.children));
+        case Expr::Kind::Sub:
+            return logic.mkMinus(translate(logic, expr.children));
         case Expr::Kind::Mul:
             return logic.mkTimes(translate(logic, expr.children));
         case Expr::Kind::Eq:
             return logic.mkEq(translate(logic, expr.children));
         case Expr::Kind::Leq:
             return logic.mkLeq(translate(logic, expr.children));
+        case Expr::Kind::Geq:
+            return logic.mkGeq(translate(logic, expr.children));
+        case Expr::Kind::Lt:
+            return logic.mkLt(translate(logic, expr.children));
+        case Expr::Kind::Gt:
+            return logic.mkGt(translate(logic, expr.children));
         case Expr::Kind::And:
             return logic.mkAnd(translate(logic, expr.children));
         case Expr::Kind::Or:
@@ -399,7 +417,7 @@ ChcSystem ITS::asChcs(ArithLogic & logic) const {
                 args.push(logic.mkIntVar(argName.c_str()));
             }
             PTRef bodyPredicate = logic.mkUninterpFun(source, std::move(args));
-            PTRef constraint = translate(logic, *rule.guard);
+            PTRef constraint = rule.guard ? translate(logic, *rule.guard) : logic.getTerm_true();
             clause.body = ChcBody{.interpretedPart = {constraint}, .uninterpretedPart = {{bodyPredicate}}};
         }
         chcs.addClause(std::move(clause));
