@@ -262,6 +262,8 @@ LocationDeclaration ITS::parseFun(SExpression const & expr) {
 }
 
 Location ITS::parseLocationInstance(SExpression const & expr) {
+    if (isAtom(expr)) return {asAtom(expr), {}};
+
     auto const & args = asSubExpressions(expr);
     if (args.empty()) throw std::runtime_error("Location instance cannot be empty");
 
