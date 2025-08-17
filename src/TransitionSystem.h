@@ -77,15 +77,16 @@ private:
 };
 
 struct KTo1Inductive {
-    enum class Mode { UNFOLD, QE };
+    enum class Mode { UNFOLD_SINGLE_QUERY, UNFOLD_HALVING, QE };
     explicit KTo1Inductive(Mode mode) : mode(mode) {}
-    [[nodiscard]] PTRef kinductiveToInductive(PTRef invariant, unsigned k, TransitionSystem const & system) const;
+    [[nodiscard]] PTRef run(PTRef invariant, unsigned k, TransitionSystem const & system) const;
 
 private:
     Mode mode;
 
     [[nodiscard]] static PTRef qe(PTRef invariant, unsigned k, TransitionSystem const & system);
-    [[nodiscard]] static PTRef unfold(PTRef invariant, unsigned k, TransitionSystem const & system);
+    [[nodiscard]] static PTRef unfoldHalving(PTRef invariant, unsigned k, TransitionSystem const & system);
+    [[nodiscard]] static PTRef unfoldSingleQuery(PTRef invariant, unsigned k, TransitionSystem const & system);
 };
 
 PTRef kinductiveToInductive(PTRef invariant, unsigned k, TransitionSystem const & system);

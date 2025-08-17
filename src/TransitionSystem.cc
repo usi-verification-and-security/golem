@@ -169,10 +169,12 @@ PTRef TransitionSystem::reverseTransitionRelation(TransitionSystem const & trans
     return transition;
 }
 
-PTRef KTo1Inductive::kinductiveToInductive(PTRef invariant, unsigned k, TransitionSystem const & system) const {
+PTRef KTo1Inductive::run(PTRef invariant, unsigned k, TransitionSystem const & system) const {
     switch (mode) {
-        case Mode::UNFOLD:
-            return unfold(invariant, k, system);
+        case Mode::UNFOLD_SINGLE_QUERY:
+            return unfoldSingleQuery(invariant, k, system);
+        case Mode::UNFOLD_HALVING:
+            return unfoldHalving(invariant, k, system);
         case Mode::QE:
             return qe(invariant, k, system);
         default:
@@ -255,12 +257,12 @@ PTRef buildFormula(unsigned index, PTRef invariant, TransitionSystem const & sys
  * Conjoining the interpolant to the original invariant yields k'-inductive invariant with k' < k.
  * Depending on how we split the formula, we can get to different k'. The smallest k' we can get to is k/2 (rounded up).
  *
- * @param invariant k-inductive invsariant for the transition system \p system
+ * @param invariant k-inductive invariant for the transition system \p system
  * @param k
  * @param system
  * @return 1-inductive invariant for the same system that is logically stronger than the k-inductive one
  */
-PTRef KTo1Inductive::unfold(PTRef invariant, unsigned k, TransitionSystem const & system) {
+PTRef KTo1Inductive::unfoldHalving(PTRef invariant, unsigned k, TransitionSystem const & system) {
     Logic & logic = system.getLogic();
     TimeMachine tm(logic);
     while (k > 1) {
@@ -292,11 +294,72 @@ PTRef KTo1Inductive::unfold(PTRef invariant, unsigned k, TransitionSystem const 
     return invariant;
 }
 
+/**
+ * This improves on the halving approach. We can actually compute 1-inductive invariant
+ * from the proof of k-inductivness using sequence interpolants.
+ * The k-inductivness property can be expressed as follows:
+ *
+ * ((KInv(x_0) and Tr(x_0, x_1)) or Init(x_1)) and
+ * ((KInv(x_1) and Tr(x_1, x_2)) or Init(x_2)) and
+ * ((KInv(x_2) and Tr(x_2, x_3)) or Init(x_3)) and
+ *                     .
+ *                     .
+ *                     .
+ * ((KInv(x_(k-1)) and Tr(x_(k-1), x_k)) or Init(x_k))
+ *                     ->
+ *                  KInv(x_k)
+ *
+ * Now, we can compute a sequence interpolant for the timestamps 1 to k
+ * and the formula \bigwedge_{i=1}^{k} I_i is 1-inductive invariant
+ *
+ * @param invariant k-inductive invariant for the transition system \p system
+ * @param k
+ * @param system
+ * @return 1-inductive invariant for the same system that is logically stronger than the k-inductive one
+ */
+PTRef KTo1Inductive::unfoldSingleQuery(PTRef invariant, unsigned k, TransitionSystem const & system) {
+    Logic & logic = system.getLogic();
+    TimeMachine timeMachine(logic);
+
+    auto buildConjunct = [&](unsigned index) {
+        assert(index > 0 and index <= k);
+        PTRef invariantShifted = timeMachine.sendFlaThroughTime(invariant, index - 1);
+        PTRef stepShifted = timeMachine.sendFlaThroughTime(system.getTransition(), index - 1);
+        PTRef initShifted = timeMachine.sendFlaThroughTime(system.getInit(), index);
+        return logic.mkOr(initShifted, logic.mkAnd(invariantShifted, stepShifted));
+    };
+
+    SMTSolver solver(logic, SMTSolver::WitnessProduction::ONLY_INTERPOLANTS);
+    for (unsigned i = 1; i <= k; ++i) {
+        solver.assertProp(buildConjunct(i));
+    }
+    solver.assertProp(logic.mkNot(timeMachine.sendFlaThroughTime(invariant, k)));
+    auto res = solver.check();
+    if (res != SMTSolver::Answer::UNSAT) {
+        throw std::logic_error("Error in reducing k-inductive invariant to 1-inductive: Query must be UNSAT!");
+    }
+    vec<PTRef> interpolants;
+    std::vector<ipartitions_t> a_masks;
+    ipartitions_t mask = 0;
+    for (unsigned i = 0; i < k; ++i) {
+        opensmt::setbit(mask, i);
+        a_masks.push_back(mask);
+    }
+
+    solver.getInterpolationContext()->getPathInterpolants(interpolants, a_masks);
+    assert(interpolants.size_() == k);
+    for (int i = 0; static_cast<unsigned>(i) < k; ++i) {
+        interpolants[i] = timeMachine.sendFlaThroughTime(interpolants[i], -(i + 1));
+    }
+    PTRef inductive = logic.mkAnd(std::move(interpolants));
+    return inductive;
+}
+
 PTRef kinductiveToInductive(PTRef invariant, unsigned k, TransitionSystem const & system) {
     if (k == 1) { return invariant; }
     // std::cout << "Reducing k-inductive invariant with k=" << k << std::endl;
     // Timer timer;
-    PTRef const res = KTo1Inductive{KTo1Inductive::Mode::UNFOLD}.kinductiveToInductive(invariant, k, system);
+    PTRef const res = KTo1Inductive{KTo1Inductive::Mode::UNFOLD_SINGLE_QUERY}.run(invariant, k, system);
     // std::cout << timer.elapsedMilliseconds() << " ms" << std::endl;
     return res;
 }
