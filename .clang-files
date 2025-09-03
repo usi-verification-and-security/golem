@@ -51,6 +51,8 @@ src/termination/LassoDetector.cc
 src/termination/LassoDetector.h
 src/termination/ReachabilityTerm.cc
 src/termination/ReachabilityTerm.h
+src/termination/ReachabilityNonterm.cc
+src/termination/ReachabilityNonterm.h
 
 src/transformers/EdgeInliner.cc
 src/transformers/EdgeInliner.h
