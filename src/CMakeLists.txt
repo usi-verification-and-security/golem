@@ -62,6 +62,7 @@ target_sources(golem_lib
     PRIVATE termination/Frontend.cc
     PRIVATE termination/LassoDetector.cc
     PRIVATE termination/ReachabilityTerm.cc
+    PRIVATE termination/ReachabilityNonterm.cc
     PRIVATE transformers/BasicTransformationPipelines.cc
     PRIVATE transformers/CommonUtils.cc
     PRIVATE transformers/ConstraintSimplifier.cc
