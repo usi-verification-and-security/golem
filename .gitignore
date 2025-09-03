@@ -5,3 +5,9 @@ cmake-build-*
 .idea
 *.log
 run_benchmark.sh
+
+## vscode
+.vscode
+
+## macos
+.DS_Store

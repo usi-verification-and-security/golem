@@ -61,6 +61,7 @@ target_sources(golem_lib
     PRIVATE graph/ChcGraphBuilder.cc
     PRIVATE termination/Frontend.cc
     PRIVATE termination/LassoDetector.cc
+    PRIVATE termination/ReachabilityTerm.cc
     PRIVATE transformers/BasicTransformationPipelines.cc
     PRIVATE transformers/CommonUtils.cc
     PRIVATE transformers/ConstraintSimplifier.cc
