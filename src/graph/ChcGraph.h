@@ -14,6 +14,7 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <QuantifierElimination.h>
 
 namespace golem {
 struct VId {
@@ -191,6 +192,8 @@ public:
             action(edge.second);
         }
     }
+
+    void toSafetyGraph();
 
 private:
     DirectedEdge const & getEdge(EId eid) const { return edges.at(eid); }

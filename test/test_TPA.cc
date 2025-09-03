@@ -34,6 +34,114 @@ TEST_F(TPATest, test_TPA_simple_safe)
     solveSystem(clauses, engine, VerificationAnswer::SAFE, true);
 }
 
+
+TEST_F(TPATest, test_TPA_reset_ts)
+{
+    options.addOption(Options::ENGINE, TPAEngine::SPLIT_TPA);
+    SymRef s1 = mkPredicateSymbol("s1", {intSort(), intSort()});
+    PTRef x_c = logic->mkIntVar("x");
+    PTRef y_c = logic->mkIntVar("y");
+    PTRef x = TimeMachine(*logic).getVarVersionZero(x_c);
+    PTRef y = TimeMachine(*logic).getVarVersionZero(y_c);
+    PTRef xp = TimeMachine(*logic).sendVarThroughTime(x,1);
+    PTRef yp = TimeMachine(*logic).sendVarThroughTime(y,1);
+    PTRef minusOne =  logic->mkNeg(logic->getTerm_IntOne());
+    PTRef hundred =  logic->mkIntConst(100);
+    PTRef hundredO =  logic->mkIntConst(101);
+    PTRef hundredT =  logic->mkIntConst(102);
+    PTRef init = logic->mkAnd( logic->mkEq(x, zero), logic->mkOr(logic->mkNot(logic->mkEq(y, zero)), logic->mkNot(logic->mkEq(x, zero))));
+    PTRef tr = logic->mkOr(
+                            logic->mkAnd({
+                                logic->mkOr(
+                                    logic->mkNot(logic->mkLeq(minusOne, logic->mkNeg(y))),
+                                    logic->mkNot(logic->mkLeq(zero, y))),
+                                logic->mkNot(logic->mkLeq(hundred, x)),
+                                logic->mkEq(minusOne, logic->mkPlus(x, logic->mkNeg(xp))),
+                                logic->mkEq(y, yp)
+                            }),
+                            logic->mkAnd({
+                                logic->mkOr(
+                                    logic->mkNot(logic->mkLeq(minusOne, logic->mkNeg(y))),
+                                    logic->mkNot(logic->mkLeq(zero, y))),
+                                logic->mkLeq(hundred, x),
+                                logic->mkEq(minusOne, logic->mkPlus(x, logic->mkNeg(xp)))
+                            }));
+    PTRef query = logic->mkEq(y, zero);
+    std::vector<PTRef> state_vars = {x, y};
+    auto ts = std::make_unique<TransitionSystem>(*logic,  std::make_unique<SystemType>(state_vars,std::vector<PTRef>{},*logic), init, tr, query);
+    auto solver = std::make_unique<TPASplit>(*logic, options);
+    solver->resetTransitionSystem(*ts);
+    auto res = solver->solve();
+    ASSERT_EQ(res, VerificationAnswer::UNSAFE);
+    PTRef trOne = logic->mkAnd(logic->mkOr(
+                                logic->mkAnd({
+                                    logic->mkOr(
+                                        logic->mkNot(logic->mkLeq(minusOne, logic->mkNeg(y))),
+                                        logic->mkNot(logic->mkLeq(zero, y))),
+                                    logic->mkNot(logic->mkLeq(hundred, x)),
+                                    logic->mkEq(minusOne, logic->mkPlus(x, logic->mkNeg(xp))),
+                                    logic->mkEq(y, yp)
+                                }),
+                                logic->mkAnd({
+                                    logic->mkOr(
+                                        logic->mkNot(logic->mkLeq(minusOne, logic->mkNeg(y))),
+                                        logic->mkNot(logic->mkLeq(zero, y))),
+                                    logic->mkLeq(hundred, x),
+                                    logic->mkEq(minusOne, logic->mkPlus(x, logic->mkNeg(xp)))
+                                })),
+                                logic->mkOr({
+                                    logic->mkNot(logic->mkEq(zero, yp)),
+                                    logic->mkNot(logic->mkEq(hundredO, xp)),
+                                    logic->mkNot(logic->mkLeq(hundredO, xp)),
+                                    logic->mkNot(logic->mkLeq(logic->mkNeg(hundredO), logic->mkNeg(xp))),
+                                }));
+    solver->resetTransitionSystem(TransitionSystem(*logic,
+            std::make_unique<SystemType>(state_vars,std::vector<PTRef>{},*logic), init, trOne, query));
+    res = solver->solve();
+    ASSERT_EQ(res, VerificationAnswer::UNSAFE);
+
+    PTRef upd_tr = logic->mkAnd({
+                            logic->mkOr(
+                            logic->mkAnd({
+                                logic->mkOr(
+                                    logic->mkNot(logic->mkLeq(minusOne, logic->mkNeg(y))),
+                                    logic->mkNot(logic->mkLeq(zero, y))),
+                                logic->mkNot(logic->mkLeq(hundred, x)),
+                                logic->mkEq(minusOne, logic->mkPlus(x, logic->mkNeg(xp))),
+                                logic->mkEq(y, yp)
+                            }),
+                            logic->mkAnd({
+                                logic->mkOr(
+                                    logic->mkNot(logic->mkLeq(minusOne, logic->mkNeg(y))),
+                                    logic->mkNot(logic->mkLeq(zero, y))),
+                                logic->mkLeq(hundred, x),
+                                logic->mkEq(minusOne, logic->mkPlus(x, logic->mkNeg(xp)))
+                            })),
+                            logic->mkOr({
+                                logic->mkNot(logic->mkEq(zero, yp)),
+                                logic->mkNot(logic->mkEq(hundredO, xp)),
+                                logic->mkNot(logic->mkLeq(hundredO, xp)),
+                                logic->mkNot(logic->mkLeq(logic->mkNeg(hundredO), logic->mkNeg(xp))),
+                            }),
+                            logic->mkOr({
+                                    logic->mkNot(logic->mkEq(zero, yp)),
+                                    logic->mkNot(logic->mkEq(hundredT, xp)),
+                                    logic->mkAnd({
+                                        logic->mkEq(hundredO, xp),
+                                        logic->mkLeq(hundredO, xp),
+                                        logic->mkLeq(logic->mkNeg(hundredO), logic->mkNeg(xp))
+                                    })
+                            })
+                        });
+    solver->resetTransitionSystem(TransitionSystem(*logic,
+        std::make_unique<SystemType>(state_vars,std::vector<PTRef>{},*logic), init, upd_tr, query));
+    res = solver->solve();
+    ASSERT_EQ(res, VerificationAnswer::UNSAFE);
+}
+
+
+
+
 TEST_F(TPATest, test_TPA_simple_unsafe)
 {
     options.addOption(Options::LOGIC, "QF_LIA");

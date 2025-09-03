@@ -370,9 +370,6 @@ void TPASplit::storeExactPower(unsigned short power, PTRef tr) {
     if (not reachabilitySolvers[power + 1]) {
         reachabilitySolvers[power + 1] =
             new SolverWrapperIncrementalWithRestarts(logic, nextLevelTransitionStrengthening);
-        //        reachabilitySolvers[power + 1] = new SolverWrapperIncremental(logic,
-        //        nextLevelTransitionStrengthening); reachabilitySolvers[power + 1] = new SolverWrapperSingleUse(logic,
-        //        nextLevelTransitionStrengthening);
     } else {
         reachabilitySolvers[power + 1]->strengthenTransition(nextLevelTransitionStrengthening);
     }

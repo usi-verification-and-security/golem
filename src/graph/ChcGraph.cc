@@ -148,6 +148,33 @@ DirectedEdge ChcDirectedGraph::reverseEdge(DirectedEdge const & edge, TermUtils 
     return DirectedEdge{.from = rfrom, .to = rto, .fla = InterpretedFla{rfla}, .id = edge.id};
 }
 
+void ChcDirectedGraph::toSafetyGraph() {
+    auto vertices = this->getVertices();
+    auto edges = this->getEdges();
+    std::unordered_set<SymRef, SymRefHash> nonexiting_vertices;
+    std::unordered_map<SymRef, EId, SymRefHash> cycle_edges;
+    for (auto v : vertices) {
+        if (v!=getExit()) nonexiting_vertices.emplace(v);
+    }
+    for (auto e : edges) {
+        if (this->getSource(e) != this->getTarget(e)) {
+            nonexiting_vertices.erase(this->getSource(e));
+        } else {
+            cycle_edges.emplace(this->getSource(e), e);
+        }
+    }
+    for (auto v: nonexiting_vertices) {
+        if (cycle_edges.find(v) == cycle_edges.end()) {
+            newEdge(v, getExit(),InterpretedFla(logic.getTerm_true()));
+        } else {
+            PTRef constr = getEdgeLabel(cycle_edges[v]);
+            auto vars = getVariablesFromEdge(logic, *this, cycle_edges[v]);
+            constr = QuantifierElimination(logic).keepOnly(constr, vars.stateVars);
+            newEdge(v, getExit(),InterpretedFla(logic.mkNot(constr)));
+        }
+    }
+}
+
 ChcDirectedGraph ChcDirectedGraph::reverse() const {
     // same vertices, same canonical representation, switch entry and exit and reverse edges
     // NOTE: reversing edge means flipping state and next state variables
