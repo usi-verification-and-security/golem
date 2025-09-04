@@ -72,7 +72,6 @@ public:
 
     void addClause(ChClause clause) { clauses.push_back(std::move(clause)); }
     void addClause(ChcHead head, ChcBody body) { clauses.push_back(ChClause{.head = std::move(head), .body = std::move(body)}); }
-    void popClause() { clauses.pop_back(); }
 
     std::vector<ChClause> const & getClauses() const { return clauses; }
 
