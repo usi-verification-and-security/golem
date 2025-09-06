@@ -7,88 +7,83 @@
 #include "ReachabilityTerm.h"
 
 #include "ChcSystem.h"
-#include "Normalizer.h"
 #include "TermUtils.h"
 #include "engine/EngineFactory.h"
-#include "graph/ChcGraphBuilder.h"
+#include "engine/TPA.h"
+#include "engine/Common.h"
+#include "TransformationUtils.h"
+#include "transformers/SingleLoopTransformation.h"
+#include "ModelBasedProjection.h"
+#include "QuantifierElimination.h"
 
 namespace golem::termination {
-ReachabilityTerm::Answer ReachabilityTerm::nontermination(ChcDirectedHyperGraph const & system) {
-    ArithLogic & logic = dynamic_cast<ArithLogic &>(system.getLogic());
-    // ChcSystem chcs;
-    // // Creating predicate P(x) for TS
-    // SymRef predicate = [&]() -> SymRef {
-    //     vec<SRef> argSorts;
-    //     for (PTRef var : system.getStateVars()) {
-    //         argSorts.push(logic.getSortRef(var));
-    //     }
-    //     return logic.declareFun("L", logic.getSort_bool(), std::move(argSorts));
-    // }();
-    // chcs.addUninterpretedPredicate(predicate);
-    //
-    // // Add transition relation
-    // {
-    //     PTRef body = [&]() -> PTRef {
-    //         vec<PTRef> args;
-    //         for (PTRef var : system.getStateVars()) {
-    //             args.push(var);
-    //         }
-    //         return logic.mkUninterpFun(predicate, std::move(args));
-    //     }();
-    //     PTRef head = [&]() -> PTRef {
-    //         vec<PTRef> args;
-    //         for (PTRef var : system.getNextStateVars()) {
-    //             args.push(var);
-    //         }
-    //         return logic.mkUninterpFun(predicate, std::move(args));
-    //     }();
-    //     chcs.addClause(ChcHead{UninterpretedPredicate{head}},
-    //                    ChcBody{InterpretedFla{system.getTransition()}, {UninterpretedPredicate{body}}});
-    // }
-    //
-    // // Add query
-    // {
-    //     PTRef body = [&]() -> PTRef {
-    //         vec<PTRef> args;
-    //         for (PTRef var : system.getStateVars()) {
-    //             args.push(var);
-    //         }
-    //         return logic.mkUninterpFun(predicate, std::move(args));
-    //     }();
-    //     chcs.addClause(ChcHead{logic.getTerm_false()},
-    //                    ChcBody{InterpretedFla{logic.getTerm_true()}, {UninterpretedPredicate{body}}});
-    // }
-    //
-    // // Add initial clause
-    // {
-    //     auto initial = [&]() -> PTRef {
-    //         vec<PTRef> args;
-    //         for (PTRef var : system.getStateVars()) {
-    //             args.push(var);
-    //         }
-    //         return logic.mkUninterpFun(predicate, std::move(args));
-    //     }();
-    //     chcs.addClause(ChcHead{UninterpretedPredicate{initial}},
-    //         ChcBody{InterpretedFla{system.getInit()}, {}});
-    // }
 
-    // Normalizer normalizer(logic);
-    // auto normalizedSystem = normalizer.normalize(chcs);
-    // auto hypergraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
-    // assert(hypergraph->isNormalGraph());
-    // TODO: preprocessing
-    auto engine = EngineFactory(logic, options).getEngine(options.getOrDefault(Options::ENGINE, "spacer"));
-    if (std::stoi(options.getOrDefault(Options::VERBOSE, "0")) > 0) { std::cout << "; Searching for nontermination!\n"; }
-    auto res = engine->solve(system);
-    while(res.getAnswer() == VerificationAnswer::UNSAFE) {
-        engine.
-        auto witness = res.getInvalidityWitness();
-        // auto format = opts.getOrDefault(Options::PROOF_FORMAT, "legacy");
-        // result.printWitness(std::cout, logic, hypergraph, originalAssertions, normalizingEqualities, format);
-        auto deriv = witness.getDerivation();
+    PTRef eliminateVars(PTRef fla, const vec<PTRef> & vars, Model & model, bool useQE, Logic logic) {
+        if (useQE) {
+            return QuantifierElimination(logic).eliminate(fla, vars);
+        } else {
+            return ModelBasedProjection(logic).project(fla, vars, model);
+        }
     }
 
-    switch (res.getAnswer()) {
+ReachabilityTerm::Answer ReachabilityTerm::nontermination(ChcDirectedHyperGraph const & system) {
+    ArithLogic & logic = dynamic_cast<ArithLogic &>(system.getLogic());
+
+    assert(system.isNormalGraph());
+    auto graph = system.toNormalGraph();
+    if (isTrivial(*graph)) {
+        auto res = solveTrivial(*graph);
+        switch (res.getAnswer()) {
+            case VerificationAnswer::SAFE:
+                return Answer::NO;
+            case VerificationAnswer::UNKNOWN:
+                return Answer::UNKNOWN;
+            case VerificationAnswer::UNSAFE:
+                return Answer::UNKNOWN;
+        }
+    }
+    auto ts = [&]() -> std::unique_ptr<TransitionSystem> {
+        if (isTransitionSystemWithoutQuery(*graph)) { return toTransitionSystem(*graph, true); }
+        auto [ts, bt] = SingleLoopTransformation{}.transform(*graph);
+        return std::move(ts);
+    }();
+    // auto engine = EngineFactory(logic, options).getEngine(options.getOrDefault(Options::ENGINE, "spacer"));
+    auto solver = std::make_unique<TPASplit>(logic, options);
+    solver->resetTransitionSystem(*ts);
+    if (std::stoi(options.getOrDefault(Options::VERBOSE, "0")) > 0) { std::cout << "; Searching for nontermination!\n"; }
+    auto res = solver->solve();
+    while(res == VerificationAnswer::UNSAFE) {
+        // auto format = opts.getOrDefault(Options::PROOF_FORMAT, "legacy");
+        // result.printWitness(std::cout, logic, hypergraph, originalAssertions, normalizingEqualities, format);
+        PTRef init  = solver->getInit();
+        PTRef reached  = solver->getReachedStates();
+        PTRef transition = solver->getTransitionRelation();
+        uint num = solver->getTransitionStepCount();
+        std::vector formulas {init, TimeMachine(logic).sendFlaThroughTime(reached, num)};
+        SMTSolver SMTsolver(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
+        for(int j=0; j < num; j++){
+            formulas.push_back(TimeMachine(logic).sendFlaThroughTime(transition, j));
+        }
+        PTRef transitions = logic.mkAnd(formulas);
+        SMTsolver.assertProp(transitions);
+        auto resSMT = SMTsolver.check();
+        assert(resSMT == SMTSolver::Answer::SAT);
+        auto model = SMTsolver.getModel();
+        for (int j = num; j > 0; j--) {
+            vec<PTRef> toEliminate = solver->getStateVars(j);
+            transitions = ModelBasedProjection(logic).project(transitions, toEliminate, *model);
+        }
+        solver->resetInitialStates(logic.mkAnd(init, logic.mkNot(transitions)));
+        res = solver->solve();
+        SMTsolver.resetSolver();
+        SMTsolver.assertProp(solver->getInit());
+        resSMT = SMTsolver.check();
+        if (resSMT == SMTSolver::Answer::UNSAT) {
+            return Answer::YES;
+        }
+    }
+
+    switch (res) {
         case VerificationAnswer::SAFE:
             return Answer::NO;
         case VerificationAnswer::UNKNOWN:

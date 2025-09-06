@@ -563,7 +563,11 @@ void run(std::string const & filename, Options const & options) {
         if(res == ReachabilityTerm::Answer::NO){
             std::cout << "NO" << std::endl;
         } else {
-            std::cout << "MAYBE\n;(no nonterm detected)" << std::endl;
+            if (res == ReachabilityTerm::Answer::YES) {
+                std::cout << "YES" << std::endl;
+            } else {
+                std::cout << "MAYBE\n;(no nonterm detected)" << std::endl;
+            }
         }
         // auto res = LassoDetector{options}.find_lasso(*ts);
         // if (res == LassoDetector::Answer::LASSO) {
