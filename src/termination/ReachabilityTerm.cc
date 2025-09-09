@@ -43,7 +43,7 @@ ReachabilityTerm::Answer ReachabilityTerm::nontermination(ChcDirectedHyperGraph 
         }
     }
     auto ts = [&]() -> std::unique_ptr<TransitionSystem> {
-        if (isTransitionSystemWithoutQuery(*graph)) { return toTransitionSystem(*graph, true); }
+        if (isTransitionSystem(*graph)) { return toTransitionSystem(*graph, false); }
         auto [ts, bt] = SingleLoopTransformation{}.transform(*graph);
         return std::move(ts);
     }();
@@ -53,8 +53,6 @@ ReachabilityTerm::Answer ReachabilityTerm::nontermination(ChcDirectedHyperGraph 
     if (std::stoi(options.getOrDefault(Options::VERBOSE, "0")) > 0) { std::cout << "; Searching for nontermination!\n"; }
     auto res = solver->solve();
     while(res == VerificationAnswer::UNSAFE) {
-        // auto format = opts.getOrDefault(Options::PROOF_FORMAT, "legacy");
-        // result.printWitness(std::cout, logic, hypergraph, originalAssertions, normalizingEqualities, format);
         PTRef init  = solver->getInit();
         PTRef reached  = solver->getReachedStates();
         PTRef transition = solver->getTransitionRelation();
@@ -75,12 +73,13 @@ ReachabilityTerm::Answer ReachabilityTerm::nontermination(ChcDirectedHyperGraph 
         }
         solver->resetInitialStates(logic.mkAnd(init, logic.mkNot(transitions)));
         res = solver->solve();
-        SMTsolver.resetSolver();
-        SMTsolver.assertProp(solver->getInit());
-        resSMT = SMTsolver.check();
-        if (resSMT == SMTSolver::Answer::UNSAT) {
-            return Answer::YES;
-        }
+    }
+    SMTSolver SMTsolver(logic, SMTSolver::WitnessProduction::NONE);
+    SMTsolver.resetSolver();
+    SMTsolver.assertProp(logic.mkAnd(solver->getInit(), solver->getTransitionRelation()));
+    auto resSMT = SMTsolver.check();
+    if (resSMT == SMTSolver::Answer::UNSAT) {
+        return Answer::YES;
     }
 
     switch (res) {
