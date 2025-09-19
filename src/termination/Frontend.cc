@@ -523,8 +523,21 @@ ChcSystem ITS::asSafetyChcs(ArithLogic & logic) const {
             exists_exit = true;
         }
     }
-    return exists_exit ? chcs : ChcSystem();
+    if (!exists_exit) {
+        for (auto [pred, exit]: exit_locations) {
+                vec<PTRef> args;
+                for (auto const & argName : rules[exit].rhs.arguments) {
+                    args.push(logic.mkIntVar(argName.c_str()));
+                }
+                PTRef exitPredicate = logic.mkUninterpFun(locationsToPredicates[pred], std::move(args));
+                chcs.addClause(ChcHead{logic.getTerm_false()},
+                               ChcBody{.interpretedPart = {logic.getTerm_true()}, .uninterpretedPart = {{exitPredicate}}});
+        }
+    }
+    return chcs;
 }
+
+
 
 void run(std::string const & filename, Options const & options) {
     std::ifstream input(filename);
@@ -532,7 +545,7 @@ void run(std::string const & filename, Options const & options) {
     ITS its = parseITS(input);
     ArithLogic logic(Logic_t::QF_LIA);
     try {
-        auto chcs = its.asSafetyChcs(logic);
+        auto chcs = its.asChcs(logic);
         if (chcs.getClauses().size() == 0) { std::cout << "No exit point" << std::endl; return; }
         // ChcPrinter{logic, std::cout}.print(chcs);
         Normalizer normalizer(logic);
@@ -553,13 +566,14 @@ void run(std::string const & filename, Options const & options) {
         auto [transformedGraph, _] = TransformationPipeline(std::move(stages)).transform(std::move(hypergraph));
         assert(transformedGraph->isNormalGraph());
         auto graph = transformedGraph->toNormalGraph();
+        graph->toSafetyGraph();
         // auto ts = [&]() -> std::unique_ptr<TransitionSystem> {
         //     if (isTransitionSystemWithoutQuery(*graph)) { return toTransitionSystem(*graph, true); }
         //     auto [ts, bt] = SingleLoopTransformation{}.transform(*graph);
         //     return std::move(ts);
         // }();
 
-        auto res = ReachabilityTerm{options}.nontermination(*transformedGraph);
+        auto res = ReachabilityTerm{options}.nontermination(*graph);
         if(res == ReachabilityTerm::Answer::NO){
             std::cout << "NO" << std::endl;
         } else {

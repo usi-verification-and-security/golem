@@ -21,7 +21,7 @@ public:
 
     enum struct Answer { YES, NO, UNKNOWN, ERROR };
 
-    Answer nontermination(ChcDirectedHyperGraph const & system);
+    Answer nontermination(ChcDirectedGraph const & graph);
 
 private:
     Options const & options;

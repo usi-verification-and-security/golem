@@ -192,6 +192,23 @@ public:
         }
     }
 
+    void toSafetyGraph() {
+        auto vertices = this->getVertices();
+        auto edges = this->getEdges();
+        std::unordered_set<SymRef, SymRefHash> nonexiting_vertices;
+        for (auto v : vertices) {
+            if (v!=getExit()) nonexiting_vertices.emplace(v);
+        }
+        for (auto e : edges) {
+            if (this->getSource(e) != this->getTarget(e)) {
+                nonexiting_vertices.erase(this->getSource(e));
+            }
+        }
+        for (auto v: nonexiting_vertices) {
+            newEdge(v, getExit(),InterpretedFla(logic.getTerm_true()));
+        }
+    }
+
 private:
     DirectedEdge const & getEdge(EId eid) const { return edges.at(eid); }
 

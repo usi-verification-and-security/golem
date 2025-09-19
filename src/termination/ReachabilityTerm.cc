@@ -26,14 +26,12 @@ namespace golem::termination {
         }
     }
 
-ReachabilityTerm::Answer ReachabilityTerm::nontermination(ChcDirectedHyperGraph const & system) {
-    ArithLogic & logic = dynamic_cast<ArithLogic &>(system.getLogic());
+ReachabilityTerm::Answer ReachabilityTerm::nontermination(ChcDirectedGraph const & graph) {
+    ArithLogic & logic = dynamic_cast<ArithLogic &>(graph.getLogic());
     TermUtils utils {logic};
 
-    assert(system.isNormalGraph());
-    auto graph = system.toNormalGraph();
-    if (isTrivial(*graph)) {
-        auto res = solveTrivial(*graph);
+    if (isTrivial(graph)) {
+        auto res = solveTrivial(graph);
         switch (res.getAnswer()) {
             case VerificationAnswer::SAFE:
                 return Answer::NO;
@@ -44,12 +42,12 @@ ReachabilityTerm::Answer ReachabilityTerm::nontermination(ChcDirectedHyperGraph 
         }
     }
     auto ts = [&]() -> std::unique_ptr<TransitionSystem> {
-        if (isTransitionSystem(*graph)) { return toTransitionSystem(*graph, false); }
-        auto [ts, bt] = SingleLoopTransformation{}.transform(*graph);
+        if (isTransitionSystem(graph)) { return toTransitionSystem(graph, false); }
+        auto [ts, bt] = SingleLoopTransformation{}.transform(graph);
         return std::move(ts);
     }();
-    // auto engine = EngineFactory(logic, options).getEngine(options.getOrDefault(Options::ENGINE, "spacer"));
-    //     engine->solve();
+    auto engine = EngineFactory(logic, options).getEngine(options.getOrDefault(Options::ENGINE, "spacer"));
+    // engine->solve();
     auto solver = std::make_unique<TPASplit>(logic, options);
     solver->resetTransitionSystem(*ts);
     PTRef init  = solver->getInit();
@@ -108,6 +106,7 @@ ReachabilityTerm::Answer ReachabilityTerm::nontermination(ChcDirectedHyperGraph 
         }
         if (detected) {
             transitionConstraint = logic.mkAnd(transitionConstraint, logic.mkNot(transitions));
+            solver = std::make_unique<TPASplit>(logic, options);
             solver->resetTransitionSystem(TransitionSystem(logic,
                 std::make_unique<SystemType>(ts->getStateVars(), ts->getAuxiliaryVars(), logic),
                 logic.mkAnd(init, initConstraint),
