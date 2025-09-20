@@ -31,15 +31,15 @@ ReachabilityTerm::Answer ReachabilityTerm::nontermination(ChcDirectedGraph const
     TermUtils utils {logic};
 
     if (isTrivial(graph)) {
-        auto res = solveTrivial(graph);
-        switch (res.getAnswer()) {
-            case VerificationAnswer::SAFE:
-                return Answer::NO;
-            case VerificationAnswer::UNKNOWN:
-                return Answer::UNKNOWN;
-            case VerificationAnswer::UNSAFE:
-                return Answer::UNKNOWN;
-        }
+        return Answer::YES;
+        // auto res = solveTrivial(graph);
+        // switch (res.getAnswer()) {
+            // case VerificationAnswer::SAFE:
+            // case VerificationAnswer::UNKNOWN:
+            //     return Answer::UNKNOWN;
+            // case VerificationAnswer::UNSAFE:
+            //     return Answer::UNKNOWN;
+        // }
     }
     auto ts = [&]() -> std::unique_ptr<TransitionSystem> {
         if (isTransitionSystem(graph)) { return toTransitionSystem(graph, false); }
