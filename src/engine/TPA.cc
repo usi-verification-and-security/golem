@@ -256,9 +256,14 @@ public:
 };
 
 TPASplit::~TPASplit() {
+    clearReachabilitySolvers();
+}
+
+void TPASplit::clearReachabilitySolvers() {
     for (SolverWrapper * solver : reachabilitySolvers) {
         delete solver;
     }
+    reachabilitySolvers.clear(true);
 }
 
 PTRef TPABase::getInit() const {
@@ -841,6 +846,7 @@ PTRef TPABase::refineTwoStepTarget(PTRef start, PTRef twoSteptransition, PTRef g
 void TPASplit::resetPowers() {
     this->exactPowers.clear();
     this->lessThanPowers.clear();
+    this->clearReachabilitySolvers();
     storeExactPower(0, transition); // ATr^{=0} = Tr
     lessThanPowers.push(identity);  // Atr^{<0} = Id
 }
@@ -1170,9 +1176,14 @@ bool TPABase::verifyKinductiveInvariant(PTRef fla, unsigned long k) const {
 
 // Single hierarchy version:
 TPABasic::~TPABasic() {
+    clearReachabilitySolvers();
+}
+
+void TPABasic::clearReachabilitySolvers() {
     for (SolverWrapper * solver : reachabilitySolvers) {
         delete solver;
     }
+    reachabilitySolvers.clear(true);
 }
 
 PTRef TPABasic::getLevelTransition(unsigned short power) const {
@@ -1328,6 +1339,7 @@ TPABasic::QueryResult TPABasic::reachabilityQuery(PTRef from, PTRef to, unsigned
 
 void TPABasic::resetPowers() {
     this->transitionHierarchy.clear();
+    this->clearReachabilitySolvers();
     storeLevelTransition(0, logic.mkOr(identity, transition));
 }
 

@@ -242,6 +242,8 @@ private:
     bool verifyExactPower(unsigned short power) const;
 
     bool checkExactFixedPoint(unsigned short power);
+
+    void clearReachabilitySolvers();
 };
 
 class TPABasic : public TPABase {
@@ -271,6 +273,8 @@ private:
     QueryResult reachabilityQuery(PTRef from, PTRef to, unsigned short power);
 
     bool verifyPower(unsigned short level) const;
+
+    void clearReachabilitySolvers();
 };
 } // namespace golem
 
