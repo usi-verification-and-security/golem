@@ -49,6 +49,7 @@ void printUsage() {
            "                                  spacer - custom implementation of Spacer (any system)\n"
            "                                  split-tpa - Split Transition Power Abstraction (only linear systems)\n"
            "                                  tpa - Transition Power Abstraction (only linear systems)\n"
+           "                                  trl - Transitive Relations Learning (only linear systems)\n"
            "--validate                      Internally validate computed solution\n"
            "--print-witness                 Print computed solution\n"
            "--proof-format <name>           Proof format to use; supported formats:\n"

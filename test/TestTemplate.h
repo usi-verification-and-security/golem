@@ -61,6 +61,7 @@ protected:
     PTRef two;
     PTRef x, xp;
     PTRef y, yp;
+    PTRef z, zp;
 
     LIAEngineTest() {
         logic = std::make_unique<ArithLogic>(opensmt::Logic_t::QF_LIA);
@@ -71,6 +72,8 @@ protected:
         xp = mkIntVar("xp");
         y = mkIntVar("y");
         yp = mkIntVar("yp");
+        z = mkIntVar("z");
+        zp = mkIntVar("zp");
     }
 
     PTRef mkIntVar(char const * const name) { return logic->mkIntVar(name); }

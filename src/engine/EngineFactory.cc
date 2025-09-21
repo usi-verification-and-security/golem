@@ -16,6 +16,7 @@
 #include "Spacer.h"
 #include "SymbolicExecution.h"
 #include "TPA.h"
+#include "TRL.h"
 
 namespace golem {
 std::unique_ptr<Engine> EngineFactory::getEngine(std::string_view engine) && {
@@ -41,6 +42,8 @@ std::unique_ptr<Engine> EngineFactory::getEngine(std::string_view engine) && {
         return std::make_unique<ARGBasedEngine>(logic, options);
     } else if (engine == "se") {
         return std::make_unique<SymbolicExecution>(logic, options);
+    } else if (engine == "trl") {
+        return std::make_unique<TRL>(logic, options);
     } else {
         throw std::invalid_argument("Unknown engine specified");
     }

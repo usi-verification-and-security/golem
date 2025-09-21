@@ -24,6 +24,7 @@ target_sources(GolemTest
     PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/test_SymbolicExecution.cc"
     PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/test_TermUtils.cc"
     PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/test_TPA.cc"
+    PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/test_TRL.cc"
     PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/test_TransformationUtils.cc"
     PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/test_Transformers.cc"
     PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/test_IMC.cc"

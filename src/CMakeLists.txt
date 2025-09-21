@@ -43,6 +43,7 @@ target_sources(golem_lib
     PRIVATE engine/Spacer.cc
     PRIVATE engine/SymbolicExecution.cc
     PRIVATE engine/TPA.cc
+    PRIVATE engine/TRL.cc
     PRIVATE engine/TransitionSystemEngine.cc
     PRIVATE TransitionSystem.cc
     PRIVATE Options.cc

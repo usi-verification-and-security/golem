@@ -154,8 +154,8 @@ public:
 };
 
 struct TransitionSystemVerificationResult {
-    VerificationAnswer answer;
-    std::variant<std::size_t, PTRef> witness; // Unrolling number or state inductive invariant
+    VerificationAnswer answer {VerificationAnswer::UNKNOWN};
+    std::variant<std::size_t, PTRef> witness {0ul}; // Unrolling number or state inductive invariant
 };
 
 VerificationResult translateTransitionSystemResult(TransitionSystemVerificationResult result, ChcDirectedGraph const & graph, TransitionSystem const & ts);
