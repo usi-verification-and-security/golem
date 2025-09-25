@@ -41,6 +41,9 @@ void SMTSolver::pop() {
     solver->pop();
 }
 
+
+
+
 namespace {
 Formulas checkEntailmentOneByOne(SMTSolver & solver, Formulas candidates, Logic & logic) {
     Formulas implied;
