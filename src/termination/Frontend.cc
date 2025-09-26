@@ -543,6 +543,9 @@ void run(std::string const & filename, Options const & options) {
     std::ifstream input(filename);
     if (input.bad()) { throw std::logic_error{"Unable to process input file: " + filename}; }
     ITS its = parseITS(input);
+    if (its.rules.size() == 0u) {
+                std::cout << "YES" << std::endl;
+        return; }
     ArithLogic logic(Logic_t::QF_LIA);
     try {
         auto chcs = its.asChcs(logic);

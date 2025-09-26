@@ -33,10 +33,10 @@ namespace golem::termination {
             auto juncts = utils.getTopLevelConjuncts(input);
 
             for (int i = 0; i < (int)juncts.size(); i++) {
-                PTRef after_junct = dnfize(juncts[0], logic);
+                PTRef after_junct = dnfize(juncts[i], logic);
                 if (logic.isOr(after_junct)) {
                     auto subjuncts = utils.getTopLevelDisjuncts(after_junct);
-                    vec<PTRef> postprocessJuncts(subjuncts.size());
+                    vec<PTRef> postprocessJuncts;
                     juncts[i] = juncts.last();
                     juncts.pop();
                     for (auto subjunct: subjuncts) {
@@ -44,11 +44,10 @@ namespace golem::termination {
                     }
                     return dnfize(logic.mkOr(postprocessJuncts), logic);
                 }
-                i++;
             }
         } else if (logic.isOr(input)) {
             auto juncts = utils.getTopLevelDisjuncts(input);
-            vec<PTRef> postprocessJuncts(juncts.size());
+            vec<PTRef> postprocessJuncts;
 
             for (int i = 0; i < (int)juncts.size(); i++) {
                 PTRef after_junct = dnfize(juncts[i], logic);
@@ -68,14 +67,14 @@ namespace golem::termination {
             PTRef rev = logic.mkNot(input);
             if (logic.isAnd(rev)) {
                 auto subjuncts = utils.getTopLevelConjuncts(rev);
-                vec<PTRef> postprocessJuncts(subjuncts.size());
+                vec<PTRef> postprocessJuncts;
                 for (int i = 0; i < (int)subjuncts.size(); i++) {
                     postprocessJuncts.push(logic.mkNot(subjuncts[i]));
                 }
                 return dnfize(logic.mkOr(postprocessJuncts), logic);
             } else if (logic.isOr(rev)) {
                 auto subjuncts = utils.getTopLevelDisjuncts(input);
-                vec<PTRef> postprocessJuncts(subjuncts.size());
+                vec<PTRef> postprocessJuncts;
                 for (int i = 0; i < (int)subjuncts.size(); i++) {
                     postprocessJuncts.push(logic.mkNot(subjuncts[i]));
                 }
@@ -100,10 +99,10 @@ ReachabilityTerm::Answer ReachabilityTerm::nontermination(ChcDirectedGraph const
     auto engine = EngineFactory(logic, options).getEngine(options.getOrDefault(Options::ENGINE, "spacer"));
     // engine->solve();
     auto solver = std::make_unique<TPASplit>(logic, options);
-    PTRef init  = solver->getInit();
-    std::cout<<"Transition pre-dnfize: " << logic.pp(solver -> getTransitionRelation()) << std::endl;
-    PTRef transition = dnfize(solver -> getTransitionRelation(),logic);
-    PTRef query = solver -> getQuery();
+    PTRef init  = ts->getInit();
+    std::cout<<"Transition pre-dnfize: " << logic.pp(ts->getTransition()) << std::endl;
+    PTRef transition = dnfize(ts->getTransition(),logic);
+    PTRef query = ts->getQuery();
     solver->resetTransitionSystem(TransitionSystem(logic,
                     std::make_unique<SystemType>(ts->getStateVars(), ts->getAuxiliaryVars(), logic),
                     init,
@@ -146,11 +145,17 @@ ReachabilityTerm::Answer ReachabilityTerm::nontermination(ChcDirectedGraph const
         auto model = SMTsolver.getModel();
         bool detected = false;
         for (int j = num; j > 0; j--) {
+            uint k = 0;
+            PTRef base = model->evaluate(TimeMachine(logic).sendFlaThroughTime(transition, j-1));
             for (auto & disjunct : disjuncts) {
-                uint k = 0;
                 SMTSolver smt_solver(logic, SMTSolver::WitnessProduction::NONE);
                 std::cout<<"Junct: " << logic.pp(disjunct) << std::endl;
-                smt_solver.assertProp(model->evaluate(TimeMachine(logic).sendFlaThroughTime(disjunct, j-1)));
+                smt_solver.assertProp(logic.mkAnd(base, disjunct));
+            // uint k = 0;
+            // for (auto & disjunct : disjuncts) {
+            //     SMTSolver smt_solver(logic, SMTSolver::WitnessProduction::NONE);
+            //     std::cout<<"Junct: " << logic.pp(disjunct) << std::endl;
+            //     smt_solver.assertProp(model->evaluate(TimeMachine(logic).sendFlaThroughTime(disjunct, j-1)));
                 if (smt_solver.check() == SMTSolver::Answer::SAT) {
                     k+=1;
                     if (nondet_juncts.contains(disjunct) || k == 2) {
@@ -163,8 +168,8 @@ ReachabilityTerm::Answer ReachabilityTerm::nontermination(ChcDirectedGraph const
                             nondet_juncts.erase(disjunct);
                         };
                         detected = true;
+                        break;
                     }
-                    break;
                 }
             }
             if (detected) { break; }
@@ -202,8 +207,12 @@ ReachabilityTerm::Answer ReachabilityTerm::nontermination(ChcDirectedGraph const
             SMTsolver.assertProp(logic.mkAnd({inv, logic.mkAnd(transition, transitionConstraint), logic.mkNot(TimeMachine(logic).sendFlaThroughTime(inv, 1))}));
             auto ans_1 = SMTsolver.check();
             SMTsolver.resetSolver();
-            SMTsolver.assertProp(logic.mkAnd(inv, logic.mkNot(logic.mkAnd(transition, transitionConstraint))));
+            SMTsolver.assertProp(logic.mkAnd(inv, logic.mkNot(QuantifierElimination(logic).keepOnly(logic.mkAnd(transition, transitionConstraint), solver->getStateVars(0)))));
             auto ans_2 = SMTsolver.check();
+
+            std::cout<<"Invariant: " << logic.pp(inv) << std::endl;
+            std::cout<<"Transition: " << logic.pp(transition) << std::endl;
+            std::cout<<"Transition Constraint: " << logic.pp(transitionConstraint) << std::endl;
             if (ans_1== SMTSolver::Answer::UNSAT && ans_2 == SMTSolver::Answer::UNSAT) {
                 return Answer::NO;
             } else {
