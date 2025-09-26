@@ -100,10 +100,15 @@ ReachabilityTerm::Answer ReachabilityTerm::nontermination(ChcDirectedGraph const
     auto engine = EngineFactory(logic, options).getEngine(options.getOrDefault(Options::ENGINE, "spacer"));
     // engine->solve();
     auto solver = std::make_unique<TPASplit>(logic, options);
-    solver->resetTransitionSystem(*ts);
     PTRef init  = solver->getInit();
-    PTRef transition = solver -> getTransitionRelation();
+    std::cout<<"Transition pre-dnfize: " << logic.pp(solver -> getTransitionRelation()) << std::endl;
+    PTRef transition = dnfize(solver -> getTransitionRelation(),logic);
     PTRef query = solver -> getQuery();
+    solver->resetTransitionSystem(TransitionSystem(logic,
+                    std::make_unique<SystemType>(ts->getStateVars(), ts->getAuxiliaryVars(), logic),
+                    init,
+                        transition,
+                        query));
     std::cout<<"Init: " << logic.pp(init) << std::endl;
     std::cout<<"Transition: " << logic.pp(transition) << std::endl;
     std::cout<<"Query: " << logic.pp(query) << std::endl;
@@ -191,8 +196,20 @@ ReachabilityTerm::Answer ReachabilityTerm::nontermination(ChcDirectedGraph const
     }
 
     switch (res) {
-        case VerificationAnswer::SAFE:
-            return Answer::NO;
+        case VerificationAnswer::SAFE: {
+            PTRef inv = solver->getInductiveInvariant();
+            SMTsolver.resetSolver();
+            SMTsolver.assertProp(logic.mkAnd({inv, logic.mkAnd(transition, transitionConstraint), logic.mkNot(TimeMachine(logic).sendFlaThroughTime(inv, 1))}));
+            auto ans_1 = SMTsolver.check();
+            SMTsolver.resetSolver();
+            SMTsolver.assertProp(logic.mkAnd(inv, logic.mkNot(logic.mkAnd(transition, transitionConstraint))));
+            auto ans_2 = SMTsolver.check();
+            if (ans_1== SMTSolver::Answer::UNSAT && ans_2 == SMTSolver::Answer::UNSAT) {
+                return Answer::NO;
+            } else {
+                return Answer::UNKNOWN;
+            }
+        }
         case VerificationAnswer::UNKNOWN:
             return Answer::UNKNOWN;
         case VerificationAnswer::UNSAFE:
