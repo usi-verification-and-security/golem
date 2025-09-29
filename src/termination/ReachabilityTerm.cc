@@ -146,7 +146,7 @@ ReachabilityTerm::Answer ReachabilityTerm::nontermination(ChcDirectedGraph const
             PTRef base = model->evaluate(TimeMachine(logic).sendFlaThroughTime(transition, j-1));
             for (auto & disjunct : disjuncts) {
                 SMTSolver smt_solver(logic, SMTSolver::WitnessProduction::NONE);
-                std::cout<<"Junct: " << logic.pp(disjunct) << std::endl;
+                // std::cout<<"Junct: " << logic.pp(disjunct) << std::endl;
                 smt_solver.assertProp(logic.mkAnd(base, disjunct));
             // uint k = 0;
             // for (auto & disjunct : disjuncts) {
@@ -158,7 +158,7 @@ ReachabilityTerm::Answer ReachabilityTerm::nontermination(ChcDirectedGraph const
                     if (nondet_juncts.contains(disjunct) || k == 2) {
                         auto preVars = solver->getStateVars(j);
                         transitions = TimeMachine(logic).sendFlaThroughTime(QuantifierElimination(logic).keepOnly(transitions, preVars), -j+1);
-                        std::cout<<"Block: " << logic.pp(transitions) << std::endl;
+                        // std::cout<<"Block: " << logic.pp(transitions) << std::endl;
                         smt_solver.resetSolver();
                         smt_solver.assertProp(logic.mkAnd(logic.mkNot(transitions), disjunct));
                         if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
