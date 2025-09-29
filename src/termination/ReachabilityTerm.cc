@@ -209,21 +209,21 @@ ReachabilityTerm::Answer ReachabilityTerm::nontermination(ChcDirectedGraph const
 
     switch (res) {
         case VerificationAnswer::SAFE: {
-            PTRef inv = solver->getInductiveInvariant();
-            SMTsolver.resetSolver();
-            SMTsolver.assertProp(logic.mkAnd({inv, logic.mkAnd(transition, transitionConstraint), logic.mkNot(TimeMachine(logic).sendFlaThroughTime(inv, 1))}));
-            auto ans_1 = SMTsolver.check();
-            SMTsolver.resetSolver();
-            SMTsolver.assertProp(logic.mkAnd(inv, logic.mkNot(QuantifierElimination(logic).keepOnly(logic.mkAnd(transition, transitionConstraint), solver->getStateVars(0)))));
-            auto ans_2 = SMTsolver.check();
+            // PTRef inv = solver->getInductiveInvariant();
+            // SMTsolver.resetSolver();
+            // SMTsolver.assertProp(logic.mkAnd({inv, logic.mkAnd(transition, transitionConstraint), logic.mkNot(TimeMachine(logic).sendFlaThroughTime(inv, 1))}));
+            // auto ans_1 = SMTsolver.check();
+            // SMTsolver.resetSolver();
+            // SMTsolver.assertProp(logic.mkAnd(inv, logic.mkNot(QuantifierElimination(logic).keepOnly(logic.mkAnd(transition, transitionConstraint), solver->getStateVars(0)))));
+            // auto ans_2 = SMTsolver.check();
 
             // std::cout<<"Invariant: " << logic.pp(inv) << std::endl;
             // std::cout<<"Transition: " << logic.pp(transition) << std::endl;
             // std::cout<<"Transition Constraint: " << logic.pp(transitionConstraint) << std::endl;
             // std::cout<<"Comp: " << logic.pp(QuantifierElimination(logic).keepOnly(logic.mkAnd(transition, transitionConstraint), solver->getStateVars(0))) << std::endl;
-            if (ans_1== SMTSolver::Answer::UNSAT && ans_2 == SMTSolver::Answer::UNSAT) {
+            // if (ans_1== SMTSolver::Answer::UNSAT ) {
                 return Answer::NO;
-            }
+            // }
             // else {
             //     SMTsolver.resetSolver();
             //     SMTsolver.assertProp(logic.mkAnd(transition, transitionConstraint));
