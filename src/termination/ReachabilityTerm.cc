@@ -97,7 +97,7 @@ ReachabilityTerm::Answer ReachabilityTerm::nontermination(ChcDirectedGraph const
     // engine->solve();
     auto solver = std::make_unique<TPASplit>(logic, options);
     PTRef init  = ts->getInit();
-    // std::cout<<"Transition pre-dnfize: " << logic.pp(ts->getTransition()) << std::endl;
+    std::cout<<"Transition pre-dnfize: " << logic.pp(ts->getTransition()) << std::endl;
     PTRef transition = dnfize(ts->getTransition(),logic);
     PTRef query = ts->getQuery();
     solver->resetTransitionSystem(TransitionSystem(logic,
@@ -105,10 +105,10 @@ ReachabilityTerm::Answer ReachabilityTerm::nontermination(ChcDirectedGraph const
                     init,
                         transition,
                         query));
-    // std::cout<<"Init: " << logic.pp(init) << std::endl;
-    // std::cout<<"Transition: " << logic.pp(transition) << std::endl;
-    // std::cout<<"Query: " << logic.pp(query) << std::endl;
-    // auto vars = solver -> getStateVars(0);
+    std::cout<<"Init: " << logic.pp(init) << std::endl;
+    std::cout<<"Transition: " << logic.pp(transition) << std::endl;
+    std::cout<<"Query: " << logic.pp(query) << std::endl;
+    auto vars = solver -> getStateVars(0);
     auto next_vars = solver -> getStateVars(1);
     auto disjuncts = utils.getTopLevelDisjuncts(transition);
     std::unordered_set<PTRef, PTRefHash> nondet_juncts;
@@ -143,25 +143,34 @@ ReachabilityTerm::Answer ReachabilityTerm::nontermination(ChcDirectedGraph const
         bool detected = false;
         for (int j = num; j > 0; j--) {
             uint k = 0;
-            PTRef base = model->evaluate(TimeMachine(logic).sendFlaThroughTime(transition, j-1));
+            PTRef base = logic.getTerm_true();
+            for (auto var: vars) {
+                PTRef ver = TimeMachine(logic).sendFlaThroughTime(var, j-1);
+                base = logic.mkAnd(base, logic.mkEq(ver, model->evaluate(ver)));
+            }
+            // PTRef base = model->evaluate(TimeMachine(logic).sendFlaThroughTime(transition, j-1));
             for (auto & disjunct : disjuncts) {
-                SMTSolver smt_solver(logic, SMTSolver::WitnessProduction::NONE);
-                // std::cout<<"Junct: " << logic.pp(disjunct) << std::endl;
-                smt_solver.assertProp(logic.mkAnd(base, disjunct));
+                SMTsolver.resetSolver();
+                std::cout<<"Base: " << logic.pp(base) << std::endl;
+                SMTsolver.assertProp(logic.mkAnd(base, TimeMachine(logic).sendFlaThroughTime(disjunct,j-1)));
             // uint k = 0;
             // for (auto & disjunct : disjuncts) {
             //     SMTSolver smt_solver(logic, SMTSolver::WitnessProduction::NONE);
             //     std::cout<<"Junct: " << logic.pp(disjunct) << std::endl;
             //     smt_solver.assertProp(model->evaluate(TimeMachine(logic).sendFlaThroughTime(disjunct, j-1)));
-                if (smt_solver.check() == SMTSolver::Answer::SAT) {
+                // Example, what is the solution
+                // Why it is hard
+                // how it is solved in my approach (invariants, auxiliary properties, trace analysis)
+                // Idea is to make it interesting
+                if (SMTsolver.check() == SMTSolver::Answer::SAT) {
                     k+=1;
                     if (nondet_juncts.contains(disjunct) || k == 2) {
                         auto preVars = solver->getStateVars(j);
                         transitions = TimeMachine(logic).sendFlaThroughTime(QuantifierElimination(logic).keepOnly(transitions, preVars), -j+1);
                         // std::cout<<"Block: " << logic.pp(transitions) << std::endl;
-                        smt_solver.resetSolver();
-                        smt_solver.assertProp(logic.mkAnd(logic.mkNot(transitions), disjunct));
-                        if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
+                        SMTsolver.resetSolver();
+                        SMTsolver.assertProp(logic.mkAnd(logic.mkNot(transitions), disjunct));
+                        if (SMTsolver.check() == SMTSolver::Answer::UNSAT) {
                             nondet_juncts.erase(disjunct);
                         };
                         detected = true;
@@ -189,6 +198,7 @@ ReachabilityTerm::Answer ReachabilityTerm::nontermination(ChcDirectedGraph const
         }
         res = solver->solve();
     }
+        // Give linear templates of vars, and check them for preconds to cover benchmarks...
     SMTSolver SMTsolver(logic, SMTSolver::WitnessProduction::NONE);
     SMTsolver.resetSolver();
     SMTsolver.assertProp(logic.mkAnd({solver->getInit(), solver->getTransitionRelation(), transitionConstraint}));
@@ -207,14 +217,21 @@ ReachabilityTerm::Answer ReachabilityTerm::nontermination(ChcDirectedGraph const
             SMTsolver.assertProp(logic.mkAnd(inv, logic.mkNot(QuantifierElimination(logic).keepOnly(logic.mkAnd(transition, transitionConstraint), solver->getStateVars(0)))));
             auto ans_2 = SMTsolver.check();
 
-            // std::cout<<"Invariant: " << logic.pp(inv) << std::endl;
-            // std::cout<<"Transition: " << logic.pp(transition) << std::endl;
-            // std::cout<<"Transition Constraint: " << logic.pp(transitionConstraint) << std::endl;
+            std::cout<<"Invariant: " << logic.pp(inv) << std::endl;
+            std::cout<<"Transition: " << logic.pp(transition) << std::endl;
+            std::cout<<"Transition Constraint: " << logic.pp(transitionConstraint) << std::endl;
+            std::cout<<"Comp: " << logic.pp(QuantifierElimination(logic).keepOnly(logic.mkAnd(transition, transitionConstraint), solver->getStateVars(0))) << std::endl;
             if (ans_1== SMTSolver::Answer::UNSAT && ans_2 == SMTSolver::Answer::UNSAT) {
                 return Answer::NO;
-            } else {
-                return Answer::UNKNOWN;
             }
+            // else {
+            //     SMTsolver.resetSolver();
+            //     SMTsolver.assertProp(logic.mkAnd(transition, transitionConstraint));
+            //     if (SMTsolver.check() == SMTSolver::Answer::UNSAT) {
+            //         return Answer::YES;
+            //     }
+            //     return Answer::UNKNOWN;
+            // }
         }
         case VerificationAnswer::UNKNOWN:
             return Answer::UNKNOWN;
