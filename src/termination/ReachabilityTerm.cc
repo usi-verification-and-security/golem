@@ -27,7 +27,7 @@ namespace golem::termination {
     }
 
     // TODO: think what to do with negation
-    PTRef  dnfize(PTRef input, Logic & logic) {
+    PTRef dnfize(PTRef input, Logic & logic) {
         TermUtils utils {logic};
         if (logic.isAnd(input)) {
             auto juncts = utils.getTopLevelConjuncts(input);
@@ -48,12 +48,9 @@ namespace golem::termination {
         } else if (logic.isOr(input)) {
             auto juncts = utils.getTopLevelDisjuncts(input);
             vec<PTRef> postprocessJuncts;
-
             for (int i = 0; i < (int)juncts.size(); i++) {
                 PTRef after_junct = dnfize(juncts[i], logic);
                 if (logic.isOr(after_junct)) {
-                    postprocessJuncts[i] = juncts.last();
-                    postprocessJuncts.pop();
                     auto subjuncts = utils.getTopLevelDisjuncts(after_junct);
                     for (auto subjunct: subjuncts) {
                         postprocessJuncts.push(subjunct);
@@ -100,7 +97,7 @@ ReachabilityTerm::Answer ReachabilityTerm::nontermination(ChcDirectedGraph const
     // engine->solve();
     auto solver = std::make_unique<TPASplit>(logic, options);
     PTRef init  = ts->getInit();
-    std::cout<<"Transition pre-dnfize: " << logic.pp(ts->getTransition()) << std::endl;
+    // std::cout<<"Transition pre-dnfize: " << logic.pp(ts->getTransition()) << std::endl;
     PTRef transition = dnfize(ts->getTransition(),logic);
     PTRef query = ts->getQuery();
     solver->resetTransitionSystem(TransitionSystem(logic,
@@ -108,9 +105,9 @@ ReachabilityTerm::Answer ReachabilityTerm::nontermination(ChcDirectedGraph const
                     init,
                         transition,
                         query));
-    std::cout<<"Init: " << logic.pp(init) << std::endl;
-    std::cout<<"Transition: " << logic.pp(transition) << std::endl;
-    std::cout<<"Query: " << logic.pp(query) << std::endl;
+    // std::cout<<"Init: " << logic.pp(init) << std::endl;
+    // std::cout<<"Transition: " << logic.pp(transition) << std::endl;
+    // std::cout<<"Query: " << logic.pp(query) << std::endl;
     // auto vars = solver -> getStateVars(0);
     auto next_vars = solver -> getStateVars(1);
     auto disjuncts = utils.getTopLevelDisjuncts(transition);
@@ -210,9 +207,9 @@ ReachabilityTerm::Answer ReachabilityTerm::nontermination(ChcDirectedGraph const
             SMTsolver.assertProp(logic.mkAnd(inv, logic.mkNot(QuantifierElimination(logic).keepOnly(logic.mkAnd(transition, transitionConstraint), solver->getStateVars(0)))));
             auto ans_2 = SMTsolver.check();
 
-            std::cout<<"Invariant: " << logic.pp(inv) << std::endl;
-            std::cout<<"Transition: " << logic.pp(transition) << std::endl;
-            std::cout<<"Transition Constraint: " << logic.pp(transitionConstraint) << std::endl;
+            // std::cout<<"Invariant: " << logic.pp(inv) << std::endl;
+            // std::cout<<"Transition: " << logic.pp(transition) << std::endl;
+            // std::cout<<"Transition Constraint: " << logic.pp(transitionConstraint) << std::endl;
             if (ans_1== SMTSolver::Answer::UNSAT && ans_2 == SMTSolver::Answer::UNSAT) {
                 return Answer::NO;
             } else {
