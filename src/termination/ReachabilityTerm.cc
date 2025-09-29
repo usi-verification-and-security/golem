@@ -97,7 +97,7 @@ ReachabilityTerm::Answer ReachabilityTerm::nontermination(ChcDirectedGraph const
     // engine->solve();
     auto solver = std::make_unique<TPASplit>(logic, options);
     PTRef init  = ts->getInit();
-    std::cout<<"Transition pre-dnfize: " << logic.pp(ts->getTransition()) << std::endl;
+    // std::cout<<"Transition pre-dnfize: " << logic.pp(ts->getTransition()) << std::endl;
     PTRef transition = dnfize(ts->getTransition(),logic);
     PTRef query = ts->getQuery();
     solver->resetTransitionSystem(TransitionSystem(logic,
@@ -105,9 +105,9 @@ ReachabilityTerm::Answer ReachabilityTerm::nontermination(ChcDirectedGraph const
                     init,
                         transition,
                         query));
-    std::cout<<"Init: " << logic.pp(init) << std::endl;
-    std::cout<<"Transition: " << logic.pp(transition) << std::endl;
-    std::cout<<"Query: " << logic.pp(query) << std::endl;
+    // std::cout<<"Init: " << logic.pp(init) << std::endl;
+    // std::cout<<"Transition: " << logic.pp(transition) << std::endl;
+    // std::cout<<"Query: " << logic.pp(query) << std::endl;
     auto vars = solver -> getStateVars(0);
     auto next_vars = solver -> getStateVars(1);
     auto disjuncts = utils.getTopLevelDisjuncts(transition);
@@ -151,7 +151,7 @@ ReachabilityTerm::Answer ReachabilityTerm::nontermination(ChcDirectedGraph const
             // PTRef base = model->evaluate(TimeMachine(logic).sendFlaThroughTime(transition, j-1));
             for (auto & disjunct : disjuncts) {
                 SMTsolver.resetSolver();
-                std::cout<<"Base: " << logic.pp(base) << std::endl;
+                // std::cout<<"Base: " << logic.pp(base) << std::endl;
                 SMTsolver.assertProp(logic.mkAnd(base, TimeMachine(logic).sendFlaThroughTime(disjunct,j-1)));
             // uint k = 0;
             // for (auto & disjunct : disjuncts) {
@@ -217,10 +217,10 @@ ReachabilityTerm::Answer ReachabilityTerm::nontermination(ChcDirectedGraph const
             SMTsolver.assertProp(logic.mkAnd(inv, logic.mkNot(QuantifierElimination(logic).keepOnly(logic.mkAnd(transition, transitionConstraint), solver->getStateVars(0)))));
             auto ans_2 = SMTsolver.check();
 
-            std::cout<<"Invariant: " << logic.pp(inv) << std::endl;
-            std::cout<<"Transition: " << logic.pp(transition) << std::endl;
-            std::cout<<"Transition Constraint: " << logic.pp(transitionConstraint) << std::endl;
-            std::cout<<"Comp: " << logic.pp(QuantifierElimination(logic).keepOnly(logic.mkAnd(transition, transitionConstraint), solver->getStateVars(0))) << std::endl;
+            // std::cout<<"Invariant: " << logic.pp(inv) << std::endl;
+            // std::cout<<"Transition: " << logic.pp(transition) << std::endl;
+            // std::cout<<"Transition Constraint: " << logic.pp(transitionConstraint) << std::endl;
+            // std::cout<<"Comp: " << logic.pp(QuantifierElimination(logic).keepOnly(logic.mkAnd(transition, transitionConstraint), solver->getStateVars(0))) << std::endl;
             if (ans_1== SMTSolver::Answer::UNSAT && ans_2 == SMTSolver::Answer::UNSAT) {
                 return Answer::NO;
             }
