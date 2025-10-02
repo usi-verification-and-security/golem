@@ -168,14 +168,19 @@ ReachabilityTerm::Answer ReachabilityTerm::nontermination(ChcDirectedGraph const
             SMTsolver.resetSolver();
             if (detected) {
                 PTRef block = TimeMachine(logic).sendFlaThroughTime(QuantifierElimination(logic).keepOnly(transitions, nondet_vars), -j+1);
-                // std::cout<<"Block: " << logic.pp(block) << std::endl;
+                std::cout<<"Block: " << logic.pp(block) << std::endl;
                 SMTsolver.assertProp(logic.mkAnd(logic.mkNot(TimeMachine(logic).sendFlaThroughTime(block, j-1)), transitions));
                 if (block == logic.getTerm_true() || SMTsolver.check() == SMTSolver::Answer::SAT) {
                     detected = false;
                     SMTsolver.resetSolver();
                     continue;
                 } else {
+                    SMTsolver.resetSolver();
                     transitionConstraint = logic.mkAnd(transitionConstraint, logic.mkNot(block));
+                    SMTsolver.assertProp(logic.mkAnd(transition, transitionConstraint));
+                    if (SMTsolver.check() == SMTSolver::Answer::UNSAT) {
+                        return Answer::UNKNOWN;
+                    }
                 }
             }
 
