@@ -143,48 +143,79 @@ ReachabilityTerm::Answer ReachabilityTerm::nontermination(ChcDirectedGraph const
         bool detected = false;
         for (int j = num; j > 0; j--) {
             uint k = 0;
-            PTRef base = logic.getTerm_true();
+            vec<PTRef> base;
+            vec<PTRef> results;
             for (auto var: vars) {
                 PTRef ver = TimeMachine(logic).sendFlaThroughTime(var, j-1);
-                base = logic.mkAnd(base, logic.mkEq(ver, model->evaluate(ver)));
+                PTRef nxt = TimeMachine(logic).sendFlaThroughTime(var, j);
+                base.push(logic.mkEq(ver, model->evaluate(ver)));
+                results.push(logic.mkEq(nxt, model->evaluate(nxt)));
             }
-            // PTRef base = model->evaluate(TimeMachine(logic).sendFlaThroughTime(transition, j-1));
-            for (auto & disjunct : disjuncts) {
-                SMTsolver.resetSolver();
-                // std::cout<<"Base: " << logic.pp(base) << std::endl;
-                SMTsolver.assertProp(logic.mkAnd(base, TimeMachine(logic).sendFlaThroughTime(disjunct,j-1)));
-            // uint k = 0;
-            // for (auto & disjunct : disjuncts) {
-            //     SMTSolver smt_solver(logic, SMTSolver::WitnessProduction::NONE);
-            //     std::cout<<"Junct: " << logic.pp(disjunct) << std::endl;
-            //     smt_solver.assertProp(model->evaluate(TimeMachine(logic).sendFlaThroughTime(disjunct, j-1)));
-                // Example, what is the solution
-                // Why it is hard
-                // how it is solved in my approach (invariants, auxiliary properties, trace analysis)
-                // Idea is to make it interesting
+            vec<PTRef> nondet_vars;
+            // std::cout<<"Base: " << logic.pp(logic.mkAnd(base)) << std::endl;
+            uint i = 0;
+            SMTsolver.assertProp(logic.mkAnd(logic.mkAnd(base), TimeMachine(logic).sendFlaThroughTime(transition,j-1)));
+            for(auto result:results) {
+                SMTsolver.push();
+                SMTsolver.assertProp(logic.mkNot(result));
                 if (SMTsolver.check() == SMTSolver::Answer::SAT) {
-                    k+=1;
-                    if (nondet_juncts.contains(disjunct) || k == 2) {
-                        auto preVars = solver->getStateVars(j);
-                        transitions = TimeMachine(logic).sendFlaThroughTime(QuantifierElimination(logic).keepOnly(transitions, preVars), -j+1);
-                        // std::cout<<"Block: " << logic.pp(transitions) << std::endl;
-                        SMTsolver.resetSolver();
-                        SMTsolver.assertProp(logic.mkAnd(logic.mkNot(transitions), disjunct));
-                        if (SMTsolver.check() == SMTSolver::Answer::UNSAT) {
-                            nondet_juncts.erase(disjunct);
-                        };
-                        detected = true;
-                        break;
-                    }
+                    detected = true;
+                    nondet_vars.push(TimeMachine(logic).sendFlaThroughTime(vars[i],j));
+                }
+                i++;
+                SMTsolver.pop();
+            }
+            SMTsolver.resetSolver();
+            if (detected) {
+                PTRef block = TimeMachine(logic).sendFlaThroughTime(QuantifierElimination(logic).keepOnly(transitions, nondet_vars), -j+1);
+                // std::cout<<"Block: " << logic.pp(block) << std::endl;
+                SMTsolver.assertProp(logic.mkAnd(logic.mkNot(TimeMachine(logic).sendFlaThroughTime(block, j-1)), transitions));
+                if (block == logic.getTerm_true() || SMTsolver.check() == SMTSolver::Answer::SAT) {
+                    detected = false;
+                    SMTsolver.resetSolver();
+                    continue;
+                } else {
+                    transitionConstraint = logic.mkAnd(transitionConstraint, logic.mkNot(block));
                 }
             }
+
+
+
+            // for (auto & disjunct : disjuncts) {
+            //     SMTsolver.resetSolver();
+            // SMTsolver.assertProp(logic.mkAnd(logic.mkAnd(base), TimeMachine(logic).sendFlaThroughTime(disjunct,j-1)));
+            //
+            //     // Example, what is the solution
+            //     // Why it is hard
+            //     // how it is solved in my approach (invariants, auxiliary properties, trace analysis)
+            //     // Idea is to make it interesting
+            //     if (SMTsolver.check() == SMTSolver::Answer::SAT) {
+            //         k+=1;
+            //         if (nondet_juncts.contains(disjunct) || k == 2) {
+            //             auto junct_vars = utils.getVars(disjunct);
+            //             vec<PTRef> preVars;
+            //             for (auto & var : next_vars) {
+            //                 if (std::find(junct_vars.begin(), junct_vars.end(), var) == junct_vars.end()) {
+            //                     preVars.push(TimeMachine(logic).sendFlaThroughTime(var, j));
+            //                 }
+            //             }
+            //             transitions = TimeMachine(logic).sendFlaThroughTime(QuantifierElimination(logic).keepOnly(transitions, preVars), -j+1);
+            //             SMTsolver.resetSolver();
+            //             SMTsolver.assertProp(logic.mkAnd(logic.mkNot(transitions), disjunct));
+            //             if (SMTsolver.check() == SMTSolver::Answer::UNSAT) {
+            //                 nondet_juncts.erase(disjunct);
+            //             };
+            //             detected = true;
+            //             break;
+            //         }
+            //     }
+            // }
             if (detected) { break; }
             // vec<PTRef> toEliminate = solver->getStateVars(j);
             // transitions = ModelBasedProjection(logic).project(transitions, toEliminate, *model);
 
         }
         if (detected) {
-            transitionConstraint = logic.mkAnd(transitionConstraint, logic.mkNot(transitions));
             solver = std::make_unique<TPASplit>(logic, options);
             solver->resetTransitionSystem(TransitionSystem(logic,
                 std::make_unique<SystemType>(ts->getStateVars(), ts->getAuxiliaryVars(), logic),
@@ -209,10 +240,10 @@ ReachabilityTerm::Answer ReachabilityTerm::nontermination(ChcDirectedGraph const
 
     switch (res) {
         case VerificationAnswer::SAFE: {
-            // PTRef inv = solver->getInductiveInvariant();
-            // SMTsolver.resetSolver();
-            // SMTsolver.assertProp(logic.mkAnd({inv, logic.mkAnd(transition, transitionConstraint), logic.mkNot(TimeMachine(logic).sendFlaThroughTime(inv, 1))}));
-            // auto ans_1 = SMTsolver.check();
+            PTRef inv = solver->getInductiveInvariant();
+            SMTsolver.resetSolver();
+            SMTsolver.assertProp(logic.mkAnd({inv, logic.mkAnd(transition, transitionConstraint), logic.mkNot(TimeMachine(logic).sendFlaThroughTime(inv, 1))}));
+            auto ans_1 = SMTsolver.check();
             // SMTsolver.resetSolver();
             // SMTsolver.assertProp(logic.mkAnd(inv, logic.mkNot(QuantifierElimination(logic).keepOnly(logic.mkAnd(transition, transitionConstraint), solver->getStateVars(0)))));
             // auto ans_2 = SMTsolver.check();
@@ -221,9 +252,9 @@ ReachabilityTerm::Answer ReachabilityTerm::nontermination(ChcDirectedGraph const
             // std::cout<<"Transition: " << logic.pp(transition) << std::endl;
             // std::cout<<"Transition Constraint: " << logic.pp(transitionConstraint) << std::endl;
             // std::cout<<"Comp: " << logic.pp(QuantifierElimination(logic).keepOnly(logic.mkAnd(transition, transitionConstraint), solver->getStateVars(0))) << std::endl;
-            // if (ans_1== SMTSolver::Answer::UNSAT ) {
+            if (ans_1== SMTSolver::Answer::UNSAT ) {
                 return Answer::NO;
-            // }
+            }
             // else {
             //     SMTsolver.resetSolver();
             //     SMTsolver.assertProp(logic.mkAnd(transition, transitionConstraint));

@@ -115,7 +115,7 @@ std::unique_ptr<TransitionSystem> toTransitionSystem(ChcDirectedGraph const & gr
                            auxiliaryVars.begin(), std::inserter(subMap, subMap.end()),
                            [](PTRef key, PTRef value) { return std::make_pair(key, value); });
             bad = utils.varSubstitute(bad, subMap);
-            //            std::cout << logic.printTerm(bad) << std::endl;
+            // std::cout << "BAD" << logic.printTerm(bad) << std::endl;
         }
     });
     assert(init != PTRef_Undef);
