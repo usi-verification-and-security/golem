@@ -104,6 +104,7 @@ ReachabilityTerm::Answer ReachabilityTerm::nontermination(ChcDirectedGraph const
         if (logic.isSortInt(logic.getSortRef(var)) || logic.isSortReal(logic.getSortRef(var))) {
             postprocVars1.push(logic.mkEq(var,counter0));
             postprocVars2.push(logic.mkGeq(counter0, var));
+            postprocVars2.push(logic.mkGeq(counter0, logic.mkNeg(var)));
         }
     }
     PTRef addInit = logic.mkAnd(logic.mkOr(postprocVars1), logic.mkAnd(postprocVars2));
