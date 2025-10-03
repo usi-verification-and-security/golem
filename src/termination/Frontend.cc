@@ -575,7 +575,7 @@ void run(std::string const & filename, Options const & options) {
         //     auto [ts, bt] = SingleLoopTransformation{}.transform(*graph);
         //     return std::move(ts);
         // }();
-
+        std::cout << "Number of graph transitions: " << graph->getEdges().size() << std::endl;
         auto res = ReachabilityTerm{options}.nontermination(*graph);
         if(res == ReachabilityTerm::Answer::NO){
             std::cout << "NO" << std::endl;
