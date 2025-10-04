@@ -7,6 +7,7 @@
 #include "ChcInterpreter.h"
 #include "Options.h"
 #include <termination/Frontend.h>
+#include <vmt/FrontEnd.h>
 
 #include "osmt_terms.h"
 #include "osmt_parser.h"
@@ -116,6 +117,11 @@ int main( int argc, char * argv[] ) {
         if (extension != nullptr and strcmp(extension, ".ari") == 0) {
             fclose(fin);
             termination::run(inputFile, options);
+            return 0;
+        }
+        if (extension != nullptr and strcmp(extension, ".vmt") == 0) {
+            fclose(fin);
+            vmt::run(inputFile, options);
             return 0;
         }
         if (extension != nullptr && strcmp(extension, ".smt2") == 0) {
