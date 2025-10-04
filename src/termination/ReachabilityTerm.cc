@@ -99,7 +99,6 @@ ReachabilityTerm::Answer ReachabilityTerm::nontermination(ChcDirectedGraph const
     PTRef counter = logic.mkIntVar("counter");
     PTRef counter0 = TimeMachine(logic).getVarVersionZero(counter);
     PTRef counter1 = TimeMachine(logic).sendVarThroughTime(counter0,1);
-    vars.push_back(counter0);
     for (auto var: vars) {
         if (logic.isSortInt(logic.getSortRef(var)) || logic.isSortReal(logic.getSortRef(var))) {
             postprocVars1.push(logic.mkEq(var,counter0));
@@ -107,7 +106,11 @@ ReachabilityTerm::Answer ReachabilityTerm::nontermination(ChcDirectedGraph const
             postprocVars2.push(logic.mkGeq(counter0, logic.mkNeg(var)));
         }
     }
+    vars.push_back(counter0);
     PTRef addInit = logic.mkAnd(logic.mkOr(postprocVars1), logic.mkAnd(postprocVars2));
+    // std::cout<<"postProc1: " << logic.pp(logic.mkOr(postprocVars1)) << std::endl;
+    // std::cout<<"postProc2: " << logic.pp(logic.mkAnd(postprocVars2)) << std::endl;
+    // std::cout<<"addInit: " << logic.pp(addInit) << std::endl;
     PTRef init  = logic.mkAnd(ts->getInit(), addInit);
     PTRef counterDec = logic.mkEq(counter1, logic.mkMinus(counter0, logic.getTerm_IntOne()));
     PTRef transition = dnfize(logic.mkAnd(ts->getTransition(), counterDec),logic);
@@ -117,24 +120,21 @@ ReachabilityTerm::Answer ReachabilityTerm::nontermination(ChcDirectedGraph const
                     init,
                         transition,
                         query));
-    std::cout<<"Init: " << logic.pp(init) << std::endl;
-    std::cout<<"Transition: " << logic.pp(transition) << std::endl;
-    std::cout<<"Query: " << logic.pp(query) << std::endl;
+    // std::cout<<"Init: " << logic.pp(init) << std::endl;
+    // std::cout<<"Transition: " << logic.pp(transition) << std::endl;
+    // std::cout<<"Query: " << logic.pp(query) << std::endl;
 
     if (std::stoi(options.getOrDefault(Options::VERBOSE, "0")) > 0) { std::cout << "; Searching for nontermination!\n"; }
     auto res = solver->solve();
 
     switch (res) {
-        case VerificationAnswer::SAFE: {
+        case VerificationAnswer::SAFE:
             return Answer::YES;
-        }
         case VerificationAnswer::UNKNOWN:
             return Answer::ERROR;
         case VerificationAnswer::UNSAFE:
             return Answer::UNKNOWN;
     }
-    // assert(false && "Unreachable!");
-    // return Answer::ERROR;
 }
 
 } // namespace golem::termination
