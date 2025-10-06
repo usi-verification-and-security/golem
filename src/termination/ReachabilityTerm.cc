@@ -93,6 +93,7 @@ ReachabilityTerm::Answer ReachabilityTerm::nontermination(ChcDirectedGraph const
     for (auto var: vars) {
         if (logic.isSortInt(logic.getSortRef(var)) || logic.isSortReal(logic.getSortRef(var))) {
             postprocVars1.push(logic.mkEq(var,counter0));
+            postprocVars1.push(logic.mkEq(logic.mkNeg(var),counter0));
             postprocVars2.push(logic.mkGeq(counter0, var));
             postprocVars2.push(logic.mkGeq(counter0, logic.mkNeg(var)));
         }
@@ -111,9 +112,9 @@ ReachabilityTerm::Answer ReachabilityTerm::nontermination(ChcDirectedGraph const
                     init,
                         transition,
                         query));
-    // std::cout<<"Init: " << logic.pp(init) << std::endl;
-    // std::cout<<"Transition: " << logic.pp(transition) << std::endl;
-    // std::cout<<"Query: " << logic.pp(query) << std::endl;
+    std::cout<<"Init: " << logic.pp(init) << std::endl;
+    std::cout<<"Transition: " << logic.pp(transition) << std::endl;
+    std::cout<<"Query: " << logic.pp(query) << std::endl;
 
     if (std::stoi(options.getOrDefault(Options::VERBOSE, "0")) > 0) { std::cout << "; Searching for nontermination!\n"; }
     auto res = solver->solve();
