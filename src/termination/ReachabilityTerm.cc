@@ -18,15 +18,7 @@
 
 namespace golem::termination {
 
-    PTRef eliminateVars(PTRef fla, const vec<PTRef> & vars, Model & model, bool useQE, Logic logic) {
-        if (useQE) {
-            return QuantifierElimination(logic).eliminate(fla, vars);
-        } else {
-            return ModelBasedProjection(logic).project(fla, vars, model);
-        }
-    }
-
-    // TODO: think what to do with negation
+// TODO: think what to do with negation
     PTRef dnfize(PTRef input, Logic & logic) {
         TermUtils utils {logic};
         if (logic.isAnd(input)) {
@@ -81,7 +73,6 @@ namespace golem::termination {
         return input;
     }
 
-
 ReachabilityTerm::Answer ReachabilityTerm::nontermination(ChcDirectedGraph const & graph) {
     ArithLogic & logic = dynamic_cast<ArithLogic &>(graph.getLogic());
     TermUtils utils {logic};
@@ -108,9 +99,9 @@ ReachabilityTerm::Answer ReachabilityTerm::nontermination(ChcDirectedGraph const
     }
     vars.push_back(counter0);
     PTRef addInit = logic.mkAnd(logic.mkOr(postprocVars1), logic.mkAnd(postprocVars2));
-    // std::cout<<"postProc1: " << logic.pp(logic.mkOr(postprocVars1)) << std::endl;
-    // std::cout<<"postProc2: " << logic.pp(logic.mkAnd(postprocVars2)) << std::endl;
-    // std::cout<<"addInit: " << logic.pp(addInit) << std::endl;
+    std::cout<<"postProc1: " << logic.pp(logic.mkOr(postprocVars1)) << std::endl;
+    std::cout << "postProc2: " << logic.pp(logic.mkAnd(postprocVars2)) << std::endl;
+    std::cout << "addInit: " << logic.pp(addInit) << std::endl;
     PTRef init  = logic.mkAnd(ts->getInit(), addInit);
     PTRef counterDec = logic.mkEq(counter1, logic.mkMinus(counter0, logic.getTerm_IntOne()));
     PTRef transition = dnfize(logic.mkAnd(ts->getTransition(), counterDec),logic);

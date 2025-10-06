@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: MIT
  */
 
-#ifndef REACHABILITYTERM_H
-#define REACHABILITYTERM_H
+#ifndef REACHABILITYNONTERM_H
+#define REACHABILITYNONTERM_H
 
 #include "osmt_terms.h"
 
@@ -29,4 +29,4 @@ private:
 };
 } // namespace golem::termination
 
-#endif //REACHABILITYTERM_H
+#endif //REACHABILITYNONTERM_H

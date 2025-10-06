@@ -7,6 +7,7 @@
 #include "ChcSystem.h"
 #include "LassoDetector.h"
 #include "ReachabilityTerm.h"
+#include "ReachabilityNonterm.h"
 #include "Normalizer.h"
 #include "TransformationUtils.h"
 
@@ -18,7 +19,6 @@
 #include "transformers/NodeEliminator.h"
 #include "transformers/RemoveUnreachableNodes.h"
 #include "transformers/SimpleChainSummarizer.h"
-#include "transformers/SingleLoopTransformation.h"
 #include "transformers/TransformationPipeline.h"
 #include "transformers/TrivialEdgePruner.h"
 
@@ -577,6 +577,7 @@ void run(std::string const & filename, Options const & options) {
         // }();
         std::cout << "Number of graph transitions: " << graph->getEdges().size() << std::endl;
         auto res = ReachabilityTerm{options}.nontermination(*graph);
+        // auto res = ReachabilityNonterm{options}.nontermination(*graph);
         if(res == ReachabilityTerm::Answer::NO){
             std::cout << "NO" << std::endl;
         } else {
