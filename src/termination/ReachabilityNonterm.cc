@@ -20,13 +20,13 @@ namespace golem::termination {
 
     // TODO: think what to do with negation
 // TODO: think what to do with negation
-    PTRef dnfize1(PTRef input, Logic & logic) {
+    PTRef dnfize(PTRef input, Logic & logic) {
         TermUtils utils {logic};
         if (logic.isAnd(input)) {
             auto juncts = utils.getTopLevelConjuncts(input);
 
             for (int i = 0; i < (int)juncts.size(); i++) {
-                PTRef after_junct = dnfize1(juncts[i], logic);
+                PTRef after_junct = dnfize(juncts[i], logic);
                 if (logic.isOr(after_junct)) {
                     auto subjuncts = utils.getTopLevelDisjuncts(after_junct);
                     vec<PTRef> postprocessJuncts;
@@ -35,14 +35,14 @@ namespace golem::termination {
                     for (auto subjunct: subjuncts) {
                         postprocessJuncts.push(logic.mkAnd(logic.mkAnd(juncts), subjunct));
                     }
-                    return dnfize1(logic.mkOr(postprocessJuncts), logic);
+                    return dnfize(logic.mkOr(postprocessJuncts), logic);
                 }
             }
         } else if (logic.isOr(input)) {
             auto juncts = utils.getTopLevelDisjuncts(input);
             vec<PTRef> postprocessJuncts;
             for (int i = 0; i < (int)juncts.size(); i++) {
-                PTRef after_junct = dnfize1(juncts[i], logic);
+                PTRef after_junct = dnfize(juncts[i], logic);
                 if (logic.isOr(after_junct)) {
                     auto subjuncts = utils.getTopLevelDisjuncts(after_junct);
                     for (auto subjunct: subjuncts) {
@@ -61,14 +61,14 @@ namespace golem::termination {
                 for (int i = 0; i < (int)subjuncts.size(); i++) {
                     postprocessJuncts.push(logic.mkNot(subjuncts[i]));
                 }
-                return dnfize1(logic.mkOr(postprocessJuncts), logic);
+                return dnfize(logic.mkOr(postprocessJuncts), logic);
             } else if (logic.isOr(rev)) {
                 auto subjuncts = utils.getTopLevelDisjuncts(input);
                 vec<PTRef> postprocessJuncts;
                 for (int i = 0; i < (int)subjuncts.size(); i++) {
                     postprocessJuncts.push(logic.mkNot(subjuncts[i]));
                 }
-                return dnfize1(logic.mkAnd(postprocessJuncts), logic);
+                return dnfize(logic.mkAnd(postprocessJuncts), logic);
             }
         }
         return input;
@@ -85,7 +85,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(ChcDirectedGraph
     }();
     auto solver = std::make_unique<TPASplit>(logic, options);
     PTRef init  = ts->getInit();
-    PTRef transition = dnfize1(ts->getTransition(),logic);
+    PTRef transition = dnfize(ts->getTransition(),logic);
     PTRef query = logic.mkNot(QuantifierElimination(logic).keepOnly(transition, ts->getStateVars()));
     solver->resetTransitionSystem(TransitionSystem(logic,
                     std::make_unique<SystemType>(ts->getStateVars(), ts->getAuxiliaryVars(), logic),
