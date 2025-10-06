@@ -105,7 +105,7 @@ ReachabilityTerm::Answer ReachabilityTerm::nontermination(ChcDirectedGraph const
     PTRef init  = logic.mkAnd(ts->getInit(), addInit);
     PTRef counterDec = logic.mkEq(counter1, logic.mkMinus(counter0, logic.getTerm_IntOne()));
     PTRef transition = dnfize(logic.mkAnd(ts->getTransition(), counterDec),logic);
-    PTRef query = logic.mkGeq(counter0, logic.getTerm_IntZero());
+    PTRef query = logic.mkLt(counter0, logic.getTerm_IntZero());
     solver->resetTransitionSystem(TransitionSystem(logic,
                     std::make_unique<SystemType>(vars, ts->getAuxiliaryVars(), logic),
                     init,
