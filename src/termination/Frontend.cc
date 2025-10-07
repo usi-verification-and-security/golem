@@ -7,6 +7,7 @@
 #include "ChcSystem.h"
 #include "LassoDetector.h"
 #include "Normalizer.h"
+#include "ReachabilityTerm.h"
 #include "TransformationUtils.h"
 
 #include "graph/ChcGraphBuilder.h"
@@ -474,13 +475,20 @@ void run(std::string const & filename, Options const & options) {
             auto [ts, bt] = SingleLoopTransformation{}.transform(*graph);
             return std::move(ts);
         }();
-        auto res = LassoDetector{options}.find_lasso(*ts);
-        if (res == LassoDetector::Answer::LASSO) {
-            std::cout << "NO" << std::endl;
-        } else if (res == LassoDetector::Answer::NO_LASSO) {
-            std::cout << "MAYBE\n;(no lasso exists)" << std::endl;
+        auto res = ReachabilityTerm{options}.termination(*ts);
+        if (res == ReachabilityTerm::Answer::YES) {
+            std::cout << "YES" << std::endl;
+        } else if (res == ReachabilityTerm::Answer::UNKNOWN) {
+            auto res = LassoDetector{options}.find_lasso(*ts);
+            if (res == LassoDetector::Answer::LASSO) {
+                std::cout << "NO" << std::endl;
+            } else if (res == LassoDetector::Answer::NO_LASSO) {
+                std::cout << "MAYBE\n;(no lasso exists)" << std::endl;
+            } else {
+                std::cout << "ERROR (when searching for lasso in the system)" << std::endl;
+            }
         } else {
-            std::cout << "ERROR (when searching for lasso in the system)" << std::endl;
+            std::cout << "ERROR (when searching for termination in the system)" << std::endl;
         }
     } catch (LANonLinearException const &) {
         std::cout << "MAYBE\n;(Nonlinear arithmetic expression in the input)" << std::endl;

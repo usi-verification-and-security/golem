@@ -47,6 +47,8 @@ src/termination/Frontend.cc
 src/termination/Frontend.h
 src/termination/LassoDetector.cc
 src/termination/LassoDetector.h
+src/termination/ReachabilityTerm.cc
+src/termination/ReachabilityTerm.h
 
 src/transformers/EdgeInliner.cc
 src/transformers/EdgeInliner.h
