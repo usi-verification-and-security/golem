@@ -6,8 +6,6 @@
 
 #include "ChcSystem.h"
 #include "LassoDetector.h"
-#include "ReachabilityTerm.h"
-#include "ReachabilityNonterm.h"
 #include "Normalizer.h"
 #include "TransformationUtils.h"
 
@@ -19,6 +17,7 @@
 #include "transformers/NodeEliminator.h"
 #include "transformers/RemoveUnreachableNodes.h"
 #include "transformers/SimpleChainSummarizer.h"
+#include "transformers/SingleLoopTransformation.h"
 #include "transformers/TransformationPipeline.h"
 #include "transformers/TrivialEdgePruner.h"
 
@@ -121,7 +120,6 @@ struct ITS {
     static Rule parseRule(SExpression const &);
     static std::shared_ptr<Expr> parseExpr(SExpression const &);
     ChcSystem asChcs(ArithLogic & logic) const;
-    ChcSystem asSafetyChcs(ArithLogic & logic) const;
 };
 
 ITS parseITS(std::istream & input) {
@@ -445,111 +443,13 @@ ChcSystem ITS::asChcs(ArithLogic & logic) const {
     return chcs;
 }
 
-// This function encodes termination problem as safety - every predicate which is not a
-// source of some clause gets corresponding query clause.
-// If there is no such predicate, then safety-based termination doesn't make sense as it requires
-// some sort of loop guard
-ChcSystem ITS::asSafetyChcs(ArithLogic & logic) const {
-    assert(this->format == "LCTRS");
-    assert(this->theory == "Ints");
-    ChcSystem chcs;
-    std::unordered_map<std::string, int> exit_locations;
-    std::unordered_map<std::string, SymRef> locationsToPredicates;
-    for (auto && [_, locationDeclaration] : this->locations) {
-        assert(std::all_of(locationDeclaration.argTypes.begin(), locationDeclaration.argTypes.end(),
-                           [](auto const & typeName) { return typeName == "Int"; }));
-        auto const predicate = logic.declareFun(locationDeclaration.name, logic.getSort_bool(),
-                                                std::vector(locationDeclaration.argTypes.size(), logic.getSort_int()));
-        locationsToPredicates.insert({locationDeclaration.name, predicate});
-        chcs.addUninterpretedPredicate(predicate);
-    }
-
-    int i = 0;
-    for (auto const & rule : this->rules) {
-        auto source = locationsToPredicates.at(rule.lhs.name);
-        auto target = locationsToPredicates.at(rule.rhs.name);
-        exit_locations[rule.lhs.name] = -1;
-
-        if (!exit_locations.contains(rule.rhs.name)) {
-            exit_locations[rule.rhs.name] = i;
-        }
-        i++;
-        ChClause clause;
-        {
-            vec<PTRef> args;
-            for (auto const & argName : rule.rhs.arguments) {
-                args.push(logic.mkIntVar(argName.c_str()));
-            }
-            clause.head = {logic.mkUninterpFun(target, std::move(args))};
-        }
-        ChcBody body;
-        {
-            vec<PTRef> args;
-            for (auto const & argName : rule.lhs.arguments) {
-                args.push(logic.mkIntVar(argName.c_str()));
-            }
-            PTRef bodyPredicate = logic.mkUninterpFun(source, std::move(args));
-            PTRef constraint = rule.guard ? translate(logic, *rule.guard) : logic.getTerm_true();
-            clause.body = ChcBody{.interpretedPart = {constraint}, .uninterpretedPart = {{bodyPredicate}}};
-        }
-        chcs.addClause(std::move(clause));
-    }
-
-    {
-        auto entryPredicateSym = locationsToPredicates.at(this->entrypoint);
-        auto entryLoc = this->locations.at(this->entrypoint);
-        vec<PTRef> auxArgs;
-        unsigned counter = 0u;
-        for (auto const & argType : entryLoc.argTypes) {
-            assert(argType == "Int");
-            (void)argType;
-            auto argName = "e" + std::to_string(counter++);
-            auxArgs.push(logic.mkIntVar(argName.c_str()));
-        }
-        PTRef entryPredicate = logic.mkUninterpFun(entryPredicateSym, std::move(auxArgs));
-        chcs.addClause(ChcHead{.predicate = {entryPredicate}},
-                       ChcBody{.interpretedPart = {logic.getTerm_true()}, .uninterpretedPart = {}});
-    }
-    bool exists_exit = false;
-    for (auto [pred, exit]: exit_locations) {
-        if (exit != -1) {
-            vec<PTRef> args;
-            for (auto const & argName : rules[exit].rhs.arguments) {
-                args.push(logic.mkIntVar(argName.c_str()));
-            }
-            PTRef exitPredicate = logic.mkUninterpFun(locationsToPredicates[pred], std::move(args));
-            chcs.addClause(ChcHead{logic.getTerm_false()},
-                           ChcBody{.interpretedPart = {logic.getTerm_true()}, .uninterpretedPart = {{exitPredicate}}});
-            exists_exit = true;
-        }
-    }
-    if (!exists_exit) {
-        for (auto [pred, exit]: exit_locations) {
-                vec<PTRef> args;
-                for (auto const & argName : rules[exit].rhs.arguments) {
-                    args.push(logic.mkIntVar(argName.c_str()));
-                }
-                PTRef exitPredicate = logic.mkUninterpFun(locationsToPredicates[pred], std::move(args));
-                chcs.addClause(ChcHead{logic.getTerm_false()},
-                               ChcBody{.interpretedPart = {logic.getTerm_true()}, .uninterpretedPart = {{exitPredicate}}});
-        }
-    }
-    return chcs;
-}
-
-
-
 void run(std::string const & filename, Options const & options) {
     std::ifstream input(filename);
     if (input.bad()) { throw std::logic_error{"Unable to process input file: " + filename}; }
     ITS its = parseITS(input);
-    if (its.rules.size() == 0u) {
-                std::cout << "YES" << std::endl;
-        return; }
     ArithLogic logic(Logic_t::QF_LIA);
     try {
         auto chcs = its.asChcs(logic);
-        if (chcs.getClauses().size() == 0) { std::cout << "No exit point" << std::endl; return; }
         // ChcPrinter{logic, std::cout}.print(chcs);
         Normalizer normalizer(logic);
         auto normalizedSystem = normalizer.normalize(chcs);
@@ -569,32 +469,19 @@ void run(std::string const & filename, Options const & options) {
         auto [transformedGraph, _] = TransformationPipeline(std::move(stages)).transform(std::move(hypergraph));
         assert(transformedGraph->isNormalGraph());
         auto graph = transformedGraph->toNormalGraph();
-        graph->toSafetyGraph();
-        // auto ts = [&]() -> std::unique_ptr<TransitionSystem> {
-        //     if (isTransitionSystemWithoutQuery(*graph)) { return toTransitionSystem(*graph, true); }
-        //     auto [ts, bt] = SingleLoopTransformation{}.transform(*graph);
-        //     return std::move(ts);
-        // }();
-        std::cout << "Number of graph transitions: " << graph->getEdges().size() << std::endl;
-        auto res = ReachabilityTerm{options}.nontermination(*graph);
-        // auto res = ReachabilityNonterm{options}.nontermination(*graph);
-        if(res == ReachabilityTerm::Answer::NO){
+        auto ts = [&]() -> std::unique_ptr<TransitionSystem> {
+            if (isTransitionSystemWithoutQuery(*graph)) { return toTransitionSystem(*graph, true); }
+            auto [ts, bt] = SingleLoopTransformation{}.transform(*graph);
+            return std::move(ts);
+        }();
+        auto res = LassoDetector{options}.find_lasso(*ts);
+        if (res == LassoDetector::Answer::LASSO) {
             std::cout << "NO" << std::endl;
+        } else if (res == LassoDetector::Answer::NO_LASSO) {
+            std::cout << "MAYBE\n;(no lasso exists)" << std::endl;
         } else {
-            if (res == ReachabilityTerm::Answer::YES) {
-                std::cout << "YES" << std::endl;
-            } else {
-                std::cout << "MAYBE\n;(no nonterm detected)" << std::endl;
-            }
+            std::cout << "ERROR (when searching for lasso in the system)" << std::endl;
         }
-        // auto res = LassoDetector{options}.find_lasso(*ts);
-        // if (res == LassoDetector::Answer::LASSO) {
-        //     std::cout << "NO" << std::endl;
-        // } else if (res == LassoDetector::Answer::NO_LASSO) {
-        //     std::cout << "MAYBE\n;(no lasso exists)" << std::endl;
-        // } else {
-        //     std::cout << "ERROR (when searching for lasso in the system)" << std::endl;
-        // }
     } catch (LANonLinearException const &) {
         std::cout << "MAYBE\n;(Nonlinear arithmetic expression in the input)" << std::endl;
     }
