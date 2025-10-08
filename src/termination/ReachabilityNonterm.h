@@ -10,8 +10,7 @@
 #include "osmt_terms.h"
 
 #include "Options.h"
-#include "graph/ChcGraphBuilder.h"
-#include "utils/SmtSolver.h"
+#include "TransitionSystem.h"
 
 namespace golem::termination {
 
@@ -21,11 +20,10 @@ public:
 
     enum struct Answer { YES, NO, UNKNOWN, ERROR };
 
-    Answer nontermination(ChcDirectedGraph const & graph);
+    Answer nontermination(TransitionSystem const & ts);
 
 private:
     Options const & options;
-    PTRef eliminateVars(PTRef fla, const vec<PTRef> & vars, Model & model, bool useQE, Logic logic);
 };
 } // namespace golem::termination
 

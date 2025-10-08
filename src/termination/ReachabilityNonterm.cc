@@ -12,9 +12,9 @@
 #include "engine/TPA.h"
 #include "engine/Common.h"
 #include "TransformationUtils.h"
-#include "transformers/SingleLoopTransformation.h"
 #include "ModelBasedProjection.h"
 #include "QuantifierElimination.h"
+#include "utils/SmtSolver.h"
 
 namespace golem::termination {
 
@@ -74,43 +74,38 @@ namespace golem::termination {
         return input;
     }
 
-ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(ChcDirectedGraph const & graph) {
-    ArithLogic & logic = dynamic_cast<ArithLogic &>(graph.getLogic());
-    TermUtils utils {logic};
-    if (isTrivial(graph)) { return Answer::YES; }
-    auto ts = [&]() -> std::unique_ptr<TransitionSystem> {
-        if (isTransitionSystem(graph)) { return toTransitionSystem(graph, false); }
-        auto [ts, bt] = SingleLoopTransformation{}.transform(graph);
-        return std::move(ts);
-    }();
+ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem const & ts) {
+
+    ArithLogic & logic = dynamic_cast<ArithLogic &>(ts.getLogic());
     auto solver = std::make_unique<TPASplit>(logic, options);
-    PTRef init  = ts->getInit();
-    PTRef transition = dnfize(ts->getTransition(),logic);
-    PTRef query = logic.mkNot(QuantifierElimination(logic).keepOnly(transition, ts->getStateVars()));
+    PTRef init  = ts.getInit();
+    PTRef transition = dnfize(ts.getTransition(),logic);
+    PTRef query = logic.mkNot(QuantifierElimination(logic).keepOnly(transition, ts.getStateVars()));
     solver->resetTransitionSystem(TransitionSystem(logic,
-                    std::make_unique<SystemType>(ts->getStateVars(), ts->getAuxiliaryVars(), logic),
+                    std::make_unique<SystemType>(ts.getStateVars(), ts.getAuxiliaryVars(), logic),
                     init,
                         transition,
                         query));
     std::cout<<"Init: " << logic.pp(init) << std::endl;
     std::cout<<"Transition: " << logic.pp(transition) << std::endl;
     std::cout<<"Query: " << logic.pp(query) << std::endl;
+    if (query == logic.getTerm_false()) {
+        std::cout<<"; (Trivial nontermination)" << std::endl;
+        return Answer::NO;
+    }
     auto vars = solver -> getStateVars(0);
-    auto next_vars = solver -> getStateVars(1);
-    auto disjuncts = utils.getTopLevelDisjuncts(transition);
-
     PTRef transitionConstraint = logic.getTerm_true();
     PTRef initConstraint = logic.getTerm_true();
 
-    if (std::stoi(options.getOrDefault(Options::VERBOSE, "0")) > 0) { std::cout << "; Searching for nontermination!\n"; }
     auto res = solver->solve();
     while(res == VerificationAnswer::UNSAFE) {
         PTRef reached  = solver->getReachedStates();
+        PTRef solverTransition = solver->getTransitionRelation();
         uint num = solver->getTransitionStepCount();
-        std::vector formulas {init, TimeMachine(logic).sendFlaThroughTime(reached, num)};
+        std::vector formulas {init, TimeMachine(logic).sendFlaThroughTime(logic.mkAnd(reached,query), num)};
         SMTSolver SMTsolver(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
         for(int j=0; j < num; j++){
-            formulas.push_back(TimeMachine(logic).sendFlaThroughTime(transition, j));
+            formulas.push_back(TimeMachine(logic).sendFlaThroughTime(solverTransition, j));
         }
         PTRef transitions = logic.mkAnd(formulas);
         SMTsolver.assertProp(transitions);
@@ -128,27 +123,32 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(ChcDirectedGraph
                 results.push(logic.mkEq(nxt, model->evaluate(nxt)));
             }
             vec<PTRef> nondet_vars;
-            std::cout<<"Base: " << logic.pp(logic.mkAnd(base)) << std::endl;
+            vec<PTRef> det_vars;
             uint i = 0;
             SMTsolver.resetSolver();
-            SMTsolver.assertProp(logic.mkAnd(logic.mkAnd(base), TimeMachine(logic).sendFlaThroughTime(transition,j-1)));
-            // std::cout << "Formula: " << logic.pp(logic.mkAnd(logic.mkAnd(base), TimeMachine(logic).sendFlaThroughTime(transition,j-1))) << "\n";
+            SMTsolver.assertProp(logic.mkAnd(logic.mkAnd(base), TimeMachine(logic).sendFlaThroughTime(solverTransition,j-1)));
+            std::cout<<"***********CHECK*************\n";
+            std::cout<<"Base: " << logic.pp(logic.mkAnd(base)) << std::endl;
+            std::cout<<"Result: " << logic.pp(logic.mkAnd(results)) << std::endl;
+            std::cout<<"Check: " << logic.pp(TimeMachine(logic).sendFlaThroughTime(solverTransition,j-1)) << std::endl;
+            std::cout<<"*****************************\n";
             for(auto result:results) {
                 SMTsolver.push();
                 SMTsolver.assertProp(logic.mkNot(result));
                 if (SMTsolver.check() == SMTSolver::Answer::SAT) {
                     detected = true;
                     nondet_vars.push(TimeMachine(logic).sendFlaThroughTime(vars[i],j));
+                } else {
+                    det_vars.push(results[i]);
                 }
                 i++;
                 SMTsolver.pop();
             }
             SMTsolver.resetSolver();
             if (detected) {
-                PTRef block = TimeMachine(logic).sendFlaThroughTime(QuantifierElimination(logic).keepOnly(transitions, nondet_vars), -j+1);
+                PTRef block = TimeMachine(logic).sendFlaThroughTime(QuantifierElimination(logic).keepOnly(logic.mkAnd(logic.mkAnd(det_vars), transitions), nondet_vars), -j+1);
                 std::cout<<"Block: " << logic.pp(block) << std::endl;
-                SMTsolver.assertProp(logic.mkAnd(logic.mkNot(TimeMachine(logic).sendFlaThroughTime(block, j-1)), transitions));
-                if (block == logic.getTerm_true() || SMTsolver.check() == SMTSolver::Answer::SAT) {
+                if (block == logic.getTerm_true()) {
                     detected = false;
                     SMTsolver.resetSolver();
                     continue;
@@ -157,7 +157,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(ChcDirectedGraph
                     transitionConstraint = logic.mkAnd(transitionConstraint, logic.mkNot(block));
                     SMTsolver.assertProp(logic.mkAnd(transition, transitionConstraint));
                     if (SMTsolver.check() == SMTSolver::Answer::UNSAT) {
-                        return Answer::UNKNOWN;
+                        return Answer::YES;
                     }
                 }
             }
@@ -166,10 +166,10 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(ChcDirectedGraph
         if (detected) {
             solver = std::make_unique<TPASplit>(logic, options);
             solver->resetTransitionSystem(TransitionSystem(logic,
-                std::make_unique<SystemType>(ts->getStateVars(), ts->getAuxiliaryVars(), logic),
-                logic.mkAnd(init, initConstraint),
-                    logic.mkAnd(transition, transitionConstraint),
-                    query));
+                std::make_unique<SystemType>(ts.getStateVars(), ts.getAuxiliaryVars(), logic),
+                    logic.mkAnd(init, initConstraint),
+                logic.mkAnd(transition, transitionConstraint),
+                     query));
         } else {
             transitions = QuantifierElimination(logic).keepOnly(transitions, vars);
             initConstraint = logic.mkAnd(initConstraint, logic.mkNot(transitions));

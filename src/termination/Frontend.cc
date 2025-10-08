@@ -8,6 +8,7 @@
 #include "LassoDetector.h"
 #include "Normalizer.h"
 #include "ReachabilityTerm.h"
+#include "ReachabilityNonterm.h"
 #include "TransformationUtils.h"
 
 #include "graph/ChcGraphBuilder.h"
@@ -121,6 +122,7 @@ struct ITS {
     static Rule parseRule(SExpression const &);
     static std::shared_ptr<Expr> parseExpr(SExpression const &);
     ChcSystem asChcs(ArithLogic & logic) const;
+    ChcSystem asSafetyChcs(ArithLogic & logic) const;
 };
 
 ITS parseITS(std::istream & input) {
@@ -444,6 +446,108 @@ ChcSystem ITS::asChcs(ArithLogic & logic) const {
     return chcs;
 }
 
+// This function encodes termination problem as safety - every predicate which is not a
+
+
+
+// source of some clause gets corresponding query clause.
+
+
+// If there is no such predicate, then safety-based termination doesn't make sense as it requires
+
+
+// some sort of loop guard
+
+
+ChcSystem ITS::asSafetyChcs(ArithLogic & logic) const {
+    assert(this->format == "LCTRS");
+    assert(this->theory == "Ints");
+    ChcSystem chcs;
+    std::unordered_map<std::string, int> exit_locations;
+    std::unordered_map<std::string, SymRef> locationsToPredicates;
+    for (auto && [_, locationDeclaration] : this->locations) {
+        assert(std::all_of(locationDeclaration.argTypes.begin(), locationDeclaration.argTypes.end(),
+                           [](auto const & typeName) { return typeName == "Int"; }));
+        auto const predicate = logic.declareFun(locationDeclaration.name, logic.getSort_bool(),
+                                                std::vector(locationDeclaration.argTypes.size(), logic.getSort_int()));
+        locationsToPredicates.insert({locationDeclaration.name, predicate});
+        chcs.addUninterpretedPredicate(predicate);
+    }
+
+    int i = 0;
+    for (auto const & rule : this->rules) {
+        auto source = locationsToPredicates.at(rule.lhs.name);
+        auto target = locationsToPredicates.at(rule.rhs.name);
+        exit_locations[rule.lhs.name] = -1;
+
+        if (!exit_locations.contains(rule.rhs.name)) {
+            exit_locations[rule.rhs.name] = i;
+        }
+        i++;
+        ChClause clause;
+        {
+            vec<PTRef> args;
+            for (auto const & argName : rule.rhs.arguments) {
+                args.push(logic.mkIntVar(argName.c_str()));
+            }
+            clause.head = {logic.mkUninterpFun(target, std::move(args))};
+        }
+        ChcBody body;
+        {
+            vec<PTRef> args;
+            for (auto const & argName : rule.lhs.arguments) {
+                args.push(logic.mkIntVar(argName.c_str()));
+            }
+            PTRef bodyPredicate = logic.mkUninterpFun(source, std::move(args));
+            PTRef constraint = rule.guard ? translate(logic, *rule.guard) : logic.getTerm_true();
+            clause.body = ChcBody{.interpretedPart = {constraint}, .uninterpretedPart = {{bodyPredicate}}};
+        }
+        chcs.addClause(std::move(clause));
+    }
+    {
+        auto entryPredicateSym = locationsToPredicates.at(this->entrypoint);
+        auto entryLoc = this->locations.at(this->entrypoint);
+        vec<PTRef> auxArgs;
+        unsigned counter = 0u;
+        for (auto const & argType : entryLoc.argTypes) {
+            assert(argType == "Int");
+            (void)argType;
+            auto argName = "e" + std::to_string(counter++);
+            auxArgs.push(logic.mkIntVar(argName.c_str()));
+        }
+        PTRef entryPredicate = logic.mkUninterpFun(entryPredicateSym, std::move(auxArgs));
+        chcs.addClause(ChcHead{.predicate = {entryPredicate}},
+                       ChcBody{.interpretedPart = {logic.getTerm_true()}, .uninterpretedPart = {}});
+    }
+    bool exists_exit = false;
+    for (auto [pred, exit]: exit_locations) {
+        if (exit != -1) {
+            vec<PTRef> args;
+            for (auto const & argName : rules[exit].rhs.arguments) {
+                args.push(logic.mkIntVar(argName.c_str()));
+            }
+            PTRef exitPredicate = logic.mkUninterpFun(locationsToPredicates[pred], std::move(args));
+            chcs.addClause(ChcHead{logic.getTerm_false()},
+                           ChcBody{.interpretedPart = {logic.getTerm_true()}, .uninterpretedPart = {{exitPredicate}}});
+            exists_exit = true;
+        }
+    }
+    if (!exists_exit) {
+        for (auto [pred, exit]: exit_locations) {
+                vec<PTRef> args;
+                for (auto const & argName : rules[exit].rhs.arguments) {
+                    args.push(logic.mkIntVar(argName.c_str()));
+                }
+                PTRef exitPredicate = logic.mkUninterpFun(locationsToPredicates[pred], std::move(args));
+                chcs.addClause(ChcHead{logic.getTerm_false()},
+                               ChcBody{.interpretedPart = {logic.getTerm_true()}, .uninterpretedPart = {{exitPredicate}}});
+        }
+    }
+    return chcs;
+}
+
+
+
 void run(std::string const & filename, Options const & options) {
     std::ifstream input(filename);
     if (input.bad()) { throw std::logic_error{"Unable to process input file: " + filename}; }
@@ -475,21 +579,30 @@ void run(std::string const & filename, Options const & options) {
             auto [ts, bt] = SingleLoopTransformation{}.transform(*graph);
             return std::move(ts);
         }();
-        auto res = ReachabilityTerm{options}.termination(*ts);
-        if (res == ReachabilityTerm::Answer::YES) {
-            std::cout << "YES" << std::endl;
-        } else if (res == ReachabilityTerm::Answer::UNKNOWN) {
-            auto res = LassoDetector{options}.find_lasso(*ts);
-            if (res == LassoDetector::Answer::LASSO) {
-                std::cout << "NO" << std::endl;
-            } else if (res == LassoDetector::Answer::NO_LASSO) {
-                std::cout << "MAYBE\n;(no lasso exists)" << std::endl;
-            } else {
-                std::cout << "ERROR (when searching for lasso in the system)" << std::endl;
-            }
-        } else {
-            std::cout << "ERROR (when searching for termination in the system)" << std::endl;
-        }
+        // auto res = ReachabilityTerm{options}.termination(*ts);
+        // if (res == ReachabilityTerm::Answer::YES) {
+        //     std::cout << "YES" << std::endl;
+        // } else if (res == ReachabilityTerm::Answer::UNKNOWN) {
+        //     auto res = LassoDetector{options}.find_lasso(*ts);
+        //     if (res == LassoDetector::Answer::LASSO) {
+        //         std::cout << "NO" << std::endl;
+        //     } else if (res == LassoDetector::Answer::NO_LASSO) {
+                auto res = ReachabilityNonterm{options}.nontermination(*ts);
+                if (res == ReachabilityNonterm::Answer::YES) {
+                    std::cout << "YES" << std::endl;
+                } else if (res == ReachabilityNonterm::Answer::NO) {
+                    std::cout << "NO" << std::endl;
+                } else if (res == ReachabilityNonterm::Answer::UNKNOWN) {
+                    std::cout << "MAYBE\n;(no lasso exists)" << std::endl;
+                } else {
+                    std::cout << "ERROR (when doing reachability procedure)" << std::endl;
+                }
+    //         } else {
+    //             std::cout << "ERROR (when searching for lasso in the system)" << std::endl;
+    //         }
+    //     } else {
+    //         std::cout << "ERROR (when searching for termination in the system)" << std::endl;
+    //     }
     } catch (LANonLinearException const &) {
         std::cout << "MAYBE\n;(Nonlinear arithmetic expression in the input)" << std::endl;
     }
