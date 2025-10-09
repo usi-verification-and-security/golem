@@ -14,6 +14,7 @@
 #include "TransformationUtils.h"
 #include "ModelBasedProjection.h"
 #include "QuantifierElimination.h"
+#include "itehandler/IteToSwitch.h"
 #include "utils/SmtSolver.h"
 
 namespace golem::termination {
@@ -77,156 +78,145 @@ namespace golem::termination {
 ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem const & ts) {
 
     ArithLogic & logic = dynamic_cast<ArithLogic &>(ts.getLogic());
-    auto solver = std::make_unique<TPASplit>(logic, options);
     PTRef init  = ts.getInit();
     PTRef transition = dnfize(ts.getTransition(),logic);
     PTRef query = logic.mkNot(QuantifierElimination(logic).keepOnly(transition, ts.getStateVars()));
-    solver->resetTransitionSystem(TransitionSystem(logic,
-                    std::make_unique<SystemType>(ts.getStateVars(), ts.getAuxiliaryVars(), logic),
-                    init,
-                        transition,
-                        query));
-    std::cout<<"Init: " << logic.pp(init) << std::endl;
-    std::cout<<"Transition: " << logic.pp(transition) << std::endl;
-    std::cout<<"Query: " << logic.pp(query) << std::endl;
+    auto vars = ts.getStateVars();
     if (query == logic.getTerm_false()) {
         std::cout<<"; (Trivial nontermination)" << std::endl;
         return Answer::NO;
     }
-    auto vars = solver -> getStateVars(0);
+
+    enum JobType {TERM, NONTERM};
+    struct QueueJob {
+        TransitionSystem ts;
+        JobType type;
+    };
+
+    std::queue<QueueJob> jobs;
+    jobs.push({TransitionSystem(logic,
+                        std::make_unique<SystemType>(ts.getStateVars(), ts.getAuxiliaryVars(), logic),
+                        init,
+                            transition,
+                            query), NONTERM});
+
+
     PTRef transitionConstraint = logic.getTerm_true();
     PTRef initConstraint = logic.getTerm_true();
-
-    auto res = solver->solve();
-    while(res == VerificationAnswer::UNSAFE) {
-        PTRef reached  = solver->getReachedStates();
-        PTRef solverTransition = solver->getTransitionRelation();
-        uint num = solver->getTransitionStepCount();
-        std::vector formulas {init, TimeMachine(logic).sendFlaThroughTime(logic.mkAnd(reached,query), num)};
-        SMTSolver SMTsolver(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
-        for(int j=0; j < num; j++){
-            formulas.push_back(TimeMachine(logic).sendFlaThroughTime(solverTransition, j));
-        }
-        PTRef transitions = logic.mkAnd(formulas);
-        SMTsolver.assertProp(transitions);
-        auto resSMT = SMTsolver.check();
-        assert(resSMT == SMTSolver::Answer::SAT);
-        auto model = SMTsolver.getModel();
-        bool detected = false;
-        for (int j = num; j > 0; j--) {
-            vec<PTRef> base;
-            vec<PTRef> results;
-            for (auto var: vars) {
-                PTRef ver = TimeMachine(logic).sendFlaThroughTime(var, j-1);
-                PTRef nxt = TimeMachine(logic).sendFlaThroughTime(var, j);
-                base.push(logic.mkEq(ver, model->evaluate(ver)));
-                results.push(logic.mkEq(nxt, model->evaluate(nxt)));
+    while (!jobs.empty()) {
+        auto solver = std::make_unique<TPASplit>(logic, options);
+        auto [job, type] = std::move(jobs.front());
+        jobs.pop();
+        solver->resetTransitionSystem(job);
+        auto res = solver->solve();
+        if (res == VerificationAnswer::UNSAFE) {
+            PTRef reached  = solver->getReachedStates();
+            PTRef solverTransition = solver->getTransitionRelation();
+            uint num = solver->getTransitionStepCount();
+            std::vector formulas {solver->getInit(), TimeMachine(logic).sendFlaThroughTime(logic.mkAnd(reached,query), num)};
+            SMTSolver SMTsolver(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
+            for(int j=0; j < num; j++){
+                formulas.push_back(TimeMachine(logic).sendFlaThroughTime(solverTransition, j));
             }
-            vec<PTRef> nondet_vars;
-            vec<PTRef> det_vars;
-            uint i = 0;
-            SMTsolver.resetSolver();
-            SMTsolver.assertProp(logic.mkAnd(logic.mkAnd(base), TimeMachine(logic).sendFlaThroughTime(solverTransition,j-1)));
-            std::cout<<"***********CHECK*************\n";
-            std::cout<<"Base: " << logic.pp(logic.mkAnd(base)) << std::endl;
-            std::cout<<"Result: " << logic.pp(logic.mkAnd(results)) << std::endl;
-            std::cout<<"Check: " << logic.pp(TimeMachine(logic).sendFlaThroughTime(solverTransition,j-1)) << std::endl;
-            std::cout<<"*****************************\n";
-            for(auto result:results) {
-                SMTsolver.push();
-                SMTsolver.assertProp(logic.mkNot(result));
-                if (SMTsolver.check() == SMTSolver::Answer::SAT) {
-                    detected = true;
-                    nondet_vars.push(TimeMachine(logic).sendFlaThroughTime(vars[i],j));
-                } else {
-                    det_vars.push(results[i]);
+            PTRef transitions = logic.mkAnd(formulas);
+            SMTsolver.assertProp(transitions);
+            auto resSMT = SMTsolver.check();
+            assert(resSMT == SMTSolver::Answer::SAT);
+            auto model = SMTsolver.getModel();
+            bool detected = false;
+            for (int j = num; j > 0; j--) {
+                vec<PTRef> base;
+                vec<PTRef> results;
+                for (auto var: vars) {
+                    PTRef ver = TimeMachine(logic).sendFlaThroughTime(var, j-1);
+                    PTRef nxt = TimeMachine(logic).sendFlaThroughTime(var, j);
+                    base.push(logic.mkEq(ver, model->evaluate(ver)));
+                    results.push(logic.mkEq(nxt, model->evaluate(nxt)));
                 }
-                i++;
-                SMTsolver.pop();
-            }
-            SMTsolver.resetSolver();
-            if (detected) {
-                PTRef block = TimeMachine(logic).sendFlaThroughTime(QuantifierElimination(logic).keepOnly(logic.mkAnd(logic.mkAnd(det_vars), transitions), nondet_vars), -j+1);
-                std::cout<<"Block: " << logic.pp(block) << std::endl;
-                if (block == logic.getTerm_true()) {
-                    detected = false;
-                    SMTsolver.resetSolver();
-                    continue;
-                } else {
-                    SMTsolver.resetSolver();
-                    SMTsolver.assertProp(logic.mkAnd(transition, logic.mkAnd(transitionConstraint, logic.mkNot(block))));
-                    if (SMTsolver.check() == SMTSolver::Answer::UNSAT) {
+                vec<PTRef> nondet_vars;
+                vec<PTRef> det_vars;
+                uint i = 0;
+                SMTsolver.resetSolver();
+                SMTsolver.assertProp(logic.mkAnd(logic.mkAnd(base), TimeMachine(logic).sendFlaThroughTime(solverTransition,j-1)));
+                std::cout<<"***********CHECK*************\n";
+                std::cout<<"Base: " << logic.pp(logic.mkAnd(base)) << std::endl;
+                std::cout<<"Result: " << logic.pp(logic.mkAnd(results)) << std::endl;
+                std::cout<<"Check: " << logic.pp(TimeMachine(logic).sendFlaThroughTime(solverTransition,j-1)) << std::endl;
+                std::cout<<"*****************************\n";
+                for(auto result:results) {
+                    SMTsolver.push();
+                    SMTsolver.assertProp(logic.mkNot(result));
+                    if (SMTsolver.check() == SMTSolver::Answer::SAT) {
+                        detected = true;
+                        nondet_vars.push(TimeMachine(logic).sendFlaThroughTime(vars[i],j));
+                    } else {
+                        det_vars.push(results[i]);
+                    }
+                    i++;
+                    SMTsolver.pop();
+                }
+                SMTsolver.resetSolver();
+                if (detected) {
+                    PTRef block = TimeMachine(logic).sendFlaThroughTime(QuantifierElimination(logic).keepOnly(logic.mkAnd(logic.mkAnd(det_vars), transitions), nondet_vars), -j+1);
+                    std::cout<<"Block: " << logic.pp(block) << std::endl;
+                    if (block == logic.getTerm_true()) {
                         detected = false;
                         SMTsolver.resetSolver();
                         continue;
                     } else {
-                        transitionConstraint = logic.mkAnd(transitionConstraint, logic.mkNot(block));
+                        SMTsolver.resetSolver();
+                        SMTsolver.assertProp(logic.mkAnd(transition, logic.mkAnd(transitionConstraint, logic.mkNot(block))));
+                        if (SMTsolver.check() == SMTSolver::Answer::UNSAT) {
+                            detected = false;
+                            SMTsolver.resetSolver();
+                            continue;
+                        } else {
+                            transitionConstraint = logic.mkAnd(transitionConstraint, logic.mkNot(block));
+                        }
                     }
                 }
+                if (detected) { break; }
             }
-            if (detected) { break; }
-        }
-        if (detected) {
-            solver = std::make_unique<TPASplit>(logic, options);
-            solver->resetTransitionSystem(TransitionSystem(logic,
-                std::make_unique<SystemType>(ts.getStateVars(), ts.getAuxiliaryVars(), logic),
-                    logic.mkAnd(init, initConstraint),
-                logic.mkAnd(transition, transitionConstraint),
-                     query));
+            if (detected) {
+                jobs.push({TransitionSystem(logic,
+                    std::make_unique<SystemType>(ts.getStateVars(), ts.getAuxiliaryVars(), logic),
+                        logic.mkAnd(init, initConstraint),
+                    logic.mkAnd(transition, transitionConstraint),
+                         query), NONTERM});
+            } else {
+                transitions = QuantifierElimination(logic).keepOnly(transitions, vars);
+                initConstraint = logic.mkAnd(initConstraint, logic.mkNot(transitions));
+                jobs.push({TransitionSystem(logic,
+                    std::make_unique<SystemType>(ts.getStateVars(), ts.getAuxiliaryVars(), logic),
+                        logic.mkAnd(init, initConstraint),
+                    logic.mkAnd(transition, transitionConstraint),
+                         query), NONTERM});
+            }
+
+        } else if (res == VerificationAnswer::SAFE) {
+            if (type == NONTERM) {
+                SMTSolver SMTsolver(logic, SMTSolver::WitnessProduction::NONE);
+                SMTsolver.resetSolver();
+                SMTsolver.assertProp(logic.mkAnd({solver->getInit(), solver->getTransitionRelation()}));
+                auto resSMT = SMTsolver.check();
+                if (resSMT == SMTSolver::Answer::UNSAT) {
+                    return Answer::YES;
+                } else {
+                    return Answer::NO;
+                }
+            } else {
+                PTRef transitionInv = solver->getInductiveInvariant();
+            }
         } else {
-            transitions = QuantifierElimination(logic).keepOnly(transitions, vars);
-            initConstraint = logic.mkAnd(initConstraint, logic.mkNot(transitions));
-            std::cout<<"Init block: " << logic.pp(initConstraint) << std::endl;
-            solver->resetInitialStates(logic.mkAnd(init, initConstraint));
-        }
-        res = solver->solve();
-    }
-        // Give linear templates of vars, and check them for preconds to cover benchmarks...
-    SMTSolver SMTsolver(logic, SMTSolver::WitnessProduction::NONE);
-    SMTsolver.resetSolver();
-
-    std::cout<<"Transition block: " << logic.pp(transitionConstraint) << std::endl;
-    std::cout<<"Init: " << logic.pp(solver->getInit()) << std::endl;
-    SMTsolver.assertProp(logic.mkAnd({solver->getInit(), solver->getTransitionRelation()}));
-    auto resSMT = SMTsolver.check();
-    if (resSMT == SMTSolver::Answer::UNSAT) {
-        return Answer::YES;
-    }
-
-    switch (res) {
-        case VerificationAnswer::SAFE: {
-            PTRef inv = solver->getInductiveInvariant();
-            SMTsolver.resetSolver();
-            SMTsolver.assertProp(logic.mkAnd({inv, logic.mkAnd(transition, transitionConstraint), logic.mkNot(TimeMachine(logic).sendFlaThroughTime(inv, 1))}));
-            auto ans_1 = SMTsolver.check();
-            SMTsolver.resetSolver();
-            SMTsolver.assertProp(logic.mkAnd({inv, logic.mkAnd(transition, transitionConstraint), logic.mkOr(TimeMachine(logic).sendFlaThroughTime(
-                query, 1), logic.mkNot(transitionConstraint))}));
-            auto ans_2 = SMTsolver.check();
-
-            // std::cout<<"Invariant: " << logic.pp(inv) << std::endl;
-            // std::cout<<"Transition: " << logic.pp(transition) << std::endl;
-            // std::cout<<"Transition Constraint: " << logic.pp(transitionConstraint) << std::endl;
-            // std::cout<<"Comp: " << logic.pp(QuantifierElimination(logic).keepOnly(logic.mkAnd(transition, transitionConstraint), solver->getStateVars(0))) << std::endl;
-            if (ans_1 == SMTSolver::Answer::UNSAT && ans_2 == SMTSolver::Answer::UNSAT) {
-                return Answer::NO;
-            }
-            // else {
-            //     SMTsolver.resetSolver();
-            //     SMTsolver.assertProp(logic.mkAnd(transition, transitionConstraint));
-            //     if (SMTsolver.check() == SMTSolver::Answer::UNSAT) {
-            //         return Answer::YES;
-            //     }
-            //     return Answer::UNKNOWN;
-            // }
-        }
-        case VerificationAnswer::UNKNOWN:
-            return Answer::UNKNOWN;
-        case VerificationAnswer::UNSAFE:
+            assert(false && "Unreachable!");
             return Answer::ERROR;
+        }
     }
-    // assert(false && "Unreachable!");
-    // return Answer::ERROR;
+
+
+
+    assert(false && "Unreachable!");
+    return Answer::ERROR;
 }
 
 } // namespace golem::termination
