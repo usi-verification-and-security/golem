@@ -19,6 +19,9 @@ ReachabilityTerm::Answer ReachabilityTerm::termination(TransitionSystem const & 
     vec<PTRef> eqCheck;
     vec<PTRef> geqCheck;
 
+    if (ts.getTransition() == logic.getTerm_true() || ts.getInit() == logic.getTerm_false()) {
+        return Answer::UNKNOWN;
+    }
     // Adding a counter variable
     PTRef counter = logic.mkIntVar("counter");
     PTRef counter0 = TimeMachine(logic).getVarVersionZero(counter);

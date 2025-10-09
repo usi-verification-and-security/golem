@@ -154,10 +154,13 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
                     continue;
                 } else {
                     SMTsolver.resetSolver();
-                    transitionConstraint = logic.mkAnd(transitionConstraint, logic.mkNot(block));
-                    SMTsolver.assertProp(logic.mkAnd(transition, transitionConstraint));
+                    SMTsolver.assertProp(logic.mkAnd(transition, logic.mkAnd(transitionConstraint, logic.mkNot(block))));
                     if (SMTsolver.check() == SMTSolver::Answer::UNSAT) {
-                        return Answer::YES;
+                        detected = false;
+                        SMTsolver.resetSolver();
+                        continue;
+                    } else {
+                        transitionConstraint = logic.mkAnd(transitionConstraint, logic.mkNot(block));
                     }
                 }
             }

@@ -579,14 +579,14 @@ void run(std::string const & filename, Options const & options) {
             auto [ts, bt] = SingleLoopTransformation{}.transform(*graph);
             return std::move(ts);
         }();
-        // auto res = ReachabilityTerm{options}.termination(*ts);
-        // if (res == ReachabilityTerm::Answer::YES) {
-        //     std::cout << "YES" << std::endl;
-        // } else if (res == ReachabilityTerm::Answer::UNKNOWN) {
-        //     auto res = LassoDetector{options}.find_lasso(*ts);
-        //     if (res == LassoDetector::Answer::LASSO) {
-        //         std::cout << "NO" << std::endl;
-        //     } else if (res == LassoDetector::Answer::NO_LASSO) {
+        auto res = ReachabilityTerm{options}.termination(*ts);
+        if (res == ReachabilityTerm::Answer::YES) {
+            std::cout << "YES" << std::endl;
+        } else if (res == ReachabilityTerm::Answer::UNKNOWN) {
+            auto res = LassoDetector{options}.find_lasso(*ts);
+            if (res == LassoDetector::Answer::LASSO) {
+                std::cout << "NO" << std::endl;
+            } else if (res == LassoDetector::Answer::NO_LASSO) {
                 auto res = ReachabilityNonterm{options}.nontermination(*ts);
                 if (res == ReachabilityNonterm::Answer::YES) {
                     std::cout << "YES" << std::endl;
@@ -597,12 +597,12 @@ void run(std::string const & filename, Options const & options) {
                 } else {
                     std::cout << "ERROR (when doing reachability procedure)" << std::endl;
                 }
-    //         } else {
-    //             std::cout << "ERROR (when searching for lasso in the system)" << std::endl;
-    //         }
-    //     } else {
-    //         std::cout << "ERROR (when searching for termination in the system)" << std::endl;
-    //     }
+        } else {
+            std::cout << "ERROR (when searching for lasso in the system)" << std::endl;
+        }
+    } else {
+        std::cout << "ERROR (when searching for termination in the system)" << std::endl;
+    }
     } catch (LANonLinearException const &) {
         std::cout << "MAYBE\n;(Nonlinear arithmetic expression in the input)" << std::endl;
     }
