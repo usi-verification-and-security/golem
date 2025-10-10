@@ -113,6 +113,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
         // std::cout << "Query: " << logic.pp(solver->getQuery()) << std::endl;
         auto res = solver->solve();
         if (res == VerificationAnswer::UNSAFE) {
+            // solver->get
             PTRef reached  = solver->getReachedStates();
             PTRef solverTransition = solver->getTransitionRelation();
             uint num = solver->getTransitionStepCount();
