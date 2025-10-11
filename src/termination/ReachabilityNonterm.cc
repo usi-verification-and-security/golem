@@ -19,8 +19,6 @@
 
 namespace golem::termination {
 
-    // TODO: think what to do with negation
-// TODO: think what to do with negation
     PTRef dnfize(PTRef input, Logic & logic) {
         TermUtils utils {logic};
         if (logic.isAnd(input)) {
@@ -212,12 +210,18 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
                     PTRef inv = solver->getInductiveInvariant();
                     SMTsolver.resetSolver();
                     SMTsolver.assertProp(logic.mkAnd({inv, logic.mkNot(QuantifierElimination(logic).keepOnly(logic.mkAnd(transition, transitionConstraint), vars))}));
-
                     auto ans = SMTsolver.check();
 
                     if (ans == SMTSolver::Answer::UNSAT) {
                         return Answer::NO;
                     } else {
+                        query = logic.mkAnd(query, logic.mkNot(QuantifierElimination(logic).keepOnly(logic.mkAnd(transition, transitionConstraint), vars)));
+                        transitionConstraint = logic.getTerm_true();
+                        jobs.push_back({TransitionSystem(logic,
+                            std::make_unique<SystemType>(ts.getStateVars(), ts.getAuxiliaryVars(), logic),
+                                logic.mkAnd(init, initConstraint),
+                            transition,
+                                 query), NONTERM});
                         return  Answer::UNKNOWN;
                     }
 
