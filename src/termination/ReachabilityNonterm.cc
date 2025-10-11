@@ -108,9 +108,9 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
         auto [job, type] = std::move(jobs.back());
         jobs.pop_back();
         solver->resetTransitionSystem(job);
-        // std::cout << "Init: " << logic.pp(solver->getInit()) << std::endl;
-        // std::cout << "Transition: " << logic.pp(solver->getTransitionRelation()) << std::endl;
-        // std::cout << "Query: " << logic.pp(solver->getQuery()) << std::endl;
+        std::cout << "Init: " << logic.pp(solver->getInit()) << std::endl;
+        std::cout << "Transition: " << logic.pp(solver->getTransitionRelation()) << std::endl;
+        std::cout << "Query: " << logic.pp(solver->getQuery()) << std::endl;
         auto res = solver->solve();
         if (res == VerificationAnswer::UNSAFE) {
             // solver->get
@@ -149,6 +149,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
                 // std::cout<<"*****************************\n";
                 for(auto result:results) {
                     SMTsolver.push();
+                    // std::cout<<"Result: " << logic.pp(result) << std::endl;
                     SMTsolver.assertProp(logic.mkNot(result));
                     if (SMTsolver.check() == SMTSolver::Answer::SAT) {
                         detected = true;
@@ -162,7 +163,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
                 SMTsolver.resetSolver();
                 if (detected) {
                     PTRef block = TimeMachine(logic).sendFlaThroughTime(QuantifierElimination(logic).keepOnly(logic.mkAnd(logic.mkAnd(det_vars), transitions), nondet_vars), -j+1);
-                    std::cout << j <<" Block: " << logic.pp(block) << std::endl;
+                    // std::cout << j <<" Block: " << logic.pp(block) << std::endl;
                     if (block == logic.getTerm_true()) {
                         detected = false;
                         SMTsolver.resetSolver();
@@ -208,7 +209,18 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
                 if (resSMT == SMTSolver::Answer::UNSAT) {
                     return Answer::YES;
                 } else {
-                    return Answer::NO;
+                    PTRef inv = solver->getInductiveInvariant();
+                    SMTsolver.resetSolver();
+                    SMTsolver.assertProp(logic.mkAnd({inv, logic.mkNot(QuantifierElimination(logic).keepOnly(logic.mkAnd(transition, transitionConstraint), vars))}));
+
+                    auto ans = SMTsolver.check();
+
+                    if (ans == SMTSolver::Answer::UNSAT) {
+                        return Answer::NO;
+                    } else {
+                        return  Answer::UNKNOWN;
+                    }
+
                 }
             } else {
                 PTRef transitionInv = solver->getInductiveInvariant();
