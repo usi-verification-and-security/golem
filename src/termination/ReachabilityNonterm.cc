@@ -93,8 +93,8 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
         JobType type;
     };
 
-    std::queue<QueueJob> jobs;
-    jobs.push({TransitionSystem(logic,
+    std::vector<QueueJob> jobs;
+    jobs.push_back({TransitionSystem(logic,
                         std::make_unique<SystemType>(ts.getStateVars(), ts.getAuxiliaryVars(), logic),
                         init,
                             transition,
@@ -105,8 +105,8 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
     PTRef initConstraint = logic.getTerm_true();
     while (!jobs.empty()) {
         auto solver = std::make_unique<TPASplit>(logic, options);
-        auto [job, type] = std::move(jobs.front());
-        jobs.pop();
+        auto [job, type] = std::move(jobs.back());
+        jobs.pop_back();
         solver->resetTransitionSystem(job);
         // std::cout << "Init: " << logic.pp(solver->getInit()) << std::endl;
         // std::cout << "Transition: " << logic.pp(solver->getTransitionRelation()) << std::endl;
@@ -183,7 +183,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
             }
             if (detected) {
                 // std::cout<<"Transition block: " << logic.pp(transitionConstraint) << std::endl;
-                jobs.push({TransitionSystem(logic,
+                jobs.push_back({TransitionSystem(logic,
                     std::make_unique<SystemType>(ts.getStateVars(), ts.getAuxiliaryVars(), logic),
                         logic.mkAnd(init, initConstraint),
                     logic.mkAnd(transition, transitionConstraint),
@@ -192,7 +192,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
                 // std::cout<<"Init block: " << logic.pp(transitionConstraint) << std::endl;
                 transitions = QuantifierElimination(logic).keepOnly(transitions, vars);
                 initConstraint = logic.mkAnd(initConstraint, logic.mkNot(transitions));
-                jobs.push({TransitionSystem(logic,
+                jobs.push_back({TransitionSystem(logic,
                     std::make_unique<SystemType>(ts.getStateVars(), ts.getAuxiliaryVars(), logic),
                         logic.mkAnd(init, initConstraint),
                     logic.mkAnd(transition, transitionConstraint),
