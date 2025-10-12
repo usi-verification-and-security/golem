@@ -106,9 +106,9 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
         auto [job, type] = std::move(jobs.back());
         jobs.pop_back();
         solver->resetTransitionSystem(job);
-        std::cout << "Init: " << logic.pp(solver->getInit()) << std::endl;
-        std::cout << "Transition: " << logic.pp(solver->getTransitionRelation()) << std::endl;
-        std::cout << "Query: " << logic.pp(solver->getQuery()) << std::endl;
+        // std::cout << "Init: " << logic.pp(solver->getInit()) << std::endl;
+        // std::cout << "Transition: " << logic.pp(solver->getTransitionRelation()) << std::endl;
+        // std::cout << "Query: " << logic.pp(solver->getQuery()) << std::endl;
         auto res = solver->solve();
         if (res == VerificationAnswer::UNSAFE) {
             // solver->get
