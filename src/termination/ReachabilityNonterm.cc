@@ -222,7 +222,6 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
                                 logic.mkAnd(init, initConstraint),
                             transition,
                                  query), NONTERM});
-                        return  Answer::UNKNOWN;
                     }
 
                 }
