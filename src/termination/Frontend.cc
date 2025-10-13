@@ -21,15 +21,23 @@
 #include "transformers/SingleLoopTransformation.h"
 #include "transformers/TransformationPipeline.h"
 #include "transformers/TrivialEdgePruner.h"
+#include "utils/ScopeGuard.h"
 
 #include <cassert>
+#include <csignal>
 #include <fstream>
 #include <iostream>
+#include <memory>
 #include <sstream>
 #include <string>
 #include <unordered_map>
 #include <variant>
 #include <vector>
+
+#include <sys/mman.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
 namespace golem::termination {
 
@@ -444,6 +452,112 @@ ChcSystem ITS::asChcs(ArithLogic & logic) const {
     return chcs;
 }
 
+namespace {
+enum class TerminationAnswer { TERMINATING, NONTERMINATING, UNKNOWN, ERROR };
+
+enum Method { LASSO_FINDER, STEP_COUNTER, SENTINEL };
+
+TerminationAnswer solve(Method method, Options const & options, TransitionSystem const & ts) {
+    switch (method) {
+        case LASSO_FINDER: {
+            auto const res = LassoDetector{options}.find_lasso(ts);
+            if (res == LassoDetector::Answer::LASSO) {
+                return TerminationAnswer::NONTERMINATING;
+                // std::cout << "NO" << std::endl;
+            }
+            if (res == LassoDetector::Answer::NO_LASSO) {
+                return TerminationAnswer::UNKNOWN;
+                // std::cout << "MAYBE\n;(no lasso exists)" << std::endl;
+            }
+            return TerminationAnswer::ERROR;
+            // std::cout << "ERROR (when searching for lasso in the system)" << std::endl;
+        }
+        case STEP_COUNTER: {
+            auto const res = ReachabilityTerm{options}.termination(ts);
+            if (res == ReachabilityTerm::Answer::YES) {
+                return TerminationAnswer::TERMINATING;
+                // std::cout << "YES" << std::endl;
+            }
+            if (res == ReachabilityTerm::Answer::UNKNOWN) {
+                return TerminationAnswer::UNKNOWN;
+                // std::cout << "MAYBE" << std::endl;
+            }
+            return TerminationAnswer::ERROR;
+            // std::cout << "ERROR (when searching for termination in the system)" << std::endl;
+        }
+        default:
+            return TerminationAnswer::UNKNOWN;
+    }
+}
+
+void printAnswer(TerminationAnswer answer) {
+    switch (answer) {
+        case TerminationAnswer::TERMINATING:
+            std::cout << "YES" << std::endl;
+            return;
+        case TerminationAnswer::NONTERMINATING:
+            std::cout << "NO" << std::endl;
+            return;
+        case TerminationAnswer::UNKNOWN:
+            std::cout << "MAYBE" << std::endl;
+            return;
+        case TerminationAnswer::ERROR:
+            std::cout << "ERROR" << std::endl;
+            return;
+    }
+}
+
+void multiMethodSolve(Options const & options, std::unique_ptr<TransitionSystem> ts) {
+    pid_t const parent = getpid();
+    std::vector<pid_t> processes;
+    void * mptr = mmap(nullptr, sizeof(pid_t), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+    if (mptr == MAP_FAILED) {
+        std::cerr << "Problem setting up termination portfolio" << std::endl;
+        exit(1);
+    }
+    auto * winner_pid = static_cast<pid_t *>(mptr);
+    *winner_pid = -1;
+    for (uint i = 0; i < SENTINEL; i++) {
+        if (getpid() == parent) { processes.push_back(fork()); }
+        if (processes[i] == 0) {
+            // child process
+            auto result = solve(static_cast<Method>(i), options, *ts);
+            if (result == TerminationAnswer::UNKNOWN or result == TerminationAnswer::ERROR) { exit(1); }
+            if (__sync_bool_compare_and_swap(winner_pid, -1, getpid())) {
+                printAnswer(result);
+                exit(0);
+            } else {
+                exit(1); // Exit with error so that the main process would not kill the child working on witness
+            }
+        }
+    }
+
+    auto guard = ScopeGuard{[&]() { munmap(winner_pid, sizeof(pid_t)); }};
+    while (true) {
+        int status;
+        // Parent process waits until at least one child finishes
+        pid_t done = wait(&status);
+        if (done == -1) {
+            // If all the children processes are finished, we stop
+            if (errno == ECHILD) {
+                if (*winner_pid == -1) { // No child came up with an answer
+                    printAnswer(TerminationAnswer::UNKNOWN);
+                }
+                return;
+            }
+        } else {
+            // If some child process encountered error, we continue, otherwise if it returned
+            // SAT/UNSAT we stop all other children and exit the parent process
+            if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) { continue; }
+            for (auto k_p : processes) {
+                kill(k_p, SIGKILL);
+            }
+            return;
+        }
+    }
+}
+} // namespace
+
 void run(std::string const & filename, Options const & options) {
     std::ifstream input(filename);
     if (input.bad()) { throw std::logic_error{"Unable to process input file: " + filename}; }
@@ -475,21 +589,7 @@ void run(std::string const & filename, Options const & options) {
             auto [ts, bt] = SingleLoopTransformation{}.transform(*graph);
             return std::move(ts);
         }();
-        auto res = ReachabilityTerm{options}.termination(*ts);
-        if (res == ReachabilityTerm::Answer::YES) {
-            std::cout << "YES" << std::endl;
-        } else if (res == ReachabilityTerm::Answer::UNKNOWN) {
-            auto res = LassoDetector{options}.find_lasso(*ts);
-            if (res == LassoDetector::Answer::LASSO) {
-                std::cout << "NO" << std::endl;
-            } else if (res == LassoDetector::Answer::NO_LASSO) {
-                std::cout << "MAYBE\n;(no lasso exists)" << std::endl;
-            } else {
-                std::cout << "ERROR (when searching for lasso in the system)" << std::endl;
-            }
-        } else {
-            std::cout << "ERROR (when searching for termination in the system)" << std::endl;
-        }
+        multiMethodSolve(options, std::move(ts));
     } catch (LANonLinearException const &) {
         std::cout << "MAYBE\n;(Nonlinear arithmetic expression in the input)" << std::endl;
     }
