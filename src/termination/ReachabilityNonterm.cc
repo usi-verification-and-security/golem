@@ -73,43 +73,90 @@ namespace golem::termination {
         return input;
     }
 
+    PTRef generateReachabilityQuery(ArithLogic &logic, PTRef query, std::vector<PTRef>& vars) {
+        enum TypeOfQuery {LT, GT, LTC, GTC, EQ, NEQ};
+        PTRef constr;
+        SMTSolver solver(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
+        do {
+            int j = rand() % vars.size(),k = rand() % vars.size();
+            while (!logic.isNumVar(vars[j])) { j = rand() % vars.size(); }
+            while (!logic.isNumVar(vars[k])) { k = rand() % vars.size(); }
+            int i = rand() % 6;
+            switch (i) {
+                case LT: {
+                    if (logic.isNumVar(vars[j]) && logic.isNumVar(vars[k])) {
+                        constr = logic.mkLt(vars[j], vars[k]);
+                    }
+                }
+                case GT: {
+                    if (logic.isNumVar(vars[j]) && logic.isNumVar(vars[k])) {
+                        constr = logic.mkGt(vars[j], vars[k]);
+                    }
+                }
+                case LTC: {
+                    if (logic.isNumVar(vars[j]) ) {
+                        constr = logic.mkLt(vars[j], logic.mkIntConst(rand()));
+                    }
+                }
+                case GTC: {
+                    if (logic.isNumVar(vars[j]) ) {
+                        constr = logic.mkGt(vars[j], logic.mkIntConst(rand()));
+                    }
+                }
+                case EQ: {
+                    if (logic.isNumVar(vars[j]) && logic.isNumVar(vars[k])) {
+                        constr = logic.mkEq(vars[j], vars[k]);
+                    }
+                }
+                case NEQ: {
+                    if (logic.isNumVar(vars[j]) && logic.isNumVar(vars[k])) {
+                        constr = logic.mkNot(logic.mkEq(vars[j], vars[k]));
+                    }
+                }
+            }
+            solver.resetSolver();
+            solver.assertProp(logic.mkAnd(query, constr));
+        } while (solver.check() == SMTSolver::Answer::UNSAT);
+        return constr;
+    }
+
     bool checkDisjunctiveWellfoundness (Logic &logic, PTRef relation, std::vector<PTRef>& vars) {
         TermUtils utils {logic};
         TimeMachine machine {logic};
+        std::vector<PTRef> identity;
         // auto disjuncts = utils.getTopLevelDisjuncts(dnfize(relation, logic));
         vec<PTRef> primedVars;
         for (auto var: vars) {
+            identity.push_back(logic.mkEq(var, machine.sendVarThroughTime(var, 1)));
             primedVars.push(machine.sendVarThroughTime(var, 1));
         }
         TermUtils::substitutions_map varSubstitutions;
         for (uint32_t i = 0u; i < vars.size(); ++i) {
             varSubstitutions.insert({ primedVars[i], vars[i]});
         }
-        PTRef irreflexiveCheck = utils.varSubstitute(relation, varSubstitutions);
+        PTRef inv = logic.mkAnd(logic.mkNot(logic.mkAnd(identity)), relation);
+        PTRef irreflexiveCheck = utils.varSubstitute(inv, varSubstitutions);
         SMTSolver SMTsolver(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
         SMTsolver.assertProp(irreflexiveCheck);
+        assert (SMTsolver.check() != SMTSolver::Answer::SAT);
+        varSubstitutions.clear();
+        for (uint32_t i = 0u; i < vars.size(); ++i) {
+            varSubstitutions.insert({ primedVars[i], machine.sendVarThroughTime(primedVars[i], 1)});
+        }
+        PTRef transitionBack = utils.varSubstitute(inv, varSubstitutions);
+        varSubstitutions.clear();
+        for (uint32_t i = 0u; i < vars.size(); ++i) {
+            varSubstitutions.insert({ vars[i], primedVars[i]});
+            varSubstitutions.insert({ machine.sendVarThroughTime(primedVars[i], 1), vars[i]});
+        }
+        transitionBack = utils.varSubstitute(transitionBack, varSubstitutions);
+        PTRef totalOrder = logic.mkAnd(inv, transitionBack);
+        SMTsolver.resetSolver();
+        SMTsolver.assertProp(totalOrder);
         if (SMTsolver.check() == SMTSolver::Answer::SAT) {
             return false;
         } else {
-            varSubstitutions.clear();
-            for (uint32_t i = 0u; i < vars.size(); ++i) {
-                varSubstitutions.insert({ primedVars[i], machine.sendVarThroughTime(primedVars[i], 1)});
-            }
-            PTRef transitionBack = utils.varSubstitute(relation, varSubstitutions);
-            varSubstitutions.clear();
-            for (uint32_t i = 0u; i < vars.size(); ++i) {
-                varSubstitutions.insert({ vars[i], primedVars[i]});
-                varSubstitutions.insert({ machine.sendVarThroughTime(primedVars[i], 1), vars[i]});
-            }
-            transitionBack = utils.varSubstitute(transitionBack, varSubstitutions);
-            PTRef totalOrder = logic.mkAnd(relation, transitionBack);
-            SMTsolver.resetSolver();
-            SMTsolver.assertProp(totalOrder);
-            if (SMTsolver.check() == SMTSolver::Answer::SAT) {
-                return false;
-            } else {
-                return true;
-            }
+            return true;
         }
         // TODO: disjunctive well-foundness
     }
@@ -161,7 +208,6 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
         // std::cout << "Query: " << logic.pp(solver->getQuery()) << std::endl;
         auto res = solver->solve();
         if (res == VerificationAnswer::UNSAFE) {
-            // solver->get
             PTRef reached  = solver->getReachedStates();
             PTRef solverTransition = solver->getTransitionRelation();
             uint num = solver->getTransitionStepCount();
@@ -230,6 +276,14 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
                 }
                 if (detected) { break; }
             }
+            if (type == NONTERM) {
+                PTRef test_q = generateReachabilityQuery(logic, query, vars);
+                jobs.push_back({TransitionSystem(logic,
+                        std::make_unique<SystemType>(ts.getStateVars(), ts.getAuxiliaryVars(), logic),
+                            logic.mkAnd(init, initConstraint),
+                                      transition,
+                             logic.mkAnd(query, test_q)), TERM});
+            }
             if (detected) {
                 // std::cout<<"Transition block: " << logic.pp(transitionConstraint) << std::endl;
                 jobs.push_back({TransitionSystem(logic,
@@ -250,6 +304,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
 
         } else if (res == VerificationAnswer::SAFE) {
             PTRef transitionInv = solver->getTransitionInvariant();
+            PTRef inv = solver->getInductiveInvariant();
             if (type == NONTERM) {
                 SMTSolver SMTsolver(logic, SMTSolver::WitnessProduction::NONE);
                 SMTsolver.resetSolver();
@@ -258,7 +313,6 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
                 if (resSMT == SMTSolver::Answer::UNSAT) {
                     return Answer::YES;
                 } else {
-                    PTRef inv = solver->getInductiveInvariant();
                     SMTsolver.resetSolver();
                     SMTsolver.assertProp(logic.mkAnd({inv, logic.mkNot(QuantifierElimination(logic).keepOnly(logic.mkAnd(transition, transitionConstraint), vars))}));
                     auto ans = SMTsolver.check();
@@ -273,13 +327,16 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
                                 logic.mkAnd(init, initConstraint),
                             transition,
                                  query), NONTERM});
-                        if (checkDisjunctiveWellfoundness(logic, transitionInv, vars)) {
+                        if (checkDisjunctiveWellfoundness(logic, logic.mkAnd(inv,transitionInv), vars)) {
                             return Answer::YES;
                         }
                     }
 
                 }
             } else {
+                if (checkDisjunctiveWellfoundness(logic, logic.mkAnd(inv,transitionInv), vars)) {
+                    return Answer::YES;
+                }
             }
         } else {
             assert(false && "Unreachable!");
