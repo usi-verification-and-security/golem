@@ -583,10 +583,10 @@ void run(std::string const & filename, Options const & options) {
         if (res == ReachabilityTerm::Answer::YES) {
             std::cout << "YES" << std::endl;
         } else if (res == ReachabilityTerm::Answer::UNKNOWN) {
-            auto res = LassoDetector{options}.find_lasso(*ts);
-            if (res == LassoDetector::Answer::LASSO) {
-                std::cout << "NO" << std::endl;
-            } else if (res == LassoDetector::Answer::NO_LASSO) {
+            // auto res = LassoDetector{options}.find_lasso(*ts);
+            // if (res == LassoDetector::Answer::LASSO) {
+            //     std::cout << "NO" << std::endl;
+            // } else if (res == LassoDetector::Answer::NO_LASSO) {
                 auto res = ReachabilityNonterm{options}.nontermination(*ts);
                 if (res == ReachabilityNonterm::Answer::YES) {
                     std::cout << "YES" << std::endl;
@@ -597,9 +597,9 @@ void run(std::string const & filename, Options const & options) {
                 } else {
                     std::cout << "ERROR (when doing reachability procedure)" << std::endl;
                 }
-        } else {
-            std::cout << "ERROR (when searching for lasso in the system)" << std::endl;
-        }
+        // } else {
+        //     std::cout << "ERROR (when searching for lasso in the system)" << std::endl;
+        // }
     } else {
         std::cout << "ERROR (when searching for termination in the system)" << std::endl;
     }

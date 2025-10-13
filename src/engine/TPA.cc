@@ -1708,6 +1708,30 @@ PTRef TPABase::getSafetyExplanation() const {
         getNextVersion(getQuery(), explanation.relationType == TPAType::LESS_THAN ? 1 : 2));
 }
 
+
+PTRef TPABase::getTransitionInvariant() const {
+    PTRef transitionInvariant =  explanation.safeTransitionInvariant;
+    switch (explanation.relationType) {
+        case TPAType::LESS_THAN:
+            return transitionInvariant;
+        case TPAType::EQUALS: {
+            auto vars = getStateVars(2);
+            auto primeVars = getStateVars(1);
+            TermUtils::substitutions_map varSubstitutions;
+            for (uint32_t i = 0u; i < vars.size(); ++i) {
+                varSubstitutions.insert({ vars[i], primeVars[i]});
+            }
+            auto initVars = getStateVars(0);
+            for (auto var : initVars) {
+                vars.push(var);
+            }
+            PTRef qe = QuantifierElimination(logic).keepOnly(transitionInvariant, vars);
+            TermUtils utils {logic};
+            return utils.varSubstitute(qe, varSubstitutions);
+        }
+    }
+}
+
 PTRef TPABase::getInductiveInvariant() const {
     assert(explanation.invariantType != SafetyExplanation::TransitionInvariantType::NONE);
     if (explanation.relationType == TPAType::LESS_THAN) {

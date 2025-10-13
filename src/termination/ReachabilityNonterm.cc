@@ -73,6 +73,56 @@ namespace golem::termination {
         return input;
     }
 
+    bool checkDisjunctiveWellfoundness (Logic &logic, PTRef relation, std::vector<PTRef>& vars) {
+        TermUtils utils {logic};
+        TimeMachine machine {logic};
+        // auto disjuncts = utils.getTopLevelDisjuncts(dnfize(relation, logic));
+        vec<PTRef> primedVars;
+        for (auto var: vars) {
+            primedVars.push(machine.sendVarThroughTime(var, 1));
+        }
+        TermUtils::substitutions_map varSubstitutions;
+        for (uint32_t i = 0u; i < vars.size(); ++i) {
+            varSubstitutions.insert({ primedVars[i], vars[i]});
+        }
+        PTRef irreflexiveCheck = utils.varSubstitute(relation, varSubstitutions);
+        SMTSolver SMTsolver(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
+        SMTsolver.assertProp(irreflexiveCheck);
+        if (SMTsolver.check() == SMTSolver::Answer::SAT) {
+            return false;
+        } else {
+            varSubstitutions.clear();
+            for (uint32_t i = 0u; i < vars.size(); ++i) {
+                varSubstitutions.insert({ primedVars[i], machine.sendVarThroughTime(primedVars[i], 1)});
+            }
+            PTRef transitionBack = utils.varSubstitute(relation, varSubstitutions);
+            varSubstitutions.clear();
+            for (uint32_t i = 0u; i < vars.size(); ++i) {
+                varSubstitutions.insert({ vars[i], primedVars[i]});
+                varSubstitutions.insert({ machine.sendVarThroughTime(primedVars[i], 1), vars[i]});
+            }
+            transitionBack = utils.varSubstitute(transitionBack, varSubstitutions);
+            PTRef totalOrder = logic.mkAnd(relation, transitionBack);
+            SMTsolver.resetSolver();
+            SMTsolver.assertProp(totalOrder);
+            if (SMTsolver.check() == SMTSolver::Answer::SAT) {
+                return false;
+            } else {
+                return true;
+            }
+        }
+        // TODO: disjunctive well-foundness
+    }
+
+    // bool checkWellFoundness (Logic logic, PTRef relation, vec<PTRef>& vars) {
+    //     PTRef constraints = QuantifierElimination(logic).keepOnly(relation, vars);
+    //     if (constraints == logic.getTerm_true()) {
+    //         return false;
+    //     } else {
+    //
+    //     }
+    // }
+
 ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem const & ts) {
 
     ArithLogic & logic = dynamic_cast<ArithLogic &>(ts.getLogic());
@@ -199,6 +249,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
             }
 
         } else if (res == VerificationAnswer::SAFE) {
+            PTRef transitionInv = solver->getTransitionInvariant();
             if (type == NONTERM) {
                 SMTSolver SMTsolver(logic, SMTSolver::WitnessProduction::NONE);
                 SMTsolver.resetSolver();
@@ -222,11 +273,13 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
                                 logic.mkAnd(init, initConstraint),
                             transition,
                                  query), NONTERM});
+                        if (checkDisjunctiveWellfoundness(logic, transitionInv, vars)) {
+                            return Answer::YES;
+                        }
                     }
 
                 }
             } else {
-                PTRef transitionInv = solver->getInductiveInvariant();
             }
         } else {
             assert(false && "Unreachable!");
