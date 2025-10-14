@@ -13,40 +13,33 @@
 namespace golem::termination {
 
 ReachabilityTerm::Answer ReachabilityTerm::termination(TransitionSystem const & ts) {
-    // Preprocessing of TS
-    ArithLogic & logic = dynamic_cast<ArithLogic &>(ts.getLogic());
+    auto & logic = dynamic_cast<ArithLogic &>(ts.getLogic());
     auto vars = ts.getStateVars();
-    vec<PTRef> eqCheck;
-    vec<PTRef> geqCheck;
 
     // Adding a counter variable
     PTRef counter = logic.mkIntVar("counter");
     PTRef counter0 = TimeMachine(logic).getVarVersionZero(counter);
     PTRef counter1 = TimeMachine(logic).sendVarThroughTime(counter0, 1);
+    // initial condition: counter > max(0, x_1, -x_1, x_2, -x_2, ..., x_n, -x_n)
+    vec<PTRef> geqCheck;
+    geqCheck.push(logic.mkGt(counter0, logic.getTerm_IntZero())); // Needed in case there are no int variables
     for (auto var : vars) {
-        if (logic.isSortInt(logic.getSortRef(var)) || logic.isSortReal(logic.getSortRef(var))) {
-            eqCheck.push(logic.mkEq(var, counter0));
-            eqCheck.push(logic.mkEq(logic.mkNeg(var), counter0));
-            geqCheck.push(logic.mkGeq(counter0, var));
-            geqCheck.push(logic.mkGeq(counter0, logic.mkNeg(var)));
+        if (logic.isSortInt(logic.getSortRef(var))) {
+            geqCheck.push(logic.mkGt(counter0, var));
+            geqCheck.push(logic.mkGt(counter0, logic.mkNeg(var)));
         }
     }
     vars.push_back(counter0);
-    // Creating a formula counter = max(x_1, -x_1, x_2, -x_2, ..., x_n, -x_n) - counter should be a positive max value
-    // of a variable
-    PTRef max = logic.mkAnd(logic.mkOr(eqCheck), logic.mkAnd(geqCheck));
-    // This is a formula that decrements counter by one
-    PTRef counterDec = logic.mkEq(counter1, logic.mkMinus(counter0, logic.getTerm_IntOne()));
-
-    // init = init /\ counter = max(x_1, -x_1, x_2, -x_2, ..., x_n, -x_n)
+    PTRef max = logic.mkAnd(geqCheck);
+    // init = init /\ counter > max(0, x_1, -x_1, x_2, -x_2, ..., x_n, -x_n)
     PTRef init = logic.mkAnd(ts.getInit(), max);
     // transition = transition /\ counter' = counter -1
+    PTRef counterDec = logic.mkEq(counter1, logic.mkMinus(counter0, logic.getTerm_IntOne()));
     PTRef transition = logic.mkAnd(ts.getTransition(), counterDec);
     // query = counter < 0
     PTRef query = logic.mkLt(counter0, logic.getTerm_IntZero());
 
     ChcSystem chcs;
-
     // Adding an uninterpreted predicate P
     SymRef predicate = [&]() -> SymRef {
         vec<SRef> argSorts;
@@ -74,7 +67,6 @@ ReachabilityTerm::Answer ReachabilityTerm::termination(TransitionSystem const & 
         }
         return logic.mkUninterpFun(predicate, std::move(args));
     }();
-    // adding clauses to CHC system
     chcs.addClause(ChcHead{UninterpretedPredicate{pred}}, ChcBody{InterpretedFla{init}, {}});
     chcs.addClause(ChcHead{UninterpretedPredicate{pred_next}},
                    ChcBody{InterpretedFla{transition}, {UninterpretedPredicate{pred}}});

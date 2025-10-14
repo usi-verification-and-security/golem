@@ -589,6 +589,10 @@ void run(std::string const & filename, Options const & options) {
             auto [ts, bt] = SingleLoopTransformation{}.transform(*graph);
             return std::move(ts);
         }();
+        if (ts->getTransition() == logic.getTerm_false()) {
+            printAnswer(TerminationAnswer::TERMINATING);
+            return;
+        }
         multiMethodSolve(options, std::move(ts));
     } catch (LANonLinearException const &) {
         std::cout << "MAYBE\n;(Nonlinear arithmetic expression in the input)" << std::endl;
