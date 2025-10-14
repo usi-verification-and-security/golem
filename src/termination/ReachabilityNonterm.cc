@@ -276,14 +276,14 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
                 }
                 if (detected) { break; }
             }
-            if (type == NONTERM) {
-                PTRef test_q = generateReachabilityQuery(logic, query, vars);
-                jobs.push_back({TransitionSystem(logic,
-                        std::make_unique<SystemType>(ts.getStateVars(), ts.getAuxiliaryVars(), logic),
-                            logic.mkAnd(init, initConstraint),
-                                      transition,
-                             logic.mkAnd(query, test_q)), TERM});
-            }
+            // if (type == NONTERM) {
+            //     PTRef test_q = generateReachabilityQuery(logic, query, vars);
+            //     jobs.push_back({TransitionSystem(logic,
+            //             std::make_unique<SystemType>(ts.getStateVars(), ts.getAuxiliaryVars(), logic),
+            //                 logic.mkAnd(init, initConstraint),
+            //                           transition,
+            //                  logic.mkAnd(query, test_q)), TERM});
+            // }
             if (detected) {
                 // std::cout<<"Transition block: " << logic.pp(transitionConstraint) << std::endl;
                 jobs.push_back({TransitionSystem(logic,
@@ -314,18 +314,20 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
                     return Answer::YES;
                 } else {
                     SMTsolver.resetSolver();
-                    SMTsolver.assertProp(logic.mkAnd({inv, logic.mkNot(QuantifierElimination(logic).keepOnly(logic.mkAnd(transition, transitionConstraint), vars))}));
+                    PTRef fkconstr =  logic.mkNot(QuantifierElimination(logic).keepOnly(transition, vars));
+                    PTRef constr =  logic.mkNot(QuantifierElimination(logic).keepOnly(logic.mkAnd(transition, transitionConstraint), vars));
+                    SMTsolver.assertProp(logic.mkAnd({inv, constr}));
                     auto ans = SMTsolver.check();
 
                     if (ans == SMTSolver::Answer::UNSAT) {
                         return Answer::NO;
                     } else {
-                        query = logic.mkAnd(query, logic.mkNot(QuantifierElimination(logic).keepOnly(logic.mkAnd(transition, transitionConstraint), vars)));
+                        query = logic.mkOr(query, constr);
                         transitionConstraint = logic.getTerm_true();
                         jobs.push_back({TransitionSystem(logic,
                             std::make_unique<SystemType>(ts.getStateVars(), ts.getAuxiliaryVars(), logic),
                                 logic.mkAnd(init, initConstraint),
-                            transition,
+                            logic.mkAnd(transition, transitionConstraint),
                                  query), NONTERM});
                         if (checkDisjunctiveWellfoundness(logic, logic.mkAnd(inv,transitionInv), vars)) {
                             return Answer::YES;
