@@ -8,7 +8,6 @@
 
 #include "ChcSystem.h"
 #include "TermUtils.h"
-#include "engine/EngineFactory.h"
 #include "engine/TPA.h"
 #include "engine/Common.h"
 #include "TransformationUtils.h"
@@ -16,6 +15,7 @@
 #include "QuantifierElimination.h"
 #include "itehandler/IteToSwitch.h"
 #include "utils/SmtSolver.h"
+#include <queue>
 
 namespace golem::termination {
 
@@ -188,8 +188,8 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
         JobType type;
     };
 
-    std::vector<QueueJob> jobs;
-    jobs.push_back({TransitionSystem(logic,
+    std::queue<QueueJob> jobs;
+    jobs.push({TransitionSystem(logic,
                         std::make_unique<SystemType>(ts.getStateVars(), ts.getAuxiliaryVars(), logic),
                         init,
                             transition,
@@ -200,9 +200,10 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
     PTRef initConstraint = logic.getTerm_true();
     while (!jobs.empty()) {
         auto solver = std::make_unique<TPASplit>(logic, options);
-        auto [job, type] = std::move(jobs.back());
-        jobs.pop_back();
+        auto [job, type] = std::move(jobs.front());
+        jobs.pop();
         solver->resetTransitionSystem(job);
+        // std::cout << "Type: " << ((type == TERM) ? "term" : "nonterm") << std::endl;
         // std::cout << "Init: " << logic.pp(solver->getInit()) << std::endl;
         // std::cout << "Transition: " << logic.pp(solver->getTransitionRelation()) << std::endl;
         // std::cout << "Query: " << logic.pp(solver->getQuery()) << std::endl;
@@ -211,10 +212,10 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
             PTRef reached  = solver->getReachedStates();
             PTRef solverTransition = solver->getTransitionRelation();
             uint num = solver->getTransitionStepCount();
-            std::vector formulas {solver->getInit(), TimeMachine(logic).sendFlaThroughTime(logic.mkAnd(reached,query), num)};
+            std::vector formulas {solver->getInit(), TimeMachine(logic).sendFlaThroughTime(reached, num)};
             SMTSolver SMTsolver(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
             for(int j=0; j < num; j++){
-                formulas.push_back(TimeMachine(logic).sendFlaThroughTime(transition, j));
+                formulas.push_back(TimeMachine(logic).sendFlaThroughTime(solverTransition, j));
             }
             PTRef transitions = logic.mkAnd(formulas);
             SMTsolver.assertProp(transitions);
@@ -233,6 +234,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
                 }
                 vec<PTRef> nondet_vars;
                 vec<PTRef> det_vars;
+                vec<PTRef> all_vars;
                 uint i = 0;
                 SMTsolver.resetSolver();
                 SMTsolver.assertProp(logic.mkAnd(logic.mkAnd(base), TimeMachine(logic).sendFlaThroughTime(solverTransition,j-1)));
@@ -251,12 +253,13 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
                     } else {
                         det_vars.push(results[i]);
                     }
+                    all_vars.push(TimeMachine(logic).sendFlaThroughTime(vars[i],j));
                     i++;
                     SMTsolver.pop();
                 }
                 SMTsolver.resetSolver();
                 if (detected) {
-                    PTRef block = TimeMachine(logic).sendFlaThroughTime(QuantifierElimination(logic).keepOnly(logic.mkAnd(logic.mkAnd(det_vars), transitions), nondet_vars), -j+1);
+                    PTRef block = TimeMachine(logic).sendFlaThroughTime(QuantifierElimination(logic).keepOnly(transitions, all_vars), -j+1);
                     // std::cout << j <<" Block: " << logic.pp(block) << std::endl;
                     if (block == logic.getTerm_true()) {
                         detected = false;
@@ -264,38 +267,45 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
                         continue;
                     } else {
                         SMTsolver.resetSolver();
-                        SMTsolver.assertProp(logic.mkAnd(transition, logic.mkAnd(transitionConstraint, logic.mkNot(block))));
+                        SMTsolver.assertProp(logic.mkAnd(transition, logic.mkNot(block)));
                         if (SMTsolver.check() == SMTSolver::Answer::UNSAT) {
-                            detected = false;
-                            SMTsolver.resetSolver();
-                            continue;
+                            return Answer::NO;
                         } else {
+                            SMTsolver.resetSolver();
+                            SMTsolver.assertProp(logic.mkAnd({transition, transitionConstraint, logic.mkNot(block)}));
+                            if (SMTsolver.check() == SMTSolver::Answer::UNSAT) {
+                                detected = false;
+                                SMTsolver.resetSolver();
+                                continue;
+                            }
+                            // std::cout << j <<" Transitions: " << logic.pp(transitions) << std::endl;
                             transitionConstraint = logic.mkAnd(transitionConstraint, logic.mkNot(block));
                         }
                     }
                 }
                 if (detected) { break; }
             }
-            // if (type == NONTERM) {
-            //     PTRef test_q = generateReachabilityQuery(logic, query, vars);
-            //     jobs.push_back({TransitionSystem(logic,
-            //             std::make_unique<SystemType>(ts.getStateVars(), ts.getAuxiliaryVars(), logic),
-            //                 logic.mkAnd(init, initConstraint),
-            //                           transition,
-            //                  logic.mkAnd(query, test_q)), TERM});
-            // }
+            if (type == NONTERM) {
+                PTRef test_q = generateReachabilityQuery(logic, query, vars);
+                // jobs.push({TransitionSystem(logic,
+                //         std::make_unique<SystemType>(ts.getStateVars(), ts.getAuxiliaryVars(), logic),
+                //             logic.mkAnd(init, initConstraint),
+                //                       transition,
+                //              logic.mkAnd(query, test_q)), TERM});
+            }
             if (detected) {
                 // std::cout<<"Transition block: " << logic.pp(transitionConstraint) << std::endl;
-                jobs.push_back({TransitionSystem(logic,
+                jobs.push({TransitionSystem(logic,
                     std::make_unique<SystemType>(ts.getStateVars(), ts.getAuxiliaryVars(), logic),
                         logic.mkAnd(init, initConstraint),
                     logic.mkAnd(transition, transitionConstraint),
                          query), NONTERM});
             } else {
-                // std::cout<<"Init block: " << logic.pp(transitionConstraint) << std::endl;
                 transitions = QuantifierElimination(logic).keepOnly(transitions, vars);
+                // std::cout<<"Block: " << logic.pp(logic.mkNot(transitions)) << std::endl;
                 initConstraint = logic.mkAnd(initConstraint, logic.mkNot(transitions));
-                jobs.push_back({TransitionSystem(logic,
+                // std::cout<<"Init block: " << logic.pp(initConstraint) << std::endl;
+                jobs.push({TransitionSystem(logic,
                     std::make_unique<SystemType>(ts.getStateVars(), ts.getAuxiliaryVars(), logic),
                         logic.mkAnd(init, initConstraint),
                     logic.mkAnd(transition, transitionConstraint),
@@ -324,7 +334,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
                     } else {
                         query = logic.mkOr(query, constr);
                         transitionConstraint = logic.getTerm_true();
-                        jobs.push_back({TransitionSystem(logic,
+                        jobs.push({TransitionSystem(logic,
                             std::make_unique<SystemType>(ts.getStateVars(), ts.getAuxiliaryVars(), logic),
                                 logic.mkAnd(init, initConstraint),
                             logic.mkAnd(transition, transitionConstraint),
