@@ -212,7 +212,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
             PTRef reached  = solver->getReachedStates();
             PTRef solverTransition = solver->getTransitionRelation();
             uint num = solver->getTransitionStepCount();
-            std::vector formulas {solver->getInit(), TimeMachine(logic).sendFlaThroughTime(reached, num)};
+            std::vector formulas {solver->getInit(), TimeMachine(logic).sendFlaThroughTime(logic.mkAnd(query, reached), num)};
             SMTSolver SMTsolver(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
             for(int j=0; j < num; j++){
                 formulas.push_back(TimeMachine(logic).sendFlaThroughTime(solverTransition, j));
@@ -322,7 +322,8 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
                 } else {
                     SMTsolver.resetSolver();
                     PTRef constr =  logic.mkNot(QuantifierElimination(logic).keepOnly(logic.mkAnd(transition, transitionConstraint), vars));
-                    SMTsolver.assertProp(logic.mkAnd({inv, TimeMachine(logic).sendFlaThroughTime(transitionConstraint, -1)}));
+                    // SMTsolver.assertProp(logic.mkAnd({inv, TimeMachine(logic).sendFlaThroughTime(transitionConstraint, -1)}));
+                    SMTsolver.assertProp(logic.mkAnd({inv, constr}));
                     auto ans = SMTsolver.check();
 
                     if (ans == SMTSolver::Answer::UNSAT) {
