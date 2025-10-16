@@ -320,26 +320,25 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
                 if (resSMT == SMTSolver::Answer::UNSAT) {
                     return Answer::YES;
                 } else {
-                    SMTsolver.resetSolver();
-                    PTRef fkconstr =  logic.mkNot(QuantifierElimination(logic).keepOnly(transition, vars));
-                    PTRef constr =  logic.mkNot(QuantifierElimination(logic).keepOnly(logic.mkAnd(transition, transitionConstraint), vars));
-                    SMTsolver.assertProp(logic.mkAnd({inv, constr}));
-                    auto ans = SMTsolver.check();
-
-                    if (ans == SMTSolver::Answer::UNSAT) {
+                    // SMTsolver.resetSolver();
+                    // PTRef constr =  logic.mkNot(QuantifierElimination(logic).keepOnly(logic.mkAnd(transition, transitionConstraint), vars));
+                    // SMTsolver.assertProp(logic.mkAnd({inv, TimeMachine(logic).sendFlaThroughTime(transitionConstraint, -1)}));
+                    // auto ans = SMTsolver.check();
+                    //
+                    // if (ans == SMTSolver::Answer::UNSAT) {
                         return Answer::NO;
-                    } else {
-                        query = logic.mkOr(query, constr);
-                        transitionConstraint = logic.getTerm_true();
-                        jobs.push({TransitionSystem(logic,
-                            std::make_unique<SystemType>(ts.getStateVars(), ts.getAuxiliaryVars(), logic),
-                                logic.mkAnd(init, initConstraint),
-                            logic.mkAnd(transition, transitionConstraint),
-                                 query), NONTERM});
-                        if (checkDisjunctiveWellfoundness(logic, logic.mkAnd(inv,transitionInv), vars)) {
-                            return Answer::YES;
-                        }
-                    }
+                    // } else {
+                    //     query = logic.mkOr(query, constr);
+                    //     transitionConstraint = logic.getTerm_true();
+                    //     jobs.push({TransitionSystem(logic,
+                    //         std::make_unique<SystemType>(ts.getStateVars(), ts.getAuxiliaryVars(), logic),
+                    //             logic.mkAnd(init, initConstraint),
+                    //         logic.mkAnd(transition, transitionConstraint),
+                    //              query), NONTERM});
+                    //     if (checkDisjunctiveWellfoundness(logic, logic.mkAnd(inv,transitionInv), vars)) {
+                    //         return Answer::YES;
+                    //     }
+                    // }
 
                 }
             } else {
