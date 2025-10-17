@@ -244,9 +244,9 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
                 // std::cout<<"*****************************\n";
                 for(auto result:results) {
                     SMTsolver.push();
-                    // std::cout<<"Result: " << logic.pp(result) << std::endl;
                     SMTsolver.assertProp(logic.mkNot(result));
                     if (SMTsolver.check() == SMTSolver::Answer::SAT) {
+                        std::cout<<"Result: " << logic.pp(result) << std::endl;
                         detected = true;
                         nondet_vars.push(TimeMachine(logic).sendFlaThroughTime(vars[i],j));
                     }
@@ -320,29 +320,29 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
                 if (resSMT == SMTSolver::Answer::UNSAT) {
                     return Answer::YES;
                 } else {
-                    // SMTsolver.resetSolver();
-                    // PTRef constr =  logic.mkNot(QuantifierElimination(logic).keepOnly(logic.mkAnd(transition, transitionConstraint), vars));
+                    SMTsolver.resetSolver();
+                    PTRef constr =  logic.mkNot(QuantifierElimination(logic).keepOnly(logic.mkAnd(transition, transitionConstraint), vars));
                     // SMTsolver.assertProp(logic.mkAnd({inv, TimeMachine(logic).sendFlaThroughTime(transitionConstraint, -1)}));
-                    // SMTsolver.assertProp(logic.mkAnd({inv, constr}));
-                    // auto ans = SMTsolver.check();
+                    SMTsolver.assertProp(logic.mkAnd({inv, constr}));
+                    auto ans = SMTsolver.check();
                     //
                     if (checkDisjunctiveWellfoundness(logic, logic.mkAnd(inv,transitionInv), vars)) {
                         return Answer::YES;
                     }
-                    // if (ans == SMTSolver::Answer::UNSAT) {
+                    if (ans == SMTSolver::Answer::UNSAT) {
                         return Answer::NO;
-                    // } else {
-                    //     query = logic.mkOr(query, constr);
-                    //     transitionConstraint = logic.getTerm_true();
-                    //     jobs.push({TransitionSystem(logic,
-                    //         std::make_unique<SystemType>(ts.getStateVars(), ts.getAuxiliaryVars(), logic),
-                    //             logic.mkAnd(init, initConstraint),
-                    //         logic.mkAnd(transition, transitionConstraint),
-                    //              query), NONTERM});
+                    } else {
+                        query = logic.mkOr(query, constr);
+                        transitionConstraint = logic.getTerm_true();
+                        jobs.push({TransitionSystem(logic,
+                            std::make_unique<SystemType>(ts.getStateVars(), ts.getAuxiliaryVars(), logic),
+                                logic.mkAnd(init, initConstraint),
+                            logic.mkAnd(transition, transitionConstraint),
+                                 query), NONTERM});
                     // if (checkDisjunctiveWellfoundness(logic, logic.mkAnd(inv,transitionInv), vars)) {
                     //     return Answer::YES;
                     // }
-                    // }
+                    }
 
                 }
             } else {
