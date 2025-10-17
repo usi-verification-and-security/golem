@@ -246,7 +246,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
                     SMTsolver.push();
                     SMTsolver.assertProp(logic.mkNot(result));
                     if (SMTsolver.check() == SMTSolver::Answer::SAT) {
-                        std::cout<<"Result: " << logic.pp(result) << std::endl;
+                        // std::cout<<"Result: " << logic.pp(result) << std::endl;
                         detected = true;
                         nondet_vars.push(TimeMachine(logic).sendFlaThroughTime(vars[i],j));
                     }
@@ -256,6 +256,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
                 }
                 SMTsolver.resetSolver();
                 if (detected) {
+                    // TODO: I need to think on how to detect nondeterminism better
                     PTRef block = TimeMachine(logic).sendFlaThroughTime(QuantifierElimination(logic).keepOnly(transitions, all_vars), -j+1);
                     // std::cout << j <<" Block: " << logic.pp(block) << std::endl;
                     if (block == logic.getTerm_true()) {
@@ -269,7 +270,8 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
                             return Answer::YES;
                         } else {
                             SMTsolver.resetSolver();
-                            SMTsolver.assertProp(logic.mkAnd({transition, transitionConstraint, logic.mkNot(block)}));
+                            SMTsolver.assertProp(logic.mkAnd({TimeMachine(logic).sendFlaThroughTime(logic.mkAnd(base), -j+1), transition, transitionConstraint, logic.mkNot(block)}));
+                            // std::cout<<"Check: " << logic.pp(logic.mkAnd({TimeMachine(logic).sendFlaThroughTime(logic.mkAnd(base), -j+1), transition, transitionConstraint, logic.mkNot(block)})) << std::endl;
                             if (SMTsolver.check() == SMTSolver::Answer::UNSAT) {
                                 detected = false;
                                 SMTsolver.resetSolver();
