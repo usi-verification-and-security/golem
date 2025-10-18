@@ -17,6 +17,9 @@
 #include "utils/SmtSolver.h"
 #include <queue>
 
+#include "engine/EngineFactory.h"
+#include "graph/ChcGraphBuilder.h"
+
 namespace golem::termination {
 
     PTRef dnfize(PTRef input, Logic & logic) {
@@ -170,6 +173,52 @@ namespace golem::termination {
     //     }
     // }
 
+std::unique_ptr<ChcDirectedHyperGraph> constructHyperGraph(PTRef const init, PTRef const transition, PTRef const query, Logic& logic, std::vector<PTRef> vars) {
+        ChcSystem chcs;
+
+        // Adding an uninterpreted predicate P
+        SymRef predicate = [&]() -> SymRef {
+            vec<SRef> argSorts;
+            for (PTRef var : vars) {
+                argSorts.push(logic.getSortRef(var));
+            }
+            return logic.declareFun("P", logic.getSort_bool(), std::move(argSorts));
+        }();
+
+        chcs.addUninterpretedPredicate(predicate);
+
+        // creating P(x_1, x_2, ..., x_n)
+        auto pred = [&]() -> PTRef {
+            vec<PTRef> args;
+            for (PTRef var : vars) {
+                args.push(var);
+            }
+            return logic.mkUninterpFun(predicate, std::move(args));
+        }();
+        // creating P(x_1', x_2', ..., x_n')
+        auto pred_next = [&]() -> PTRef {
+            vec<PTRef> args;
+            TimeMachine tm(logic);
+            for (PTRef var : vars) {
+                args.push(tm.sendVarThroughTime(var, 1));
+            }
+            return logic.mkUninterpFun(predicate, std::move(args));
+        }();
+        // adding clauses to CHC system
+        chcs.addClause(ChcHead{UninterpretedPredicate{pred}}, ChcBody{InterpretedFla{init}, {}});
+        chcs.addClause(ChcHead{UninterpretedPredicate{pred_next}},
+                       ChcBody{InterpretedFla{transition}, {UninterpretedPredicate{pred}}});
+        chcs.addClause(ChcHead{UninterpretedPredicate{logic.getTerm_false()}},
+                       ChcBody{InterpretedFla{query}, {UninterpretedPredicate{pred}}});
+
+        Normalizer normalizer(logic);
+        auto normalizedSystem = normalizer.normalize(chcs);
+        ChcPrinter(logic, std::cout).print(chcs);
+        auto hypergraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
+        assert(hypergraph->isNormalGraph());
+        return hypergraph;
+}
+
 ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem const & ts) {
 
     ArithLogic & logic = dynamic_cast<ArithLogic &>(ts.getLogic());
@@ -181,6 +230,19 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
         std::cout<<"; (Trivial nontermination)" << std::endl;
         return Answer::NO;
     }
+
+
+
+    // if (res.getAnswer() == VerificationAnswer::UNSAFE) {
+    //     auto witness = res.getInvalidityWitness();
+    //     int n = witness.getDerivation().size();
+    // } else {
+    //     auto witness = res.getValidityWitness();
+    //     assert(witness.getDefinitions().size() == 1);
+    //     PTRef inv = (*witness.getDefinitions().begin()).second;
+    // }
+
+
 
     enum JobType {TERM, NONTERM};
     struct QueueJob {
@@ -199,26 +261,37 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
     PTRef transitionConstraint = logic.getTerm_true();
     PTRef initConstraint = logic.getTerm_true();
     while (!jobs.empty()) {
-        auto solver = std::make_unique<TPASplit>(logic, options);
+        // auto solver = std::make_unique<TPASplit>(logic, options);
         auto [job, type] = std::move(jobs.front());
         jobs.pop();
-        solver->resetTransitionSystem(job);
-        // std::cout << "Type: " << ((type == TERM) ? "term" : "nonterm") << std::endl;
-        std::cout << "Init: " << logic.pp(solver->getInit()) << std::endl;
-        std::cout << "Transition: " << logic.pp(solver->getTransitionRelation()) << std::endl;
-        std::cout << "Query: " << logic.pp(solver->getQuery()) << std::endl;
-        auto res = solver->solve();
-        if (res == VerificationAnswer::UNSAFE) {
-            PTRef reached  = solver->getReachedStates();
-            PTRef solverTransition = solver->getTransitionRelation();
-            uint num = solver->getTransitionStepCount();
-            std::vector formulas {solver->getInit(), TimeMachine(logic).sendFlaThroughTime(logic.mkAnd(query, reached), num)};
+
+        auto graph = constructHyperGraph(job.getInit(), job.getTransition(), job.getQuery(), logic, job.getStateVars());
+        // Solving constructed CHC system
+        Options noptions = options;
+        noptions.addOption(options.COMPUTE_WITNESS, "true");
+        auto engine = EngineFactory(logic, noptions).getEngine(options.getOrDefault(Options::ENGINE, "spacer"));
+        auto res = engine->solve(*graph);
+        // solver->resetTransitionSystem(job);
+        // // std::cout << "Type: " << ((type == TERM) ? "term" : "nonterm") << std::endl;
+        // std::cout << "Init: " << logic.pp(job.getInit()) << std::endl;
+        // std::cout << "Transition: " << logic.pp(job.getTransition()) << std::endl;
+        // std::cout << "Query: " << logic.pp(job.getQuery()) << std::endl;
+        // auto res = solver->solve();
+        // if (res == VerificationAnswer::UNSAFE) {
+        if (res.getAnswer() == VerificationAnswer::UNSAFE) {
+            // PTRef reached  = solver->getReachedStates();
+            PTRef solverTransition = job.getTransition();
+            // uint num = solver->getTransitionStepCount();
+            uint num = res.getInvalidityWitness().getDerivation().size() - 3;
+            // std::cout<<"Num: " << num << std::endl;
+            std::vector formulas {job.getInit(), TimeMachine(logic).sendFlaThroughTime(job.getQuery(), num)};
             SMTSolver SMTsolver(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
             for(int j=0; j < num; j++){
                 formulas.push_back(TimeMachine(logic).sendFlaThroughTime(solverTransition, j));
             }
             PTRef transitions = logic.mkAnd(formulas);
             SMTsolver.assertProp(transitions);
+            // std::cout << "Transitions: " << logic.pp(transitions) << std::endl;
             auto resSMT = SMTsolver.check();
             assert(resSMT == SMTSolver::Answer::SAT);
             auto model = SMTsolver.getModel();
@@ -258,7 +331,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
                 if (detected) {
                     // TODO: I need to think on how to detect nondeterminism better
                     PTRef block = TimeMachine(logic).sendFlaThroughTime(QuantifierElimination(logic).keepOnly(transitions, all_vars), -j+1);
-                    std::cout << j <<" Block: " << logic.pp(block) << std::endl;
+                    // std::cout << j <<" Block: " << logic.pp(block) << std::endl;
                     if (block == logic.getTerm_true()) {
                         detected = false;
                         SMTsolver.resetSolver();
@@ -291,7 +364,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
             //     //              logic.mkAnd(query, test_q)), TERM});
             // }
             if (detected) {
-                std::cout<<"Transition block: " << logic.pp(transitionConstraint) << std::endl;
+                // std::cout<<"Transition block: " << logic.pp(transitionConstraint) << std::endl;
                 jobs.push({TransitionSystem(logic,
                     std::make_unique<SystemType>(ts.getStateVars(), ts.getAuxiliaryVars(), logic),
                         logic.mkAnd(init, initConstraint),
@@ -309,13 +382,23 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
                          query), NONTERM});
             }
 
-        } else if (res == VerificationAnswer::SAFE) {
-            PTRef transitionInv = solver->getTransitionInvariant();
-            PTRef inv = solver->getInductiveInvariant();
+        } else if (res.getAnswer() == VerificationAnswer::SAFE) {
+            // PTRef transitionInv = solver->getTransitionInvariant();
+            auto witness = res.getValidityWitness();
+            // std::cout<<"DEFS:  "<<witness.getDefinitions().size()<<std::endl;
+            assert(witness.getDefinitions().size() == 3);
+            PTRef inv;
+            for (auto wtn: witness.getDefinitions()) {
+                if (wtn.first.x != 3 && wtn.first.x != 0) {
+                    inv = wtn.second;
+                }
+            }
+             // = (*witness.getDefinitions().begin()).second;
+            // PTRef inv = solver->getInductiveInvariant();
             if (type == NONTERM) {
                 SMTSolver SMTsolver(logic, SMTSolver::WitnessProduction::NONE);
                 SMTsolver.resetSolver();
-                SMTsolver.assertProp(logic.mkAnd({solver->getInit(), solver->getTransitionRelation()}));
+                SMTsolver.assertProp(logic.mkAnd({job.getInit(), job.getTransition()}));
                 auto resSMT = SMTsolver.check();
                 if (resSMT == SMTSolver::Answer::UNSAT) {
                     return Answer::YES;
@@ -335,15 +418,15 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
                                 logic.mkAnd(init, initConstraint),
                             logic.mkAnd(transition, transitionConstraint),
                                  query), NONTERM});
-                        if (checkDisjunctiveWellfoundness(logic, logic.mkAnd(inv,transitionInv), vars)) {
-                            return Answer::YES;
-                        }
+                        // if (checkDisjunctiveWellfoundness(logic, logic.mkAnd(inv,transitionInv), vars)) {
+                        //     return Answer::YES;
+                        // }
                     }
                 }
             } else {
-                if (checkDisjunctiveWellfoundness(logic, logic.mkAnd(inv,transitionInv), vars)) {
-                    return Answer::YES;
-                }
+                // if (checkDisjunctiveWellfoundness(logic, logic.mkAnd(inv,transitionInv), vars)) {
+                //     return Answer::YES;
+                // }
             }
         } else {
             assert(false && "Unreachable!");
