@@ -213,7 +213,6 @@ std::unique_ptr<ChcDirectedHyperGraph> constructHyperGraph(PTRef const init, PTR
 
         Normalizer normalizer(logic);
         auto normalizedSystem = normalizer.normalize(chcs);
-        ChcPrinter(logic, std::cout).print(chcs);
         auto hypergraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
         assert(hypergraph->isNormalGraph());
         return hypergraph;
