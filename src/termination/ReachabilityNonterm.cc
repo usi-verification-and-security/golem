@@ -230,19 +230,6 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
         return Answer::NO;
     }
 
-
-
-    // if (res.getAnswer() == VerificationAnswer::UNSAFE) {
-    //     auto witness = res.getInvalidityWitness();
-    //     int n = witness.getDerivation().size();
-    // } else {
-    //     auto witness = res.getValidityWitness();
-    //     assert(witness.getDefinitions().size() == 1);
-    //     PTRef inv = (*witness.getDefinitions().begin()).second;
-    // }
-
-
-
     enum JobType {TERM, NONTERM};
     struct QueueJob {
         TransitionSystem ts;
@@ -255,7 +242,6 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
                         init,
                             transition,
                             query), NONTERM});
-
 
     PTRef transitionConstraint = logic.getTerm_true();
     PTRef initConstraint = logic.getTerm_true();
@@ -290,10 +276,16 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
             }
             PTRef transitions = logic.mkAnd(formulas);
             SMTsolver.assertProp(transitions);
-            // std::cout << "Transitions: " << logic.pp(transitions) << std::endl;
             auto resSMT = SMTsolver.check();
             assert(resSMT == SMTSolver::Answer::SAT);
             auto model = SMTsolver.getModel();
+            std::vector<PTRef> lastVars;
+            for (auto var:vars) {
+                lastVars.push_back(TimeMachine(logic).sendFlaThroughTime(var,num));
+            }
+            PTRef reached  =  ModelBasedProjection(logic).keepOnly(transitions, lastVars, *model);
+            transitions = logic.mkAnd(transitions, reached);
+            // std::cout << "Transitions: " << logic.pp(transitions) << std::endl;
             bool detected = false;
             for (int j = num; j > 0; j--) {
                 vec<PTRef> base;
