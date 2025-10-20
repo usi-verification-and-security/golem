@@ -256,19 +256,13 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
         noptions.addOption(options.COMPUTE_WITNESS, "true");
         auto engine = EngineFactory(logic, noptions).getEngine(options.getOrDefault(Options::ENGINE, "spacer"));
         auto res = engine->solve(*graph);
-        // solver->resetTransitionSystem(job);
         // // std::cout << "Type: " << ((type == TERM) ? "term" : "nonterm") << std::endl;
-        // std::cout << "Init: " << logic.pp(job.getInit()) << std::endl;
-        // std::cout << "Transition: " << logic.pp(job.getTransition()) << std::endl;
-        // std::cout << "Query: " << logic.pp(job.getQuery()) << std::endl;
-        // auto res = solver->solve();
-        // if (res == VerificationAnswer::UNSAFE) {
+        std::cout << "Init: " << logic.pp(job.getInit()) << std::endl;
+        std::cout << "Transition: " << logic.pp(job.getTransition()) << std::endl;
+        std::cout << "Query: " << logic.pp(job.getQuery()) << std::endl;
         if (res.getAnswer() == VerificationAnswer::UNSAFE) {
-            // PTRef reached  = solver->getReachedStates();
             PTRef solverTransition = job.getTransition();
-            // uint num = solver->getTransitionStepCount();
             uint num = res.getInvalidityWitness().getDerivation().size() - 3;
-            // std::cout<<"Num: " << num << std::endl;
             std::vector formulas {job.getInit(), TimeMachine(logic).sendFlaThroughTime(job.getQuery(), num)};
             SMTSolver SMTsolver(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
             for(int j=0; j < num; j++){
@@ -285,7 +279,6 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
             }
             PTRef reached  =  ModelBasedProjection(logic).keepOnly(transitions, lastVars, *model);
             transitions = logic.mkAnd(transitions, reached);
-            // std::cout << "Transitions: " << logic.pp(transitions) << std::endl;
             bool detected = false;
             for (int j = num; j > 0; j--) {
                 vec<PTRef> base;
@@ -306,18 +299,17 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
                 // std::cout<<"Result: " << logic.pp(logic.mkAnd(results)) << std::endl;
                 // std::cout<<"Check: " << logic.pp(TimeMachine(logic).sendFlaThroughTime(solverTransition,j-1)) << std::endl;
                 // std::cout<<"*****************************\n";
-                for(auto result:results) {
-                    SMTsolver.push();
-                    SMTsolver.assertProp(logic.mkNot(result));
-                    if (SMTsolver.check() == SMTSolver::Answer::SAT) {
-                        // std::cout<<"Result: " << logic.pp(result) << std::endl;
-                        detected = true;
-                        nondet_vars.push(TimeMachine(logic).sendFlaThroughTime(vars[i],j));
-                    }
+                for(auto var:vars) {
                     all_vars.push(TimeMachine(logic).sendFlaThroughTime(vars[i],j));
                     i++;
-                    SMTsolver.pop();
                 }
+                //     SMTsolver.push();
+                SMTsolver.assertProp(logic.mkNot(logic.mkAnd(results)));
+                if (SMTsolver.check() == SMTSolver::Answer::SAT) {
+                    detected = true;
+                }
+                SMTsolver.resetSolver();
+
                 SMTsolver.resetSolver();
                 if (detected) {
                     // TODO: I need to think on how to detect nondeterminism better
@@ -355,7 +347,6 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
             //     //              logic.mkAnd(query, test_q)), TERM});
             // }
             if (detected) {
-                // std::cout<<"Transition block: " << logic.pp(transitionConstraint) << std::endl;
                 jobs.push({TransitionSystem(logic,
                     std::make_unique<SystemType>(ts.getStateVars(), ts.getAuxiliaryVars(), logic),
                         logic.mkAnd(init, initConstraint),
@@ -363,9 +354,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
                          query), NONTERM});
             } else {
                 transitions = QuantifierElimination(logic).keepOnly(transitions, vars);
-                // std::cout<<"Block: " << logic.pp(logic.mkNot(transitions)) << std::endl;
                 initConstraint = logic.mkAnd(initConstraint, logic.mkNot(transitions));
-                // std::cout<<"Init block: " << logic.pp(initConstraint) << std::endl;
                 jobs.push({TransitionSystem(logic,
                     std::make_unique<SystemType>(ts.getStateVars(), ts.getAuxiliaryVars(), logic),
                         logic.mkAnd(init, initConstraint),
@@ -392,6 +381,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
                 varSubstitutions.insert({ repr[i], vars[i]});
             }
             inv = TermUtils(logic).varSubstitute(inv, varSubstitutions);
+            std::cout<< "Invariant: " << logic.pp(inv) << std::endl;
              // = (*witness.getDefinitions().begin()).second;
             // PTRef inv = solver->getInductiveInvariant();
             if (type == NONTERM) {
