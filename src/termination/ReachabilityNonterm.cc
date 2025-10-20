@@ -17,6 +17,7 @@
 #include "utils/SmtSolver.h"
 #include <queue>
 
+#include "common/numbers/NumberUtils.h"
 #include "engine/EngineFactory.h"
 #include "graph/ChcGraphBuilder.h"
 
@@ -210,7 +211,6 @@ std::unique_ptr<ChcDirectedHyperGraph> constructHyperGraph(PTRef const init, PTR
                        ChcBody{InterpretedFla{transition}, {UninterpretedPredicate{pred}}});
         chcs.addClause(ChcHead{UninterpretedPredicate{logic.getTerm_false()}},
                        ChcBody{InterpretedFla{query}, {UninterpretedPredicate{pred}}});
-
         Normalizer normalizer(logic);
         auto normalizedSystem = normalizer.normalize(chcs);
         auto hypergraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
@@ -379,11 +379,19 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
             // std::cout<<"DEFS:  "<<witness.getDefinitions().size()<<std::endl;
             assert(witness.getDefinitions().size() == 3);
             PTRef inv;
+            std::vector<PTRef> repr;
             for (auto wtn: witness.getDefinitions()) {
                 if (wtn.first.x != 3 && wtn.first.x != 0) {
+                    repr = graph->predicateRepresentation().getRepresentation(wtn.first);
                     inv = wtn.second;
                 }
             }
+            TermUtils::substitutions_map varSubstitutions;
+            auto edges = graph->getEdges();
+            for (uint32_t i = 0u; i < vars.size(); ++i) {
+                varSubstitutions.insert({ repr[i], vars[i]});
+            }
+            inv = TermUtils(logic).varSubstitute(inv, varSubstitutions);
              // = (*witness.getDefinitions().begin()).second;
             // PTRef inv = solver->getInductiveInvariant();
             if (type == NONTERM) {
