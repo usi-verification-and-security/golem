@@ -174,7 +174,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
 
     ArithLogic & logic = dynamic_cast<ArithLogic &>(ts.getLogic());
     PTRef init  = ts.getInit();
-    PTRef transition = dnfize(ts.getTransition(),logic);
+    PTRef transition = ts.getTransition();
     PTRef query = logic.mkNot(QuantifierElimination(logic).keepOnly(transition, ts.getStateVars()));
     auto vars = ts.getStateVars();
     if (query == logic.getTerm_false()) {
@@ -204,15 +204,15 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
         jobs.pop();
         solver->resetTransitionSystem(job);
         // std::cout << "Type: " << ((type == TERM) ? "term" : "nonterm") << std::endl;
-        // std::cout << "Init: " << logic.pp(solver->getInit()) << std::endl;
-        // std::cout << "Transition: " << logic.pp(solver->getTransitionRelation()) << std::endl;
-        // std::cout << "Query: " << logic.pp(solver->getQuery()) << std::endl;
+        std::cout << "Init: " << logic.pp(solver->getInit()) << std::endl;
+        std::cout << "Transition: " << logic.pp(solver->getTransitionRelation()) << std::endl;
+        std::cout << "Query: " << logic.pp(solver->getQuery()) << std::endl;
         auto res = solver->solve();
         if (res == VerificationAnswer::UNSAFE) {
             PTRef reached  = solver->getReachedStates();
             PTRef solverTransition = solver->getTransitionRelation();
             uint num = solver->getTransitionStepCount();
-            std::vector formulas {solver->getInit(), TimeMachine(logic).sendFlaThroughTime(query, num)};
+            std::vector formulas {solver->getInit(), TimeMachine(logic).sendFlaThroughTime(logic.mkAnd(reached,query), num)};
             SMTSolver SMTsolver(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
             for(int j=0; j < num; j++){
                 formulas.push_back(TimeMachine(logic).sendFlaThroughTime(solverTransition, j));
@@ -223,6 +223,11 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
             assert(resSMT == SMTSolver::Answer::SAT);
             auto model = SMTsolver.getModel();
             bool detected = false;
+            vec<PTRef> lastVars;
+            for (auto var: vars) {
+                PTRef ver = TimeMachine(logic).sendFlaThroughTime(var, num);
+                lastVars.push(logic.mkEq(ver, model->evaluate(ver)));
+            }
             for (int j = num; j > 0; j--) {
                 vec<PTRef> base;
                 vec<PTRef> results;
@@ -234,30 +239,23 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
                 }
                 vec<PTRef> nondet_vars;
                 vec<PTRef> all_vars;
-                uint i = 0;
                 SMTsolver.resetSolver();
-                SMTsolver.assertProp(logic.mkAnd(logic.mkAnd(base), TimeMachine(logic).sendFlaThroughTime(solverTransition,j-1)));
+                SMTsolver.assertProp(logic.mkAnd({logic.mkAnd(base), TimeMachine(logic).sendFlaThroughTime(solverTransition,j-1),logic.mkNot(logic.mkAnd(results))}));
                 // std::cout<<"***********CHECK*************\n";
                 // std::cout<<"Base: " << logic.pp(logic.mkAnd(base)) << std::endl;
                 // std::cout<<"Result: " << logic.pp(logic.mkAnd(results)) << std::endl;
                 // std::cout<<"Check: " << logic.pp(TimeMachine(logic).sendFlaThroughTime(solverTransition,j-1)) << std::endl;
                 // std::cout<<"*****************************\n";
-                for(auto result:results) {
-                    SMTsolver.push();
-                    SMTsolver.assertProp(logic.mkNot(result));
-                    if (SMTsolver.check() == SMTSolver::Answer::SAT) {
-                        // std::cout<<"Result: " << logic.pp(result) << std::endl;
-                        detected = true;
-                        nondet_vars.push(TimeMachine(logic).sendFlaThroughTime(vars[i],j));
-                    }
-                    all_vars.push(TimeMachine(logic).sendFlaThroughTime(vars[i],j));
-                    i++;
-                    SMTsolver.pop();
+                for (auto var: vars) {
+                    all_vars.push(TimeMachine(logic).sendFlaThroughTime(var,j));
+                }
+                if (SMTsolver.check() == SMTSolver::Answer::SAT) {
+                    detected = true;
                 }
                 SMTsolver.resetSolver();
                 if (detected) {
                     // TODO: I need to think on how to detect nondeterminism better
-                    PTRef block = TimeMachine(logic).sendFlaThroughTime(QuantifierElimination(logic).keepOnly(transitions, all_vars), -j+1);
+                    PTRef block = TimeMachine(logic).sendFlaThroughTime(QuantifierElimination(logic).keepOnly(logic.mkAnd(transitions,logic.mkAnd(lastVars)), all_vars), -j+1);
                     // std::cout << j <<" Block: " << logic.pp(block) << std::endl;
                     if (block == logic.getTerm_true()) {
                         detected = false;
