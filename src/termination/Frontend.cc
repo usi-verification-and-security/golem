@@ -457,6 +457,12 @@ enum class TerminationAnswer { TERMINATING, NONTERMINATING, UNKNOWN, ERROR };
 
 enum Method { LASSO_FINDER, STEP_COUNTER, SENTINEL };
 
+std::optional<Method> parseMethod(std::string const & str) {
+    if (str == "lasso-finder") { return LASSO_FINDER; }
+    if (str == "step-counter") { return STEP_COUNTER; }
+    return std::nullopt;
+}
+
 TerminationAnswer solve(Method method, Options const & options, TransitionSystem const & ts) {
     switch (method) {
         case LASSO_FINDER: {
@@ -556,6 +562,17 @@ void multiMethodSolve(Options const & options, std::unique_ptr<TransitionSystem>
         }
     }
 }
+
+void solve(Options const & options, std::unique_ptr<TransitionSystem> ts) {
+    if (not options.hasOption(Options::TERMINATION_BACKEND)) { return multiMethodSolve(options, std::move(ts)); }
+    std::optional<Method> maybeMethod = parseMethod(options.getOption(Options::TERMINATION_BACKEND).value());
+    if (not maybeMethod.has_value()) {
+        std::cerr << "Invalid termination backend specified!" << std::endl;
+        exit(1);
+    }
+    auto result = solve(maybeMethod.value(), options, *ts);
+    printAnswer(result);
+}
 } // namespace
 
 void run(std::string const & filename, Options const & options) {
@@ -593,7 +610,7 @@ void run(std::string const & filename, Options const & options) {
             printAnswer(TerminationAnswer::TERMINATING);
             return;
         }
-        multiMethodSolve(options, std::move(ts));
+        solve(options, std::move(ts));
     } catch (LANonLinearException const &) {
         std::cout << "MAYBE\n;(Nonlinear arithmetic expression in the input)" << std::endl;
     }

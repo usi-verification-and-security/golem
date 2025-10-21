@@ -26,6 +26,7 @@ const std::string Options::TPA_USE_QE = "tpa.use-qe";
 const std::string Options::FORCE_TS = "force-ts";
 const std::string Options::SIMPLIFY_NESTED = "simplify-nested";
 const std::string Options::PROOF_FORMAT = "proof-format";
+const std::string Options::TERMINATION_BACKEND = "termination-backend";
 
 namespace {
 
@@ -33,30 +34,33 @@ void printUsage() {
     std::cout
         << "Usage: golem [options] [-i] file\n"
            "\n"
-           "-h,--help                  Print this help message\n"
-           "--version                  Print version number of Golem\n"
-           "-l,--logic <name>          SMT-LIB logic to use (required); possible values: QF_LRA, QF_LIA\n"
-           "-e,--engine <name>         Select engine to use; supported engines:\n"
-           "                             bmc - Bounded Model Checking (only linear systems)\n"
-           "                             dar - Dual Approximated Reachability (only linear systems)\n"
-           "                             imc - McMillan's original Interpolation-based model checking (only linear systems)\n"
-           "                             kind - basic k-induction algorithm (only transition systems)\n"
-           "                             lawi - Lazy Abstraction with Interpolants (only linear systems)\n"
-           "                             pa - basic predicate abstraction with CEGAR (any system)\n"
-           "                             pdkind - Property directed k-induction (only linear systems)\n"
-           "                             se - forward symbolic execution (only linear system)\n"
-           "                             spacer - custom implementation of Spacer (any system)\n"
-           "                             split-tpa - Split Transition Power Abstraction (only linear systems)\n"
-           "                             tpa - Transition Power Abstraction (only linear systems)\n"
-           "--validate                 Internally validate computed solution\n"
-           "--print-witness            Print computed solution\n"
-           "--proof-format <name>      Proof format to use; supported formats:\n"
-           "                             legacy (default) - golem's original proof format\n"
-           "                             intermediate - intermediate proof format (includes variable instantiation)\n"
-           "                             alethe (verifiable) - alethe proof format\n"
-           "-v                         Increase verbosity (can be applied multiple times)\n"
-           "-i,--input <file>          Input file (option not required)\n"
-           "--force-ts                 Always encode linear system into transition system (affects BMC and TPA)\n";
+           "-h,--help                       Print this help message\n"
+           "--version                       Print version number of Golem\n"
+           "-l,--logic <name>               SMT-LIB logic to use (required); possible values: QF_LRA, QF_LIA\n"
+           "-e,--engine <name>              Select engine to use; supported engines:\n"
+           "                                  bmc - Bounded Model Checking (only linear systems)\n"
+           "                                  dar - Dual Approximated Reachability (only linear systems)\n"
+           "                                  imc - McMillan's original Interpolation-based model checking (only linear systems)\n"
+           "                                  kind - basic k-induction algorithm (only transition systems)\n"
+           "                                  lawi - Lazy Abstraction with Interpolants (only linear systems)\n"
+           "                                  pa - basic predicate abstraction with CEGAR (any system)\n"
+           "                                  pdkind - Property directed k-induction (only linear systems)\n"
+           "                                  se - forward symbolic execution (only linear system)\n"
+           "                                  spacer - custom implementation of Spacer (any system)\n"
+           "                                  split-tpa - Split Transition Power Abstraction (only linear systems)\n"
+           "                                  tpa - Transition Power Abstraction (only linear systems)\n"
+           "--validate                      Internally validate computed solution\n"
+           "--print-witness                 Print computed solution\n"
+           "--proof-format <name>           Proof format to use; supported formats:\n"
+           "                                  legacy (default) - golem's original proof format\n"
+           "                                  intermediate - intermediate proof format (includes variable instantiation)\n"
+           "                                  alethe (verifiable) - alethe proof format\n"
+           "-v                              Increase verbosity (can be applied multiple times)\n"
+           "-i,--input <file>               Input file (option not required)\n"
+           "--force-ts                      Always encode linear system into transition system (affects BMC and TPA)\n"
+           "--termination-backend <name>    Select backend algorithm for termination problems:\n"
+           "                                  lasso-finder - searches for lasso in the system\n"
+           "                                  step-counter - searches for upper bound on number of steps the system can make\n";
     std::cout << std::flush;
 }
 
@@ -95,6 +99,7 @@ Options CommandLineParser::parse(int argc, char ** argv) {
                                     {Options::PROOF_FORMAT.c_str(), required_argument, nullptr, 'p'},
                                     {Options::FORCE_TS.c_str(), no_argument, &forceTS, 1},
                                     {Options::SIMPLIFY_NESTED.c_str(), no_argument, &simplifyNested, 1},
+                                    {Options::TERMINATION_BACKEND.c_str(), required_argument, nullptr, 0},
                                     {0, 0, 0, 0}};
 
     while (true) {
@@ -129,6 +134,8 @@ Options CommandLineParser::parse(int argc, char ** argv) {
                     forceTS = 1;
                 } else if (long_options[option_index].flag == &simplifyNested) {
                     simplifyNested = 1;
+                } else if (long_options[option_index].name == Options::TERMINATION_BACKEND.c_str()) {
+                    res.addOption(Options::TERMINATION_BACKEND, optarg);
                 }
                 break;
             case 'e':

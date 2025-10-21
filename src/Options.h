@@ -47,6 +47,7 @@ public:
     static const std::string TPA_USE_QE;
     static const std::string FORCE_TS;
     static const std::string SIMPLIFY_NESTED;
+    static const std::string TERMINATION_BACKEND;
 };
 
 class CommandLineParser {
