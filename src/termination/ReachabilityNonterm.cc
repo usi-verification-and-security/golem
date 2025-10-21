@@ -204,9 +204,9 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
         jobs.pop();
         solver->resetTransitionSystem(job);
         // std::cout << "Type: " << ((type == TERM) ? "term" : "nonterm") << std::endl;
-        std::cout << "Init: " << logic.pp(solver->getInit()) << std::endl;
-        std::cout << "Transition: " << logic.pp(solver->getTransitionRelation()) << std::endl;
-        std::cout << "Query: " << logic.pp(solver->getQuery()) << std::endl;
+        // std::cout << "Init: " << logic.pp(solver->getInit()) << std::endl;
+        // std::cout << "Transition: " << logic.pp(solver->getTransitionRelation()) << std::endl;
+        // std::cout << "Query: " << logic.pp(solver->getQuery()) << std::endl;
         auto res = solver->solve();
         if (res == VerificationAnswer::UNSAFE) {
             PTRef reached  = solver->getReachedStates();
