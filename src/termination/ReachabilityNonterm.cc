@@ -257,9 +257,9 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
         auto engine = EngineFactory(logic, noptions).getEngine(options.getOrDefault(Options::ENGINE, "spacer"));
         auto res = engine->solve(*graph);
         // // std::cout << "Type: " << ((type == TERM) ? "term" : "nonterm") << std::endl;
-        std::cout << "Init: " << logic.pp(job.getInit()) << std::endl;
-        std::cout << "Transition: " << logic.pp(job.getTransition()) << std::endl;
-        std::cout << "Query: " << logic.pp(job.getQuery()) << std::endl;
+        // std::cout << "Init: " << logic.pp(job.getInit()) << std::endl;
+        // std::cout << "Transition: " << logic.pp(job.getTransition()) << std::endl;
+        // std::cout << "Query: " << logic.pp(job.getQuery()) << std::endl;
         if (res.getAnswer() == VerificationAnswer::UNSAFE) {
             PTRef solverTransition = job.getTransition();
             uint num = res.getInvalidityWitness().getDerivation().size() - 3;
@@ -291,20 +291,16 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
                 }
                 vec<PTRef> nondet_vars;
                 vec<PTRef> all_vars;
-                uint i = 0;
                 SMTsolver.resetSolver();
-                SMTsolver.assertProp(logic.mkAnd(logic.mkAnd(base), TimeMachine(logic).sendFlaThroughTime(solverTransition,j-1)));
+                SMTsolver.assertProp(logic.mkAnd({logic.mkAnd(base), TimeMachine(logic).sendFlaThroughTime(solverTransition,j-1), logic.mkNot(logic.mkAnd(results))}));
                 // std::cout<<"***********CHECK*************\n";
                 // std::cout<<"Base: " << logic.pp(logic.mkAnd(base)) << std::endl;
                 // std::cout<<"Result: " << logic.pp(logic.mkAnd(results)) << std::endl;
                 // std::cout<<"Check: " << logic.pp(TimeMachine(logic).sendFlaThroughTime(solverTransition,j-1)) << std::endl;
                 // std::cout<<"*****************************\n";
                 for(auto var:vars) {
-                    all_vars.push(TimeMachine(logic).sendFlaThroughTime(vars[i],j));
-                    i++;
+                    all_vars.push(TimeMachine(logic).sendFlaThroughTime(var,j));
                 }
-                //     SMTsolver.push();
-                SMTsolver.assertProp(logic.mkNot(logic.mkAnd(results)));
                 if (SMTsolver.check() == SMTSolver::Answer::SAT) {
                     detected = true;
                 }
@@ -381,7 +377,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
                 varSubstitutions.insert({ repr[i], vars[i]});
             }
             inv = TermUtils(logic).varSubstitute(inv, varSubstitutions);
-            std::cout<< "Invariant: " << logic.pp(inv) << std::endl;
+            // std::cout<< "Invariant: " << logic.pp(inv) << std::endl;
              // = (*witness.getDefinitions().begin()).second;
             // PTRef inv = solver->getInductiveInvariant();
             if (type == NONTERM) {
@@ -393,7 +389,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
                     return Answer::YES;
                 } else {
                     SMTsolver.resetSolver();
-                    PTRef constr =  logic.mkNot(QuantifierElimination(logic).keepOnly(logic.mkAnd(transition, transitionConstraint), vars));
+                    PTRef constr =  logic.mkNot(QuantifierElimination(logic).keepOnly(job.getTransition(), vars));
                     SMTsolver.assertProp(logic.mkAnd({inv, constr}));
                     auto ans = SMTsolver.check();
 
