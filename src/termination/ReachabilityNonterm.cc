@@ -222,7 +222,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
 
     ArithLogic & logic = dynamic_cast<ArithLogic &>(ts.getLogic());
     PTRef init  = ts.getInit();
-    PTRef transition = dnfize(ts.getTransition(),logic);
+    PTRef transition = ts.getTransition();
     PTRef query = logic.mkNot(QuantifierElimination(logic).keepOnly(transition, ts.getStateVars()));
     auto vars = ts.getStateVars();
     if (query == logic.getTerm_false()) {
