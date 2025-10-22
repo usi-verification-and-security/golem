@@ -389,8 +389,8 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
                     return Answer::YES;
                 } else {
                     SMTsolver.resetSolver();
-                    PTRef constr =  logic.mkNot(QuantifierElimination(logic).keepOnly(logic.mkAnd(inv, job.getTransition()), vars));
-                    SMTsolver.assertProp(constr);
+                    PTRef constr =  logic.mkNot(QuantifierElimination(logic).keepOnly(job.getTransition(), vars));
+                    SMTsolver.assertProp(logic.mkAnd({inv, constr}));
                     auto ans = SMTsolver.check();
 
                     if (ans == SMTSolver::Answer::UNSAT) {
