@@ -223,9 +223,6 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
             assert(resSMT == SMTSolver::Answer::SAT);
             auto model = SMTsolver.getModel();
             bool detected = false;
-            for (auto var: vars) {
-                PTRef ver = TimeMachine(logic).sendFlaThroughTime(var, num);
-            }
             for (int j = num; j > 0; j--) {
                 vec<PTRef> base;
                 vec<PTRef> results;
@@ -253,7 +250,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
                 SMTsolver.resetSolver();
                 if (detected) {
                     // TODO: I need to think on how to detect nondeterminism better
-                    PTRef block = TimeMachine(logic).sendFlaThroughTime(QuantifierElimination(logic).keepOnly(transitions, all_vars), -j+1);
+                    PTRef block = TimeMachine(logic).sendFlaThroughTime(ModelBasedProjection(logic).keepOnly(transitions, all_vars, *model), -j+1);
                     // std::cout << j <<" Block: " << logic.pp(block) << std::endl;
                     if (block == logic.getTerm_true()) {
                         detected = false;
@@ -294,7 +291,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
                     logic.mkAnd(transition, transitionConstraint),
                          query), NONTERM});
             } else {
-                transitions = QuantifierElimination(logic).keepOnly(transitions, vars);
+                transitions = ModelBasedProjection(logic).keepOnly(transitions, vars, *model);
                 // std::cout<<"Block: " << logic.pp(logic.mkNot(transitions)) << std::endl;
                 initConstraint = logic.mkAnd(initConstraint, logic.mkNot(transitions));
                 // std::cout<<"Init block: " << logic.pp(initConstraint) << std::endl;
