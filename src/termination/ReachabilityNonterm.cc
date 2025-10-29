@@ -28,7 +28,7 @@ namespace golem::termination {
         if (logic.isAnd(input)) {
             auto juncts = utils.getTopLevelConjuncts(input);
 
-            for (int i = 0; i < (int)juncts.size(); i++) {
+            for (int i = 0; i < juncts.size(); i++) {
                 PTRef after_junct = dnfize(juncts[i], logic);
                 if (logic.isOr(after_junct)) {
                     auto subjuncts = utils.getTopLevelDisjuncts(after_junct);
@@ -128,7 +128,6 @@ namespace golem::termination {
         TermUtils utils {logic};
         TimeMachine machine {logic};
         std::vector<PTRef> identity;
-        // auto disjuncts = utils.getTopLevelDisjuncts(dnfize(relation, logic));
         vec<PTRef> primedVars;
         for (auto var: vars) {
             identity.push_back(logic.mkEq(var, machine.sendVarThroughTime(var, 1)));
@@ -164,15 +163,6 @@ namespace golem::termination {
         }
         // TODO: disjunctive well-foundness
     }
-
-    // bool checkWellFoundness (Logic logic, PTRef relation, vec<PTRef>& vars) {
-    //     PTRef constraints = QuantifierElimination(logic).keepOnly(relation, vars);
-    //     if (constraints == logic.getTerm_true()) {
-    //         return false;
-    //     } else {
-    //
-    //     }
-    // }
 
 std::unique_ptr<ChcDirectedHyperGraph> constructHyperGraph(PTRef const init, PTRef const transition, PTRef const query, Logic& logic, std::vector<PTRef> vars) {
         ChcSystem chcs;
@@ -246,7 +236,6 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
     PTRef transitionConstraint = logic.getTerm_true();
     PTRef initConstraint = logic.getTerm_true();
     while (!jobs.empty()) {
-        // auto solver = std::make_unique<TPASplit>(logic, options);
         auto [job, type] = std::move(jobs.front());
         jobs.pop();
 
@@ -256,7 +245,6 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
         noptions.addOption(options.COMPUTE_WITNESS, "true");
         auto engine = EngineFactory(logic, noptions).getEngine(options.getOrDefault(Options::ENGINE, "spacer"));
         auto res = engine->solve(*graph);
-        // // std::cout << "Type: " << ((type == TERM) ? "term" : "nonterm") << std::endl;
         // std::cout << "Init: " << logic.pp(job.getInit()) << std::endl;
         // std::cout << "Transition: " << logic.pp(job.getTransition()) << std::endl;
         // std::cout << "Query: " << logic.pp(job.getQuery()) << std::endl;
@@ -306,11 +294,9 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
                 }
                 SMTsolver.resetSolver();
 
-                SMTsolver.resetSolver();
                 if (detected) {
                     // TODO: I need to think on how to detect nondeterminism better
-                    PTRef block = TimeMachine(logic).sendFlaThroughTime(QuantifierElimination(logic).keepOnly(transitions, all_vars), -j+1);
-                    // std::cout << j <<" Block: " << logic.pp(block) << std::endl;
+                    PTRef block = TimeMachine(logic).sendFlaThroughTime(ModelBasedProjection(logic).keepOnly(transitions, all_vars, *model), -j+1);
                     if (block == logic.getTerm_true()) {
                         detected = false;
                         SMTsolver.resetSolver();
@@ -349,7 +335,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
                     logic.mkAnd(transition, transitionConstraint),
                          query), NONTERM});
             } else {
-                transitions = QuantifierElimination(logic).keepOnly(transitions, vars);
+                transitions = ModelBasedProjection(logic).keepOnly(transitions, vars, *model);
                 initConstraint = logic.mkAnd(initConstraint, logic.mkNot(transitions));
                 jobs.push({TransitionSystem(logic,
                     std::make_unique<SystemType>(ts.getStateVars(), ts.getAuxiliaryVars(), logic),
@@ -397,12 +383,13 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
                         return Answer::NO;
                     } else {
                         query = logic.mkOr(query, constr);
-                        transitionConstraint = logic.getTerm_true();
-                        jobs.push({TransitionSystem(logic,
-                            std::make_unique<SystemType>(ts.getStateVars(), ts.getAuxiliaryVars(), logic),
-                                logic.mkAnd(init, initConstraint),
-                            logic.mkAnd(transition, transitionConstraint),
-                                 query), NONTERM});
+                        // transitionConstraint = logic.getTerm_true();
+                        return Answer::UNKNOWN;
+                        // jobs.push({TransitionSystem(logic,
+                        //     std::make_unique<SystemType>(ts.getStateVars(), ts.getAuxiliaryVars(), logic),
+                        //         logic.mkAnd(init, initConstraint),
+                        //     logic.mkAnd(transition, transitionConstraint),
+                        //          query), NONTERM});
                         // if (checkDisjunctiveWellfoundness(logic, logic.mkAnd(inv,transitionInv), vars)) {
                         //     return Answer::YES;
                         // }
