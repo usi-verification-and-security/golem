@@ -8,7 +8,6 @@
 
 #include "TermUtils.h"
 #include "../ChcSystem.h"
-#include "../../cmake-build-debug/_deps/opensmt-src/src/pterms/PTRef.h"
 #include "engine/EngineFactory.h"
 #include "graph/ChcGraphBuilder.h"
 
