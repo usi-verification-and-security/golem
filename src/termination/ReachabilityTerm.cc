@@ -17,27 +17,27 @@ ReachabilityTerm::Answer ReachabilityTerm::termination(TransitionSystem const & 
     auto & logic = dynamic_cast<ArithLogic &>(ts.getLogic());
     auto vars = ts.getStateVars();
     uint multiplier = 1;
-    while (true) {
-        // Adding a counter variable
-        PTRef counter = logic.mkIntVar("counter");
-        PTRef counter0 = TimeMachine(logic).getVarVersionZero(counter);
-        PTRef counter1 = TimeMachine(logic).sendVarThroughTime(counter0, 1);
-        // initial condition: counter > const * (|x_1| + |x_2| + ... + |x_n|)
-        unsigned i = 0;
-        PTRef sum = logic.getTerm_IntZero();
-        vec<PTRef> sumCheck;
-        sumCheck.push(logic.mkGt(counter0, logic.getTerm_IntZero())); // Needed in case there are no int variables
-        for (auto var : vars) {
-            if (logic.isSortInt(logic.getSortRef(var))) {
-                PTRef temp = TimeMachine(logic).getVarVersionZero(logic.mkIntVar(("y" + std::to_string(i)).c_str()));
-                // cond = y_i >=0 /\ (y_i = -1 * x_i \/ y_i = x_i)
-                sumCheck.push(logic.mkAnd(logic.mkOr(logic.mkEq(temp, var), logic.mkEq(temp, logic.mkNeg(var))), logic.mkGeq(temp, logic.getTerm_IntZero())));
-                // sum = sum + y_i
-                sum = logic.mkPlus(sum, temp);
-                i++;
-            }
+    // Adding a counter variable
+    PTRef counter = logic.mkIntVar("counter");
+    PTRef counter0 = TimeMachine(logic).getVarVersionZero(counter);
+    PTRef counter1 = TimeMachine(logic).sendVarThroughTime(counter0, 1);
+    // initial condition: counter > const * (|x_1| + |x_2| + ... + |x_n|)
+    unsigned i = 0;
+    PTRef sum = logic.getTerm_IntZero();
+    vec<PTRef> sumCheck;
+    sumCheck.push(logic.mkGt(counter0, logic.getTerm_IntZero())); // Needed in case there are no int variables
+    for (auto var : vars) {
+        if (logic.isSortInt(logic.getSortRef(var))) {
+            PTRef temp = TimeMachine(logic).getVarVersionZero(logic.mkIntVar(("y" + std::to_string(i)).c_str()));
+            // cond = y_i >=0 /\ (y_i = -1 * x_i \/ y_i = x_i)
+            sumCheck.push(logic.mkAnd(logic.mkOr(logic.mkEq(temp, var), logic.mkEq(temp, logic.mkNeg(var))), logic.mkGeq(temp, logic.getTerm_IntZero())));
+            // sum = sum + y_i
+            sum = logic.mkPlus(sum, temp);
+            i++;
         }
-        vars.push_back(counter0);
+    }
+    vars.push_back(counter0);
+    while (true) {
         // counter = multiplier * (y_1 + ... + y_n)
         PTRef countEq = logic.mkEq(counter0, logic.mkTimes(logic.mkIntConst(Number(multiplier)), sum));
         // init = init /\ counter = y_1 + ... + y_n /\ (y_1 = |x_1| /\ ... /\ y_n = |x_n|)
@@ -58,7 +58,6 @@ ReachabilityTerm::Answer ReachabilityTerm::termination(TransitionSystem const & 
             return logic.declareFun("P", logic.getSort_bool(), std::move(argSorts));
         }();
         chcs.addUninterpretedPredicate(predicate);
-
         // creating P(x_1, x_2, ..., x_n)
         auto pred = [&]() -> PTRef {
             vec<PTRef> args;
