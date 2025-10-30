@@ -39,7 +39,7 @@ ReachabilityTerm::Answer ReachabilityTerm::termination(TransitionSystem const & 
     vars.push_back(counter0);
     while (true) {
         // counter = multiplier * (y_1 + ... + y_n)
-        PTRef countEq = logic.mkEq(counter0, logic.mkTimes(logic.mkIntConst(Number(multiplier)), sum));
+        PTRef countEq = sumCheck.size() == 0 ? logic.mkEq(counter0, logic.mkTimes(logic.mkIntConst(Number(multiplier)), sum)) : logic.getTerm_true();
         // init = init /\ counter = y_1 + ... + y_n /\ (y_1 = |x_1| /\ ... /\ y_n = |x_n|)
         PTRef init = logic.mkAnd({ts.getInit(), countEq, logic.mkAnd(sumCheck)});
         // transition = transition /\ counter' = counter - 1
@@ -80,6 +80,7 @@ ReachabilityTerm::Answer ReachabilityTerm::termination(TransitionSystem const & 
                        ChcBody{InterpretedFla{transition}, {UninterpretedPredicate{pred}}});
         chcs.addClause(ChcHead{UninterpretedPredicate{logic.getTerm_false()}},
                        ChcBody{InterpretedFla{query}, {UninterpretedPredicate{pred}}});
+        // ChcPrinter(logic, std::cout).print(chcs);
         Normalizer normalizer(logic);
         auto normalizedSystem = normalizer.normalize(chcs);
         auto hypergraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
