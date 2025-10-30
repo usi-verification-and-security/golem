@@ -82,7 +82,7 @@ ReachabilityTerm::Answer ReachabilityTerm::termination(TransitionSystem const & 
                        ChcBody{InterpretedFla{transition}, {UninterpretedPredicate{pred}}});
         chcs.addClause(ChcHead{UninterpretedPredicate{logic.getTerm_false()}},
                        ChcBody{InterpretedFla{query}, {UninterpretedPredicate{pred}}});
-        ChcPrinter(logic, std::cout).print(chcs);
+        // ChcPrinter(logic, std::cout).print(chcs);
         Normalizer normalizer(logic);
         auto normalizedSystem = normalizer.normalize(chcs);
         auto hypergraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
