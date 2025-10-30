@@ -384,12 +384,12 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
                     } else {
                         query = logic.mkOr(query, constr);
                         // transitionConstraint = logic.getTerm_true();
-                        return Answer::UNKNOWN;
-                        // jobs.push({TransitionSystem(logic,
-                        //     std::make_unique<SystemType>(ts.getStateVars(), ts.getAuxiliaryVars(), logic),
-                        //         logic.mkAnd(init, initConstraint),
-                        //     logic.mkAnd(transition, transitionConstraint),
-                        //          query), NONTERM});
+                        // return Answer::UNKNOWN;
+                        jobs.push({TransitionSystem(logic,
+                            std::make_unique<SystemType>(ts.getStateVars(), ts.getAuxiliaryVars(), logic),
+                                logic.mkAnd(init, initConstraint),
+                            logic.mkAnd(transition, transitionConstraint),
+                                 query), NONTERM});
                         // if (checkDisjunctiveWellfoundness(logic, logic.mkAnd(inv,transitionInv), vars)) {
                         //     return Answer::YES;
                         // }
