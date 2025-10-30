@@ -35,11 +35,13 @@ ReachabilityTerm::Answer ReachabilityTerm::termination(TransitionSystem const & 
             i++;
         }
     }
-    if (sumCheck.size() == 0) sumCheck.push(logic.mkGt(counter0, logic.getTerm_IntZero())); // Needed in case there are no int variables
+    if (sumCheck.size() == 0) {
+        sumCheck.push(logic.mkGt(counter0, logic.getTerm_IntZero())); // Needed in case there are no int variables
+    }
     vars.push_back(counter0);
     while (true) {
         // counter = multiplier * (y_1 + ... + y_n)
-        PTRef countEq = sumCheck.size() != 0 ? logic.mkEq(counter0, logic.mkTimes(logic.mkIntConst(Number(multiplier)), sum)) : logic.getTerm_true();
+        PTRef countEq = sumCheck.size() != 0 ? logic.mkGt(counter0, logic.mkTimes(logic.mkIntConst(Number(multiplier)), sum)) : logic.getTerm_true();
         // init = init /\ counter = y_1 + ... + y_n /\ (y_1 = |x_1| /\ ... /\ y_n = |x_n|)
         PTRef init = logic.mkAnd({ts.getInit(), countEq, logic.mkAnd(sumCheck)});
         // transition = transition /\ counter' = counter - 1
