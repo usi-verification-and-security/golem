@@ -35,15 +35,15 @@ ReachabilityTerm::Answer ReachabilityTerm::termination(TransitionSystem const & 
             i++;
         }
     }
-    if (sumCheck.size() == 0) {
-        sumCheck.push(logic.mkGt(counter0, logic.getTerm_IntZero())); // Needed in case there are no int variables
-    }
+    // if (sumCheck.size() == 0) {
+    //     sumCheck.push(logic.mkGt(counter0, logic.getTerm_IntZero())); // Needed in case there are no int variables
+    // }
     vars.push_back(counter0);
     while (true) {
         // counter = multiplier * (y_1 + ... + y_n)
-        PTRef countEq = sumCheck.size() != 0 ? logic.mkGt(counter0, logic.mkTimes(logic.mkIntConst(Number(multiplier)), sum)) : logic.getTerm_true();
+        PTRef countEq =  logic.mkGt(counter0, logic.mkTimes(logic.mkIntConst(Number(multiplier)), sum));
         // init = init /\ counter = y_1 + ... + y_n /\ (y_1 = |x_1| /\ ... /\ y_n = |x_n|)
-        PTRef init = logic.mkAnd({ts.getInit(), countEq, logic.mkAnd(sumCheck)});
+        PTRef init = sumCheck.size() != 0 ? logic.mkAnd({ts.getInit(), countEq, logic.mkAnd(sumCheck)}) : logic.mkAnd({ts.getInit(), logic.mkGt(counter0, logic.getTerm_IntZero())});
         // transition = transition /\ counter' = counter - 1
         PTRef counterDec = logic.mkEq(counter1, logic.mkMinus(counter0, logic.getTerm_IntOne()));
         PTRef transition = logic.mkAnd(ts.getTransition(), counterDec);
@@ -82,7 +82,7 @@ ReachabilityTerm::Answer ReachabilityTerm::termination(TransitionSystem const & 
                        ChcBody{InterpretedFla{transition}, {UninterpretedPredicate{pred}}});
         chcs.addClause(ChcHead{UninterpretedPredicate{logic.getTerm_false()}},
                        ChcBody{InterpretedFla{query}, {UninterpretedPredicate{pred}}});
-        // ChcPrinter(logic, std::cout).print(chcs);
+        ChcPrinter(logic, std::cout).print(chcs);
         Normalizer normalizer(logic);
         auto normalizedSystem = normalizer.normalize(chcs);
         auto hypergraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
