@@ -39,7 +39,7 @@ ReachabilityTerm::Answer ReachabilityTerm::termination(TransitionSystem const & 
     //     sumCheck.push(logic.mkGt(counter0, logic.getTerm_IntZero())); // Needed in case there are no int variables
     // }
     vars.push_back(counter0);
-    while (true) {
+    while (multiplier < 64) {
         // counter = multiplier * (y_1 + ... + y_n)
         PTRef countEq =  logic.mkGt(counter0, logic.mkTimes(logic.mkIntConst(Number(multiplier)), sum));
         // init = init /\ counter = y_1 + ... + y_n /\ (y_1 = |x_1| /\ ... /\ y_n = |x_n|)
