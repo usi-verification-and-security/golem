@@ -25,7 +25,6 @@ ReachabilityTerm::Answer ReachabilityTerm::termination(TransitionSystem const & 
     unsigned i = 0;
     PTRef sum = logic.getTerm_IntZero();
     vec<PTRef> sumCheck;
-    sumCheck.push(logic.mkGt(counter0, logic.getTerm_IntZero())); // Needed in case there are no int variables
     for (auto var : vars) {
         if (logic.isSortInt(logic.getSortRef(var))) {
             PTRef temp = TimeMachine(logic).getVarVersionZero(logic.mkIntVar(("y" + std::to_string(i)).c_str()));
@@ -36,8 +35,9 @@ ReachabilityTerm::Answer ReachabilityTerm::termination(TransitionSystem const & 
             i++;
         }
     }
+    if (sumCheck.size() == 0) sumCheck.push(logic.mkGt(counter0, logic.getTerm_IntZero())); // Needed in case there are no int variables
     vars.push_back(counter0);
-    while (true) {
+    while (multiplier <= 64) {
         // counter = multiplier * (y_1 + ... + y_n)
         PTRef countEq = logic.mkEq(counter0, logic.mkTimes(logic.mkIntConst(Number(multiplier)), sum));
         // init = init /\ counter = y_1 + ... + y_n /\ (y_1 = |x_1| /\ ... /\ y_n = |x_n|)
@@ -103,6 +103,7 @@ ReachabilityTerm::Answer ReachabilityTerm::termination(TransitionSystem const & 
         assert(false && "Unreachable!");
         return Answer::ERROR;
     }
+    return Answer::UNKNOWN;
 }
 
 } // namespace golem::termination
