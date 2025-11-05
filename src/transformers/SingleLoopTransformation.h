@@ -69,7 +69,7 @@ public:
     // Main method
     using TransformationResult = std::pair<std::unique_ptr<TransitionSystem>, std::unique_ptr<WitnessBackTranslator>>;
 
-    TransformationResult transform(ChcDirectedGraph const & graph);
+    TransformationResult transform(ChcDirectedGraph const & graph) const;
 };
 } // namespace golem
 

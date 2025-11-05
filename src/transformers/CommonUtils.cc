@@ -231,7 +231,7 @@ InvalidityWitness::Derivation expandStepWithHyperEdge(
     return newDerivation;
 }
 
-PTRef EdgeTranslator::translateEdge(DirectedEdge const & edge) const {
+PTRef EdgeTranslator::translateEdge(DirectedEdge const & edge) {
     TermUtils::substitutions_map substitutionsMap;
     Logic & logic = graph.getLogic();
     auto source = edge.from;
@@ -240,7 +240,11 @@ PTRef EdgeTranslator::translateEdge(DirectedEdge const & edge) const {
 
     auto edgeVariables = getVariablesFromEdge(logic, graph, edge.id);
     for (PTRef auxVar : edgeVariables.auxiliaryVars) {
-        this->auxiliaryVariablesSeen.push(auxVar);
+        std::string varName = auxPrefix + std::to_string(this->auxiliaryVariables.size());
+        PTRef var = logic.mkVar(logic.getSortRef(auxVar), varName.c_str());
+        var = timeMachine.getVarVersionZero(var);
+        this->auxiliaryVariables.push(var);
+        substitutionsMap.insert({auxVar, var});
     }
 
     // TODO: prepare the substitution map in advance!

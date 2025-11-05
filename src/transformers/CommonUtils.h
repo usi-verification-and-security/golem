@@ -91,9 +91,10 @@ struct EdgeTranslator {
     LocationVarMap const & locationVarMap;
     PositionVarMap const & positionVarMap;
 
-    mutable vec<PTRef> auxiliaryVariablesSeen;
+    vec<PTRef> auxiliaryVariables;
+    constexpr static const char * auxPrefix = "golem::et::aux";
 
-    PTRef translateEdge(DirectedEdge const & edge) const;
+    PTRef translateEdge(DirectedEdge const & edge);
 };
 } // namespace golem
 

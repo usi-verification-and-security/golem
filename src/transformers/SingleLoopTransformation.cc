@@ -11,12 +11,13 @@
 #include "utils/SmtSolver.h"
 
 namespace golem {
-SingleLoopTransformation::TransformationResult SingleLoopTransformation::transform(const ChcDirectedGraph & graph) {
+SingleLoopTransformation::TransformationResult
+SingleLoopTransformation::transform(const ChcDirectedGraph & graph) const {
     Logic & logic = graph.getLogic();
     TimeMachine timeMachine(logic);
     auto vertices = graph.getVertices();
     // MB: It is useful to have exit location, so we do not remove exit from the vertices
-    vertices.erase(std::remove(vertices.begin(), vertices.end(), graph.getEntry()), vertices.end());
+    std::erase(vertices, graph.getEntry());
     LocationVarMap locationVars;
     locationVars.reserve(vertices.size());
     for (auto vertex : vertices) {
@@ -62,7 +63,7 @@ SingleLoopTransformation::TransformationResult SingleLoopTransformation::transfo
         }
         return ret;
     }();
-    auto systemType = std::make_unique<SystemType>(stateVars, edgeTranslator.auxiliaryVariablesSeen, logic);
+    auto systemType = std::make_unique<SystemType>(stateVars, edgeTranslator.auxiliaryVariables, logic);
     auto ts =
         std::make_unique<TransitionSystem>(logic, std::move(systemType), initialStates, transitionRelation, badStates);
     auto backTranslator =
