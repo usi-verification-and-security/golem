@@ -128,9 +128,13 @@ jobs:
     build-macos:
         macos:
             xcode: 15.4.0
-        resource_class: macos.m1.medium.gen1
+        resource_class: m4pro.medium
         steps:
-            - run: echo "HOMEBREW_NO_AUTO_UPDATE=1" >> $BASH_ENV
+            - run:
+                name: HOMEBREW configuration
+                command: |
+                  echo "export HOMEBREW_NO_AUTO_UPDATE=1" >> $BASH_ENV
+                  echo "export HOMEBREW_NO_INSTALL_CLEANUP=1" >> $BASH_ENV
             - run:
                 name: Packages
                 command: |
