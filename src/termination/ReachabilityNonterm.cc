@@ -15,7 +15,150 @@
 #include "engine/EngineFactory.h"
 #include "graph/ChcGraphBuilder.h"
 
+#include <queue>
+
 namespace golem::termination {
+
+PTRef dnfize(PTRef input, Logic & logic) {
+    TermUtils utils {logic};
+    if (logic.isAnd(input)) {
+        auto juncts = utils.getTopLevelConjuncts(input);
+
+        for (int i = 0; i < juncts.size(); i++) {
+            PTRef after_junct = dnfize(juncts[i], logic);
+            if (logic.isOr(after_junct)) {
+                auto subjuncts = utils.getTopLevelDisjuncts(after_junct);
+                vec<PTRef> postprocessJuncts;
+                juncts[i] = juncts.last();
+                juncts.pop();
+                for (auto subjunct: subjuncts) {
+                    postprocessJuncts.push(logic.mkAnd(logic.mkAnd(juncts), subjunct));
+                }
+                return dnfize(logic.mkOr(postprocessJuncts), logic);
+            }
+        }
+    } else if (logic.isOr(input)) {
+        auto juncts = utils.getTopLevelDisjuncts(input);
+        vec<PTRef> postprocessJuncts;
+        for (int i = 0; i < (int)juncts.size(); i++) {
+            PTRef after_junct = dnfize(juncts[i], logic);
+            if (logic.isOr(after_junct)) {
+                auto subjuncts = utils.getTopLevelDisjuncts(after_junct);
+                for (auto subjunct: subjuncts) {
+                    postprocessJuncts.push(subjunct);
+                }
+            } else {
+                postprocessJuncts.push(after_junct);
+            }
+        }
+        return logic.mkOr(postprocessJuncts);
+    } else if (logic.isNot(input)) {
+        PTRef rev = logic.mkNot(input);
+        if (logic.isAnd(rev)) {
+            auto subjuncts = utils.getTopLevelConjuncts(rev);
+            vec<PTRef> postprocessJuncts;
+            for (int i = 0; i < (int)subjuncts.size(); i++) {
+                postprocessJuncts.push(logic.mkNot(subjuncts[i]));
+            }
+            return dnfize(logic.mkOr(postprocessJuncts), logic);
+        } else if (logic.isOr(rev)) {
+            auto subjuncts = utils.getTopLevelDisjuncts(input);
+            vec<PTRef> postprocessJuncts;
+            for (int i = 0; i < (int)subjuncts.size(); i++) {
+                postprocessJuncts.push(logic.mkNot(subjuncts[i]));
+            }
+            return dnfize(logic.mkAnd(postprocessJuncts), logic);
+        }
+    }
+    return input;
+}
+
+PTRef generateReachabilityQuery(ArithLogic &logic, PTRef query, std::vector<PTRef>& vars) {
+    enum TypeOfQuery {LT, GT, LTC, GTC, EQ, NEQ};
+    PTRef constr;
+    SMTSolver solver(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
+    do {
+        int j = rand() % vars.size(),k = rand() % vars.size();
+        while (!logic.isNumVar(vars[j])) { j = rand() % vars.size(); }
+        while (!logic.isNumVar(vars[k])) { k = rand() % vars.size(); }
+        int i = rand() % 6;
+        switch (i) {
+            case LT: {
+                if (logic.isNumVar(vars[j]) && logic.isNumVar(vars[k])) {
+                    constr = logic.mkLt(vars[j], vars[k]);
+                }
+            }
+            case GT: {
+                if (logic.isNumVar(vars[j]) && logic.isNumVar(vars[k])) {
+                    constr = logic.mkGt(vars[j], vars[k]);
+                }
+            }
+            case LTC: {
+                if (logic.isNumVar(vars[j]) ) {
+                    constr = logic.mkLt(vars[j], logic.mkIntConst(rand()));
+                }
+            }
+            case GTC: {
+                if (logic.isNumVar(vars[j]) ) {
+                    constr = logic.mkGt(vars[j], logic.mkIntConst(rand()));
+                }
+            }
+            case EQ: {
+                if (logic.isNumVar(vars[j]) && logic.isNumVar(vars[k])) {
+                    constr = logic.mkEq(vars[j], vars[k]);
+                }
+            }
+            case NEQ: {
+                if (logic.isNumVar(vars[j]) && logic.isNumVar(vars[k])) {
+                    constr = logic.mkNot(logic.mkEq(vars[j], vars[k]));
+                }
+            }
+        }
+        solver.resetSolver();
+        solver.assertProp(logic.mkAnd(query, constr));
+    } while (solver.check() == SMTSolver::Answer::UNSAT);
+    return constr;
+}
+
+bool checkDisjunctiveWellfoundness (Logic &logic, PTRef relation, std::vector<PTRef>& vars) {
+    TermUtils utils {logic};
+    TimeMachine machine {logic};
+    std::vector<PTRef> identity;
+    vec<PTRef> primedVars;
+    for (auto var: vars) {
+        identity.push_back(logic.mkEq(var, machine.sendVarThroughTime(var, 1)));
+        primedVars.push(machine.sendVarThroughTime(var, 1));
+    }
+    TermUtils::substitutions_map varSubstitutions;
+    for (uint32_t i = 0u; i < vars.size(); ++i) {
+        varSubstitutions.insert({ primedVars[i], vars[i]});
+    }
+    PTRef inv = logic.mkAnd(logic.mkNot(logic.mkAnd(identity)), relation);
+    PTRef irreflexiveCheck = utils.varSubstitute(inv, varSubstitutions);
+    SMTSolver SMTsolver(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
+    SMTsolver.assertProp(irreflexiveCheck);
+    assert (SMTsolver.check() != SMTSolver::Answer::SAT);
+    varSubstitutions.clear();
+    for (uint32_t i = 0u; i < vars.size(); ++i) {
+        varSubstitutions.insert({ primedVars[i], machine.sendVarThroughTime(primedVars[i], 1)});
+    }
+    PTRef transitionBack = utils.varSubstitute(inv, varSubstitutions);
+    varSubstitutions.clear();
+    for (uint32_t i = 0u; i < vars.size(); ++i) {
+        varSubstitutions.insert({ vars[i], primedVars[i]});
+        varSubstitutions.insert({ machine.sendVarThroughTime(primedVars[i], 1), vars[i]});
+    }
+    transitionBack = utils.varSubstitute(transitionBack, varSubstitutions);
+    PTRef totalOrder = logic.mkAnd(inv, transitionBack);
+    SMTsolver.resetSolver();
+    SMTsolver.assertProp(totalOrder);
+    if (SMTsolver.check() == SMTSolver::Answer::SAT) {
+        return false;
+    } else {
+        return true;
+    }
+    // TODO: disjunctive well-foundness
+}
 
 std::unique_ptr<ChcDirectedHyperGraph> constructHyperGraph(PTRef const init, PTRef const transition, PTRef const query,
                                                            Logic & logic, std::vector<PTRef> vars) {
@@ -65,14 +208,27 @@ std::unique_ptr<ChcDirectedHyperGraph> constructHyperGraph(PTRef const init, PTR
 ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem const & ts) {
     auto vars = ts.getStateVars();
     ArithLogic & logic = dynamic_cast<ArithLogic &>(ts.getLogic());
-    PTRef init = ts.getInit();
-    PTRef transition = ts.getTransition();
+    PTRef initS = ts.getInit();
+    PTRef transitionS = ts.getTransition();
     // In this case query is a set of sink states - states from which transition is not possible.
     // sink /\ transition is UNSAT
-    PTRef sink = logic.mkNot(QuantifierElimination(logic).keepOnly(transition, vars));
+    PTRef sinkS = logic.mkNot(QuantifierElimination(logic).keepOnly(transitionS, vars));
 
     // if sink is false, there are no sink states in the TS, therefore it is nonterminating
-    if (sink == logic.getTerm_false()) { return Answer::NO; }
+    if (sinkS == logic.getTerm_false()) { return Answer::NO; }
+
+    enum JobType {TERM, NONTERM};
+    struct QueueJob {
+        TransitionSystem ts;
+        JobType type;
+    };
+
+    std::queue<QueueJob> jobs;
+    jobs.push({TransitionSystem(logic,
+                        std::make_unique<SystemType>(ts.getStateVars(), ts.getAuxiliaryVars(), logic),
+                        initS,
+                        transitionS,
+                        logic.mkNot(QuantifierElimination(logic).keepOnly(transitionS, vars))), NONTERM});
 
     // Witness computation is required, as we need to use both counterexample traces to limit terminating states
     // and inductive invariants to prove nontermination
@@ -80,7 +236,12 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
     witnesses.addOption(options.COMPUTE_WITNESS, "true");
 
     // Main nonterm-checking loop
-    while (true) {
+    while (jobs.size() > 0) {
+        auto [job, type] = std::move(jobs.front());
+        PTRef init = job.getInit();
+        PTRef transition = job.getTransition();
+        PTRef sink = job.getQuery();
+        jobs.pop();
         // Constructing a graph based on the currently considered TS
         auto graph = constructHyperGraph(init, transition, sink, logic, vars);
         auto engine = EngineFactory(logic, witnesses).getEngine(witnesses.getOrDefault(Options::ENGINE, "spacer"));
@@ -155,7 +316,11 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
                         // If block removes the opportunity to take any other transition, then nondet choice leads to
                         // termination whatever transition is picked, therefore transitions are traversed backwards
                         if (SMTsolver.check() == SMTSolver::Answer::UNSAT) { continue; }
-                        transition = logic.mkAnd(transition, logic.mkNot(block));
+                        jobs.push({TransitionSystem(logic,
+                        std::make_unique<SystemType>(ts.getStateVars(), ts.getAuxiliaryVars(), logic),
+                        init,
+                        logic.mkAnd(transition, logic.mkNot(block)),
+                        sink), NONTERM});
                         detected = true;
                         break;
                     }
@@ -163,7 +328,11 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
             }
             if (!detected) {
                 // If all transitions were determenistic, we block the initial states that lead to the termination
-                init = logic.mkAnd(init, logic.mkNot(ModelBasedProjection(logic).keepOnly(transitions, vars, *model)));
+                jobs.push({TransitionSystem(logic,
+                        std::make_unique<SystemType>(ts.getStateVars(), ts.getAuxiliaryVars(), logic),
+                        logic.mkAnd(init, logic.mkNot(ModelBasedProjection(logic).keepOnly(transitions, vars, *model))),
+                        transition,
+                        sink), NONTERM});
             }
 
         } else if (res.getAnswer() == VerificationAnswer::SAFE) {
@@ -216,7 +385,11 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
                     return Answer::NO;
                 } else {
                     // We update the sink states by the detected sink states and rerun the verification
-                    sink = constr;
+                    jobs.push({TransitionSystem(logic,
+                            std::make_unique<SystemType>(ts.getStateVars(), ts.getAuxiliaryVars(), logic),
+                            init,
+                            transition,
+                            constr), NONTERM});
                 }
             }
         } else {
