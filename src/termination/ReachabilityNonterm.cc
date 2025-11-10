@@ -72,10 +72,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
     PTRef sink = logic.mkNot(QuantifierElimination(logic).keepOnly(transition, vars));
 
     // if sink is false, there are no sink states in the TS, therefore it is nonterminating
-    if (sink == logic.getTerm_false()) {
-        std::cout << "; (Trivial nontermination)" << std::endl;
-        return Answer::NO;
-    }
+    if (sink == logic.getTerm_false()) { return Answer::NO; }
 
     // Witness computation is required, as we need to use both counterexample traces to limit terminating states
     // and inductive invariants to prove nontermination
@@ -122,12 +119,12 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
                 // Constructing assignments for x^(j-1) and x^(j) based on the values extracted from model
                 // To check if different assignment was possible
                 for (auto var : vars) {
-                    PTRef prev = TimeMachine(logic).sendFlaThroughTime(var, j - 1);
-                    PTRef nxt = TimeMachine(logic).sendFlaThroughTime(var, j);
+                    PTRef prev = TimeMachine(logic).sendVarThroughTime(var, j - 1);
+                    PTRef nxt = TimeMachine(logic).sendVarThroughTime(var, j);
                     base.push(logic.mkEq(prev, model->evaluate(prev)));
                     results.push(logic.mkEq(nxt, model->evaluate(nxt)));
                     // Constructing vector of variables x^(j)
-                    all_vars.push(TimeMachine(logic).sendFlaThroughTime(var, j));
+                    all_vars.push(nxt);
                 }
                 SMTsolver.resetSolver();
                 // Checking if it is possible to reach values different to those that were reached in model via
@@ -186,7 +183,6 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
                 }
             }
             TermUtils::substitutions_map varSubstitutions;
-            auto edges = graph->getEdges();
             for (uint32_t i = 0u; i < vars.size(); ++i) {
                 varSubstitutions.insert({repr[i], vars[i]});
             }
