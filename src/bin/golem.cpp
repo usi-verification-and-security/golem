@@ -21,7 +21,7 @@ std::string tryDetectLogic(ASTNode const * root) {
     bool hasArrays = false;
     auto decide = [&]() -> std::string {
         if (hasReals and hasIntegers) { return ""; }
-        return std::string("QF_") + (hasArrays ? "A" : "") + "L" + (hasIntegers ? "I" : "R") + "A";
+        return std::string("QF_") + (hasArrays ? "A" : "") + "L" + (hasReals ? "R" : "I") + "A";
     };
     auto checkForRealsAndInts = [&](ASTNode const * const node) {
             hasReals = hasReals or strcmp(node->getValue(), "Real") == 0;
