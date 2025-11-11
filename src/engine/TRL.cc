@@ -7,6 +7,7 @@
 #include "TRL.h"
 
 #include "ModelBasedProjection.h"
+#include "QuantifierElimination.h"
 #include "utils/SmtSolver.h"
 #include "utils/StdUtils.h"
 
@@ -41,8 +42,8 @@ struct BlockingClause {
 
 class Context {
 public:
-    explicit Context(TransitionSystem const & system)
-        : system(system), logic(dynamic_cast<ArithLogic &>(system.getLogic())) {
+    explicit Context(TransitionSystem const & system, bool computeWintess = false)
+        : system(system), logic(dynamic_cast<ArithLogic &>(system.getLogic())), computeWitness(computeWintess) {
         indexVar = TimeMachine(logic).getVarVersionZero(logic.mkIntVar("trl_id"));
     }
     TransitionSystemVerificationResult run();
@@ -59,12 +60,14 @@ private:
     PTRef transitiveProjection(PTRef fla, Model & model, Loop loop);
 
     PTRef getFreshLoopCounter();
-    std::vector<PTRef> getSystemVars(std::size_t step) const;
+    [[nodiscard]] std::vector<PTRef> getSystemVars(std::size_t step) const;
+    PTRef computeInductiveInvariant(std::vector<PTRef> const & relations, int diameter) const;
 
     TransitionSystem const & system;
     ArithLogic & logic;
     PTRef indexVar;
     std::size_t loopCounterIndex = 0;
+    bool computeWitness = false;
 };
 
 TransitionSystemVerificationResult Context::run() {
@@ -113,7 +116,11 @@ TransitionSystemVerificationResult Context::run() {
         }
         // Check if the search space is exhausted
         res = solver.check();
-        if (res == SMTSolver::Answer::UNSAT) { return {VerificationAnswer::SAFE}; }
+        if (res == SMTSolver::Answer::UNSAT) {
+            if (not computeWitness) { return {VerificationAnswer::SAFE}; }
+            PTRef inductiveInvariant = computeInductiveInvariant(relations, currentUnrolling);
+            return {VerificationAnswer::SAFE, inductiveInvariant};
+        }
         if (res != SMTSolver::Answer::SAT) { return {VerificationAnswer::UNKNOWN}; }
         // check current trace for a loop
         auto model = solver.getModel();
@@ -450,10 +457,24 @@ std::vector<PTRef> Context::getSystemVars(std::size_t step) const {
     }
     return res;
 }
+
+PTRef Context::computeInductiveInvariant(std::vector<PTRef> const & relations, int diameter) const {
+    PTRef const extendedTransition = logic.mkOr(relations);
+    TimeMachine tm(logic);
+    vec<PTRef> components;
+    PTRef current = system.getInit();
+    components.push(current);
+    for (int i = 0; i < diameter; ++i) {
+        current = logic.mkAnd(current, tm.sendFlaThroughTime(extendedTransition, i));
+        current = QuantifierElimination(logic).keepOnly(current, getSystemVars(i + 1));
+        components.push(tm.sendFlaThroughTime(current, -(i + 1)));
+    }
+    return logic.mkOr(std::move(components));
+}
 } // namespace
 
 TransitionSystemVerificationResult TRL::solve(TransitionSystem const & system) {
-    return Context(system).run();
+    return Context(system, computeWitness).run();
 }
 
 } // namespace golem
