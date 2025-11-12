@@ -8,6 +8,7 @@
 
 #include "TermUtils.h"
 #include "engine/EngineFactory.h"
+#include "engine/TPA.h"
 #include "graph/ChcGraphBuilder.h"
 
 namespace golem::termination {

@@ -17,6 +17,8 @@
 
 #include <queue>
 
+#include "engine/TPA.h"
+
 namespace golem::termination {
 
 PTRef dnfize(PTRef input, Logic & logic) {
@@ -75,42 +77,71 @@ PTRef dnfize(PTRef input, Logic & logic) {
 
 PTRef generateReachabilityQuery(ArithLogic &logic, PTRef query, std::vector<PTRef>& vars) {
     enum TypeOfQuery {LT, GT, LTC, GTC, EQ, NEQ};
+    TermUtils utils {logic};
     PTRef constr;
+    auto formVars = utils.getVars(query);
     SMTSolver solver(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
     do {
-        int j = rand() % vars.size(),k = rand() % vars.size();
-        while (!logic.isNumVar(vars[j])) { j = rand() % vars.size(); }
-        while (!logic.isNumVar(vars[k])) { k = rand() % vars.size(); }
-        int i = rand() % 6;
-        switch (i) {
-            case LT: {
-                if (logic.isNumVar(vars[j]) && logic.isNumVar(vars[k])) {
-                    constr = logic.mkLt(vars[j], vars[k]);
+        PTRef var = formVars[rand() % formVars.size()];
+        if (logic.isNumVar(var)) {
+            int i = rand() % 6;
+            switch (i) {
+                case 0: {
+                    PTRef comp_var = formVars[rand() % formVars.size()];
+                    while (!logic.isNumVar(comp_var)) {
+                        comp_var = formVars[rand() % formVars.size()];
+                    }
+                    constr = logic.mkLt(var, comp_var);
+                    break;
+                }
+                case 1: {
+                    PTRef comp_var = formVars[rand() % formVars.size()];
+                    while (!logic.isNumVar(comp_var)) {
+                        comp_var = formVars[rand() % formVars.size()];
+                    }
+                    constr = logic.mkGt(var, comp_var);
+                    break;
+                }
+                case 2: {
+                    constr = logic.mkLt(var, logic.mkIntConst(rand()%1000000));
+                    break;
+                }
+                case 3: {
+                    constr = logic.mkGt(var, logic.mkIntConst(rand()%1000000));
+                    break;
+                }
+                case 4: {
+                    PTRef comp_var = formVars[rand() % formVars.size()];
+                    while (!logic.isNumVar(comp_var)) {
+                        comp_var = formVars[rand() % formVars.size()];
+                    }
+                    constr = logic.mkEq(var, comp_var);
+                    break;
+                }
+                case 5: {
+                    PTRef comp_var = formVars[rand() % formVars.size()];
+                    while (!logic.isNumVar(comp_var)) {
+                        comp_var = formVars[rand() % formVars.size()];
+                    }
+                    constr = logic.mkNot(logic.mkEq(var, comp_var));
+                    break;
+                } default: {
+                   assert(false);
                 }
             }
-            case GT: {
-                if (logic.isNumVar(vars[j]) && logic.isNumVar(vars[k])) {
-                    constr = logic.mkGt(vars[j], vars[k]);
+        } if (logic.isBoolAtom(var)) {
+            int i = rand() % 2;
+            switch (i) {
+                case 0: {
+                    constr = logic.mkEq(var, logic.getTerm_true());
+                    break;
                 }
-            }
-            case LTC: {
-                if (logic.isNumVar(vars[j]) ) {
-                    constr = logic.mkLt(vars[j], logic.mkIntConst(rand()));
+                case 1: {
+                    constr = logic.mkEq(var, logic.getTerm_false());
+                    break;
                 }
-            }
-            case GTC: {
-                if (logic.isNumVar(vars[j]) ) {
-                    constr = logic.mkGt(vars[j], logic.mkIntConst(rand()));
-                }
-            }
-            case EQ: {
-                if (logic.isNumVar(vars[j]) && logic.isNumVar(vars[k])) {
-                    constr = logic.mkEq(vars[j], vars[k]);
-                }
-            }
-            case NEQ: {
-                if (logic.isNumVar(vars[j]) && logic.isNumVar(vars[k])) {
-                    constr = logic.mkNot(logic.mkEq(vars[j], vars[k]));
+                default: {
+                    assert(false);
                 }
             }
         }
@@ -234,6 +265,8 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
     // and inductive invariants to prove nontermination
     Options witnesses = options;
     witnesses.addOption(options.COMPUTE_WITNESS, "true");
+    // std::cout<<"Original sink" << logic.pp(sinkS) << std::endl;
+    PTRef reachConstr = logic.getTerm_true();
 
     // Main nonterm-checking loop
     while (jobs.size() > 0) {
@@ -247,10 +280,15 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
         auto engine = EngineFactory(logic, witnesses).getEngine(witnesses.getOrDefault(Options::ENGINE, "spacer"));
 
         // Check if sink states are reachable within TS
-        auto res = engine->solve(*graph);
-        if (res.getAnswer() == VerificationAnswer::UNSAFE) {
+        // auto res = engine->solve(*graph);
+        auto solver = std::make_unique<TPASplit>(logic, options);
+        auto res = solver->solveTransitionSystem(job);
+        if (type == TERM) {
+            std::cout<<"Termination condition" << logic.pp(sink) << std::endl;
+        }
+        if (res == VerificationAnswer::UNSAFE && type == NONTERM) {
             // When sink states are reachable, extract the number of transitions needed to reach the sink states
-            uint num = res.getInvalidityWitness().getDerivation().size() - 3;
+            uint num = solver->getTransitionStepCount();
 
             // Construct the logical formula representing the trace:
             // Init(x) /\ Tr(x,x') /\ ... /\ Bad(x^(num))
@@ -334,67 +372,97 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
                         transition,
                         sink), NONTERM});
             }
+            PTRef newCond = generateReachabilityQuery(logic, sink, vars);
+            SMTsolver.resetSolver();
+            SMTsolver.assertProp(logic.mkAnd(reachConstr, newCond));
+            if (SMTsolver.check() == SMTSolver::Answer::UNSAT) {
+                reachConstr = newCond;
+            } else {
+                reachConstr = logic.mkAnd(reachConstr, newCond);
+            }
+            // jobs.push({TransitionSystem(logic,
+            //     std::make_unique<SystemType>(ts.getStateVars(), ts.getAuxiliaryVars(), logic),
+            //     init,
+            //     transition,
+            //     logic.mkAnd(sink, reachConstr)),
+            //     TERM
+            // });
 
-        } else if (res.getAnswer() == VerificationAnswer::SAFE) {
+        } else if (res == VerificationAnswer::SAFE) {
             // In case if sink states are not reachable, we need to construct the inductive invariant and demonstrate
             // that it doesn't contain any sink states itself.
             // It is possible since we add constraints to the transition relation, which were not accounted for
             // initially.
-            auto witness = res.getValidityWitness();
-            assert(witness.getDefinitions().size() == 3);
-            PTRef inv;
+            auto inv = solver->getInductiveInvariant();
+            // assert(witness.getDefinitions().size() == 3);
+            // PTRef inv;
             std::vector<PTRef> repr;
             // First, we extract the invariant from the witness. It is interpretation of predicate P.
-            for (auto wtn : witness.getDefinitions()) {
-                if (wtn.first.x != 3 && wtn.first.x != 0) {
-                    repr = graph->predicateRepresentation().getRepresentation(wtn.first);
-                    inv = wtn.second;
-                }
-            }
-            TermUtils::substitutions_map varSubstitutions;
-            for (uint32_t i = 0u; i < vars.size(); ++i) {
-                varSubstitutions.insert({repr[i], vars[i]});
-            }
-            // Then invariant is translated, so the variables correspond to the encoding of the CHC system,
-            // pre-normalization
-            inv = TermUtils(logic).varSubstitute(inv, varSubstitutions);
+            // for (auto wtn : witness.getDefinitions()) {
+            //     if (wtn.first.x != 3 && wtn.first.x != 0) {
+            //         repr = graph->predicateRepresentation().getRepresentation(wtn.first);
+            //         inv = wtn.second;
+            //     }
+            // }
+            // TermUtils::substitutions_map varSubstitutions;
+            // for (uint32_t i = 0u; i < vars.size(); ++i) {
+            //     varSubstitutions.insert({repr[i], vars[i]});
+            //     PTRef vz = TimeMachine(logic).getVarVersionZero(repr[i]);
+            //     std::cout<<"Var: " << logic.pp(vz) << std::endl;
+            //     varSubstitutions.insert({TimeMachine(logic).sendVarThroughTime(vz,0),TimeMachine(logic).sendVarThroughTime(vars[i],0)});
+            //     varSubstitutions.insert({TimeMachine(logic).sendVarThroughTime(vz,1),TimeMachine(logic).sendVarThroughTime(vars[i],1)});
+            // }
+            // // Then invariant is translated, so the variables correspond to the encoding of the CHC system,
+            // // pre-normalization
+            // inv = TermUtils(logic).varSubstitute(inv, varSubstitutions);
+            // if (type == TERM) {
+            //     // auto witness = res.getValidityWitness();
+            //     // auto orig = engine->getTransitionInvariant();
+            //     auto trInv = solver->getTransitionInvariant();
+            //     std::cout << "Invariant: " << logic.pp(inv) << "\n";
+            //     std::cout << "Transition Invariant: " << logic.pp(trInv) << "\n";
+            //     // std::cout << "Transition: " << logic.pp(transition) << "\n";
+            // }
+            // else {
 
-            SMTSolver SMTsolver(logic, SMTSolver::WitnessProduction::NONE);
-            SMTsolver.assertProp(logic.mkAnd(init, transition));
-            // We check if init state is blocked (it's impossible to make a transition from initial state)
-            // When it is the case, TS is terminating
-            if (SMTsolver.check() == SMTSolver::Answer::UNSAT) {
-                return Answer::YES;
-            } else {
-                SMTsolver.resetSolver();
-                SMTsolver.assertProp(
-                    logic.mkAnd({inv, transition, logic.mkNot(TimeMachine(logic).sendFlaThroughTime(inv, 1))}));
-                assert(SMTsolver.check() == SMTSolver::Answer::UNSAT);
-                PTRef constr = logic.mkNot(QuantifierElimination(logic).keepOnly(transition, vars));
-                SMTsolver.resetSolver();
-                SMTsolver.assertProp(logic.mkAnd({inv, constr}));
-                // We check if from any state satisfying the invariant it is possible to take a transition.
-                // For this we check the reverse, if there exists a state satisfying Inv, from which it is impossible
-                // to take a transition:
-                // Exists x. Inv(x) /\ Does not (Exist x'.  Tr(x,x')) - right conjunct is QE-ed
-                // Meaning there exists a state satisfying an invariant, such that there does not exist a SAT transition
-                // from this state If it is the case, there exist a sink state in the invariant - otherwise, invariant
-                // is a recurrent set
+                SMTSolver SMTsolver(logic, SMTSolver::WitnessProduction::NONE);
+                SMTsolver.assertProp(logic.mkAnd(init, transition));
+                // We check if init state is blocked (it's impossible to make a transition from initial state)
+                // When it is the case, TS is terminating
                 if (SMTsolver.check() == SMTSolver::Answer::UNSAT) {
-                    // std::cout<<"Final check:" << logic.pp(logic.mkAnd({inv, constr})) << "\n";
-                    return Answer::NO;
+                    return Answer::YES;
                 } else {
-                    // We update the sink states by the detected sink states and rerun the verification
-                    jobs.push({TransitionSystem(logic,
-                            std::make_unique<SystemType>(ts.getStateVars(), ts.getAuxiliaryVars(), logic),
-                            init,
-                            transition,
-                            constr), NONTERM});
-                }
+                    SMTsolver.resetSolver();
+                    SMTsolver.assertProp(
+                        logic.mkAnd({inv, transition, logic.mkNot(TimeMachine(logic).sendFlaThroughTime(inv, 1))}));
+                    assert(SMTsolver.check() == SMTSolver::Answer::UNSAT);
+                    PTRef constr = logic.mkNot(QuantifierElimination(logic).keepOnly(transition, vars));
+                    SMTsolver.resetSolver();
+                    SMTsolver.assertProp(logic.mkAnd({inv, constr}));
+                    // We check if from any state satisfying the invariant it is possible to take a transition.
+                    // For this we check the reverse, if there exists a state satisfying Inv, from which it is impossible
+                    // to take a transition:
+                    // Exists x. Inv(x) /\ Does not (Exist x'.  Tr(x,x')) - right conjunct is QE-ed
+                    // Meaning there exists a state satisfying an invariant, such that there does not exist a SAT transition
+                    // from this state If it is the case, there exist a sink state in the invariant - otherwise, invariant
+                    // is a recurrent set
+                    if (SMTsolver.check() == SMTSolver::Answer::UNSAT) {
+                        // std::cout<<"Final check:" << logic.pp(logic.mkAnd({inv, constr})) << "\n";
+                        return Answer::NO;
+                    } else {
+                        // We update the sink states by the detected sink states and rerun the verification
+                        jobs.push({TransitionSystem(logic,
+                                std::make_unique<SystemType>(ts.getStateVars(), ts.getAuxiliaryVars(), logic),
+                                init,
+                                transition,
+                                constr), NONTERM});
+                    }
+                // }
             }
+
         } else {
-            assert(false && "Unreachable!");
-            return Answer::ERROR;
+            assert(type == TERM);
+            continue;
         }
     }
 

@@ -38,6 +38,7 @@ class TPAEngine : public TransitionSystemEngine {
     Options options;
     TPACore coreAlgorithm;
     friend class TransitionSystemNetworkManager;
+    PTRef transitionInvariant;
 
 public:
     TPAEngine(Logic & logic, Options options, TPACore core)
@@ -47,6 +48,9 @@ public:
 
     using TransitionSystemEngine::solve;
     VerificationResult solve(ChcDirectedGraph const & graph) override;
+
+    using TransitionSystemEngine::getTransitionInvariant;
+    PTRef getTransitionInvariant() override {return  transitionInvariant;};
 
     static const std::string TPA;
     static const std::string SPLIT_TPA;
@@ -134,6 +138,7 @@ public:
     PTRef getSafetyExplanation() const;
     PTRef getReachedStates() const;
     unsigned getTransitionStepCount() const;
+    PTRef getTransitionInvariant() const;
     PTRef getInductiveInvariant() const;
     vec<PTRef> getStateVars(int version) const;
 

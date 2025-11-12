@@ -17,6 +17,10 @@ public:
         return VerificationResult(VerificationAnswer::UNKNOWN);
     }
 
+    virtual PTRef getTransitionInvariant() {
+        return PTRef_Undef;
+    }
+
     virtual ~Engine() = default;
 };
 } // namespace golem
