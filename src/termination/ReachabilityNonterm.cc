@@ -75,11 +75,22 @@ PTRef dnfize(PTRef input, Logic & logic) {
     return input;
 }
 
-PTRef generateReachabilityQuery(ArithLogic &logic, PTRef query, std::vector<PTRef>& vars) {
+PTRef generateReachabilityQuery(ArithLogic &logic, PTRef query, PTRef oldCond) {
     enum TypeOfQuery {LT, GT, LTC, GTC, EQ, NEQ};
     TermUtils utils {logic};
     PTRef constr;
     auto formVars = utils.getVars(query);
+    std::vector<PTRef> boolVars;
+    for (int i = 0; i < formVars.size(); i++) {
+        if (logic.isAtom(formVars[i])) {
+            boolVars.push_back(formVars[i]);
+        }
+    }
+    if (oldCond == logic.getTerm_true() && boolVars.size() > 0) {
+        PTRef var = boolVars[rand() % boolVars.size()];
+        constr = logic.mkEq(var, logic.getTerm_true());
+        return constr;
+    }
     SMTSolver solver(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
     do {
         PTRef var = formVars[rand() % formVars.size()];
@@ -103,11 +114,11 @@ PTRef generateReachabilityQuery(ArithLogic &logic, PTRef query, std::vector<PTRe
                     break;
                 }
                 case 2: {
-                    constr = logic.mkLt(var, logic.mkIntConst(rand()%1000000));
+                    constr = logic.mkLt(var, logic.mkIntConst(1000000-rand()%2000000));
                     break;
                 }
                 case 3: {
-                    constr = logic.mkGt(var, logic.mkIntConst(rand()%1000000));
+                    constr = logic.mkGt(var, logic.mkIntConst(1000000-rand()%2000000));
                     break;
                 }
                 case 4: {
@@ -372,7 +383,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
                         transition,
                         sink), NONTERM});
             }
-            PTRef newCond = generateReachabilityQuery(logic, sink, vars);
+            PTRef newCond = generateReachabilityQuery(logic, sink, reachConstr);
             SMTsolver.resetSolver();
             SMTsolver.assertProp(logic.mkAnd(reachConstr, newCond));
             if (SMTsolver.check() == SMTSolver::Answer::UNSAT) {
@@ -380,13 +391,13 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
             } else {
                 reachConstr = logic.mkAnd(reachConstr, newCond);
             }
-            // jobs.push({TransitionSystem(logic,
-            //     std::make_unique<SystemType>(ts.getStateVars(), ts.getAuxiliaryVars(), logic),
-            //     init,
-            //     transition,
-            //     logic.mkAnd(sink, reachConstr)),
-            //     TERM
-            // });
+            jobs.push({TransitionSystem(logic,
+                std::make_unique<SystemType>(ts.getStateVars(), ts.getAuxiliaryVars(), logic),
+                init,
+                transition,
+                logic.mkAnd(sink, reachConstr)),
+                TERM
+            });
 
         } else if (res == VerificationAnswer::SAFE) {
             // In case if sink states are not reachable, we need to construct the inductive invariant and demonstrate
@@ -415,14 +426,18 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
             // // Then invariant is translated, so the variables correspond to the encoding of the CHC system,
             // // pre-normalization
             // inv = TermUtils(logic).varSubstitute(inv, varSubstitutions);
-            // if (type == TERM) {
-            //     // auto witness = res.getValidityWitness();
-            //     // auto orig = engine->getTransitionInvariant();
-            //     auto trInv = solver->getTransitionInvariant();
-            //     std::cout << "Invariant: " << logic.pp(inv) << "\n";
-            //     std::cout << "Transition Invariant: " << logic.pp(trInv) << "\n";
-            //     // std::cout << "Transition: " << logic.pp(transition) << "\n";
-            // }
+            if (type == TERM) {
+                // auto witness = res.getValidityWitness();
+                // auto orig = engine->getTransitionInvariant();
+                auto trInv = solver->getTransitionInvariant();
+                //inductive check
+
+                // std::cout << "Invariant: " << logic.pp(inv) << "\n";
+                std::cout << "Constraint: " << logic.pp(reachConstr) << "\n";
+                std::cout << "Transition Invariant: " << logic.pp(dnfize(trInv,logic)) << "\n";
+                reachConstr = logic.getTerm_true();
+                std::cout << "Transition: " << logic.pp(transition) << "\n";
+            }
             // else {
 
                 SMTSolver SMTsolver(logic, SMTSolver::WitnessProduction::NONE);

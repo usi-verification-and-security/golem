@@ -1742,14 +1742,47 @@ namespace golem {
 
     //TODO: Think about Transition Invariant differences
     PTRef TPABase::getTransitionInvariant() const {
+        std::vector<PTRef> identityBlocks;
+        for (auto var: getStateVars(0)) {
+            identityBlocks.push_back(logic.mkNot(logic.mkEq(var, TimeMachine(logic).sendVarThroughTime(var,1))));
+        }
+        PTRef identityBlock = logic.mkOr(identityBlocks);
+        PTRef invariantAttempt = logic.mkAnd(explanation.safeTransitionInvariant, identityBlock);
+        SMTSolver SMTsolver(logic, SMTSolver::WitnessProduction::NONE);
+        std::cout << "Strict invariant: " << logic.pp(invariantAttempt) << "\n";
+        std::cout << "Transition: " << logic.pp(transition) << "\n";
         assert(explanation.invariantType != SafetyExplanation::TransitionInvariantType::NONE);
         if (explanation.relationType == TPAType::LESS_THAN) {
-            return explanation.safeTransitionInvariant;
+            SMTsolver.resetSolver();
+            if (explanation.invariantType == SafetyExplanation::TransitionInvariantType::UNRESTRICTED) {
+                SMTsolver.assertProp(logic.mkAnd({invariantAttempt,  TimeMachine(logic).sendFlaThroughTime(transition,1),
+                    logic.mkNot(shiftOnlyNextVars(invariantAttempt))}));
+            } else if (explanation.invariantType == SafetyExplanation::TransitionInvariantType::RESTRICTED_TO_QUERY) {
+                SMTsolver.assertProp(logic.mkAnd({TimeMachine(logic).sendFlaThroughTime(invariantAttempt,1), transition,
+                    TimeMachine(logic).sendFlaThroughTime(query, 2),
+                    logic.mkNot(shiftOnlyNextVars(invariantAttempt))}));
+            }
+            else {
+                SMTsolver.assertProp(logic.mkAnd({invariantAttempt, TimeMachine(logic).sendFlaThroughTime(transition,1),
+                    init, logic.mkNot(shiftOnlyNextVars(invariantAttempt))}));
+            }
+            if (SMTsolver.check() == SMTSolver::Answer::UNSAT) {
+                return invariantAttempt;
+            } else {
+                return explanation.safeTransitionInvariant;
+            }
         } else if (explanation.relationType == TPAType::EQUALS) {
             if (explanation.invariantType == SafetyExplanation::TransitionInvariantType::RESTRICTED_TO_QUERY) {
                 return PTRef_Undef;
             }
-            return explanation.safeTransitionInvariant;
+            SMTSolver SMTsolver(logic, SMTSolver::WitnessProduction::NONE);
+            SMTsolver.assertProp(logic.mkAnd({invariantAttempt,
+                transition, logic.mkNot(shiftOnlyNextVars(invariantAttempt))}));
+            if (SMTsolver.check() == SMTSolver::Answer::UNSAT) {
+                return invariantAttempt;
+            } else {
+                return explanation.safeTransitionInvariant;
+            }
         }
         throw std::logic_error("Unreachable!");
     }
