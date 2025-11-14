@@ -7,6 +7,7 @@
 #include "ChcSystem.h"
 #include "LassoDetector.h"
 #include "Normalizer.h"
+#include "ReachabilityNonterm.h"
 #include "ReachabilityTerm.h"
 #include "TransformationUtils.h"
 
@@ -327,11 +328,12 @@ ChcSystem ITS::asChcs(ArithLogic & logic) const {
 namespace {
 enum class TerminationAnswer { TERMINATING, NONTERMINATING, UNKNOWN, ERROR };
 
-enum Method { LASSO_FINDER, STEP_COUNTER, SENTINEL };
+enum Method { LASSO_FINDER, STEP_COUNTER, SAFE_NONTERM, SENTINEL };
 
 std::optional<Method> parseMethod(std::string const & str) {
     if (str == "lasso-finder") { return LASSO_FINDER; }
     if (str == "step-counter") { return STEP_COUNTER; }
+    if (str == "safe-nonterm") { return SAFE_NONTERM; }
     return std::nullopt;
 }
 
@@ -357,6 +359,23 @@ TerminationAnswer solve(Method method, Options const & options, TransitionSystem
                 // std::cout << "YES" << std::endl;
             }
             if (res == ReachabilityTerm::Answer::UNKNOWN) {
+                return TerminationAnswer::UNKNOWN;
+                // std::cout << "MAYBE" << std::endl;
+            }
+            return TerminationAnswer::ERROR;
+            // std::cout << "ERROR (when searching for termination in the system)" << std::endl;
+        }
+        case SAFE_NONTERM: {
+            auto const res = ReachabilityNonterm{options}.nontermination(ts);
+            if (res == ReachabilityNonterm::Answer::YES) {
+                return TerminationAnswer::TERMINATING;
+                // std::cout << "YES" << std::endl;
+            }
+            if (res == ReachabilityNonterm::Answer::NO) {
+                return TerminationAnswer::NONTERMINATING;
+                // std::cout << "YES" << std::endl;
+            }
+            if (res == ReachabilityNonterm::Answer::UNKNOWN) {
                 return TerminationAnswer::UNKNOWN;
                 // std::cout << "MAYBE" << std::endl;
             }
