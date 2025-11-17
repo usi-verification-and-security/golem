@@ -113,52 +113,38 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
             // Traversing trace from the Bad to Init, detecting the last transition where some variables
             // were assigned nondetermenistically
             for (int j = num; j > 0; j--) {
-                vec<PTRef> base;
-                vec<PTRef> results;
                 vec<PTRef> all_vars;
-                // Constructing assignments for x^(j-1) and x^(j) based on the values extracted from model
-                // To check if different assignment was possible
+                vec<PTRef> prev_vars;
+                // Constructing vectors of variables x^(j-1) and x^(j)
                 for (auto var : vars) {
                     PTRef prev = TimeMachine(logic).sendVarThroughTime(var, j - 1);
                     PTRef nxt = TimeMachine(logic).sendVarThroughTime(var, j);
-                    base.push(logic.mkEq(prev, model->evaluate(prev)));
-                    results.push(logic.mkEq(nxt, model->evaluate(nxt)));
-                    // Constructing vector of variables x^(j)
+                    prev_vars.push(prev);
                     all_vars.push(nxt);
                 }
+                // Base is a formula, depicting all states reachable in j-1 transitions, which can reach
+                // termination in n-j+1 transitions
+                PTRef Base = QuantifierElimination(logic).keepOnly(transitions, prev_vars);
+                // Result is a formula, depicting all states reachable in j transitions, which can reach
+                // termination in n-j transitions (if j = n it is Termination states)
+                PTRef Result = QuantifierElimination(logic).keepOnly(transitions, all_vars);
                 SMTsolver.resetSolver();
-                // Checking if it is possible to reach values different to those that were reached in model via
-                // transition
+                // Checking if it is possible to reach states which would not lead to termination in n-j states
+                // (if j = n) it checks if it is possible to reach nontermination states from trace
                 SMTsolver.assertProp(
-                    logic.mkAnd({logic.mkAnd(base), TimeMachine(logic).sendFlaThroughTime(transition, j - 1),
-                                 logic.mkNot(logic.mkAnd(results))}));
+                    logic.mkAnd({Base, TimeMachine(logic).sendFlaThroughTime(transition, j - 1), logic.mkNot(Result)}));
 
                 // It means that this transition was nondetermenistic, since
-                // variable assignment other than "results" is possible from the "base"
+                // using transition from the states that guaranteed to reach termination in n-j+1 transitions
+                // it is possible to reach states which are not guaranteed to reach termination in n-j transitions
                 if (SMTsolver.check() == SMTSolver::Answer::SAT) {
-                    // We construct the nondetermenism that leads to the termination using the quantifier elimination
-                    // over (x^(j)), removing the values of (x^(j)) that lead to the termination
-                    PTRef block = TimeMachine(logic).sendFlaThroughTime(
-                        ModelBasedProjection(logic).keepOnly(transitions, all_vars, *model), -j + 1);
+                    // We restrict the nondeterminism that leads to the termination, removing the states
+                    // which are guaranteed to terminate in n-j transitions
+                    PTRef block = TimeMachine(logic).sendFlaThroughTime(Result, -j + 1);
                     assert(block != logic.getTerm_true());
-                    SMTsolver.resetSolver();
-                    SMTsolver.assertProp(logic.mkAnd(ts.getTransition(), logic.mkNot(block)));
-                    // In case if all possible transitions are blocked - system terminates because all transitions lead
-                    // to termination
-                    if (SMTsolver.check() == SMTSolver::Answer::UNSAT) {
-                        return Answer::YES;
-                    } else {
-                        SMTsolver.resetSolver();
-                        SMTsolver.assertProp(
-                            logic.mkAnd({TimeMachine(logic).sendFlaThroughTime(logic.mkAnd(base), -j + 1), transition,
-                                         logic.mkNot(block)}));
-                        // If block removes the opportunity to take any other transition, then nondet choice leads to
-                        // termination whatever transition is picked, therefore transitions are traversed backwards
-                        if (SMTsolver.check() == SMTSolver::Answer::UNSAT) { continue; }
-                        transition = logic.mkAnd(transition, logic.mkNot(block));
-                        detected = true;
-                        break;
-                    }
+                    transition = logic.mkAnd(transition, logic.mkNot(block));
+                    detected = true;
+                    break;
                 }
             }
             if (!detected) {
