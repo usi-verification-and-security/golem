@@ -109,25 +109,23 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
             }
             auto model = SMTsolver.getModel();
 
+            // Result is a formula, depicting all states reachable in j transitions, which can reach
+            // termination in n-j transitions (if j = n it is Termination states)
+            PTRef Result = TimeMachine(logic).sendFlaThroughTime(sink, num);
+
             bool detected = false;
             // Traversing trace from the Bad to Init, detecting the last transition where some variables
             // were assigned nondetermenistically
             for (int j = num; j > 0; j--) {
-                vec<PTRef> all_vars;
                 vec<PTRef> prev_vars;
                 // Constructing vectors of variables x^(j-1) and x^(j)
                 for (auto var : vars) {
                     PTRef prev = TimeMachine(logic).sendVarThroughTime(var, j - 1);
-                    PTRef nxt = TimeMachine(logic).sendVarThroughTime(var, j);
                     prev_vars.push(prev);
-                    all_vars.push(nxt);
                 }
                 // Base is a formula, depicting all states reachable in j-1 transitions, which can reach
                 // termination in n-j+1 transitions
                 PTRef Base = QuantifierElimination(logic).keepOnly(transitions, prev_vars);
-                // Result is a formula, depicting all states reachable in j transitions, which can reach
-                // termination in n-j transitions (if j = n it is Termination states)
-                PTRef Result = QuantifierElimination(logic).keepOnly(transitions, all_vars);
                 SMTsolver.resetSolver();
                 // Checking if it is possible to reach states which would not lead to termination in n-j states
                 // (if j = n) it checks if it is possible to reach nontermination states from trace
@@ -145,11 +143,13 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
                     transition = logic.mkAnd(transition, logic.mkNot(block));
                     detected = true;
                     break;
+                } else {
+                    Result = Base;
                 }
             }
             if (!detected) {
                 // If all transitions were determenistic, we block the initial states that lead to the termination
-                init = logic.mkAnd(init, logic.mkNot(ModelBasedProjection(logic).keepOnly(transitions, vars, *model)));
+                init = logic.mkAnd(init, logic.mkNot(Result));
             }
 
         } else if (res.getAnswer() == VerificationAnswer::SAFE) {
