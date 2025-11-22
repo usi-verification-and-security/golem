@@ -20,7 +20,7 @@ public:
 
     enum struct Answer { YES, NO, UNKNOWN, ERROR };
 
-    Answer nontermination(TransitionSystem const & ts);
+    Answer run(TransitionSystem const & ts);
 
 private:
     Options const & options;

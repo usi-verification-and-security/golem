@@ -62,7 +62,7 @@ std::unique_ptr<ChcDirectedHyperGraph> constructHyperGraph(PTRef const init, PTR
     return hypergraph;
 }
 
-ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem const & ts) {
+ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts) {
     auto vars = ts.getStateVars();
     ArithLogic & logic = dynamic_cast<ArithLogic &>(ts.getLogic());
     PTRef init = ts.getInit();

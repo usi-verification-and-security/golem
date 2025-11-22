@@ -328,12 +328,12 @@ ChcSystem ITS::asChcs(ArithLogic & logic) const {
 namespace {
 enum class TerminationAnswer { TERMINATING, NONTERMINATING, UNKNOWN, ERROR };
 
-enum Method { LASSO_FINDER, STEP_COUNTER, SAFE_NONTERM, SENTINEL };
+enum Method { LASSO_FINDER, STEP_COUNTER, NONTERMINATION_VIA_SAFETY, SENTINEL };
 
 std::optional<Method> parseMethod(std::string const & str) {
     if (str == "lasso-finder") { return LASSO_FINDER; }
     if (str == "step-counter") { return STEP_COUNTER; }
-    if (str == "safe-nonterm") { return SAFE_NONTERM; }
+    if (str == "nontermination-via-safety") { return NONTERMINATION_VIA_SAFETY; }
     return std::nullopt;
 }
 
@@ -341,46 +341,22 @@ TerminationAnswer solve(Method method, Options const & options, TransitionSystem
     switch (method) {
         case LASSO_FINDER: {
             auto const res = LassoDetector{options}.find_lasso(ts);
-            if (res == LassoDetector::Answer::LASSO) {
-                return TerminationAnswer::NONTERMINATING;
-                // std::cout << "NO" << std::endl;
-            }
-            if (res == LassoDetector::Answer::NO_LASSO) {
-                return TerminationAnswer::UNKNOWN;
-                // std::cout << "MAYBE\n;(no lasso exists)" << std::endl;
-            }
+            if (res == LassoDetector::Answer::LASSO) { return TerminationAnswer::NONTERMINATING; }
+            if (res == LassoDetector::Answer::NO_LASSO) { return TerminationAnswer::UNKNOWN; }
             return TerminationAnswer::ERROR;
-            // std::cout << "ERROR (when searching for lasso in the system)" << std::endl;
         }
         case STEP_COUNTER: {
             auto const res = ReachabilityTerm{options}.termination(ts);
-            if (res == ReachabilityTerm::Answer::YES) {
-                return TerminationAnswer::TERMINATING;
-                // std::cout << "YES" << std::endl;
-            }
-            if (res == ReachabilityTerm::Answer::UNKNOWN) {
-                return TerminationAnswer::UNKNOWN;
-                // std::cout << "MAYBE" << std::endl;
-            }
+            if (res == ReachabilityTerm::Answer::YES) { return TerminationAnswer::TERMINATING; }
+            if (res == ReachabilityTerm::Answer::UNKNOWN) { return TerminationAnswer::UNKNOWN; }
             return TerminationAnswer::ERROR;
-            // std::cout << "ERROR (when searching for termination in the system)" << std::endl;
         }
-        case SAFE_NONTERM: {
-            auto const res = ReachabilityNonterm{options}.nontermination(ts);
-            if (res == ReachabilityNonterm::Answer::YES) {
-                return TerminationAnswer::TERMINATING;
-                // std::cout << "YES" << std::endl;
-            }
-            if (res == ReachabilityNonterm::Answer::NO) {
-                return TerminationAnswer::NONTERMINATING;
-                // std::cout << "YES" << std::endl;
-            }
-            if (res == ReachabilityNonterm::Answer::UNKNOWN) {
-                return TerminationAnswer::UNKNOWN;
-                // std::cout << "MAYBE" << std::endl;
-            }
+        case NONTERMINATION_VIA_SAFETY: {
+            auto const res = ReachabilityNonterm{options}.run(ts);
+            if (res == ReachabilityNonterm::Answer::YES) { return TerminationAnswer::TERMINATING; }
+            if (res == ReachabilityNonterm::Answer::NO) { return TerminationAnswer::NONTERMINATING; }
+            if (res == ReachabilityNonterm::Answer::UNKNOWN) { return TerminationAnswer::UNKNOWN; }
             return TerminationAnswer::ERROR;
-            // std::cout << "ERROR (when searching for termination in the system)" << std::endl;
         }
         default:
             return TerminationAnswer::UNKNOWN;

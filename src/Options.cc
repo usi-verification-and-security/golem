@@ -61,6 +61,7 @@ void printUsage() {
            "--force-ts                      Always encode linear system into transition system (affects BMC and TPA)\n"
            "--termination-backend <name>    Select backend algorithm for termination problems:\n"
            "                                  lasso-finder - searches for lasso in the system\n"
+           "                                  nontermination-via-safety - gradually eliminates terminating traces from the system\n"
            "                                  step-counter - searches for upper bound on number of steps the system can make\n";
     std::cout << std::flush;
 }
