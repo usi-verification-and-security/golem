@@ -10,9 +10,6 @@
 #include "ModelBasedProjection.h"
 #include "QuantifierElimination.h"
 #include "TermUtils.h"
-#include "../TermUtils.h"
-#include "../../cmake-build-debug/_deps/opensmt-src/src/pterms/PTRef.h"
-#include "../utils/SmtSolver.h"
 #include "utils/SmtSolver.h"
 
 #include "engine/EngineFactory.h"
