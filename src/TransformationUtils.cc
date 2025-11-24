@@ -85,7 +85,7 @@ std::unique_ptr<TransitionSystem> toTransitionSystem(ChcDirectedGraph const & gr
         auto target = edge.to;
         bool isInit = source == vertices[0] && target == vertices[1];
         bool isLoop = source == vertices[1] && target == vertices[1];
-        bool isEnd = source == vertices[1] && target == vertices[2];
+        bool isEnd = vertices.size() == 3 && source == vertices[1] && target == vertices[2];
         assert(isInit || isLoop || isEnd);
         PTRef fla = edge.fla.fla;
         TermUtils utils(logic);
