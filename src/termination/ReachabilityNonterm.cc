@@ -88,9 +88,8 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
         detSubstitutions.insert({TimeMachine(logic).sendVarThroughTime(vars[i],1),TimeMachine(logic).sendVarThroughTime(vars[i],2)});
         neq.push(logic.mkNot(logic.mkEq(TimeMachine(logic).sendVarThroughTime(vars[i],1),TimeMachine(logic).sendVarThroughTime(vars[i],2))));
     }
-    opensmt::PTRef newTransition = TermUtils(logic).varSubstitute(transition, detSubstitutions);
-    detChecker.assertProp(logic.mkAnd({transition,newTransition, logic.mkAnd(neq)}));
-    bool determenistic = false;
+    PTRef newTransition = TermUtils(logic).varSubstitute(transition, detSubstitutions);
+    detChecker.assertProp(logic.mkAnd({transition,newTransition, logic.mkOr(neq)}));
     if (detChecker.check() == SMTSolver::Answer::UNSAT) {
         std::cout<<"DETERMINISTIC;"<<std::endl;
     }
