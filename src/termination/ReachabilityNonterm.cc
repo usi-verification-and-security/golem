@@ -10,6 +10,9 @@
 #include "ModelBasedProjection.h"
 #include "QuantifierElimination.h"
 #include "TermUtils.h"
+#include "../TermUtils.h"
+#include "../../cmake-build-debug/_deps/opensmt-src/src/pterms/PTRef.h"
+#include "../utils/SmtSolver.h"
 #include "utils/SmtSolver.h"
 
 #include "engine/EngineFactory.h"
@@ -67,6 +70,9 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
     ArithLogic & logic = dynamic_cast<ArithLogic &>(ts.getLogic());
     PTRef init = ts.getInit();
     PTRef transition = ts.getTransition();
+    uint nunsafe = 0;
+    uint nsafe = 0;
+    uint nnondetfirst = 0;
     // In this case query is a set of sink states - states from which transition is not possible.
     // sink /\ transition is UNSAT
     PTRef sink = logic.mkNot(QuantifierElimination(logic).keepOnly(transition, vars));
@@ -78,7 +84,19 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
     // and inductive invariants to prove nontermination
     Options witnesses = options;
     witnesses.addOption(options.COMPUTE_WITNESS, "true");
-
+    SMTSolver detChecker(logic, SMTSolver::WitnessProduction::NONE);
+    TermUtils::substitutions_map detSubstitutions;
+    vec<PTRef> neq;
+    for (uint32_t i = 0u; i < vars.size(); ++i) {
+        detSubstitutions.insert({TimeMachine(logic).sendVarThroughTime(vars[i],1),TimeMachine(logic).sendVarThroughTime(vars[i],2)});
+        neq.push(logic.mkNot(logic.mkEq(TimeMachine(logic).sendVarThroughTime(vars[i],1),TimeMachine(logic).sendVarThroughTime(vars[i],2))));
+    }
+    opensmt::PTRef newTransition = TermUtils(logic).varSubstitute(transition, detSubstitutions);
+    detChecker.assertProp(logic.mkAnd({transition,newTransition, logic.mkAnd(neq)}));
+    bool determenistic = false;
+    if (detChecker.check() == SMTSolver::Answer::UNSAT) {
+        std::cout<<"DETERMINISTIC;"<<std::endl;
+    }
     // Main nonterm-checking loop
     while (true) {
         // Constructing a graph based on the currently considered TS
@@ -88,6 +106,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
         // Check if sink states are reachable within TS
         auto res = engine->solve(*graph);
         if (res.getAnswer() == VerificationAnswer::UNSAFE) {
+            nunsafe++;
             // When sink states are reachable, extract the number of transitions needed to reach the sink states
             uint num = res.getInvalidityWitness().getDerivation().size() - 3;
 
@@ -138,6 +157,9 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
                 if (SMTsolver.check() == SMTSolver::Answer::SAT) {
                     // We restrict the nondeterminism that leads to the termination, removing the states
                     // which are guaranteed to terminate in n-j transitions
+                    if (j==1) {
+                        nnondetfirst += 1;
+                    }
                     PTRef block = TimeMachine(logic).sendFlaThroughTime(Result, -j + 1);
                     assert(block != logic.getTerm_true());
                     transition = logic.mkAnd(transition, logic.mkNot(block));
@@ -153,6 +175,10 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
             }
 
         } else if (res.getAnswer() == VerificationAnswer::SAFE) {
+            nsafe++;
+            std::cout << "SAFEs:" << nsafe << std::endl;
+            std::cout << "UNSAFEs:" << nunsafe << std::endl;
+            std::cout << "Firsts:" << nnondetfirst << std::endl;
             // In case if sink states are not reachable, we need to construct the inductive invariant and demonstrate
             // that it doesn't contain any sink states itself.
             // It is possible since we add constraints to the transition relation, which were not accounted for
