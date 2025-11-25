@@ -6,6 +6,9 @@
 
 #include "ReachabilityNonterm.h"
 
+#include <iostream>
+#include <ostream>
+
 #include "ChcSystem.h"
 #include "ModelBasedProjection.h"
 #include "QuantifierElimination.h"
@@ -94,10 +97,14 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
         std::cout<<"DETERMINISTIC;"<<std::endl;
     }
     // Main nonterm-checking loop
+
     while (true) {
         // Constructing a graph based on the currently considered TS
         auto graph = constructHyperGraph(init, transition, sink, logic, vars);
         auto engine = EngineFactory(logic, witnesses).getEngine(witnesses.getOrDefault(Options::ENGINE, "spacer"));
+        std::cout << "SAFEs:" << nsafe << std::endl;
+        std::cout << "UNSAFEs:" << nunsafe << std::endl;
+        std::cout << "Firsts:" << nnondetfirst << std::endl;
 
         // Check if sink states are reachable within TS
         auto res = engine->solve(*graph);
@@ -172,9 +179,6 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
 
         } else if (res.getAnswer() == VerificationAnswer::SAFE) {
             nsafe++;
-            std::cout << "SAFEs:" << nsafe << std::endl;
-            std::cout << "UNSAFEs:" << nunsafe << std::endl;
-            std::cout << "Firsts:" << nnondetfirst << std::endl;
             // In case if sink states are not reachable, we need to construct the inductive invariant and demonstrate
             // that it doesn't contain any sink states itself.
             // It is possible since we add constraints to the transition relation, which were not accounted for
