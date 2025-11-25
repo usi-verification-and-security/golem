@@ -69,16 +69,16 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
     auto vars = ts.getStateVars();
     ArithLogic & logic = dynamic_cast<ArithLogic &>(ts.getLogic());
     PTRef init = ts.getInit();
-        std::cout << "Init:" << logic.pp(init) << std::endl;
+        // std::cout << "Init:" << logic.pp(init) << std::endl;
     PTRef transition = ts.getTransition();
-        std::cout << "Transition:" << logic.pp(transition) << std::endl;
+        // std::cout << "Transition:" << logic.pp(transition) << std::endl;
     uint nunsafe = 0;
     uint nsafe = 0;
     uint nnondetfirst = 0;
     // In this case query is a set of sink states - states from which transition is not possible.
     // sink /\ transition is UNSAT
     PTRef sink = logic.mkNot(QuantifierElimination(logic).keepOnly(transition, vars));
-    std::cout << "Sink:" << logic.pp(sink) << std::endl;
+    // std::cout << "Sink:" << logic.pp(sink) << std::endl;
 
     // if sink is false, there are no sink states in the TS, therefore it is nonterminating
     if (sink == logic.getTerm_false()) { return Answer::NO; }
