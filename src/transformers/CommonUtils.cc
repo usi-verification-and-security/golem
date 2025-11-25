@@ -275,7 +275,7 @@ PTRef EdgeTranslator::translateEdge(DirectedEdge const & edge) {
             if (entry.second != targetLocationVar) {
                 args.push(logic.mkNot(timeMachine.sendVarThroughTime(entry.second, 1)));
             }
-            if (entry.second != sourceLocationVar) { args.push(logic.mkNot(entry.second)); }
+            if (entry.second != sourceLocationVar && source != graph.getEntry()) { args.push(logic.mkNot(entry.second)); }
         }
         return logic.mkAnd(std::move(args));
     }();
@@ -285,6 +285,10 @@ PTRef EdgeTranslator::translateEdge(DirectedEdge const & edge) {
     // This is sound because we still force the right variables to be considered using the location variables.
     vec<PTRef> components{sourceLocationVar, translatedConstraint, timeMachine.sendVarThroughTime(targetLocationVar, 1),
                           updatedLocation};
-    return logic.mkAnd(std::move(components));
+    if (source == graph.getEntry()) {
+        return TimeMachine(logic).sendFlaThroughTime(logic.mkAnd(std::move(components)), -1);
+    } else {
+        return logic.mkAnd(std::move(components));
+    }
 }
 } // namespace golem
