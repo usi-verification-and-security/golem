@@ -255,6 +255,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
     // In this case query is a set of sink states - states from which transition is not possible.
     // sink /\ transition is UNSAT
     PTRef sinkS = logic.mkNot(QuantifierElimination(logic).keepOnly(transitionS, vars));
+    std::cout<<"Initial condition: " << logic.pp(sinkS) << std::endl;
 
     // if sink is false, there are no sink states in the TS, therefore it is nonterminating
     if (sinkS == logic.getTerm_false()) { return Answer::NO; }
@@ -295,7 +296,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
         auto solver = std::make_unique<TPASplit>(logic, options);
         auto res = solver->solveTransitionSystem(job);
         if (type == TERM) {
-            std::cout<<"Termination condition" << logic.pp(sink) << std::endl;
+            std::cout<<"Termination condition: " << logic.pp(sink) << std::endl;
         }
         if (res == VerificationAnswer::UNSAFE && type == NONTERM) {
             // When sink states are reachable, extract the number of transitions needed to reach the sink states
@@ -320,66 +321,49 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
             auto model = SMTsolver.getModel();
 
             bool detected = false;
+            PTRef Result = TimeMachine(logic).sendFlaThroughTime(sink, num);
             // Traversing trace from the Bad to Init, detecting the last transition where some variables
             // were assigned nondetermenistically
             for (int j = num; j > 0; j--) {
-                vec<PTRef> base;
-                vec<PTRef> results;
-                vec<PTRef> all_vars;
+                PTRef Base;
+                vec<PTRef> prev_vars;
                 // Constructing assignments for x^(j-1) and x^(j) based on the values extracted from model
                 // To check if different assignment was possible
                 for (auto var : vars) {
                     PTRef prev = TimeMachine(logic).sendVarThroughTime(var, j - 1);
-                    PTRef nxt = TimeMachine(logic).sendVarThroughTime(var, j);
-                    base.push(logic.mkEq(prev, model->evaluate(prev)));
-                    results.push(logic.mkEq(nxt, model->evaluate(nxt)));
                     // Constructing vector of variables x^(j)
-                    all_vars.push(nxt);
+                    prev_vars.push(prev);
                 }
+                Base = QuantifierElimination(logic).keepOnly(transitions, prev_vars);
                 SMTsolver.resetSolver();
                 // Checking if it is possible to reach values different to those that were reached in model via
                 // transition
                 SMTsolver.assertProp(
-                    logic.mkAnd({logic.mkAnd(base), TimeMachine(logic).sendFlaThroughTime(transition, j - 1),
-                                 logic.mkNot(logic.mkAnd(results))}));
+                    logic.mkAnd({Base, TimeMachine(logic).sendFlaThroughTime(transition, j - 1),
+                                 logic.mkNot(Result)}));
 
                 // It means that this transition was nondetermenistic, since
                 // variable assignment other than "results" is possible from the "base"
                 if (SMTsolver.check() == SMTSolver::Answer::SAT) {
                     // We construct the nondetermenism that leads to the termination using the quantifier elimination
                     // over (x^(j)), removing the values of (x^(j)) that lead to the termination
-                    PTRef block = TimeMachine(logic).sendFlaThroughTime(
-                        ModelBasedProjection(logic).keepOnly(transitions, all_vars, *model), -j + 1);
+                    PTRef block = TimeMachine(logic).sendFlaThroughTime(Result, -j + 1);
                     assert(block != logic.getTerm_true());
-                    SMTsolver.resetSolver();
-                    SMTsolver.assertProp(logic.mkAnd(ts.getTransition(), logic.mkNot(block)));
-                    // In case if all possible transitions are blocked - system terminates because all transitions lead
-                    // to termination
-                    if (SMTsolver.check() == SMTSolver::Answer::UNSAT) {
-                        return Answer::YES;
-                    } else {
-                        SMTsolver.resetSolver();
-                        SMTsolver.assertProp(
-                            logic.mkAnd({TimeMachine(logic).sendFlaThroughTime(logic.mkAnd(base), -j + 1), transition,
-                                         logic.mkNot(block)}));
-                        // If block removes the opportunity to take any other transition, then nondet choice leads to
-                        // termination whatever transition is picked, therefore transitions are traversed backwards
-                        if (SMTsolver.check() == SMTSolver::Answer::UNSAT) { continue; }
-                        jobs.push({TransitionSystem(logic,
-                        std::make_unique<SystemType>(ts.getStateVars(), ts.getAuxiliaryVars(), logic),
-                        init,
-                        logic.mkAnd(transition, logic.mkNot(block)),
-                        sink), NONTERM});
-                        detected = true;
-                        break;
-                    }
+                    jobs.push({TransitionSystem(logic,
+                    std::make_unique<SystemType>(ts.getStateVars(), ts.getAuxiliaryVars(), logic),
+                    init,
+                    logic.mkAnd(transition, logic.mkNot(block)),
+                    sink), NONTERM});
+                    detected = true;
+                    break;
                 }
+                Result = Base;
             }
             if (!detected) {
                 // If all transitions were determenistic, we block the initial states that lead to the termination
                 jobs.push({TransitionSystem(logic,
                         std::make_unique<SystemType>(ts.getStateVars(), ts.getAuxiliaryVars(), logic),
-                        logic.mkAnd(init, logic.mkNot(ModelBasedProjection(logic).keepOnly(transitions, vars, *model))),
+                        logic.mkAnd(init, logic.mkNot(Result)),
                         transition,
                         sink), NONTERM});
             }
@@ -391,6 +375,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
             } else {
                 reachConstr = logic.mkAnd(reachConstr, newCond);
             }
+            std::cout<<"Reachability constraint: " << logic.pp(reachConstr) << std::endl;
             jobs.push({TransitionSystem(logic,
                 std::make_unique<SystemType>(ts.getStateVars(), ts.getAuxiliaryVars(), logic),
                 init,
@@ -408,24 +393,6 @@ ReachabilityNonterm::Answer ReachabilityNonterm::nontermination(TransitionSystem
             // assert(witness.getDefinitions().size() == 3);
             // PTRef inv;
             std::vector<PTRef> repr;
-            // First, we extract the invariant from the witness. It is interpretation of predicate P.
-            // for (auto wtn : witness.getDefinitions()) {
-            //     if (wtn.first.x != 3 && wtn.first.x != 0) {
-            //         repr = graph->predicateRepresentation().getRepresentation(wtn.first);
-            //         inv = wtn.second;
-            //     }
-            // }
-            // TermUtils::substitutions_map varSubstitutions;
-            // for (uint32_t i = 0u; i < vars.size(); ++i) {
-            //     varSubstitutions.insert({repr[i], vars[i]});
-            //     PTRef vz = TimeMachine(logic).getVarVersionZero(repr[i]);
-            //     std::cout<<"Var: " << logic.pp(vz) << std::endl;
-            //     varSubstitutions.insert({TimeMachine(logic).sendVarThroughTime(vz,0),TimeMachine(logic).sendVarThroughTime(vars[i],0)});
-            //     varSubstitutions.insert({TimeMachine(logic).sendVarThroughTime(vz,1),TimeMachine(logic).sendVarThroughTime(vars[i],1)});
-            // }
-            // // Then invariant is translated, so the variables correspond to the encoding of the CHC system,
-            // // pre-normalization
-            // inv = TermUtils(logic).varSubstitute(inv, varSubstitutions);
             if (type == TERM) {
                 // auto witness = res.getValidityWitness();
                 // auto orig = engine->getTransitionInvariant();
