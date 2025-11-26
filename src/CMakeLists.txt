@@ -80,6 +80,7 @@ target_sources(golem_lib
     PRIVATE utils/SmtSolver.cc
     PRIVATE utils/SExpressions.cc
     PRIVATE vmt/FrontEnd.cc
+    PRIVATE vmt/StepCounter.cc
     )
 
 target_include_directories(golem_lib PUBLIC ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/src/include)

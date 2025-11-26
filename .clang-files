@@ -71,3 +71,8 @@ src/utils/SmtSolver.h
 src/utils/SmtSolver.cc
 src/utils/StdUtils.h
 src/utils/Timer.h
+
+src/vmt/FrontEnd.cc
+src/vmt/FrontEnd.h
+src/vmt/StepCounter.cc
+src/vmt/StepCounter.h
