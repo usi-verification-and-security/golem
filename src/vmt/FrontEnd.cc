@@ -1,5 +1,7 @@
 #include "FrontEnd.h"
 
+#include "StepCounter.h"
+
 #include "ChcSystem.h"
 #include "Normalizer.h"
 #include "engine/EngineFactory.h"
@@ -13,45 +15,41 @@
 #include <fstream>
 #include <string>
 
-#include "TransformationUtils.h"
-
 namespace golem::vmt {
 
 namespace {
-    using CommandArgs = std::vector<SExpression>;
-    CommandArgs dropOne(std::vector<SExpression> const & args) {
-        return {args.begin() + 1, args.end()};
-    }
-
-    enum Command {ASSERT, DECLARE_FUN, DEFINE_FUN, SET_INFO};
-    const std::map<std::string_view, Command> nameToCommand {
-        {"assert", ASSERT},
-        {"declare-fun", DECLARE_FUN},
-        {"define-fun", DEFINE_FUN},
-        {"set-info", SET_INFO}
-    };
-    std::optional<Command> asCommand(std::string_view str) {
-        auto it = nameToCommand.find(str);
-        return it != nameToCommand.end() ? std::optional<Command>{it->second} : std::nullopt;
-    }
+using CommandArgs = std::vector<SExpression>;
+CommandArgs dropOne(std::vector<SExpression> const & args) {
+    return {args.begin() + 1, args.end()};
 }
+
+enum Command { ASSERT, DECLARE_FUN, DEFINE_FUN, SET_INFO };
+const std::map<std::string_view, Command> nameToCommand{
+    {"assert", ASSERT}, {"declare-fun", DECLARE_FUN}, {"define-fun", DEFINE_FUN}, {"set-info", SET_INFO}};
+std::optional<Command> asCommand(std::string_view str) {
+    auto it = nameToCommand.find(str);
+    return it != nameToCommand.end() ? std::optional<Command>{it->second} : std::nullopt;
+}
+} // namespace
 
 class VMTModel {
 public:
-    VMTModel(
-        std::shared_ptr<opensmt::ArithLogic> logic,
-        std::vector<PTRef> stateVars,
-        std::vector<PTRef> nextStateVars,
-        PTRef init,
-        PTRef transition,
-        std::map<unsigned, PTRef> invarProperties
-        ) : logic(std::move(logic)), stateVars(std::move(stateVars)), nextStateVars(std::move(nextStateVars)),
-            init(init), transition(transition), invarProperties(std::move(invarProperties))
-    {}
+    VMTModel(std::shared_ptr<opensmt::ArithLogic> logic, std::vector<PTRef> stateVars, std::vector<PTRef> nextStateVars,
+             PTRef init, PTRef transition, std::map<unsigned, PTRef> invarProperties,
+             std::map<unsigned, PTRef> liveProperties)
+        : logic(std::move(logic)),
+          stateVars(std::move(stateVars)),
+          nextStateVars(std::move(nextStateVars)),
+          init(init),
+          transition(transition),
+          invarProperties(std::move(invarProperties)),
+          liveProperties(std::move(liveProperties)) {}
 
     [[nodiscard]] ChcSystem asChcs() const;
+    [[nodiscard]] TransitionSystem asLivenessProblem() const;
     [[nodiscard]] ArithLogic & getLogic() const { return *logic; }
-
+    [[nodiscard]] bool isSafetyProblem() const { return invarProperties.size() == 1 and liveProperties.empty(); }
+    [[nodiscard]] bool isLivenessProblem() const { return liveProperties.size() == 1 and invarProperties.empty(); }
 
 private:
     std::shared_ptr<opensmt::ArithLogic> logic;
@@ -60,18 +58,22 @@ private:
     PTRef init;
     PTRef transition;
     std::map<unsigned, PTRef> invarProperties;
+    std::map<unsigned, PTRef> liveProperties;
 };
 
 class VMTModelBuilder {
 public:
     void resolve(SExpression const &);
     VMTModel build();
+
 private:
     void resolveDeclareFun(CommandArgs const &);
     void resolveDefineFun(CommandArgs const &);
     void resolveAssert(SExpression const &);
 
-    void newVariable(std::string name, std::string type) { vars.push_back({.name = std::move(name), .type = std::move(type)}); }
+    void newVariable(std::string name, std::string type) {
+        vars.push_back({.name = std::move(name), .type = std::move(type)});
+    }
 
     struct Var {
         std::string name;
@@ -103,7 +105,7 @@ void VMTModelBuilder::resolve(SExpression const & command) {
     auto const & args = asSubExpressions(command);
     assert(not args.empty());
     auto const & commandNameExpr = args[0];
-    if (not isAtom(commandNameExpr)) {throw std::logic_error("Unknown command: " + commandNameExpr.toString());}
+    if (not isAtom(commandNameExpr)) { throw std::logic_error("Unknown command: " + commandNameExpr.toString()); }
     auto const & commandName = asAtom(commandNameExpr);
     auto maybeKnownCommand = asCommand(commandName);
     if (not maybeKnownCommand) { throw std::logic_error("Unknown command: " + commandName); }
@@ -136,7 +138,9 @@ void VMTModelBuilder::resolveDefineFun(CommandArgs const & args) {
     assert(isAtom(args[0]));
     auto const & name = asAtom(args[0]);
     assert(not isAtom(args[1]));
-    if (not asSubExpressions(args[1]).empty()) { throw std::logic_error("define-fun with parameters is not yet handled!"); }
+    if (not asSubExpressions(args[1]).empty()) {
+        throw std::logic_error("define-fun with parameters is not yet handled!");
+    }
     assert(isAtom(args[2]));
     auto const & type = asAtom(args[2]);
     defs.push_back({.name = name, .type = type, .value = args[3]});
@@ -149,22 +153,30 @@ void VMTModelBuilder::resolveAssert(SExpression const &) {
 VMTModel VMTModelBuilder::build() {
     auto logic = [this]() -> std::unique_ptr<ArithLogic> {
         struct {
-            bool reals {false};
-            bool ints {false};
-            bool other {false};
+            bool reals{false};
+            bool ints{false};
+            bool other{false};
         } requestedTypes;
         for (auto const & [_, type] : vars) {
-            if (type == "Real") { requestedTypes.reals = true; }
-            else if (type == "Int") { requestedTypes.ints = true; }
-            else if (type != "Bool") { requestedTypes.other = true; }
+            if (type == "Real") {
+                requestedTypes.reals = true;
+            } else if (type == "Int") {
+                requestedTypes.ints = true;
+            } else if (type != "Bool") {
+                requestedTypes.other = true;
+            }
         }
         for (auto const & [_, type, def] : defs) {
-            if (type == "Real") { requestedTypes.reals = true; }
-            else if (type == "Int") { requestedTypes.ints = true; }
-            else if (type != "Bool") { requestedTypes.other = true; }
+            if (type == "Real") {
+                requestedTypes.reals = true;
+            } else if (type == "Int") {
+                requestedTypes.ints = true;
+            } else if (type != "Bool") {
+                requestedTypes.other = true;
+            }
         }
         if (requestedTypes.other) { throw std::logic_error("Cannot handle input theory!"); }
-        if (requestedTypes.reals and requestedTypes.ints) {throw std::logic_error("Cannot handle mixed arithmetic!");}
+        if (requestedTypes.reals and requestedTypes.ints) { throw std::logic_error("Cannot handle mixed arithmetic!"); }
         if (requestedTypes.reals) { return std::make_unique<ArithLogic>(opensmt::Logic_t::QF_LRA); }
         if (requestedTypes.ints) { return std::make_unique<ArithLogic>(opensmt::Logic_t::QF_LIA); }
         // Only bools
@@ -176,9 +188,10 @@ VMTModel VMTModelBuilder::build() {
         std::vector<std::pair<PTRef, PTRef>> currentNextPairs;
         std::vector<PTRef> auxiliaryVars;
         std::map<std::string, PTRef> nameToDef;
-        PTRef init {PTRef_Undef};
-        PTRef trans {PTRef_Undef};
+        PTRef init{PTRef_Undef};
+        PTRef trans{PTRef_Undef};
         std::map<unsigned, PTRef> invarProperties;
+        std::map<unsigned, PTRef> liveProperties;
     } gatherer;
 
     for (auto const & var : vars) {
@@ -211,9 +224,7 @@ VMTModel VMTModelBuilder::build() {
                     return it->second;
                 }
                 std::optional<PTRef> maybeConstant = tryParseConstant(asAtom(sexpr), *logic);
-                if (maybeConstant.has_value()) {
-                    return maybeConstant.value();
-                }
+                if (maybeConstant.has_value()) { return maybeConstant.value(); }
                 return PTRef_Undef;
             }
             auto subexpressions = asSubExpressions(sexpr);
@@ -236,9 +247,7 @@ VMTModel VMTModelBuilder::build() {
                 return logic->mkPlus(std::move(args));
             } else if (op == "-") {
                 assert(args.size() <= 2 and args.size() >= 1);
-                if (args.size() == 1) {
-                    return logic->mkNeg(args[0]);
-                }
+                if (args.size() == 1) { return logic->mkNeg(args[0]); }
                 return logic->mkMinus(std::move(args));
             } else if (op == "*") {
                 return logic->mkTimes(std::move(args));
@@ -268,12 +277,17 @@ VMTModel VMTModelBuilder::build() {
                         ++i;
                         unsigned index = std::stoull(asAtom(subExpressions[i]));
                         gatherer.invarProperties.insert({index, term});
+                    } else if (annotation == ":live-property") {
+                        ++i;
+                        unsigned index = std::stoull(asAtom(subExpressions[i]));
+                        gatherer.liveProperties.insert({index, term});
                     } else if (annotation == ":next") {
                         ++i;
                         auto const & nextVarName = asAtom(subExpressions[i]);
                         auto it = gatherer.nameToVar.find(nextVarName);
                         if (it == gatherer.nameToVar.end()) {
-                            auto [it2, inserted] = gatherer.nameToVar.insert({nextVarName,logic->mkVar(logic->getSortRef(term), nextVarName.c_str())});
+                            auto [it2, inserted] = gatherer.nameToVar.insert(
+                                {nextVarName, logic->mkVar(logic->getSortRef(term), nextVarName.c_str())});
                             assert(inserted);
                             it = it2;
                         }
@@ -294,38 +308,61 @@ VMTModel VMTModelBuilder::build() {
         stateVars.push_back(current);
         nextStateVars.push_back(next);
     }
-    return VMTModel(std::move(logic), std::move(stateVars), std::move(nextStateVars), gatherer.init,
-        gatherer.trans, std::move(gatherer.invarProperties));
+    return {std::move(logic),
+            std::move(stateVars),
+            std::move(nextStateVars),
+            gatherer.init,
+            gatherer.trans,
+            std::move(gatherer.invarProperties),
+            std::move(gatherer.liveProperties)};
 }
 
 ChcSystem VMTModel::asChcs() const {
     ChcSystem chcs;
     std::vector<SRef> argTypes;
-    std::transform(stateVars.begin(), stateVars.end(), std::back_inserter(argTypes), [&](PTRef var) { return logic->getSortRef(var); });
+    std::transform(stateVars.begin(), stateVars.end(), std::back_inserter(argTypes),
+                   [&](PTRef var) { return logic->getSortRef(var); });
     SymRef predicate = logic->declareFun("P", logic->getSort_bool(), argTypes);
     PTRef statePredicate = logic->mkUninterpFun(predicate, stateVars);
 
-    ChClause init = {
-        .head = {statePredicate},
-        .body = {.interpretedPart = {this->init}, .uninterpretedPart = {}}
-    };
+    ChClause init = {.head = {statePredicate}, .body = {.interpretedPart = {this->init}, .uninterpretedPart = {}}};
 
-    ChClause tr = {
-        .head = {logic->mkUninterpFun(predicate, nextStateVars)},
-        .body = {.interpretedPart = {this->transition}, .uninterpretedPart = {{statePredicate}}}
-    };
+    ChClause tr = {.head = {logic->mkUninterpFun(predicate, nextStateVars)},
+                   .body = {.interpretedPart = {this->transition}, .uninterpretedPart = {{statePredicate}}}};
 
     assert(this->invarProperties.size() == 1);
     PTRef property = invarProperties.at(0);
-    ChClause query = {
-        .head = {logic->getTerm_false()},
-        .body = {.interpretedPart = {logic->mkNot(property)}, .uninterpretedPart = {{statePredicate}}}
-    };
+    ChClause query = {.head = {logic->getTerm_false()},
+                      .body = {.interpretedPart = {logic->mkNot(property)}, .uninterpretedPart = {{statePredicate}}}};
 
     chcs.addClause(std::move(init));
     chcs.addClause(std::move(tr));
     chcs.addClause(std::move(query));
     return chcs;
+}
+
+TransitionSystem VMTModel::asLivenessProblem() const {
+    if (liveProperties.size() != 1) { throw std::logic_error("Cannot interpret VMT model as liveness problem!"); }
+    PTRef property = liveProperties.begin()->second;
+    // TODO: Auxiliary variables?
+    return {*logic, std::make_unique<SystemType>(stateVars, std::vector<PTRef>{}, *logic), init, transition, property};
+}
+
+void printLivenessAnswer(StepCounter::Answer answer) {
+    switch (answer) {
+        case StepCounter::Answer::YES: {
+            std::cout << "valid" << std::endl;
+            break;
+        }
+        case StepCounter::Answer::UNKNOWN: {
+            std::cout << "unknown" << std::endl;
+            break;
+        }
+        case StepCounter::Answer::ERROR: {
+            std::cout << "error" << std::endl;
+            break;
+        }
+    }
 }
 
 void printAnswer(VerificationAnswer answer) {
@@ -344,10 +381,7 @@ void printAnswer(VerificationAnswer answer) {
     }
 }
 
-void run(std::string const & filename, Options const & options) {
-    std::ifstream input(filename);
-    if (input.bad()) { throw std::logic_error{"Unable to process input file: " + filename}; }
-    VMTModel vmtModel = parse(input);
+void solveSafetyProblem(VMTModel const & vmtModel, Options const & options) {
     try {
         auto chcSystem = vmtModel.asChcs();
         auto & logic = vmtModel.getLogic();
@@ -364,9 +398,25 @@ void run(std::string const & filename, Options const & options) {
     } catch (LANonLinearException const &) {
         std::cout << "unknown\n;(Nonlinear arithmetic expression in the input)" << std::endl;
     }
-
 }
 
+void solveLivenessProblem(VMTModel const & vmtModel, Options const & options) {
+    auto const ts = vmtModel.asLivenessProblem();
+    auto res = StepCounter(options).checkLiveness(ts);
+    printLivenessAnswer(res);
+}
 
-} // namespace
+void run(std::string const & filename, Options const & options) {
+    std::ifstream input(filename);
+    if (input.bad()) { throw std::logic_error{"Unable to process input file: " + filename}; }
+    VMTModel const vmtModel = parse(input);
+    if (vmtModel.isSafetyProblem()) {
+        solveSafetyProblem(vmtModel, options);
+    } else if (vmtModel.isLivenessProblem()) {
+        solveLivenessProblem(vmtModel, options);
+    } else {
+        printAnswer(VerificationAnswer::UNKNOWN);
+    }
+}
 
+} // namespace golem::vmt
