@@ -128,7 +128,7 @@ void ReachabilityNonterm::houdiniCheck(PTRef invCandidates, PTRef transition, Lo
             PTRef cand = candidatesR[i];
             solverR.pop();
             solverR.push();
-            solverR.assertProp(logic.mkAnd(logic.mkAnd(candidatesL), logic.mkNot(shiftOnlyNextVars(cand, vars, logic))));
+            solverR.assertProp(logic.mkAnd(logic.mkAnd(candidatesR), logic.mkNot(shiftOnlyNextVars(cand, vars, logic))));
 
             if (solverR.check() == SMTSolver::Answer::SAT) {
                 candidatesR[i] = candidatesR[candidatesR.size() - 1];
@@ -154,9 +154,9 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
     auto vars = ts.getStateVars();
     ArithLogic & logic = dynamic_cast<ArithLogic &>(ts.getLogic());
     PTRef init = ts.getInit();
-        // std::cout << "Init:" << logic.pp(init) << std::endl;
+        std::cout << "Init:" << logic.pp(init) << std::endl;
     PTRef transition = ts.getTransition();
-        // std::cout << "Transition:" << logic.pp(transition) << std::endl;
+        std::cout << "Transition:" << logic.pp(transition) << std::endl;
     uint nunsafe = 0;
     uint nsafe = 0;
     uint nnondetfirst = 0;
@@ -181,11 +181,14 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
     }
     PTRef newTransition = TermUtils(logic).varSubstitute(transition, detSubstitutions);
     detChecker.assertProp(logic.mkAnd({transition,newTransition, logic.mkOr(neq)}));
+    bool DETERMINISTIC_TRANSITION = false;
     if (detChecker.check() == SMTSolver::Answer::UNSAT) {
         std::cout<<"DETERMINISTIC;"<<std::endl;
+        DETERMINISTIC_TRANSITION = true;
     }
     // Main nonterm-checking loop
 
+    // PTRef trInv = logic.getTerm_true();
     while (true) {
         // Constructing a graph based on the currently considered TS
         auto graph = constructHyperGraph(init, transition, sink, logic, vars);
@@ -221,42 +224,119 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
             PTRef Result = TimeMachine(logic).sendFlaThroughTime(sink, num);
             PTRef Base;
             bool detected = false;
-            int j = num;
+
             // Traversing trace from the Bad to Init, detecting the last transition where some variables
             // were assigned nondetermenistically
-            for (; j > 0; j--) {
-                vec<PTRef> prev_vars;
-                // Constructing vectors of variables x^(j-1) and x^(j)
-                for (auto var : vars) {
-                    PTRef prev = TimeMachine(logic).sendVarThroughTime(var, j - 1);
-                    prev_vars.push(prev);
-                }
-                // Base is a formula, depicting all states reachable in j-1 transitions, which can reach
-                // termination in n-j+1 transitions
-                PTRef Base = QuantifierElimination(logic).keepOnly(transitions, prev_vars);
-                SMTsolver.resetSolver();
-                // Checking if it is possible to reach states which would not lead to termination in n-j states
-                // (if j = n) it checks if it is possible to reach nontermination states from trace
-                SMTsolver.assertProp(
-                    logic.mkAnd({Base, TimeMachine(logic).sendFlaThroughTime(transition, j - 1), logic.mkNot(Result)}));
-
-                // It means that this transition was nondetermenistic, since
-                // using transition from the states that guaranteed to reach termination in n-j+1 transitions
-                // it is possible to reach states which are not guaranteed to reach termination in n-j transitions
-                if (SMTsolver.check() == SMTSolver::Answer::SAT) {
-                    // We restrict the nondeterminism that leads to the termination, removing the states
-                    // which are guaranteed to terminate in n-j transitions
-                    if (j==1) {
-                        nnondetfirst += 1;
+            if (!DETERMINISTIC_TRANSITION) {
+                for (uint j = num; j > 0; j--) {
+                    vec<PTRef> prev_vars;
+                    // Constructing vectors of variables x^(j-1) and x^(j)
+                    for (auto var : vars) {
+                        PTRef prev = TimeMachine(logic).sendVarThroughTime(var, j - 1);
+                        prev_vars.push(prev);
                     }
-                    PTRef block = TimeMachine(logic).sendFlaThroughTime(Result, -j + 1);
-                    assert(block != logic.getTerm_true());
-                    transition = logic.mkAnd(transition, logic.mkNot(block));
-                    detected = true;
-                    break;
-                } else {
-                    Result = Base;
+                    // Base is a formula, depicting all states reachable in j-1 transitions, which can reach
+                    // termination in n-j+1 transitions
+                    PTRef Base = QuantifierElimination(logic).keepOnly(transitions, prev_vars);
+                    SMTsolver.resetSolver();
+                    // Checking if it is possible to reach states which would not lead to termination in n-j states
+                    // (if j = n) it checks if it is possible to reach nontermination states from trace
+                    SMTsolver.assertProp(
+                        logic.mkAnd({Base, TimeMachine(logic).sendFlaThroughTime(transition, j - 1), logic.mkNot(Result)}));
+
+                    // It means that this transition was nondetermenistic, since
+                    // using transition from the states that guaranteed to reach termination in n-j+1 transitions
+                    // it is possible to reach states which are not guaranteed to reach termination in n-j transitions
+                    if (SMTsolver.check() == SMTSolver::Answer::SAT) {
+                        // We restrict the nondeterminism that leads to the termination, removing the states
+                        // which are guaranteed to terminate in n-j transitions
+                        if (j==1) {
+                            nnondetfirst += 1;
+                        }
+                        PTRef block = TimeMachine(logic).sendFlaThroughTime(Result, -j + 1);
+                        assert(block != logic.getTerm_true());
+                        transition = logic.mkAnd(transition, logic.mkNot(block));
+                        detected = true;
+                        break;
+                    } else {
+                        Result = Base;
+                    }
                 }
+            } else {
+                Result = QuantifierElimination(logic).keepOnly(transitions, vars);
+                if (num > 0) {
+                    std::vector<PTRef> deterministic_trace{transition};
+                    vec<PTRef> eq_vars;
+                    // Constructing vectors of variables x^(j-1) and x^(j)
+                    for (auto var : vars) {
+                        PTRef curr = TimeMachine(logic).sendVarThroughTime(var,  0);
+                        PTRef next = TimeMachine(logic).sendVarThroughTime(var,  1);
+                        eq_vars.push(logic.mkEq(curr, next));
+                    }
+                    for (uint k = 1; k < num; k++) {
+                        // deterministic_trace.push_back(TimeMachine(logic).sendFlaThroughTime(logic.mkOr(transition, logic.mkAnd(eq_vars)), k));
+                        deterministic_trace.push_back(TimeMachine(logic).sendFlaThroughTime(transition, k));
+
+                    }
+                    SMTSolver smt_solver(logic, SMTSolver::WitnessProduction::ONLY_INTERPOLANTS);
+                    smt_solver.assertProp(logic.mkAnd(deterministic_trace));
+                    std::cout<<"Considered trace: " << logic.pp(logic.mkAnd(deterministic_trace)) << std::endl;
+                    smt_solver.push();
+                    smt_solver.assertProp(logic.mkAnd(Result,logic.mkNot(TimeMachine(logic).sendFlaThroughTime(sink, num))));
+                    std::cout<<"Considered init: " << logic.pp(Result) << std::endl;
+                    std::cout<<"Considered sink: " << logic.pp(logic.mkNot(TimeMachine(logic).sendFlaThroughTime(sink, num))) << std::endl;
+                    if(smt_solver.check() == SMTSolver::Answer::UNSAT) {
+                        auto itpContext = smt_solver.getInterpolationContext();
+                        vec<PTRef> itps;
+                        ipartitions_t mask = 1;
+                        itpContext->getSingleInterpolant(itps, mask);
+                        assert(itps.size() == 1);
+                        // Extracting Itp(Tr /\ ... /\ Tr, Init /\ not Sink) - overapproximation of 1 up to the num transitions
+                        PTRef itp = itps[0];
+
+                        TermUtils::substitutions_map varSubstitutions;
+                        for (uint32_t i = 0u; i < vars.size(); ++i) {
+                            varSubstitutions.insert({TimeMachine(logic).sendVarThroughTime(vars[i], num), TimeMachine(logic).sendVarThroughTime(vars[i], 1)});
+                        }
+                        std::cout<<"Considered itp before: " << logic.pp(itp) << std::endl;
+                        // Then interpolant is translated, so it would correspond to transition relation Itp(x,x')
+                        itp = TermUtils(logic).varSubstitute(itp, varSubstitutions);
+
+                        // Check if some part of interpolant is transition invariant
+                        uint size = rightInvariants.size();
+                        std::cout<<"Considered itp: " << logic.pp(itp) << std::endl;
+                        houdiniCheck(itp, transition, logic, vars);
+                        // Check if transition invariant was constrained
+                        if (rightInvariants.size() > size || leftInvariants.size() > size) {
+                            PTRef trInv = logic.mkAnd(rightInvariants);
+                            std::cout<<"Considered invariant: " << logic.pp(trInv) << std::endl;
+                            // II. Check if TrInv proves termination
+                            smt_solver.resetSolver();
+                            varSubstitutions.clear();
+                            for (uint32_t i = 0u; i < vars.size(); ++i) {
+                                varSubstitutions.insert({TimeMachine(logic).sendVarThroughTime(vars[i], 1), vars[i]});
+                            }
+                            smt_solver.assertProp(TermUtils(logic).varSubstitute(trInv, varSubstitutions));
+                            // 1. Check that TrInv(x,x) is UNSAT, otherwise there is a possibility of lasso
+                            if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
+                                smt_solver.resetSolver();
+                                PTRef terminatingInitStates = QuantifierElimination(logic).keepOnly(logic.mkAnd({trInv, TimeMachine(logic).sendFlaThroughTime(sink, 1)}), vars);
+                                smt_solver.assertProp(logic.mkAnd(logic.mkNot(terminatingInitStates), init));
+                                // 2. Check that there are states in Init, which do not terminate via TrInv
+                                if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
+                                    return Answer::YES;
+                                } else {
+                                    Result = logic.mkNot(terminatingInitStates);
+                                    continue;
+                                }
+                            }
+                        }
+                    } else {
+                        // Since transitions are deterministic, the trace should lead to the sink.
+                        return Answer::ERROR;
+                    }
+                }
+
             }
             // If counterexample is detected, we attempt to construct a disjunctive Transition Invariant
             // I. We use interpolation to construct invariant candidates
@@ -271,78 +351,77 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
             //      is all of the states that can reach Sink via transition relation and it demonstrates if there are some states in Init
             //      which still can't reach termination via TrInv.
             // 3. Considered Tr should be deterministic, because if it is nondet, it is possible
-            if (num>0 && j<num) {
-                // I. Construction of transition invariant candidates
-                SMTSolver smt_solver(logic, SMTSolver::WitnessProduction::ONLY_INTERPOLANTS);
-                // Constructing the deterministic trace that leads to the violation of the safety Property (If from init, can be just formulas)
-                std::vector<PTRef> deterministic_trace;
-                for (uint k = 0; k < num-j; k++) {
-                    deterministic_trace.push_back(TimeMachine(logic).sendFlaThroughTime(transition, k));
-                }
-                smt_solver.assertProp(logic.mkAnd(deterministic_trace));
-                smt_solver.push();
-                // std::cout << "Init:" << logic.pp(Result) << std::endl;
-                // std::cout << "Tr:" << logic.pp(logic.mkAnd(deterministic_trace)) << std::endl;
-                // std::cout << "Sink:" << logic.pp(TimeMachine(logic).sendFlaThroughTime(sink, num)) << std::endl;
-                smt_solver.assertProp(logic.mkAnd(Result,logic.mkNot(TimeMachine(logic).sendFlaThroughTime(sink, num))));
-                // SMT check, to verify that Result() /\ Tr ... /\ Tr /\ not Sink is UNSAT
-                // This is expected, because Result is QEd part of the formula, and every transition from Result is determenistic
-                if(smt_solver.check() == SMTSolver::Answer::UNSAT) {
-                    auto itpContext = smt_solver.getInterpolationContext();
-                    vec<PTRef> itps;
-                    ipartitions_t mask = 1;
-                    itpContext->getSingleInterpolant(itps, mask);
-                    assert(itps.size() == 1);
-                    // Extracting Itp(Tr /\ ... /\ Tr, Init /\ not Sink) - overapproximation of relations that don't lead to violation of safety property
-                    PTRef itp = itps[0];
-                    smt_solver.pop();
-                    smt_solver.resetSolver();
-                    TermUtils::substitutions_map varSubstitutions;
-                    for (uint32_t i = 0u; i < vars.size(); ++i) {
-                        varSubstitutions.insert({TimeMachine(logic).sendVarThroughTime(vars[i], num), TimeMachine(logic).sendVarThroughTime(vars[i], 1)});
-                    }
-                    // Then interpolant is translated, so it would correspond to transition relation Itp(x,x')
-                    itp = TermUtils(logic).varSubstitute(itp, varSubstitutions);
-                    // TODO: a. Do houdini here, decomposing itp into conjuncts and checking every conjunct for being +
-                    // TODO: a left/right transition invariant                                                        -
-                    // TODO: b. Save previously detected invariants which don't prove termination                     +
-                    // TODO: c. MAKE L AND R checks                                                                   -
-                    houdiniCheck(itp, transition, logic, vars);
-                    // std::cout << "Left invariants:" << logic.pp(logic.mkAnd(leftInvariants)) << std::endl;
-                    // std::cout << "Right invariants:" << logic.pp(logic.mkAnd(rightInvariants)) << std::endl;
-                    // This check verifies that itp is transition invariant
-                    // Itp(x,x') /\ Tr(x',x'') => Itp(x,x'')
-                    smt_solver.assertProp(logic.mkAnd({itp,TimeMachine(logic).sendFlaThroughTime(transition, 1),logic.mkNot(shiftOnlyNextVars(itp, vars, logic))}));
-                    // std::cout << "Check: " << logic.pp(logic.mkAnd({itp,TimeMachine(logic).sendFlaThroughTime(transition, 1),logic.mkNot(shiftOnlyNextVars(itp, vars, logic))})) << "\n";
-                    if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
-                        // II. Check if TrInv proves termination
-                        smt_solver.resetSolver();
-                        varSubstitutions.clear();
-                        PTRef inv = logic.mkAnd(logic.mkAnd(leftInvariants), logic.mkAnd(rightInvariants));
-                        for (uint32_t i = 0u; i < vars.size(); ++i) {
-                            varSubstitutions.insert({TimeMachine(logic).sendVarThroughTime(vars[i], 1), vars[i]});
-                        }
-                        smt_solver.assertProp(TermUtils(logic).varSubstitute(inv, varSubstitutions));
-                        // 1. Check that TrInv(x,x) is UNSAT, otherwise there is a possibility of loop
-                        if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
-                            smt_solver.resetSolver();
-                            PTRef terminatingInitStates = QuantifierElimination(logic).keepOnly(logic.mkAnd({inv, TimeMachine(logic).sendFlaThroughTime(sink, 1)}), vars);
-                            smt_solver.assertProp(logic.mkAnd(logic.mkNot(terminatingInitStates), init));
-                            // 2. Check that found TrInv(x,x') guarantees that every initial state terminates
-                            //    (corresponds to the check II.3.)
-                            if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
-                                return Answer::YES;
-                            } else {
-                                logic.mkAnd(init, logic.mkNot(terminatingInitStates));
-                                continue;
-                            }
-                        }
-                    }
-                } else {
-                    return Answer::ERROR;
-                }
-
-            }
+            // if (num>0 && j<num) {
+            //     // I. Construction of transition invariant candidates
+            //     SMTSolver smt_solver(logic, SMTSolver::WitnessProduction::ONLY_INTERPOLANTS);
+            //     // Constructing the deterministic trace that leads to the violation of the safety Property (If from init, can be just formulas)
+            //     std::vector<PTRef> deterministic_trace;
+            //     for (uint k = 0; k < num-j; k++) {
+            //         deterministic_trace.push_back(TimeMachine(logic).sendFlaThroughTime(transition, k));
+            //     }
+            //     smt_solver.assertProp(logic.mkAnd(deterministic_trace));
+            //     smt_solver.push();
+            //     // std::cout << "Init:" << logic.pp(Result) << std::endl;
+            //     // std::cout << "Tr:" << logic.pp(logic.mkAnd(deterministic_trace)) << std::endl;
+            //     // std::cout << "Sink:" << logic.pp(TimeMachine(logic).sendFlaThroughTime(sink, num)) << std::endl;
+            //     smt_solver.assertProp(logic.mkAnd(Result,logic.mkNot(TimeMachine(logic).sendFlaThroughTime(sink, num))));
+            //     // SMT check, to verify that Result() /\ Tr ... /\ Tr /\ not Sink is UNSAT
+            //     // This is expected, because Result is QEd part of the formula, and every transition from Result is determenistic
+            //     if(smt_solver.check() == SMTSolver::Answer::UNSAT) {
+            //         auto itpContext = smt_solver.getInterpolationContext();
+            //         vec<PTRef> itps;
+            //         ipartitions_t mask = 1;
+            //         itpContext->getSingleInterpolant(itps, mask);
+            //         assert(itps.size() == 1);
+            //         // Extracting Itp(Tr /\ ... /\ Tr, Init /\ not Sink) - overapproximation of relations that don't lead to violation of safety property
+            //         PTRef itp = itps[0];
+            //         smt_solver.pop();
+            //         smt_solver.resetSolver();
+            //         TermUtils::substitutions_map varSubstitutions;
+            //         for (uint32_t i = 0u; i < vars.size(); ++i) {
+            //             varSubstitutions.insert({TimeMachine(logic).sendVarThroughTime(vars[i], num), TimeMachine(logic).sendVarThroughTime(vars[i], 1)});
+            //         }
+            //         // Then interpolant is translated, so it would correspond to transition relation Itp(x,x')
+            //         itp = TermUtils(logic).varSubstitute(itp, varSubstitutions);
+            //         // TODO: a. Do houdini here, decomposing itp into conjuncts and checking every conjunct for being +
+            //         // TODO: a left/right transition invariant                                                        -
+            //         // TODO: b. Save previously detected invariants which don't prove termination                     +
+            //         // TODO: c. MAKE L AND R checks                                                                   -
+            //         houdiniCheck(itp, transition, logic, vars);
+            //
+            //
+            //         // This check verifies that itp is transition invariant
+            //         // Itp(x,x') /\ Tr(x',x'') => Itp(x,x'')
+            //         smt_solver.assertProp(logic.mkAnd({itp,TimeMachine(logic).sendFlaThroughTime(transition, 1),logic.mkNot(shiftOnlyNextVars(itp, vars, logic))}));
+            //         // std::cout << "Check: " << logic.pp(logic.mkAnd({itp,TimeMachine(logic).sendFlaThroughTime(transition, 1),logic.mkNot(shiftOnlyNextVars(itp, vars, logic))})) << "\n";
+            //         if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
+            //             // II. Check if TrInv proves termination
+            //             smt_solver.resetSolver();
+            //             varSubstitutions.clear();
+            //             PTRef inv = logic.mkAnd(logic.mkAnd(leftInvariants), logic.mkAnd(rightInvariants));
+            //             for (uint32_t i = 0u; i < vars.size(); ++i) {
+            //                 varSubstitutions.insert({TimeMachine(logic).sendVarThroughTime(vars[i], 1), vars[i]});
+            //             }
+            //             smt_solver.assertProp(TermUtils(logic).varSubstitute(inv, varSubstitutions));
+            //             // 1. Check that TrInv(x,x) is UNSAT, otherwise there is a possibility of loop
+            //             if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
+            //                 smt_solver.resetSolver();
+            //                 PTRef terminatingInitStates = QuantifierElimination(logic).keepOnly(logic.mkAnd({inv, TimeMachine(logic).sendFlaThroughTime(sink, 1)}), vars);
+            //                 smt_solver.assertProp(logic.mkAnd(logic.mkNot(terminatingInitStates), init));
+            //                 // 2. Check that found TrInv(x,x') guarantees that every initial state terminates
+            //                 //    (corresponds to the check II.3.)
+            //                 if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
+            //                     return Answer::YES;
+            //                 } else {
+            //                     logic.mkAnd(init, logic.mkNot(terminatingInitStates));
+            //                     continue;
+            //                 }
+            //             }
+            //         }
+            //     } else {
+            //         return Answer::ERROR;
+            //     }
+            // }
             if (!detected) {
                 // If all transitions were determenistic, we block the initial states that lead to the termination
                 init = logic.mkAnd(init, logic.mkNot(Result));
