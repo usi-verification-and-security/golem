@@ -140,7 +140,7 @@ void ReachabilityNonterm::houdiniCheck(PTRef invCandidates, PTRef transition, Lo
         goal = shiftOnlyNextVars(logic.mkAnd(candidatesR), vars, logic);
         solverR.assertProp(logic.mkAnd(logic.mkAnd(candidatesR), logic.mkNot(goal)));
     }
-    for (auto cand : candidatesL) {
+    for (auto cand : candidatesR) {
         if (std::find(rightInvariants.begin(), rightInvariants.end(), cand) != rightInvariants.end()) { continue; }
         rightInvariants.push(cand);
     }
@@ -154,9 +154,9 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
     auto vars = ts.getStateVars();
     ArithLogic & logic = dynamic_cast<ArithLogic &>(ts.getLogic());
     PTRef init = ts.getInit();
-        std::cout << "Init:" << logic.pp(init) << std::endl;
+        // std::cout << "Init:" << logic.pp(init) << std::endl;
     PTRef transition = ts.getTransition();
-        std::cout << "Transition:" << logic.pp(transition) << std::endl;
+        // std::cout << "Transition:" << logic.pp(transition) << std::endl;
     uint nunsafe = 0;
     uint nsafe = 0;
     uint nnondetfirst = 0;
@@ -308,8 +308,8 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
                     // TODO: b. Save previously detected invariants which don't prove termination                     +
                     // TODO: c. MAKE L AND R checks                                                                   -
                     houdiniCheck(itp, transition, logic, vars);
-                    std::cout << "Left invariants:" << logic.pp(logic.mkAnd(leftInvariants)) << std::endl;
-                    std::cout << "Right invariants:" << logic.pp(logic.mkAnd(rightInvariants)) << std::endl;
+                    // std::cout << "Left invariants:" << logic.pp(logic.mkAnd(leftInvariants)) << std::endl;
+                    // std::cout << "Right invariants:" << logic.pp(logic.mkAnd(rightInvariants)) << std::endl;
                     // This check verifies that itp is transition invariant
                     // Itp(x,x') /\ Tr(x',x'') => Itp(x,x'')
                     smt_solver.assertProp(logic.mkAnd({itp,TimeMachine(logic).sendFlaThroughTime(transition, 1),logic.mkNot(shiftOnlyNextVars(itp, vars, logic))}));
