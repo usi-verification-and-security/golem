@@ -179,9 +179,9 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
     auto vars = ts.getStateVars();
     ArithLogic & logic = dynamic_cast<ArithLogic &>(ts.getLogic());
     PTRef init = ts.getInit();
-        // std::cout << "Init:" << logic.pp(init) << std::endl;
+    // std::cout << "Init:" << logic.pp(init) << std::endl;
     PTRef transition = ts.getTransition();
-        // std::cout << "Transition:" << logic.pp(transition) << std::endl;
+    // std::cout << "Transition:" << logic.pp(transition) << std::endl;
     uint nunsafe = 0;
     uint nsafe = 0;
     uint nnondetfirst = 0;
@@ -219,6 +219,9 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
         // Constructing a graph based on the currently considered TS
         auto graph = constructHyperGraph(init, transition, sink, logic, vars);
         auto engine = EngineFactory(logic, witnesses).getEngine(witnesses.getOrDefault(Options::ENGINE, "spacer"));
+        // std::cout << "Init:" << logic.pp(init) << std::endl;
+        // std::cout << "Transition:" << logic.pp(transition) << std::endl;
+        // std::cout << "Sink:" << logic.pp(sink) << std::endl;
 
         // Check if sink states are reachable within TS
         auto res = engine->solve(*graph);
@@ -364,6 +367,11 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
                         }
 
 
+                        smt_solver.resetSolver();
+                        smt_solver.assertProp(logic.mkAnd(transition, logic.mkNot(inv)));
+                        if(smt_solver.check() == SMTSolver::Answer::SAT) { continue; }
+
+
                         // Check if transition invariant was constrained
                         smt_solver.resetSolver();
                         // std::cout<<"Considered candidate: " << logic.pp(inv) << std::endl;
@@ -384,6 +392,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
                             }
 
                         } else {
+
                             // TODO: Introduce Restricted TrInv
                             // Left-restricted
                             smt_solver.resetSolver();
