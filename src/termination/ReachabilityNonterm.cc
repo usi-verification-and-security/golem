@@ -306,9 +306,141 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
                 // 3. Using extracted pre/post conditions for nondet part, postconditions can be negated, and the formula should be UNSAT, which allows to construct
                 //    interpolant of the transition relation.
 
+                // if ( j!=num ) {
+                //     std::vector<PTRef> deterministic_trace{transition};
+                //     vec<PTRef> eq_vars;
+                //     uint n_det = num - j;
+                //     for (auto var : vars) {
+                //         PTRef curr = TimeMachine(logic).sendVarThroughTime(var,  0);
+                //         PTRef next = TimeMachine(logic).sendVarThroughTime(var,  1);
+                //         eq_vars.push(logic.mkEq(curr, next));
+                //     }
+                //     for (uint k = 1; k < n_det; k++) {
+                //         deterministic_trace.push_back(TimeMachine(logic).sendFlaThroughTime(logic.mkOr(transition, logic.mkAnd(eq_vars)), k));
+                //     }
+                //     std::vector<PTRef> checked_states;
+                //     for (int i = 1; i < n_det; i++) {
+                //         vec<PTRef> temp_vars;
+                //         // Constructing vectors of variables x^(j-1) and x^(j)
+                //         for (auto var : vars) {
+                //             temp_vars.push(TimeMachine(logic).sendVarThroughTime(var,  i));
+                //         }
+                //         checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(QuantifierElimination(logic).keepOnly(transitions, temp_vars), n_det-i));
+                //     }
+                //     checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(sink, n_det));
+                //     PTRef temp_sink = logic.mkOr(checked_states);
+                //     SMTSolver smt_solver(logic, SMTSolver::WitnessProduction::ONLY_INTERPOLANTS);
+                //     smt_solver.assertProp(logic.mkAnd(deterministic_trace));
+                //     smt_solver.push();
+                //     smt_solver.assertProp(logic.mkAnd(Result,logic.mkNot(temp_sink)));
+                //
+                //     if(smt_solver.check() == SMTSolver::Answer::UNSAT) {
+                //         auto itpContext = smt_solver.getInterpolationContext();
+                //         vec<PTRef> itps;
+                //         ipartitions_t mask = 1;
+                //         itpContext->getSingleInterpolant(itps, mask);
+                //         assert(itps.size() == 1);
+                //         // Extracting Itp(Tr /\ ... /\ Tr, Init /\ not Sink) - overapproximation of 1 up to the num transitions
+                //         PTRef itp = itps[0];
+                //
+                //         TermUtils::substitutions_map varSubstitutions;
+                //         for (uint32_t i = 0u; i < vars.size(); ++i) {
+                //             varSubstitutions.insert({TimeMachine(logic).sendVarThroughTime(vars[i], num), TimeMachine(logic).sendVarThroughTime(vars[i], 1)});
+                //         }
+                //         // Then interpolant is translated, so it would correspond to transition relation Itp(x,x')
+                //         itp = TermUtils(logic).varSubstitute(itp, varSubstitutions);
+                //
+                //         // Check if some part of interpolant is transition invariant
+                //         // std::cout<<"Considered itp: " << logic.pp(itp) << std::endl;
+                //
+                //         auto newCands = extractStrictCandidates(itp, logic, vars);
+                //         if (newCands.size() == 0)
+                //                 continue;
+                //
+                //         for (auto cand : newCands) {
+                //             strictCandidates.push(cand);
+                //         }
+                //         PTRef inv = logic.mkOr(strictCandidates);
+                //
+                //         {
+                //             // Check for the inv strictness - supposed to be strict
+                //             smt_solver.resetSolver();
+                //             varSubstitutions.clear();
+                //             for (uint32_t i = 0u; i < vars.size(); ++i) {
+                //                 varSubstitutions.insert({TimeMachine(logic).sendVarThroughTime(vars[i], 1), vars[i]});
+                //             }
+                //             smt_solver.assertProp(TermUtils(logic).varSubstitute(inv, varSubstitutions));
+                //             assert (smt_solver.check() == SMTSolver::Answer::UNSAT);
+                //         }
+                //
+                //
+                //         smt_solver.resetSolver();
+                //         smt_solver.assertProp(logic.mkAnd(transition, logic.mkNot(inv)));
+                //         if(smt_solver.check() == SMTSolver::Answer::SAT) { continue; }
+                //
+                //
+                //         // Check if transition invariant was constrained
+                //         smt_solver.resetSolver();
+                //         // std::cout<<"Considered candidate: " << logic.pp(inv) << std::endl;
+                //         // Check if inv is Transition Invariant
+                //         smt_solver.assertProp(logic.mkAnd({inv, TimeMachine(logic).sendFlaThroughTime(transition,1), logic.mkNot(shiftOnlyNextVars(inv, vars, logic))}));
+                //         // TODO: check if init /\ inv /\ tr is feasible.
+                //         // std::cout<<"Query: " << logic.pp(logic.mkAnd({inv, TimeMachine(logic).sendFlaThroughTime(transition,1), logic.mkNot(shiftOnlyNextVars(inv, vars, logic))})) << std::endl;
+                //         if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
+                //             // 2. Check that Init terminates via TrInv
+                //             smt_solver.resetSolver();
+                //             PTRef terminatingInitStates = QuantifierElimination(logic).keepOnly(logic.mkAnd({inv, TimeMachine(logic).sendFlaThroughTime(sink, 1)}), vars);
+                //             smt_solver.assertProp(logic.mkAnd(logic.mkNot(terminatingInitStates), init));
+                //             if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
+                //                 return Answer::YES;
+                //             } else {
+                //                 continue;
+                //             }
+                //
+                //         } else {
+                //
+                //             // TODO: Introduce Restricted TrInv
+                //             // Left-restricted
+                //             smt_solver.resetSolver();
+                //             smt_solver.assertProp(logic.mkAnd({init, inv, TimeMachine(logic).sendFlaThroughTime(transition,1)}));
+                //             if (smt_solver.check() == SMTSolver::Answer::SAT) {
+                //                 smt_solver.assertProp(logic.mkNot(shiftOnlyNextVars(inv, vars, logic)));
+                //                 if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
+                //                     smt_solver.resetSolver();
+                //                     PTRef terminatingInitStates = QuantifierElimination(logic).keepOnly(logic.mkAnd({inv, TimeMachine(logic).sendFlaThroughTime(sink, 1)}), vars);
+                //                     smt_solver.assertProp(logic.mkAnd(logic.mkNot(terminatingInitStates), init));
+                //                     if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
+                //                         return Answer::YES;
+                //                     } else {
+                //                     }
+                //                 }
+                //             }
+                //
+                //             // Right-restricted
+                //             smt_solver.resetSolver();
+                //             smt_solver.assertProp(logic.mkAnd({ transition, TimeMachine(logic).sendFlaThroughTime(inv,1), sink}));
+                //             if (smt_solver.check() == SMTSolver::Answer::SAT) {
+                //                 smt_solver.assertProp(logic.mkNot(shiftOnlyNextVars(inv, vars, logic)));
+                //                 if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
+                //                     smt_solver.resetSolver();
+                //                     PTRef terminatingInitStates = QuantifierElimination(logic).keepOnly(logic.mkAnd({inv, TimeMachine(logic).sendFlaThroughTime(sink, 1)}), vars);
+                //                     smt_solver.assertProp(logic.mkAnd(logic.mkNot(terminatingInitStates), init));
+                //                     if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
+                //                         return Answer::YES;
+                //                     } else {
+                //                         continue;
+                //                     }
+                //                 }
+                //             }
+                //
+                //         }
+                //     } else {
+                //         return Answer::ERROR;
+                //     }
+                // }
             } else {
                 Result = QuantifierElimination(logic).keepOnly(transitions, vars);
-                // init = logic.mkAnd(init, logic.mkNot(Result));
+                init = logic.mkAnd(init, logic.mkNot(Result));
                 if (num > 0) {
                     std::vector<PTRef> deterministic_trace{transition};
                     vec<PTRef> eq_vars;
