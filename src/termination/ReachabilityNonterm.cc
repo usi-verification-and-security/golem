@@ -73,16 +73,23 @@ PTRef shiftOnlyNextVars(PTRef formula, const std::vector<PTRef> & vars, Logic& l
     return TermUtils(logic).varSubstitute(formula, varSubstitutions);
 }
 
-    vec<PTRef> extractStrictCandidates(PTRef itp, Logic& logic,  const std::vector<PTRef> & vars) {
+vec<PTRef> extractStrictCandidates(PTRef itp, Logic& logic,  const std::vector<PTRef> & vars) {
+
+    SMTSolver smt_solver(logic, SMTSolver::WitnessProduction::NONE);
+    TermUtils::substitutions_map varSubstitutions;
+    for (uint32_t i = 0u; i < vars.size(); ++i) {
+        varSubstitutions.insert({TimeMachine(logic).sendVarThroughTime(vars[i], 1), vars[i]});
+    }
+
+    smt_solver.assertProp(TermUtils(logic).varSubstitute(itp, varSubstitutions));
+    if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
+        return {itp};
+    }
+
 
     vec<PTRef> strictCandidates;
-    SMTSolver smt_solver(logic, SMTSolver::WitnessProduction::NONE);
     if (logic.isOr(itp)) {
         vec<PTRef> candidates = TermUtils(logic).getTopLevelDisjuncts(itp);
-        TermUtils::substitutions_map varSubstitutions;
-        for (uint32_t i = 0u; i < vars.size(); ++i) {
-            varSubstitutions.insert({TimeMachine(logic).sendVarThroughTime(vars[i], 1), vars[i]});
-        }
         for (auto cand:candidates) {
             smt_solver.resetSolver();
             smt_solver.assertProp(TermUtils(logic).varSubstitute(cand, varSubstitutions));
@@ -298,7 +305,6 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
                 //      b. Splitting formula into determenistic/nondeterministic parts, and analyzing them separately.
                 // 3. Using extracted pre/post conditions for nondet part, postconditions can be negated, and the formula should be UNSAT, which allows to construct
                 //    interpolant of the transition relation.
-
 
             } else {
                 Result = QuantifierElimination(logic).keepOnly(transitions, vars);
