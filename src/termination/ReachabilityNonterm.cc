@@ -567,7 +567,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
 
                         smt_solver.resetSolver();
                         smt_solver.assertProp(logic.mkAnd(transition, logic.mkNot(inv)));
-                        std::cout<<"Considered candidate: " << logic.pp(inv) << std::endl;
+                        // std::cout<<"Considered candidate: " << logic.pp(inv) << std::endl;
                         if(smt_solver.check() == SMTSolver::Answer::SAT) { continue; }
 
 
