@@ -122,11 +122,12 @@ private:
     using TermPtr = std::shared_ptr<Term>;
     InstantiationPairs getInstPairs(std::size_t stepIndex, vec<Normalizer::Equality> const & stepNormEq);
 
-    /** Records steps to derive instantiated term and returns this term */
-    TermPtr instantiationSteps(std::size_t i, TermPtr const & quantifiedTerm);
+    /** Records steps to derive instantiated term and returns this term and its derivation step index */
+    std::pair<TermPtr, std::size_t> instantiationSteps(std::size_t i, TermPtr const & quantifiedTerm);
     void buildAssumptionSteps();
-    std::size_t deriveLHSWithoutConstraint(std::shared_ptr<Term> const & simplifiedLHS,
-                                           std::vector<std::size_t> predicatePremises);
+    std::size_t deriveLHSWithoutConstraint(TermPtr const & simplifiedLHS, std::vector<std::size_t> predicatePremises);
+    std::pair<TermPtr, std::size_t> derivePredicateFromClause(TermPtr const & instantiatedClause,
+                                                              std::size_t clauseStep, std::vector<std::size_t>);
 
     std::size_t getOrCreateTrueStep();
 

@@ -254,56 +254,73 @@ void StepHandler::buildAletheProof() {
             continue;
         }
 
-        auto instantiatedClause = instantiationSteps(i, originalAssertions[step.clauseId.id]);
-        auto implication = std::dynamic_pointer_cast<Op>(instantiatedClause);
-        auto implicationLHS = implication->getArgs()[0];
-        auto implicationRHS = implication->getArgs()[1];
-
-        recordStep(literals(negate(std::make_shared<Op>(
-                                "!", literals(implicationLHS, makeName(":named @LHS" + std::to_string(i - 1))))),
-                            implicationRHS),
-                   "implies", Step::Premises{lastStep()});
-        auto implicationStep = lastStep();
-
-        std::shared_ptr<Term> renamedImpLHS = makeName("@LHS" + std::to_string(i - 1));
-
+        auto [instantiatedClause, instantiatedClauseStep] = instantiationSteps(i, originalAssertions[step.clauseId.id]);
         std::vector<std::size_t> requiredMP;
         for (auto premise : step.premises) {
             if (premise == 0) { continue; } // This is the helper fact "true", we do not include it in the proof
-            assert(coarseStepToAletheStep.find(premise) != coarseStepToAletheStep.end());
+            assert(coarseStepToAletheStep.contains(premise));
             requiredMP.push_back(coarseStepToAletheStep.at(premise));
         }
-        auto simplificationResult = simplify(implicationLHS, renamedImpLHS);
-        std::size_t LHSderivationStep = 0;
-        if (simplificationResult) { // LHS has been simplified
-            auto simplifiedLHS = simplificationResult->first;
-            auto equivStep = lastStep();
-            auto simplifiedLHSderivationStep = deriveLHSWithoutConstraint(simplifiedLHS, std::move(requiredMP));
-            recordStep(literals(renamedImpLHS, negate(simplifiedLHS)), "equiv2", Step::Premises{equivStep});
-            recordStep(literals(renamedImpLHS), "resolution", Step::Premises{simplifiedLHSderivationStep, lastStep()});
-            LHSderivationStep = lastStep();
-        } else {
-            // TODO: Use name whenever possible
-            LHSderivationStep = deriveLHSWithoutConstraint(implicationLHS, std::move(requiredMP));
-        }
+        auto [instantiatedPredicate, instantiatedPredicateStep] =
+            derivePredicateFromClause(instantiatedClause, instantiatedClauseStep, std::move(requiredMP));
 
-        // We have derived LHS, now derive RHS with resolution
-        recordStep(literals(implicationRHS), "resolution", Step::Premises{implicationStep, LHSderivationStep});
-        auto RHSderivationStep = lastStep();
-        // Now derive simplified RHS, which is the fact of the coarse-proof step
-        auto rhsSimplificationResult = simplify(implicationRHS);
-        if (rhsSimplificationResult) {
-            auto simplifiedRHS = rhsSimplificationResult->first;
-            assert(simplifiedRHS->printTerm() == logic.printTerm(step.derivedFact));
-            recordStep(literals(negate(implicationRHS), simplifiedRHS), "equiv1", Step::Premises{lastStep()});
-            recordStep(literals(simplifiedRHS), "resolution", Step::Premises{lastStep(), RHSderivationStep});
+        // Now derive simplified predicate, which is the fact of the coarse-proof step
+        auto predicateSimplificationResult = simplify(instantiatedPredicate);
+        if (predicateSimplificationResult) {
+            auto simplifiedPredicate = predicateSimplificationResult->first;
+            assert(simplifiedPredicate->printTerm() == logic.printTerm(step.derivedFact));
+            recordStep(literals(negate(instantiatedPredicate), simplifiedPredicate), "equiv1",
+                       Step::Premises{lastStep()});
+            recordStep(literals(simplifiedPredicate), "resolution",
+                       Step::Premises{lastStep(), instantiatedPredicateStep});
+            coarseStepToAletheStep.insert({i, lastStep()});
+        } else {
+            coarseStepToAletheStep.insert({i, instantiatedPredicateStep});
         }
-        coarseStepToAletheStep.insert({i, lastStep()});
     }
 
     recordStep(literals(std::make_shared<Terminal>("(not false)", Term::UNDECLARED)), "false", {});
     // Final step deriving empty clause
     recordStep({}, "resolution", Step::Premises{currentStep - 2, currentStep - 1});
+}
+
+std::pair<StepHandler::TermPtr, std::size_t>
+StepHandler::derivePredicateFromClause(TermPtr const & instantiatedClause, std::size_t clauseStep,
+                                       std::vector<std::size_t> requiredMP) {
+    auto termType = instantiatedClause->getTermType();
+    if (termType == Term::APP) { // Already just predicate
+        return {instantiatedClause, clauseStep};
+    }
+    if (termType != Term::OP) { throw std::logic_error("Unexpected term type when processing instantiated clause!"); }
+    auto implication = std::dynamic_pointer_cast<Op>(instantiatedClause);
+    assert(implication);
+    auto implicationLHS = implication->getArgs()[0];
+    auto implicationRHS = implication->getArgs()[1];
+
+    std::string lhsName = "@LHS" + std::to_string(clauseStep);
+    recordStep(literals(negate(std::make_shared<Op>("!", literals(implicationLHS, makeName(":named " + lhsName)))),
+                        implicationRHS),
+               "implies", Step::Premises{lastStep()});
+    auto implicationStep = lastStep();
+
+    std::shared_ptr<Term> renamedImpLHS = makeName(lhsName);
+    auto simplificationResult = simplify(implicationLHS, renamedImpLHS);
+    std::size_t LHSderivationStep = 0;
+    if (simplificationResult) { // LHS has been simplified
+        auto simplifiedLHS = simplificationResult->first;
+        auto equivStep = lastStep();
+        auto simplifiedLHSderivationStep = deriveLHSWithoutConstraint(simplifiedLHS, std::move(requiredMP));
+        recordStep(literals(renamedImpLHS, negate(simplifiedLHS)), "equiv2", Step::Premises{equivStep});
+        recordStep(literals(renamedImpLHS), "resolution", Step::Premises{simplifiedLHSderivationStep, lastStep()});
+        LHSderivationStep = lastStep();
+    } else {
+        // TODO: Use name whenever possible
+        LHSderivationStep = deriveLHSWithoutConstraint(implicationLHS, std::move(requiredMP));
+    }
+
+    // We have derived LHS, now derive RHS with resolution
+    recordStep(literals(implicationRHS), "resolution", Step::Premises{implicationStep, LHSderivationStep});
+    return {implicationRHS, lastStep()};
 }
 
 StepHandler::SimplifyResult StepHandler::simplify(TermPtr const & term, std::optional<TermPtr> name) {
@@ -659,7 +676,8 @@ std::pair<std::shared_ptr<Term>, bool> removeUnusedQuantifiers(std::shared_ptr<T
 
 } // namespace
 
-StepHandler::TermPtr StepHandler::instantiationSteps(std::size_t i, TermPtr const & quantifiedTerm) {
+std::pair<StepHandler::TermPtr, std::size_t> StepHandler::instantiationSteps(std::size_t i,
+                                                                             TermPtr const & quantifiedTerm) {
 
     auto const & step = derivation[i];
 
@@ -675,13 +693,13 @@ StepHandler::TermPtr StepHandler::instantiationSteps(std::size_t i, TermPtr cons
         recordStep(literals(clearedTerm), "resolution", Step::Premises{quantStep, currentStep - 1});
 
         namedAssumption = clearedTerm;
-        quantStep = currentStep - 1;
+        quantStep = lastStep();
     }
 
     // Getting the instantiated variable-value pairs
     auto instPairs = getInstPairs(i, normalizingEqualities[step.clauseId.id]);
 
-    if (instPairs.empty()) { return clearedTerm; }
+    if (instPairs.empty()) { return {clearedTerm, quantStep}; }
 
     std::vector<std::string> args;
     assert(clearedTerm->getTermType() == Term::QUANT);
@@ -700,9 +718,9 @@ StepHandler::TermPtr StepHandler::instantiationSteps(std::size_t i, TermPtr cons
                                              makeName(":named " + instantiationReNamedTerm->printTerm())))))),
         std::move(args));
 
-    recordStep(literals(negate(namedAssumption), instantiationReNamedTerm), "or", Step::Premises{currentStep - 1});
-    recordStep(literals(instantiationReNamedTerm), "resolution", Step::Premises{currentStep - 1, quantStep});
-    return instantiatedTerm;
+    recordStep(literals(negate(namedAssumption), instantiationReNamedTerm), "or", Step::Premises{lastStep()});
+    recordStep(literals(instantiationReNamedTerm), "resolution", Step::Premises{lastStep(), quantStep});
+    return {instantiatedTerm, lastStep()};
 }
 
 void StepHandler::buildAssumptionSteps() {
