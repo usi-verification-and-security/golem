@@ -243,16 +243,16 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
     auto vars = ts.getStateVars();
     ArithLogic & logic = dynamic_cast<ArithLogic &>(ts.getLogic());
     PTRef init = ts.getInit();
-    std::cout << "Init:" << logic.pp(init) << std::endl;
+    // std::cout << "Init:" << logic.pp(init) << std::endl;
     PTRef transition = ts.getTransition();
-    std::cout << "Transition:" << logic.pp(transition) << std::endl;
+    // std::cout << "Transition:" << logic.pp(transition) << std::endl;
     uint nunsafe = 0;
     uint nsafe = 0;
     uint nnondetfirst = 0;
     // In this case query is a set of sink states - states from which transition is not possible.
     // sink /\ transition is UNSAT
     PTRef sink = logic.mkNot(QuantifierElimination(logic).keepOnly(transition, vars));
-    std::cout << "Sink:" << logic.pp(sink) << std::endl;
+    // std::cout << "Sink:" << logic.pp(sink) << std::endl;
 
     // if sink is false, there are no sink states in the TS, therefore it is nonterminating
     if (sink == logic.getTerm_false()) { return Answer::NO; }
@@ -553,7 +553,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
                         itp = TermUtils(logic).varSubstitute(itp, varSubstitutions);
 
                         // Check if some part of interpolant is transition invariant
-                        std::cout<<"Considered itp: " << logic.pp(itp) << std::endl;
+                        // std::cout<<"Considered itp: " << logic.pp(itp) << std::endl;
 
                         auto newCands = extractStrictCandidates(itp, logic, vars);
                         if (newCands.size() == 0)
@@ -579,7 +579,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
 
                         smt_solver.resetSolver();
                         smt_solver.assertProp(logic.mkAnd(transition, logic.mkNot(inv)));
-                        std::cout<<"Considered candidate: " << logic.pp(inv) << std::endl;
+                        // std::cout<<"Considered candidate: " << logic.pp(inv) << std::endl;
                         if(smt_solver.check() == SMTSolver::Answer::SAT) { continue; }
 
 
@@ -588,7 +588,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
 
                         // Check if inv is Transition Invariant
                         smt_solver.assertProp(logic.mkAnd({inv, TimeMachine(logic).sendFlaThroughTime(transition,1), logic.mkNot(shiftOnlyNextVars(inv, vars, logic))}));
-                        std::cout << "Solving!" << std::endl;
+                        // std::cout << "Solving!" << std::endl;
                         // TODO: check if init /\ inv /\ tr is feasible.
                         // std::cout<<"Query: " << logic.pp(logic.mkAnd({inv, TimeMachine(logic).sendFlaThroughTime(transition,1), logic.mkNot(shiftOnlyNextVars(inv, vars, logic))})) << std::endl;
                         if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
