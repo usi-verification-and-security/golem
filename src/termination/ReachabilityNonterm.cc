@@ -393,16 +393,17 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
                     }
                     checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(sink, n_det));
                     PTRef temp_sink = logic.mkOr(checked_states);
+                    PTRef temp_init = TimeMachine(logic).sendFlaThroughTime(Result, -j);
                     SMTSolver smt_solver(logic, SMTSolver::WitnessProduction::ONLY_INTERPOLANTS);
                     // std::cout << "Original number: " << num << "\n";
                     // std::cout << "Deterministic number: " << n_det << "\n";
-                    // std::cout << "Init: " << logic.pp(Result) << "\n";
+                    // std::cout << "Init: " << logic.pp(temp_init) << "\n";
                     // std::cout << "Deterministic Transitions: " << logic.pp(logic.mkAnd(deterministic_trace)) << "\n";
                     // std::cout << "Formula to be checked: " << logic.pp(logic.mkNot(temp_sink)) << "\n";
                     // std::cout << "*********Next************" << "\n";
                     smt_solver.assertProp(logic.mkAnd(deterministic_trace));
                     smt_solver.push();
-                    smt_solver.assertProp(logic.mkAnd(Result,logic.mkNot(temp_sink)));
+                    smt_solver.assertProp(logic.mkAnd(temp_init,logic.mkNot(temp_sink)));
                     //
                     if(smt_solver.check() == SMTSolver::Answer::UNSAT) {
                         auto itpContext = smt_solver.getInterpolationContext();
@@ -451,10 +452,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
                             smt_solver.assertProp(logic.mkAnd(logic.mkNot(terminatingInitStates), init));
                             if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
                                 return Answer::YES;
-                            } else {
-                                continue;
                             }
-
                         } else {
 
                             // TODO: Introduce Restricted TrInv
