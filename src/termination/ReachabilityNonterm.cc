@@ -142,19 +142,19 @@ vec<PTRef> extractStrictCandidates(PTRef itp, Logic& logic,  const std::vector<P
 
 
     vec<PTRef> strictCandidates;
-    if (logic.isOr(itp)) {
-        // std::cout << "Pre-dnfization:" << logic.pp(itp) << std::endl;
-        PTRef dnfized = dnfize(itp, logic);
-        // std::cout << "Post-dnfization:" << logic.pp(dnfized) << std::endl;
-        vec<PTRef> candidates = TermUtils(logic).getTopLevelDisjuncts(dnfized);
-        for (auto cand:candidates) {
-            smt_solver.resetSolver();
-            smt_solver.assertProp(TermUtils(logic).varSubstitute(cand, varSubstitutions));
-            if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
-                strictCandidates.push(cand);
-            }
+    // if (logic.isOr(itp)) {
+    // std::cout << "Pre-dnfization:" << logic.pp(itp) << std::endl;
+    PTRef dnfized = dnfize(itp, logic);
+    // std::cout << "Post-dnfization:" << logic.pp(dnfized) << std::endl;
+    vec<PTRef> candidates = TermUtils(logic).getTopLevelDisjuncts(dnfized);
+    for (auto cand:candidates) {
+        smt_solver.resetSolver();
+        smt_solver.assertProp(TermUtils(logic).varSubstitute(cand, varSubstitutions));
+        if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
+            strictCandidates.push(cand);
         }
     }
+    // }
 
 
     return strictCandidates;
@@ -280,6 +280,9 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
 
     // PTRef trInv = logic.getTerm_true();
     while (true) {
+        // std::cout << "Init:" << logic.pp(init) << std::endl;
+        // std::cout << "Transition:" << logic.pp(transition) << std::endl;
+        // std::cout << "Sink:" << logic.pp(sink) << std::endl;
         // Constructing a graph based on the currently considered TS
         auto graph = constructHyperGraph(init, transition, sink, logic, vars);
         auto engine = EngineFactory(logic, witnesses).getEngine(witnesses.getOrDefault(Options::ENGINE, "spacer"));
@@ -364,11 +367,17 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
                 //    interpolant of the transition relation.
                 if (j == 0) {
                     init = logic.mkAnd(init, logic.mkNot(Result));
+                    SMTSolver SMT_solver(logic, SMTSolver::WitnessProduction::NONE);
+                    SMT_solver.assertProp(logic.mkAnd(init, transition));
+                    // We check if init state is blocked (it's impossible to make a transition from initial state)
+                    // When it is the case, TS is terminating
+                    if (SMT_solver.check() == SMTSolver::Answer::UNSAT) {
+                        return Answer::YES;
+                    }
                 } else {
                     PTRef block = TimeMachine(logic).sendFlaThroughTime(Result, -j + 1);
                     assert(block != logic.getTerm_true());
                     transition = logic.mkAnd(transition, logic.mkNot(block));
-
                 }
                 if ( j!=num ) {
                     std::vector<PTRef> deterministic_trace{transition};
@@ -379,28 +388,36 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
                         PTRef next = TimeMachine(logic).sendVarThroughTime(var,  1);
                         eq_vars.push(logic.mkEq(curr, next));
                     }
-                    for (uint k = 1; k < n_det; k++) {
+                    for (uint k = 1; k < num; k++) {
                         deterministic_trace.push_back(TimeMachine(logic).sendFlaThroughTime(logic.mkOr(transition, logic.mkAnd(eq_vars)), k));
                     }
+                    PTRef localFormula = logic.mkAnd({init, logic.mkAnd(formulas)});
+
                     std::vector<PTRef> checked_states;
-                    for (int i = 1; i < n_det; i++) {
-                        vec<PTRef> temp_vars;
-                        // Constructing vectors of variables x^(j-1) and x^(j)
-                        for (auto var : vars) {
-                            temp_vars.push(TimeMachine(logic).sendVarThroughTime(var,  i+j));
+                    for (int i = 1; i < num; i++) {
+                        if (i < j) {
+                            vec<PTRef> temp_vars;
+                            // Constructing vectors of variables x^(j-1) and x^(j)
+                            for (auto var : vars) {
+                                temp_vars.push(TimeMachine(logic).sendVarThroughTime(var,  i));
+                            }
+                            checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(QuantifierElimination(logic).keepOnly(localFormula, temp_vars), num - i - j));
+                        } else {
+                            vec<PTRef> temp_vars;
+                            // Constructing vectors of variables x^(j-1) and x^(j)
+                            for (auto var : vars) {
+                                temp_vars.push(TimeMachine(logic).sendVarThroughTime(var,  i));
+                            }
+                            checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(QuantifierElimination(logic).keepOnly(transitions, temp_vars), num - i));
                         }
-                        checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(QuantifierElimination(logic).keepOnly(transitions, temp_vars), n_det - i - j));
+
                     }
-                    checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(sink, n_det));
+                    checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(sink, num));
                     PTRef temp_sink = logic.mkOr(checked_states);
-                    PTRef temp_init = TimeMachine(logic).sendFlaThroughTime(Result, -j);
+                    PTRef temp_init = j == 0 ? Result : logic.mkAnd(init, Result);
                     SMTSolver smt_solver(logic, SMTSolver::WitnessProduction::ONLY_INTERPOLANTS);
                     // std::cout << "Original number: " << num << "\n";
                     // std::cout << "Deterministic number: " << n_det << "\n";
-                    // std::cout << "Init: " << logic.pp(temp_init) << "\n";
-                    // std::cout << "Deterministic Transitions: " << logic.pp(logic.mkAnd(deterministic_trace)) << "\n";
-                    // std::cout << "Formula to be checked: " << logic.pp(logic.mkNot(temp_sink)) << "\n";
-                    // std::cout << "*********Next************" << "\n";
                     smt_solver.assertProp(logic.mkAnd(deterministic_trace));
                     smt_solver.push();
                     smt_solver.assertProp(logic.mkAnd(temp_init,logic.mkNot(temp_sink)));
@@ -423,6 +440,8 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
 
                         // Check if some part of interpolant is transition invariant
                         // std::cout<<"Considered itp: " << logic.pp(itp) << std::endl;
+                        // std::cout<<"Considered itp: " << std::endl;
+
 
                         auto newCands = extractStrictCandidates(itp, logic, vars);
                         if (newCands.size() == 0)
@@ -432,6 +451,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
                             strictCandidates.push(cand);
                         }
                         PTRef inv = logic.mkOr(strictCandidates);
+                        // std::cout<<"New cands" << std::endl;
                         // std::cout<<"Considered candidate: " << logic.pp(inv) << std::endl;
 
                         smt_solver.resetSolver();
