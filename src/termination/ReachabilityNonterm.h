@@ -13,18 +13,23 @@
 #include "TransitionSystem.h"
 
 namespace golem::termination {
+    class ReachabilityNonterm {
+    public:
+        explicit ReachabilityNonterm(Options const & options) : options(options) {}
 
-class ReachabilityNonterm {
-public:
-    explicit ReachabilityNonterm(Options const & options) : options(options) {}
+        enum struct Answer { YES, NO, UNKNOWN, ERROR };
 
-    enum struct Answer { YES, NO, UNKNOWN, ERROR };
+        Answer run(TransitionSystem const & ts);
 
-    Answer run(TransitionSystem const & ts);
+    private:
+        Options const & options;
 
-private:
-    Options const & options;
-};
+        void houdiniCheck(PTRef invCandidates, PTRef transition, Logic & logic, const std::vector<PTRef> & vars);
+
+        vec<PTRef> leftInvariants;
+        vec<PTRef> rightInvariants;
+
+    };
 } // namespace golem::termination
 
 #endif // REACHABILITYNONTERM_H
