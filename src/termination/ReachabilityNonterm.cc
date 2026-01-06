@@ -245,6 +245,13 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
     PTRef init = ts.getInit();
     // std::cout << "Init:" << logic.pp(init) << std::endl;
     PTRef transition = ts.getTransition();
+    TermUtils utils {logic};
+    auto disjuncts = utils.getTopLevelDisjuncts(dnfize(transition, logic));
+    vec<PTRef> postTransition;
+
+    for (auto junct: disjuncts) {
+        postTransition.push(QuantifierElimination(logic).keepOnly(junct, vars));
+    }
     // std::cout << "Transition:" << logic.pp(transition) << std::endl;
     uint nunsafe = 0;
     uint nsafe = 0;
@@ -280,9 +287,9 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
 
     // PTRef trInv = logic.getTerm_true();
     while (true) {
-        // std::cout << "Init:" << logic.pp(init) << std::endl;
-        // std::cout << "Transition:" << logic.pp(transition) << std::endl;
-        // std::cout << "Sink:" << logic.pp(sink) << std::endl;
+        std::cout << "Init:" << logic.pp(init) << std::endl;
+        std::cout << "Transition:" << logic.pp(transition) << std::endl;
+        std::cout << "Sink:" << logic.pp(sink) << std::endl;
         // Constructing a graph based on the currently considered TS
         auto graph = constructHyperGraph(init, transition, sink, logic, vars);
         auto engine = EngineFactory(logic, witnesses).getEngine(witnesses.getOrDefault(Options::ENGINE, "spacer"));
@@ -293,6 +300,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
             nunsafe++;
             // When sink states are reachable, extract the number of transitions needed to reach the sink states
             uint num = res.getInvalidityWitness().getDerivation().size() - 3;
+            std::cout << "Original number: " << num << "\n";
 
             // Construct the logical formula representing the trace:
             // Init(x) /\ Tr(x,x') /\ ... /\ Bad(x^(num))
@@ -352,7 +360,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
                         Result = Base;
                     }
                 }
-
+                PTRef temp_transition = transition;
                 // Since transitions are deterministic, the trace should lead to the sink.
                 // TODO: Idea for nondet transitions: use QE(TrInv, x') to detect Tr invariant sink states. (or every TrInv disjunct)
                 // TODO: If from any state in the system for every TrInv disjunct Inv(x) /\ TrInv(x,x') /\ Sink_TrInv(x') is true, then
@@ -365,6 +373,19 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
                 //      b. Splitting formula into determenistic/nondeterministic parts, and analyzing them separately.
                 // 3. Using extracted pre/post conditions for nondet part, postconditions can be negated, and the formula should be UNSAT, which allows to construct
                 //    interpolant of the transition relation.
+                // TODO: Sink states can be enriched, by checking sink state for every disjunct and building a corresponding interpolant
+
+
+
+                // TODO: Different technique
+                // TODO: Every disjunct in the system has different sink states!
+                // TODO: Therefore, they can be analised separately, for different initial states (which satisfy specific disjuncts)
+                // TODO: This approach will also significantly simplify the verification!!!
+
+
+
+
+
                 if (j == 0) {
                     init = logic.mkAnd(init, logic.mkNot(Result));
                     SMTSolver SMT_solver(logic, SMTSolver::WitnessProduction::NONE);
@@ -379,7 +400,11 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
                     assert(block != logic.getTerm_true());
                     transition = logic.mkAnd(transition, logic.mkNot(block));
                 }
-                if ( j!=num ) {
+
+
+
+
+                // if ( j!=num ) {
                     std::vector<PTRef> deterministic_trace{transition};
                     vec<PTRef> eq_vars;
                     uint n_det = num - j;
@@ -412,15 +437,31 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
                         }
 
                     }
+                // I am gay.
+                    vec<PTRef> temp_vars;
+                    // Constructing vectors of variables x^(j-1) and x^(j)
+                    for (auto var : vars) {
+                        temp_vars.push(TimeMachine(logic).sendVarThroughTime(var,  num));
+                    }
+                    PTRef temp_init = QuantifierElimination(logic).keepOnly(transitions, vars);
                     checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(sink, num));
                     PTRef temp_sink = logic.mkOr(checked_states);
-                    PTRef temp_init = j == 0 ? Result : logic.mkAnd(init, Result);
                     SMTSolver smt_solver(logic, SMTSolver::WitnessProduction::ONLY_INTERPOLANTS);
-                    // std::cout << "Original number: " << num << "\n";
-                    // std::cout << "Deterministic number: " << n_det << "\n";
-                    smt_solver.assertProp(logic.mkAnd(deterministic_trace));
+                    std::cout << "Deterministic number: " << n_det << "\n";
+                    vec<PTRef> first_vars;
+                    for (auto var : vars) {
+                        first_vars.push(TimeMachine(logic).sendVarThroughTime(var,  1));
+                    }
+                    // smt_solver.assertProp(logic.mkAnd(deterministic_trace));
+                    // smt_solver.push();
+                    // smt_solver.assertProp(logic.mkAnd(temp_init,logic.mkNot(temp_sink)));
+                    smt_solver.assertProp(logic.mkAnd(temp_transition, Result));
                     smt_solver.push();
-                    smt_solver.assertProp(logic.mkAnd(temp_init,logic.mkNot(temp_sink)));
+                    smt_solver.assertProp(logic.mkAnd(temp_init, logic.mkNot(temp_sink)));
+                    std::cout<<"Temp init: " << logic.pp(temp_init) << std::endl;
+                    std::cout<<"Temp sink: " << logic.pp(temp_sink) << std::endl;
+
+
                     //
                     if(smt_solver.check() == SMTSolver::Answer::UNSAT) {
                         auto itpContext = smt_solver.getInterpolationContext();
@@ -437,11 +478,39 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
                         }
                         // Then interpolant is translated, so it would correspond to transition relation Itp(x,x')
                         itp = TermUtils(logic).varSubstitute(itp, varSubstitutions);
+                        std::cout<<"Original itp: " << logic.pp(itp) << std::endl;
+
+                        //TODO: draft of interpolant enrichment
+                        for (auto tmp_sink: postTransition) {
+                            checked_states.pop_back();
+                            checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(logic.mkNot(tmp_sink), num));
+                            // std::cout<<"Considered sink: " << logic.pp(tmp_sink) << std::endl;
+                            smt_solver.pop();
+                            smt_solver.push();
+                            smt_solver.assertProp(logic.mkAnd(temp_init, logic.mkNot(logic.mkOr(checked_states))));
+                            auto res = smt_solver.check();
+                            assert(res == SMTSolver::Answer::UNSAT);
+                            auto itpContext = smt_solver.getInterpolationContext();
+                            vec<PTRef> itps;
+                            ipartitions_t mask = 1;
+                            itpContext->getSingleInterpolant(itps, mask);
+                            assert(itps.size() == 1);
+                            std::cout<<"Update itp: " << logic.pp(itps[0]) << std::endl;
+                            itp = logic.mkOr(itp,  TermUtils(logic).varSubstitute(itps[0], varSubstitutions));
+                        }
 
                         // Check if some part of interpolant is transition invariant
-                        // std::cout<<"Considered itp: " << logic.pp(itp) << std::endl;
+                        std::cout<<"Considered itp: " << logic.pp(itp) << std::endl;
                         // std::cout<<"Considered itp: " << std::endl;
 
+
+                        // 1. Check that sink states are reachable
+                        // 2. Start a loop
+                        // 3. For every disjunct of transition, check if corresponding sink state is reachable after N transitions
+                        // 4. If it is reachable(should be at least for one sink), calculate corresponding init states
+                        // 5. For the init states, get a corresponding set of states that is reachable after N transitions, negate them
+                        // 6. Using new_init /\ Tr^N /\ not (reached_states) calculate corresponding interpolant overapproximating up to N transitions
+                        // 7. Check if this interpolant is transition invariant
 
                         auto newCands = extractStrictCandidates(itp, logic, vars);
                         if (newCands.size() == 0)
@@ -452,10 +521,10 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
                         }
                         PTRef inv = logic.mkOr(strictCandidates);
                         // std::cout<<"New cands" << std::endl;
-                        // std::cout<<"Considered candidate: " << logic.pp(inv) << std::endl;
+                        std::cout<<"Considered candidate: " << logic.pp(inv) << std::endl;
 
                         smt_solver.resetSolver();
-                        smt_solver.assertProp(logic.mkAnd(transition, logic.mkNot(inv)));
+                        smt_solver.assertProp(logic.mkAnd(temp_transition, logic.mkNot(inv)));
                         if(smt_solver.check() == SMTSolver::Answer::SAT) { continue; }
 
 
@@ -463,7 +532,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
                         smt_solver.resetSolver();
                         // std::cout << "Solving!!!" << std::endl;
                         // Check if inv is Transition Invariant
-                        smt_solver.assertProp(logic.mkAnd({inv, TimeMachine(logic).sendFlaThroughTime(transition,1), logic.mkNot(shiftOnlyNextVars(inv, vars, logic))}));
+                        smt_solver.assertProp(logic.mkAnd({inv, TimeMachine(logic).sendFlaThroughTime(temp_transition,1), logic.mkNot(shiftOnlyNextVars(inv, vars, logic))}));
                         // std::cout<<"Query: " << logic.pp(logic.mkAnd({inv, TimeMachine(logic).sendFlaThroughTime(transition,1), logic.mkNot(shiftOnlyNextVars(inv, vars, logic))})) << std::endl;
                         if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
                             // 2. Check that Init terminates via TrInv
@@ -478,7 +547,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
                             // TODO: Introduce Restricted TrInv
                             // Left-restricted
                             smt_solver.resetSolver();
-                            smt_solver.assertProp(logic.mkAnd({init, inv, TimeMachine(logic).sendFlaThroughTime(transition,1)}));
+                            smt_solver.assertProp(logic.mkAnd({init, inv, TimeMachine(logic).sendFlaThroughTime(temp_transition,1)}));
                             if (smt_solver.check() == SMTSolver::Answer::SAT) {
                                 smt_solver.assertProp(logic.mkNot(shiftOnlyNextVars(inv, vars, logic)));
                                 if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
@@ -510,7 +579,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
                     } else {
                         return Answer::ERROR;
                     }
-                }
+                // }
             } else {
                 // If deterministic transition, Result = set of states that reaches sink states in num transitions
                 Result = QuantifierElimination(logic).keepOnly(transitions, vars);
