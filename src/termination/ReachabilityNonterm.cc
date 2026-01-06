@@ -448,10 +448,10 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
                     checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(sink, num));
                     // temp_sink is a formula that describes states reachable in 1 <= n <= num transitions
                     PTRef temp_sink = logic.mkOr(checked_states);
-                    std::cout<<"Temp sink: " << logic.pp(temp_sink) << std::endl;
+                    // std::cout<<"Temp sink: " << logic.pp(temp_sink) << std::endl;
                     SMTSolver smt_solver(logic, SMTSolver::WitnessProduction::ONLY_INTERPOLANTS);
                     smt_solver.assertProp(logic.mkAnd(deterministic_trace));
-                    std::cout<<"Det trace: " << logic.pp(logic.mkAnd(deterministic_trace)) << std::endl;
+                    // std::cout<<"Det trace: " << logic.pp(logic.mkAnd(deterministic_trace)) << std::endl;
                     smt_solver.push();
                     smt_solver.assertProp(logic.mkAnd(terminatingStates,logic.mkNot(temp_sink)));
                     // Formula should be unsat, because \lnot(temp_sink) is the states which can't be reached after n transitions
@@ -484,7 +484,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
 
                         smt_solver.resetSolver();
                         smt_solver.assertProp(logic.mkAnd(temp_tr, logic.mkNot(inv)));
-                        std::cout<<"Considered candidate: " << logic.pp(inv) << std::endl;
+                        // std::cout<<"Considered candidate: " << logic.pp(inv) << std::endl;
                         if(smt_solver.check() == SMTSolver::Answer::SAT) { continue; }
 
 
@@ -493,7 +493,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
 
                         // Check if inv is Transition Invariant
                         smt_solver.assertProp(logic.mkAnd({inv, TimeMachine(logic).sendFlaThroughTime(temp_tr,1), logic.mkNot(shiftOnlyNextVars(inv, vars, logic))}));
-                        std::cout << "Solving!" << std::endl;
+                        // std::cout << "Solving!" << std::endl;
                         if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
                             // 2. Check that Init terminates via TrInv
                             smt_solver.resetSolver();
