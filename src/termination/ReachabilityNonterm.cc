@@ -287,9 +287,9 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
 
     // PTRef trInv = logic.getTerm_true();
     while (true) {
-        std::cout << "Init:" << logic.pp(init) << std::endl;
-        std::cout << "Transition:" << logic.pp(transition) << std::endl;
-        std::cout << "Sink:" << logic.pp(sink) << std::endl;
+        // std::cout << "Init:" << logic.pp(init) << std::endl;
+        // std::cout << "Transition:" << logic.pp(transition) << std::endl;
+        // std::cout << "Sink:" << logic.pp(sink) << std::endl;
         // Constructing a graph based on the currently considered TS
         auto graph = constructHyperGraph(init, transition, sink, logic, vars);
         auto engine = EngineFactory(logic, witnesses).getEngine(witnesses.getOrDefault(Options::ENGINE, "spacer"));
@@ -300,7 +300,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
             nunsafe++;
             // When sink states are reachable, extract the number of transitions needed to reach the sink states
             uint num = res.getInvalidityWitness().getDerivation().size() - 3;
-            std::cout << "Original number: " << num << "\n";
+            // std::cout << "Original number: " << num << "\n";
 
             // Construct the logical formula representing the trace:
             // Init(x) /\ Tr(x,x') /\ ... /\ Bad(x^(num))
@@ -416,8 +416,8 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
                     }
                     PTRef terminatingStates = logic.mkNot(QuantifierElimination(logic).keepOnly(guaranteedTermination, vars));
                     PTRef newTransitions = logic.mkAnd({terminatingStates, logic.mkAnd(formulas), TimeMachine(logic).sendFlaThroughTime(sink, num)});
-                    std::cout<<"Terminating states: " << logic.pp(terminatingStates) << std::endl;
-                    // SMTsolver.resetSolver();
+                    // std::cout<<"Terminating states: " << logic.pp(terminatingStates) << std::endl;
+                    SMTsolver.resetSolver();
                     // SMTsolver.assertProp(logic.mkAnd(terminatingStates, init));
                     // assert(SMTsolver.check() == SMTSolver::Answer::SAT);
 
