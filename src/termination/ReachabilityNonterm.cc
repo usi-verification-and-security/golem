@@ -243,7 +243,6 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
     auto vars = ts.getStateVars();
     ArithLogic & logic = dynamic_cast<ArithLogic &>(ts.getLogic());
     PTRef init = ts.getInit();
-    // std::cout << "Init:" << logic.pp(init) << std::endl;
     PTRef transition = ts.getTransition();
     TermUtils utils {logic};
     auto disjuncts = utils.getTopLevelDisjuncts(dnfize(transition, logic));
@@ -252,14 +251,12 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
     for (auto junct: disjuncts) {
         postTransition.push(QuantifierElimination(logic).keepOnly(junct, vars));
     }
-    // std::cout << "Transition:" << logic.pp(transition) << std::endl;
     uint nunsafe = 0;
     uint nsafe = 0;
     uint nnondetfirst = 0;
     // In this case query is a set of sink states - states from which transition is not possible.
     // sink /\ transition is UNSAT
     PTRef sink = logic.mkNot(QuantifierElimination(logic).keepOnly(transition, vars));
-    // std::cout << "Sink:" << logic.pp(sink) << std::endl;
 
     // if sink is false, there are no sink states in the TS, therefore it is nonterminating
     if (sink == logic.getTerm_false()) { return Answer::NO; }
@@ -361,7 +358,6 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
                         Result = Base;
                     }
                 }
-                PTRef temp_transition = transition;
                 // Since transitions are deterministic, the trace should lead to the sink.
                 // TODO: Idea for nondet transitions: use QE(TrInv, x') to detect Tr invariant sink states. (or every TrInv disjunct)
                 // TODO: If from any state in the system for every TrInv disjunct Inv(x) /\ TrInv(x,x') /\ Sink_TrInv(x') is true, then
@@ -383,7 +379,6 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
                 // TODO: Therefore, they can be analised separately, for different initial states (which satisfy specific disjuncts)
                 // TODO: This approach will also significantly simplify the verification!!!
 
-                PTRef temp_init = init;
                 PTRef temp_tr = transition;
                 if (j == 0) {
                     init = logic.mkAnd(init, logic.mkNot(Result));
@@ -416,9 +411,6 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
                     PTRef terminatingStates = logic.mkNot(QuantifierElimination(logic).keepOnly(guaranteedTermination, vars));
                     PTRef newTransitions = logic.mkAnd({terminatingStates, logic.mkAnd(formulas), TimeMachine(logic).sendFlaThroughTime(sink, num)});
                     // std::cout<<"Terminating states: " << logic.pp(terminatingStates) << std::endl;
-                    // SMTsolver.resetSolver();
-                    // SMTsolver.assertProp(logic.mkAnd(terminatingStates, init));
-                    // assert(SMTsolver.check() == SMTSolver::Answer::SAT);
 
                         // Start buiding the trace that reaches sink states
                     std::vector deterministic_trace{temp_tr};
@@ -472,10 +464,10 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
 
                         // Check if some part of interpolant is transition invariant
                         auto newCands = extractStrictCandidates(itp, logic, vars);
-                        if (newCands.size() == 0)
-                                newCands = extractStrictCandidates(logic.mkAnd(itp, logic.mkNot(sink)), logic, vars);
-                                if (newCands.size() == 0) continue;
-                                if (newCands.size() == 0) continue;
+
+                        // if (newCands.size() == 0)
+                        //     newCands = extractStrictCandidates(logic.mkAnd(itp, logic.mkNot(sink)), logic, vars);
+                        if (newCands.size() == 0) continue;
 
                         for (auto cand : newCands) {
                             strictCandidates.push(cand);
@@ -499,9 +491,12 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
                             smt_solver.resetSolver();
                             PTRef terminatingInitStates = QuantifierElimination(logic).keepOnly(logic.mkAnd({inv, TimeMachine(logic).sendFlaThroughTime(sink, 1)}), vars);
                             smt_solver.assertProp(logic.mkAnd(logic.mkNot(terminatingInitStates), init));
+                            // std::cout<<"Terminating init states: " << logic.pp(terminatingInitStates) << std::endl;
                             if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
+                                std::cout<<"Non Restricted" << std::endl;
                                 return Answer::YES;
                             } else {
+                                std::cout<<"Restricting Init Center" << std::endl;
                                 init = logic.mkAnd(init, logic.mkNot(terminatingInitStates));
                                 continue;
                             }
@@ -519,6 +514,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
                                     return Answer::YES;
                                 } else {
                                     init = logic.mkAnd(init, logic.mkNot(terminatingInitStates));
+                                    std::cout<<"Restricting Init Left" << std::endl;
                                     continue;
                                 }
                             }
@@ -526,6 +522,11 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
                             // Right-restricted
                             smt_solver.resetSolver();
                             smt_solver.assertProp(logic.mkAnd({ temp_tr, TimeMachine(logic).sendFlaThroughTime(inv,1), TimeMachine(logic).sendFlaThroughTime(sink,2), logic.mkNot(shiftOnlyNextVars(inv, vars, logic))}));
+                            // std::cout<<"Right check:" << std::endl;
+                            // std::cout<<"Tr:" << logic.pp(temp_tr) << std::endl;
+                            // std::cout<<"Inv:" << logic.pp(TimeMachine(logic).sendFlaThroughTime(inv,1)) << std::endl;
+                            // std::cout<<"Sink:" << logic.pp(TimeMachine(logic).sendFlaThroughTime(sink,2)) << std::endl;
+                            // std::cout<<"Implicant:" << logic.pp( logic.mkNot(shiftOnlyNextVars(inv, vars, logic))) << std::endl;
                             if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
                                 smt_solver.resetSolver();
                                 PTRef terminatingInitStates = QuantifierElimination(logic).keepOnly(logic.mkAnd({inv, TimeMachine(logic).sendFlaThroughTime(sink, 1)}), vars);
@@ -535,6 +536,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
                                     return Answer::YES;
                                 } else {
                                     init = logic.mkAnd(init, logic.mkNot(terminatingInitStates));
+                                    std::cout<<"Restricting Init Right" << std::endl;
                                     continue;
                                 }
                             }
@@ -602,9 +604,9 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
 
                         // Check if some part of interpolant is transition invariant
                         auto newCands = extractStrictCandidates(itp, logic, vars);
-                        if (newCands.size() == 0)
-                                newCands = extractStrictCandidates(logic.mkAnd(itp, logic.mkNot(sink)), logic, vars);
-                                if (newCands.size() == 0) continue;
+                        // if (newCands.size() == 0)
+                        //     newCands = extractStrictCandidates(logic.mkAnd(itp, logic.mkNot(sink)), logic, vars);
+                        if (newCands.size() == 0) continue;
 
                         for (auto cand : newCands) {
                             strictCandidates.push(cand);
