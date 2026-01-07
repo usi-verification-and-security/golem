@@ -301,7 +301,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
             std::cout << "UNSAFE: " << nunsafe << "\n";
             // When sink states are reachable, extract the number of transitions needed to reach the sink states
             uint num = res.getInvalidityWitness().getDerivation().size() - 3;
-            // std::cout << "Original number: " << num << "\n";
+            std::cout << "Original number: " << num << "\n";
 
             // Construct the logical formula representing the trace:
             // Init(x) /\ Tr(x,x') /\ ... /\ Bad(x^(num))
@@ -515,7 +515,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
                                 PTRef terminatingInitStates = QuantifierElimination(logic).keepOnly(logic.mkAnd({inv, TimeMachine(logic).sendFlaThroughTime(sink, 1)}), vars);
                                 smt_solver.assertProp(logic.mkAnd(logic.mkNot(terminatingInitStates), init));
                                 if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
-                                    // std::cout<<"Left Restricted!" << std::endl;
+                                    std::cout<<"Left Restricted!" << std::endl;
                                     return Answer::YES;
                                 } else {
                                     init = logic.mkAnd(init, logic.mkNot(terminatingInitStates));
@@ -525,13 +525,13 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
 
                             // Right-restricted
                             smt_solver.resetSolver();
-                            smt_solver.assertProp(logic.mkAnd({ temp_tr, TimeMachine(logic).sendFlaThroughTime(inv,1), TimeMachine(logic).sendFlaThroughTime(sink,1), logic.mkNot(shiftOnlyNextVars(inv, vars, logic))}));
+                            smt_solver.assertProp(logic.mkAnd({ temp_tr, TimeMachine(logic).sendFlaThroughTime(inv,1), TimeMachine(logic).sendFlaThroughTime(sink,2), logic.mkNot(shiftOnlyNextVars(inv, vars, logic))}));
                             if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
                                 smt_solver.resetSolver();
                                 PTRef terminatingInitStates = QuantifierElimination(logic).keepOnly(logic.mkAnd({inv, TimeMachine(logic).sendFlaThroughTime(sink, 1)}), vars);
                                 smt_solver.assertProp(logic.mkAnd(logic.mkNot(terminatingInitStates), init));
                                 if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
-                                    // std::cout<<"Right Restricted!" << std::endl;
+                                    std::cout<<"Right Restricted!" << std::endl;
                                     return Answer::YES;
                                 } else {
                                     init = logic.mkAnd(init, logic.mkNot(terminatingInitStates));
@@ -653,7 +653,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
 
                             // Right-restricted
                             smt_solver.resetSolver();
-                            smt_solver.assertProp(logic.mkAnd({ transition, TimeMachine(logic).sendFlaThroughTime(inv,1), TimeMachine(logic).sendFlaThroughTime(sink,1), logic.mkNot(shiftOnlyNextVars(inv, vars, logic))}));
+                            smt_solver.assertProp(logic.mkAnd({ transition, TimeMachine(logic).sendFlaThroughTime(inv,1), TimeMachine(logic).sendFlaThroughTime(sink,2), logic.mkNot(shiftOnlyNextVars(inv, vars, logic))}));
                             if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
                                 smt_solver.resetSolver();
                                 PTRef terminatingInitStates = QuantifierElimination(logic).keepOnly(logic.mkAnd({inv, TimeMachine(logic).sendFlaThroughTime(sink, 1)}), vars);
