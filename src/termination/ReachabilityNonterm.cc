@@ -298,6 +298,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
         auto res = engine->solve(*graph);
         if (res.getAnswer() == VerificationAnswer::UNSAFE) {
             nunsafe++;
+            std::cout << "UNSAFE: " << nunsafe << "\n";
             // When sink states are reachable, extract the number of transitions needed to reach the sink states
             uint num = res.getInvalidityWitness().getDerivation().size() - 3;
             // std::cout << "Original number: " << num << "\n";
@@ -399,8 +400,6 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
                     transition = logic.mkAnd(transition, logic.mkNot(block));
                 }
 
-                // formulas.push_back(TimeMachine(logic).sendFlaThroughTime(transition, num));
-                // num ++;
                 if (num > 0) {
                     // Calculate the states that are guaranteed to terminate within num transitions:
                     // (Tr^n(x,x') /\ Sink(x')) /\ not (Tr^n(x,x') /\ not Sink(x')) - is a formula, where values of x
@@ -417,7 +416,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
                     PTRef terminatingStates = logic.mkNot(QuantifierElimination(logic).keepOnly(guaranteedTermination, vars));
                     PTRef newTransitions = logic.mkAnd({terminatingStates, logic.mkAnd(formulas), TimeMachine(logic).sendFlaThroughTime(sink, num)});
                     // std::cout<<"Terminating states: " << logic.pp(terminatingStates) << std::endl;
-                    SMTsolver.resetSolver();
+                    // SMTsolver.resetSolver();
                     // SMTsolver.assertProp(logic.mkAnd(terminatingStates, init));
                     // assert(SMTsolver.check() == SMTSolver::Answer::SAT);
 
@@ -476,6 +475,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
                         if (newCands.size() == 0)
                                 newCands = extractStrictCandidates(logic.mkAnd(itp, logic.mkNot(sink)), logic, vars);
                                 if (newCands.size() == 0) continue;
+                                if (newCands.size() == 0) continue;
 
                         for (auto cand : newCands) {
                             strictCandidates.push(cand);
@@ -515,6 +515,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
                                 PTRef terminatingInitStates = QuantifierElimination(logic).keepOnly(logic.mkAnd({inv, TimeMachine(logic).sendFlaThroughTime(sink, 1)}), vars);
                                 smt_solver.assertProp(logic.mkAnd(logic.mkNot(terminatingInitStates), init));
                                 if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
+                                    // std::cout<<"Left Restricted!" << std::endl;
                                     return Answer::YES;
                                 } else {
                                     init = logic.mkAnd(init, logic.mkNot(terminatingInitStates));
@@ -524,12 +525,13 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
 
                             // Right-restricted
                             smt_solver.resetSolver();
-                            smt_solver.assertProp(logic.mkAnd({ temp_tr, TimeMachine(logic).sendFlaThroughTime(inv,1), sink, logic.mkNot(shiftOnlyNextVars(inv, vars, logic))}));
+                            smt_solver.assertProp(logic.mkAnd({ temp_tr, TimeMachine(logic).sendFlaThroughTime(inv,1), TimeMachine(logic).sendFlaThroughTime(sink,1), logic.mkNot(shiftOnlyNextVars(inv, vars, logic))}));
                             if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
                                 smt_solver.resetSolver();
                                 PTRef terminatingInitStates = QuantifierElimination(logic).keepOnly(logic.mkAnd({inv, TimeMachine(logic).sendFlaThroughTime(sink, 1)}), vars);
                                 smt_solver.assertProp(logic.mkAnd(logic.mkNot(terminatingInitStates), init));
                                 if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
+                                    // std::cout<<"Right Restricted!" << std::endl;
                                     return Answer::YES;
                                 } else {
                                     init = logic.mkAnd(init, logic.mkNot(terminatingInitStates));
@@ -651,7 +653,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
 
                             // Right-restricted
                             smt_solver.resetSolver();
-                            smt_solver.assertProp(logic.mkAnd({ transition, TimeMachine(logic).sendFlaThroughTime(inv,1), sink, logic.mkNot(shiftOnlyNextVars(inv, vars, logic))}));
+                            smt_solver.assertProp(logic.mkAnd({ transition, TimeMachine(logic).sendFlaThroughTime(inv,1), TimeMachine(logic).sendFlaThroughTime(sink,1), logic.mkNot(shiftOnlyNextVars(inv, vars, logic))}));
                             if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
                                 smt_solver.resetSolver();
                                 PTRef terminatingInitStates = QuantifierElimination(logic).keepOnly(logic.mkAnd({inv, TimeMachine(logic).sendFlaThroughTime(sink, 1)}), vars);
@@ -678,6 +680,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
 
         } else if (res.getAnswer() == VerificationAnswer::SAFE) {
             nsafe++;
+            std::cout << "SAFE: " << nsafe << "\n";
             // In case if sink states are not reachable, we need to construct the inductive invariant and demonstrate
             // that it doesn't contain any sink states itself.
             // It is possible since we add constraints to the transition relation, which were not accounted for
