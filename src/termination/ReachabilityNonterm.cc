@@ -77,22 +77,44 @@ PTRef dnfize(PTRef input, Logic & logic) {
 
 void unrollAtom(ArithLogic & logic, std::vector<PTRef>& coefs, PTRef atom, bool reverse) {
     assert(logic.isVar(atom) || logic.isConstant(atom) || logic.isTimes(atom) || logic.isIntMinus(atom) || logic.isRealMinus(atom) || logic.isPlus(atom) || logic.isIntDiv(atom) || logic.isRealDiv(atom));
-    if (logic.isConstant(atom)) { return; }
+    if (logic.isConstant(atom)) {
+        if (!reverse)
+            coefs.push_back(logic.mkTimes(logic.getTerm_IntMinusOne(), atom));
+        else
+            coefs.push_back(logic.mkTimes(logic.getTerm_IntOne(), atom));
+    }
     if (logic.isVar(atom)) {
         if (reverse)
-            coefs.push_back(logic.mkTimes(logic.getTerm_IntOne(), atom));
-        else
             coefs.push_back(logic.mkTimes(logic.getTerm_IntMinusOne(), atom));
+        else
+            coefs.push_back(logic.mkTimes(logic.getTerm_IntOne(), atom));
     } else if (logic.isTimes(atom)) {
         auto it = logic.getPterm(atom).begin();
         auto size = coefs.size();
         assert(logic.getPterm(atom).size() == 2);
-        PTRef constant = it[0];
+        PTRef constant, subatom;
+        if (logic.isConstant(it[0])) {
+            constant = it[0];
+            subatom = it[1];
+        } else {
+            constant = it[1];
+            subatom = it[0];
+        }
         assert(logic.isConstant(constant));
-        PTRef subatom = it[1];
         unrollAtom(logic, coefs, subatom, reverse);
         for (int i = size; i < coefs.size(); i++) {
-            coefs[i] = logic.mkTimes((logic.mkTimes(logic.getPterm(coefs[i]).begin()[0], constant)), logic.getPterm(coefs[i]).begin()[1]);
+            if (logic.isVar(coefs[i]) or logic.isConstant(coefs[i])) {
+                coefs[i] = logic.mkTimes(constant, coefs[i]);
+            } else if (logic.isTimes(coefs[i])) {
+                auto sub = logic.getPterm(coefs[i]).begin();
+                assert(logic.getPterm(coefs[i]).size() == 2);
+                if (logic.isConstant(sub[0])){
+                    coefs[i] = logic.mkTimes( logic.mkTimes(constant, sub[0]), sub[1]);
+                } else {
+                    coefs[i] = logic.mkTimes((logic.mkTimes(constant, sub[1])), sub[0]);
+                }
+            }
+
         }
     } else if (logic.isIntMinus(atom) || logic.isRealMinus(atom)) {
         auto it = logic.getPterm(atom).begin();
@@ -146,6 +168,7 @@ void getCoeffs(ArithLogic & logic, std::vector<PTRef>& coefs, PTRef formula) {
 
 bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const & vars) {
     PTRef dnfized = dnfize(formula, logic);
+    // std::cout << "dnfized = " << logic.pp(dnfized) << std::endl;
     if (logic.isOr(dnfized)) {
         return false;
     }
@@ -162,24 +185,52 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
     TermUtils utils {logic};
     dnfized = utils.simplifyMax(dnfized);
     vec<PTRef> conjuncts = TermUtils(logic).getTopLevelConjuncts(dnfized);
+    std::vector<PTRef> b;
     std::vector<std::vector<PTRef>> A;
     std::vector<std::vector<PTRef>> A_p;
     for (auto conjunct:conjuncts) {
         A.push_back(std::vector(int_vars.size(), logic.getTerm_IntZero()));
         A_p.push_back(std::vector(int_vars.size(), logic.getTerm_IntZero()));
         std::vector<PTRef> coefs;
+        std::cout << "conjunct = " << logic.pp(conjunct) << std::endl;
         getCoeffs(logic, coefs, conjunct);
+        bool found = false;
+        std::cout << "coefs size = " << coefs.size() << std::endl;
         for (int i = 0; i < coefs.size(); i++) {
-            auto it = logic.getPterm(coefs[i]).begin();
-            PTRef constant = it[0];
-            assert(logic.isConstant(constant));
-            PTRef subatom = it[1];
-            for (int j = 0; j < int_vars.size(); j++) {
-                if (subatom == int_vars[j]) {
-                    A[A.size()-1][j] = constant;
-                    break;
-                } else if (subatom == next_vars[j]) {
-                    A_p[A_p.size()-1][j] = constant;
+                std::cout << "coefs[i] = " << logic.pp(coefs[i]) << std::endl;
+            if (logic.isConstant(coefs[i])) {
+                b.push_back(coefs[i]);
+                assert(!found);
+                found = true;
+            } else if (logic.isVar(coefs[i])) {
+                for (int j = 0; j < int_vars.size(); j++) {
+                    if (coefs[i] == int_vars[j]) {
+                        A[A.size()-1][j] = logic.getTerm_IntOne();
+                        break;
+                    } else if (coefs[i] == next_vars[j]) {
+                        A_p[A_p.size()-1][j] = logic.getTerm_IntOne();
+                    }
+                }
+            } else {
+                auto it = logic.getPterm(coefs[i]).begin();
+                assert(logic.getPterm(coefs[i]).size() == 2);
+                PTRef constant, subatom;
+                if (logic.isConstant(it[0])) {
+                    constant = it[0];
+                    subatom = it[1];
+                } else {
+                    constant = it[1];
+                    subatom = it[0];
+                }
+                assert(logic.isConstant(constant));
+                for (int j = 0; j < int_vars.size(); j++) {
+                    if (subatom == int_vars[j]) {
+                        A[A.size()-1][j] = constant;
+                        break;
+                    } else if (subatom == next_vars[j]) {
+                        A_p[A_p.size()-1][j] = constant;
+                        break;
+                    }
                 }
             }
         }
@@ -203,7 +254,7 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
         }
         ZeroIneq = logic.mkAnd(ineqs);
     }
-
+    std::cout << "ZeroIneq: " << logic.pp(ZeroIneq) << std::endl;
     // 2. lambda_1 * A_p = 0:
     PTRef firstEq;
     {
@@ -219,6 +270,7 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
 
         firstEq = logic.mkAnd(sums);
     }
+    std::cout << "firstEq: " << logic.pp(firstEq) << std::endl;
 
     // 3. (lambda_1 - lambda_2) * A = 0
     PTRef secondEq;
@@ -240,6 +292,7 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
 
         secondEq = logic.mkAnd(sums);
     }
+    std::cout << "secondEq: " << logic.pp(secondEq) << std::endl;
 
     //4. lambda_2 * (A + A_p) = 0
     PTRef thirdEq;
@@ -263,9 +316,23 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
 
         thirdEq = logic.mkAnd(sums);
     }
+    std::cout << "thirdEq: " << logic.pp(thirdEq) << std::endl;
+
+    //4. lambda_2 * b < 0
+    PTRef constCheck;
+    {
+        vec<PTRef> sums;
+        for (uint j = 0; j < lambda_2.size(); j++) {
+            PTRef mult = logic.mkTimes(lambda_2[j], b[j]);
+            sums.push(mult);
+        }
+
+        constCheck = logic.mkLt(logic.mkPlus(sums), logic.getTerm_IntZero());
+    }
+    std::cout << "constCheck: " << logic.pp(constCheck) << std::endl;
 
     // Final check:
-    PTRef finalCheck = logic.mkAnd({ZeroIneq, firstEq, secondEq, thirdEq});
+    PTRef finalCheck = logic.mkAnd({ZeroIneq, firstEq, secondEq, thirdEq, constCheck});
     SMTSolver solver(logic, SMTSolver::WitnessProduction::NONE);
     solver.assertProp(finalCheck);
     return solver.check() == SMTSolver::Answer::SAT;
@@ -324,7 +391,7 @@ PTRef shiftOnlyNextVars(PTRef formula, const std::vector<PTRef> & vars, Logic& l
     return TermUtils(logic).varSubstitute(formula, varSubstitutions);
 }
 
-vec<PTRef> extractStrictCandidates(PTRef itp, Logic& logic,  const std::vector<PTRef> & vars) {
+vec<PTRef> extractStrictCandidates(PTRef itp, PTRef sink, ArithLogic& logic,  const std::vector<PTRef> & vars) {
 
     SMTSolver smt_solver(logic, SMTSolver::WitnessProduction::NONE);
     TermUtils::substitutions_map varSubstitutions;
@@ -332,23 +399,19 @@ vec<PTRef> extractStrictCandidates(PTRef itp, Logic& logic,  const std::vector<P
         varSubstitutions.insert({TimeMachine(logic).sendVarThroughTime(vars[i], 1), vars[i]});
     }
 
-    smt_solver.assertProp(TermUtils(logic).varSubstitute(itp, varSubstitutions));
-    if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
-        return {itp};
-    }
-
 
     vec<PTRef> strictCandidates;
     // if (logic.isOr(itp)) {
-    std::cout << "Pre-dnfization:" << logic.pp(itp) << std::endl;
+    // std::cout << "Pre-dnfization:" << logic.pp(itp) << std::endl;
     PTRef dnfized = dnfize(itp, logic);
-    std::cout << "Post-dnfization:" << logic.pp(dnfized) << std::endl;
+    // std::cout << "Post-dnfization:" << logic.pp(dnfized) << std::endl;
     vec<PTRef> candidates = TermUtils(logic).getTopLevelDisjuncts(dnfized);
     for (auto cand:candidates) {
         smt_solver.resetSolver();
         smt_solver.assertProp(TermUtils(logic).varSubstitute(cand, varSubstitutions));
         if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
-            strictCandidates.push(cand);
+            if (checkWellFounded(logic.mkAnd(cand, logic.mkNot(sink)), logic, vars))
+                strictCandidates.push(cand);
         }
     }
     // }
@@ -478,12 +541,15 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
     }
     // Main nonterm-checking loop
     vec<PTRef> strictCandidates;
-
+    if (DETERMINISTIC_TRANSITION) {
+        std::cout << "Transition:" << logic.pp(transition) << std::endl;
+        if (checkWellFounded(transition, logic, vars)) return Answer::YES;
+    }
     // PTRef trInv = logic.getTerm_true();
     while (true) {
-        std::cout << "Init:" << logic.pp(init) << std::endl;
-        std::cout << "Transition:" << logic.pp(transition) << std::endl;
-        std::cout << "Sink:" << logic.pp(sink) << std::endl;
+        // std::cout << "Init:" << logic.pp(init) << std::endl;
+        // std::cout << "Transition:" << logic.pp(transition) << std::endl;
+        // std::cout << "Sink:" << logic.pp(sink) << std::endl;
         // Constructing a graph based on the currently considered TS
         auto graph = constructHyperGraph(init, transition, sink, logic, vars);
         auto engine = EngineFactory(logic, witnesses).getEngine(witnesses.getOrDefault(Options::ENGINE, "spacer"));
@@ -657,7 +723,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
                         itp = TermUtils(logic).varSubstitute(itp, varSubstitutions);
 
                         // Check if some part of interpolant is transition invariant
-                        auto newCands = extractStrictCandidates(itp, logic, vars);
+                        auto newCands = extractStrictCandidates(itp, sink, logic, vars);
 
                         // if (newCands.size() == 0)
                         //     newCands = extractStrictCandidates(logic.mkAnd(itp, logic.mkNot(sink)), logic, vars);
@@ -800,7 +866,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
                         itp = TermUtils(logic).varSubstitute(itp, varSubstitutions);
 
                         // Check if some part of interpolant is transition invariant
-                        auto newCands = extractStrictCandidates(itp, logic, vars);
+                        auto newCands = extractStrictCandidates(itp, sink, logic, vars);
                         // if (newCands.size() == 0)
                         //     newCands = extractStrictCandidates(logic.mkAnd(itp, logic.mkNot(sink)), logic, vars);
                         if (newCands.size() == 0) continue;
@@ -812,7 +878,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
 
                         smt_solver.resetSolver();
                         smt_solver.assertProp(logic.mkAnd(transition, logic.mkNot(inv)));
-                        // std::cout<<"Considered candidate: " << logic.pp(inv) << std::endl;
+                        std::cout<<"Considered candidate: " << logic.pp(inv) << std::endl;
                         if(smt_solver.check() == SMTSolver::Answer::SAT) { continue; }
 
 
@@ -824,45 +890,48 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
                         // std::cout << "Solving!" << std::endl;
                         if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
                             // 2. Check that Init terminates via TrInv
-                            smt_solver.resetSolver();
-                            PTRef terminatingInitStates = QuantifierElimination(logic).keepOnly(logic.mkAnd({inv, TimeMachine(logic).sendFlaThroughTime(sink, 1)}), vars);
-                            smt_solver.assertProp(logic.mkAnd(logic.mkNot(terminatingInitStates), init));
-                            if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
-                                return Answer::YES;
-                            } else {
-                                init = logic.mkAnd(init, logic.mkNot(terminatingInitStates));
-                                continue;
-                            }
-
+                            // smt_solver.resetSolver();
+                            // PTRef terminatingInitStates = QuantifierElimination(logic).keepOnly(logic.mkAnd({inv, TimeMachine(logic).sendFlaThroughTime(sink, 1)}), vars);
+                            // smt_solver.assertProp(logic.mkAnd(logic.mkNot(terminatingInitStates), init));
+                            // if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
+                            //     return Answer::YES;
+                            // } else {
+                            //     init = logic.mkAnd(init, logic.mkNot(terminatingInitStates));
+                            //     continue;
+                            // }
+                            return  Answer::YES;
                         } else {
                             // Left-restricted
                             smt_solver.resetSolver();
                             smt_solver.assertProp(logic.mkAnd({init, inv, TimeMachine(logic).sendFlaThroughTime(transition,1), logic.mkNot(shiftOnlyNextVars(inv, vars, logic))}));
                             if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
-                                smt_solver.resetSolver();
-                                PTRef terminatingInitStates = QuantifierElimination(logic).keepOnly(logic.mkAnd({inv, TimeMachine(logic).sendFlaThroughTime(sink, 1)}), vars);
-                                smt_solver.assertProp(logic.mkAnd(logic.mkNot(terminatingInitStates), init));
-                                if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
-                                    return Answer::YES;
-                                } else {
-                                    init = logic.mkAnd(init, logic.mkNot(terminatingInitStates));
-                                    continue;
-                                }
+
+                                return  Answer::YES;
+                                // smt_solver.resetSolver();
+                                // PTRef terminatingInitStates = QuantifierElimination(logic).keepOnly(logic.mkAnd({inv, TimeMachine(logic).sendFlaThroughTime(sink, 1)}), vars);
+                                // smt_solver.assertProp(logic.mkAnd(logic.mkNot(terminatingInitStates), init));
+                                // if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
+                                //     return Answer::YES;
+                                // } else {
+                                //     init = logic.mkAnd(init, logic.mkNot(terminatingInitStates));
+                                //     continue;
+                                // }
                             }
 
                             // Right-restricted
                             smt_solver.resetSolver();
                             smt_solver.assertProp(logic.mkAnd({ transition, TimeMachine(logic).sendFlaThroughTime(inv,1), TimeMachine(logic).sendFlaThroughTime(sink,2), logic.mkNot(shiftOnlyNextVars(inv, vars, logic))}));
                             if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
-                                smt_solver.resetSolver();
-                                PTRef terminatingInitStates = QuantifierElimination(logic).keepOnly(logic.mkAnd({inv, TimeMachine(logic).sendFlaThroughTime(sink, 1)}), vars);
-                                smt_solver.assertProp(logic.mkAnd(logic.mkNot(terminatingInitStates), init));
-                                if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
-                                    return Answer::YES;
-                                } else {
-                                    init = logic.mkAnd(init, logic.mkNot(terminatingInitStates));
-                                    continue;
-                                }
+                                return  Answer::YES;
+                                // smt_solver.resetSolver();
+                                // PTRef terminatingInitStates = QuantifierElimination(logic).keepOnly(logic.mkAnd({inv, TimeMachine(logic).sendFlaThroughTime(sink, 1)}), vars);
+                                // smt_solver.assertProp(logic.mkAnd(logic.mkNot(terminatingInitStates), init));
+                                // if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
+                                //     return Answer::YES;
+                                // } else {
+                                //     init = logic.mkAnd(init, logic.mkNot(terminatingInitStates));
+                                //     continue;
+                                // }
                             }
                         }
 
