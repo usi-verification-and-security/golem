@@ -192,12 +192,12 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
         A.push_back(std::vector(int_vars.size(), logic.getTerm_IntZero()));
         A_p.push_back(std::vector(int_vars.size(), logic.getTerm_IntZero()));
         std::vector<PTRef> coefs;
-        std::cout << "conjunct = " << logic.pp(conjunct) << std::endl;
+        // std::cout << "conjunct = " << logic.pp(conjunct) << std::endl;
         getCoeffs(logic, coefs, conjunct);
         bool found = false;
-        std::cout << "coefs size = " << coefs.size() << std::endl;
+        // std::cout << "coefs size = " << coefs.size() << std::endl;
         for (int i = 0; i < coefs.size(); i++) {
-                std::cout << "coefs[i] = " << logic.pp(coefs[i]) << std::endl;
+                // std::cout << "coefs[i] = " << logic.pp(coefs[i]) << std::endl;
             if (logic.isConstant(coefs[i])) {
                 b.push_back(coefs[i]);
                 assert(!found);
@@ -234,6 +234,9 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
                 }
             }
         }
+        if (!found) {
+            b.push_back(logic.getTerm_IntZero());
+        }
     }
 
     // Well-foundness check by Podelski - by synthesizing the ranking function
@@ -254,7 +257,7 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
         }
         ZeroIneq = logic.mkAnd(ineqs);
     }
-    std::cout << "ZeroIneq: " << logic.pp(ZeroIneq) << std::endl;
+    // std::cout << "ZeroIneq: " << logic.pp(ZeroIneq) << std::endl;
     // 2. lambda_1 * A_p = 0:
     PTRef firstEq;
     {
@@ -270,7 +273,7 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
 
         firstEq = logic.mkAnd(sums);
     }
-    std::cout << "firstEq: " << logic.pp(firstEq) << std::endl;
+    // std::cout << "firstEq: " << logic.pp(firstEq) << std::endl;
 
     // 3. (lambda_1 - lambda_2) * A = 0
     PTRef secondEq;
@@ -292,7 +295,7 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
 
         secondEq = logic.mkAnd(sums);
     }
-    std::cout << "secondEq: " << logic.pp(secondEq) << std::endl;
+    // std::cout << "secondEq: " << logic.pp(secondEq) << std::endl;
 
     //4. lambda_2 * (A + A_p) = 0
     PTRef thirdEq;
@@ -316,7 +319,7 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
 
         thirdEq = logic.mkAnd(sums);
     }
-    std::cout << "thirdEq: " << logic.pp(thirdEq) << std::endl;
+    // std::cout << "thirdEq: " << logic.pp(thirdEq) << std::endl;
 
     //4. lambda_2 * b < 0
     PTRef constCheck;
@@ -329,7 +332,7 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
 
         constCheck = logic.mkLt(logic.mkPlus(sums), logic.getTerm_IntZero());
     }
-    std::cout << "constCheck: " << logic.pp(constCheck) << std::endl;
+    // std::cout << "constCheck: " << logic.pp(constCheck) << std::endl;
 
     // Final check:
     PTRef finalCheck = logic.mkAnd({ZeroIneq, firstEq, secondEq, thirdEq, constCheck});
@@ -547,9 +550,9 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
     }
     // PTRef trInv = logic.getTerm_true();
     while (true) {
-        // std::cout << "Init:" << logic.pp(init) << std::endl;
-        // std::cout << "Transition:" << logic.pp(transition) << std::endl;
-        // std::cout << "Sink:" << logic.pp(sink) << std::endl;
+        std::cout << "Init:" << logic.pp(init) << std::endl;
+        std::cout << "Transition:" << logic.pp(transition) << std::endl;
+        std::cout << "Sink:" << logic.pp(sink) << std::endl;
         // Constructing a graph based on the currently considered TS
         auto graph = constructHyperGraph(init, transition, sink, logic, vars);
         auto engine = EngineFactory(logic, witnesses).getEngine(witnesses.getOrDefault(Options::ENGINE, "spacer"));
