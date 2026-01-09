@@ -184,6 +184,7 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
 
     TermUtils utils {logic};
     dnfized = utils.simplifyMax(dnfized);
+    // std::cout << "CANDIDATE:" << logic.pp(dnfized) << std::endl;
     vec<PTRef> conjuncts = TermUtils(logic).getTopLevelConjuncts(dnfized);
     std::vector<PTRef> b;
     std::vector<std::vector<PTRef>> A;
@@ -404,6 +405,7 @@ vec<PTRef> extractStrictCandidates(PTRef itp, PTRef sink, ArithLogic& logic,  co
 
 
     vec<PTRef> strictCandidates;
+    auto dnfized_sink = TermUtils(logic).getTopLevelDisjuncts(dnfize(logic.mkNot(sink), logic));
     // if (logic.isOr(itp)) {
     // std::cout << "Pre-dnfization:" << logic.pp(itp) << std::endl;
     PTRef dnfized = dnfize(itp, logic);
@@ -413,8 +415,22 @@ vec<PTRef> extractStrictCandidates(PTRef itp, PTRef sink, ArithLogic& logic,  co
         smt_solver.resetSolver();
         smt_solver.assertProp(TermUtils(logic).varSubstitute(cand, varSubstitutions));
         if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
-            if (checkWellFounded(logic.mkAnd(cand, logic.mkNot(sink)), logic, vars))
+            if (checkWellFounded(cand, logic, vars)) {
+                // std::cout << "Well-Founded!!!" << logic.pp(cand) << std::endl;
                 strictCandidates.push(cand);
+            } else {
+                bool isWellfounded = true;
+                for (auto sink_cand: dnfized_sink) {
+                    if (!checkWellFounded(logic.mkAnd(sink_cand,cand), logic, vars)) {
+                        isWellfounded = false;
+                        break;
+                    }
+                }
+                if (isWellfounded) {
+                    // std::cout << "Well-Founded!!!" << logic.pp(cand) << std::endl;
+                    strictCandidates.push(cand);
+                }
+            }
         }
     }
     // }
@@ -550,9 +566,9 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
     }
     // PTRef trInv = logic.getTerm_true();
     while (true) {
-        std::cout << "Init:" << logic.pp(init) << std::endl;
-        std::cout << "Transition:" << logic.pp(transition) << std::endl;
-        std::cout << "Sink:" << logic.pp(sink) << std::endl;
+        // std::cout << "Init:" << logic.pp(init) << std::endl;
+        // std::cout << "Transition:" << logic.pp(transition) << std::endl;
+        // std::cout << "Sink:" << logic.pp(sink) << std::endl;
         // Constructing a graph based on the currently considered TS
         auto graph = constructHyperGraph(init, transition, sink, logic, vars);
         auto engine = EngineFactory(logic, witnesses).getEngine(witnesses.getOrDefault(Options::ENGINE, "spacer"));
