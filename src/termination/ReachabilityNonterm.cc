@@ -750,36 +750,14 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
                         smt_solver.assertProp(logic.mkAnd({inv, TimeMachine(logic).sendFlaThroughTime(temp_tr,1), logic.mkNot(shiftOnlyNextVars(inv, vars, logic))}));
                         // std::cout << "Solving!" << std::endl;
                         if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
-                            // 2. Check that Init terminates via TrInv
-                            smt_solver.resetSolver();
-                            PTRef terminatingInitStates = QuantifierElimination(logic).keepOnly(logic.mkAnd({inv, TimeMachine(logic).sendFlaThroughTime(sink, 1)}), vars);
-                            smt_solver.assertProp(logic.mkAnd(logic.mkNot(terminatingInitStates), init));
-                            std::cout<<"Terminating init states: " << logic.pp(terminatingInitStates) << std::endl;
-                            if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
-                                std::cout<<"Non Restricted" << std::endl;
-                                return Answer::YES;
-                            } else {
-                                std::cout<<"Restricting Init Center" << std::endl;
-                                init = logic.mkAnd(init, logic.mkNot(terminatingInitStates));
-                                continue;
-                            }
+                            return Answer::YES;
 
                         } else {
                             // Left-restricted
                             smt_solver.resetSolver();
                             smt_solver.assertProp(logic.mkAnd({init, inv, TimeMachine(logic).sendFlaThroughTime(temp_tr,1), logic.mkNot(shiftOnlyNextVars(inv, vars, logic))}));
                             if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
-                                smt_solver.resetSolver();
-                                PTRef terminatingInitStates = QuantifierElimination(logic).keepOnly(logic.mkAnd({inv, TimeMachine(logic).sendFlaThroughTime(sink, 1)}), vars);
-                                smt_solver.assertProp(logic.mkAnd(logic.mkNot(terminatingInitStates), init));
-                                if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
-                                    std::cout<<"Left Restricted!" << std::endl;
                                     return Answer::YES;
-                                } else {
-                                    init = logic.mkAnd(init, logic.mkNot(terminatingInitStates));
-                                    std::cout<<"Restricting Init Left" << std::endl;
-                                    continue;
-                                }
                             }
 
                             // Right-restricted
@@ -791,17 +769,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
                             // std::cout<<"Sink:" << logic.pp(TimeMachine(logic).sendFlaThroughTime(sink,2)) << std::endl;
                             // std::cout<<"Implicant:" << logic.pp( logic.mkNot(shiftOnlyNextVars(inv, vars, logic))) << std::endl;
                             if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
-                                smt_solver.resetSolver();
-                                PTRef terminatingInitStates = QuantifierElimination(logic).keepOnly(logic.mkAnd({inv, TimeMachine(logic).sendFlaThroughTime(sink, 1)}), vars);
-                                smt_solver.assertProp(logic.mkAnd(logic.mkNot(terminatingInitStates), init));
-                                if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
-                                    std::cout<<"Right Restricted!" << std::endl;
                                     return Answer::YES;
-                                } else {
-                                    init = logic.mkAnd(init, logic.mkNot(terminatingInitStates));
-                                    std::cout<<"Restricting Init Right" << std::endl;
-                                    continue;
-                                }
                             }
                         }
 
