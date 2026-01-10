@@ -414,10 +414,10 @@ vec<PTRef> extractStrictCandidates(PTRef itp, PTRef sink, ArithLogic& logic,  co
     for (auto cand:candidates) {
         smt_solver.resetSolver();
         smt_solver.assertProp(TermUtils(logic).varSubstitute(cand, varSubstitutions));
-        std::cout << "Checking candidate: " << logic.pp(cand) << std::endl;
+        // std::cout << "Checking candidate: " << logic.pp(cand) << std::endl;
         if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
             if (checkWellFounded(cand, logic, vars)) {
-                std::cout << "Well-Founded!!!" << logic.pp(cand) << std::endl;
+                // std::cout << "Well-Founded!!!" << logic.pp(cand) << std::endl;
                 strictCandidates.push(cand);
             } else {
                 bool isWellfounded = true;
@@ -428,7 +428,7 @@ vec<PTRef> extractStrictCandidates(PTRef itp, PTRef sink, ArithLogic& logic,  co
                     }
                 }
                 if (isWellfounded) {
-                    std::cout << "Well-Founded!!!" << logic.pp(cand) << std::endl;
+                    // std::cout << "Well-Founded!!!" << logic.pp(cand) << std::endl;
                     strictCandidates.push(cand);
                 }
             }
@@ -564,14 +564,14 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
     // Main nonterm-checking loop
     vec<PTRef> strictCandidates;
     if (DETERMINISTIC_TRANSITION) {
-        std::cout << "Transition:" << logic.pp(transition) << std::endl;
+        // std::cout << "Transition:" << logic.pp(transition) << std::endl;
         if (checkWellFounded(transition, logic, vars)) return Answer::YES;
     }
     // PTRef trInv = logic.getTerm_true();
     while (true) {
-        std::cout << "Init:" << logic.pp(init) << std::endl;
-        std::cout << "Transition:" << logic.pp(transition) << std::endl;
-        std::cout << "Sink:" << logic.pp(sink) << std::endl;
+        // std::cout << "Init:" << logic.pp(init) << std::endl;
+        // std::cout << "Transition:" << logic.pp(transition) << std::endl;
+        // std::cout << "Sink:" << logic.pp(sink) << std::endl;
         // Constructing a graph based on the currently considered TS
         auto graph = constructHyperGraph(init, transition, sink, logic, vars);
         auto engine = EngineFactory(logic, witnesses).getEngine(witnesses.getOrDefault(Options::ENGINE, "spacer"));
@@ -700,7 +700,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
                         return Answer::NO;
                     }
                     PTRef newTransitions = logic.mkAnd({terminatingStates, logic.mkAnd(formulas), TimeMachine(logic).sendFlaThroughTime(sink, num)});
-                    std::cout<<"Terminating states: " << logic.pp(terminatingStates) << std::endl;
+                    // std::cout<<"Terminating states: " << logic.pp(terminatingStates) << std::endl;
 
                         // Start buiding the trace that reaches sink states
                     std::vector deterministic_trace{temp_tr};
