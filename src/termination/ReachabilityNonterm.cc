@@ -150,6 +150,7 @@ void unrollAtom(ArithLogic & logic, std::vector<PTRef>& coefs, PTRef atom, bool 
 
 void getCoeffs(ArithLogic & logic, std::vector<PTRef>& coefs, PTRef formula) {
     assert (logic.isAtom(formula) || logic.isNot(formula));
+    // std::cout << "formula = " << logic.pp(formula) << std::endl;
     bool reverse = false;
     if (logic.isNot(formula)) {
         PTRef negated_formula = logic.mkNot(formula);
@@ -441,85 +442,6 @@ vec<PTRef> extractStrictCandidates(PTRef itp, PTRef sink, ArithLogic& logic,  co
     return strictCandidates;
 }
 
-    //TODO: houdiniCheck always checks "invCandidates" in an atomic way, never in the relation to init
-    //TODO: There is a need to search for restricted invariants as well!!!
-void ReachabilityNonterm::houdiniCheck(PTRef invCandidates, PTRef transition, Logic& logic, const std::vector<PTRef> & vars) {
-    // RIGHT:
-    //   rightInvariants /\ currentLevelTransition /\ getNextVersion(transition) =>
-    //     shiftOnlyNextVars(currentLevelTransition);
-    // LEFT:
-    //   leftInvariants /\ transition /\ getNextVersion(currentLevelTransition) =>
-    //     shiftOnlyNextVars(currentLevelTransition);
-    SMTSolver solverL(logic, SMTSolver::WitnessProduction::NONE);
-    SMTSolver solverR(logic, SMTSolver::WitnessProduction::NONE);
-    solverL.push();
-    solverR.push();
-    auto candidatesL = topLevelConjuncts(logic, invCandidates);
-    auto candidatesR = topLevelConjuncts(logic, invCandidates);
-    // check for right alignment
-    solverR.assertProp(TimeMachine(logic).sendFlaThroughTime(transition,1));
-    solverL.assertProp(transition);
-
-    solverL.push();
-    solverR.push();
-    //    invCandidates.append(conjuncts);
-    //    Atr(x, x') /\ tr(x', x'') => Atr(x, x'')
-    //    or
-    //    Atr(x', x'') /\  tr(x, x') => Atr(x, x'')
-    //    Push transition once and for all
-    //    While loop externally, because we may drop smth important
-    PTRef goal = shiftOnlyNextVars(invCandidates, vars, logic);
-    // std::cout<<"SolverL formula: " << logic.pp(TimeMachine(logic).sendFlaThroughTime(transition,1)) << std::endl;
-    // std::cout<<"SolverL formula: " << logic.pp(logic.mkAnd(TimeMachine(logic).sendFlaThroughTime(invCandidates,1), logic.mkNot(goal))) << std::endl;
-    // std::cout<<"SolverR formula: " << logic.pp(transition) << std::endl;
-    // std::cout<<"SolverR formula: " << logic.pp(logic.mkAnd(invCandidates, logic.mkNot(goal))) << std::endl;
-    solverR.assertProp(logic.mkAnd(invCandidates, logic.mkNot(goal)));
-    solverL.assertProp(logic.mkAnd(TimeMachine(logic).sendFlaThroughTime(invCandidates,1), logic.mkNot(goal)));
-    while (solverL.check() == SMTSolver::Answer::SAT) {
-        for (int i = candidatesL.size() - 1; i >= 0; i--) {
-            PTRef cand = candidatesL[i];
-            solverL.pop();
-            solverL.push();
-            solverL.assertProp(
-                logic.mkAnd(TimeMachine(logic).sendFlaThroughTime(logic.mkAnd(candidatesL),1), logic.mkNot(shiftOnlyNextVars(cand, vars, logic))));
-            if (solverL.check() == SMTSolver::Answer::SAT) {
-                candidatesL[i] = candidatesL[candidatesL.size() - 1];
-                candidatesL.pop();
-            }
-        }
-        solverL.pop();
-        solverL.push();
-        goal = shiftOnlyNextVars(logic.mkAnd(candidatesL), vars, logic);
-        solverL.assertProp(logic.mkAnd(TimeMachine(logic).sendFlaThroughTime(logic.mkAnd(candidatesL), 1), logic.mkNot(goal)));
-    }
-
-    while (solverR.check() == SMTSolver::Answer::SAT) {
-        for (int i = candidatesR.size() - 1; i >= 0; i--) {
-            PTRef cand = candidatesR[i];
-            solverR.pop();
-            solverR.push();
-            solverR.assertProp(logic.mkAnd(logic.mkAnd(candidatesR), logic.mkNot(shiftOnlyNextVars(cand, vars, logic))));
-
-            if (solverR.check() == SMTSolver::Answer::SAT) {
-                candidatesR[i] = candidatesR[candidatesR.size() - 1];
-                candidatesR.pop();
-            }
-        }
-        solverR.pop();
-        solverR.push();
-        goal = shiftOnlyNextVars(logic.mkAnd(candidatesR), vars, logic);
-        solverR.assertProp(logic.mkAnd(logic.mkAnd(candidatesR), logic.mkNot(goal)));
-    }
-    for (auto cand : candidatesR) {
-        if (std::find(rightInvariants.begin(), rightInvariants.end(), cand) != rightInvariants.end()) { continue; }
-        rightInvariants.push(cand);
-    }
-    for (auto cand : candidatesL) {
-        if (std::find(leftInvariants.begin(), leftInvariants.end(), cand) != leftInvariants.end()) { continue; }
-        leftInvariants.push(cand);
-    }
-}
-
 ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts) {
     auto vars = ts.getStateVars();
     ArithLogic & logic = dynamic_cast<ArithLogic &>(ts.getLogic());
@@ -670,6 +592,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
                     // Tr^n(x,x') /\ not Sink(x') - is a formula, which can be satisfied by any x which can not terminate
                     // after n transitions
                     PTRef possibleNonterm = logic.mkAnd(logic.mkAnd(formulas), logic.mkNot(TimeMachine(logic).sendFlaThroughTime(sink, num)));
+                    PTRef stillTerms = logic.mkAnd(logic.mkAnd(formulas), TimeMachine(logic).sendFlaThroughTime(sink, num));
 
                     SMTsolver.resetSolver();
                     SMTsolver.assertProp(logic.mkAnd(init, possibleNonterm));
@@ -682,6 +605,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
                     //     return Answer::YES;
                     // }
                     PTRef terminatingStates = logic.mkNot(QuantifierElimination(logic).keepOnly(possibleNonterm, vars));
+                    PTRef statesThatCanTerm = QuantifierElimination(logic).keepOnly(stillTerms, vars);
                     // std::cout<<"Terminating states: " << logic.pp(terminatingStates) << std::endl;
                     std::cout<<"j: " << j << std::endl;
 
@@ -690,7 +614,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
                         logic.mkAnd({terminatingStates, logic.mkAnd(formulas), logic.mkNot(TimeMachine(logic).sendFlaThroughTime(sink, num))}) );
                     assert(SMTsolver.check() == SMTSolver::Answer::UNSAT);
                     SMTsolver.resetSolver();
-                    SMTsolver.assertProp(logic.mkAnd({terminatingStates, logic.mkAnd(formulas)}));
+                    SMTsolver.assertProp(logic.mkAnd({terminatingStates, statesThatCanTerm}));
                     if (SMTsolver.check() == SMTSolver::Answer::UNSAT) {
                         std::cout<<"ERROR; " << std::endl;
                     }
@@ -769,39 +693,22 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
 
                         smt_solver.resetSolver();
                         smt_solver.assertProp(logic.mkAnd(temp_tr, logic.mkNot(inv)));
+                        //TODO: NOT SURE IF THIS CHECK IS NEEDED
+                        if(smt_solver.check() == SMTSolver::Answer::SAT) { continue; }
+
                         // std::cout<<"Considered candidate: " << logic.pp(inv) << std::endl;
                         smt_solver.resetSolver();
                         // Check if inv is Transition Invariant
                         smt_solver.assertProp(logic.mkAnd({logic.mkOr(inv,id), TimeMachine(logic).sendFlaThroughTime(transition,1), logic.mkNot(shiftOnlyNextVars(inv, vars, logic))}));
                         // std::cout << "Solving!" << std::endl;
                         if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
-                            // 2. Check that Init terminates via TrInv
-                            // smt_solver.resetSolver();
-                            // PTRef terminatingInitStates = QuantifierElimination(logic).keepOnly(logic.mkAnd({inv, TimeMachine(logic).sendFlaThroughTime(sink, 1)}), vars);
-                            // smt_solver.assertProp(logic.mkAnd(logic.mkNot(terminatingInitStates), init));
-                            // if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
-                            //     return Answer::YES;
-                            // } else {
-                            //     init = logic.mkAnd(init, logic.mkNot(terminatingInitStates));
-                            //     continue;
-                            // }
                             return  Answer::YES;
                         } else {
                             // Left-restricted
                             smt_solver.resetSolver();
                             smt_solver.assertProp(logic.mkAnd({init, logic.mkOr(inv,id), TimeMachine(logic).sendFlaThroughTime(transition,1), logic.mkNot(shiftOnlyNextVars(inv, vars, logic))}));
                             if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
-
                                 return  Answer::YES;
-                                // smt_solver.resetSolver();
-                                // PTRef terminatingInitStates = QuantifierElimination(logic).keepOnly(logic.mkAnd({inv, TimeMachine(logic).sendFlaThroughTime(sink, 1)}), vars);
-                                // smt_solver.assertProp(logic.mkAnd(logic.mkNot(terminatingInitStates), init));
-                                // if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
-                                //     return Answer::YES;
-                                // } else {
-                                //     init = logic.mkAnd(init, logic.mkNot(terminatingInitStates));
-                                //     continue;
-                                // }
                             }
 
                             // Right-restricted
