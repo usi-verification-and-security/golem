@@ -700,19 +700,19 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
                         smt_solver.resetSolver();
                         smt_solver.assertProp(logic.mkAnd(temp_tr, logic.mkNot(inv)));
                         //TODO: NOT SURE IF THIS CHECK IS NEEDED
-                        if(smt_solver.check() == SMTSolver::Answer::SAT) { continue; }
+                        // if(smt_solver.check() == SMTSolver::Answer::SAT) { continue; }
 
-                        std::cout<<"Considered candidate: " << logic.pp(inv) << std::endl;
+                        // std::cout<<"Considered candidate: " << logic.pp(inv) << std::endl;
                         smt_solver.resetSolver();
                         // Check if inv is Transition Invariant
-                        smt_solver.assertProp(logic.mkAnd({inv, TimeMachine(logic).sendFlaThroughTime(transition,1), logic.mkNot(shiftOnlyNextVars(inv, vars, logic))}));
+                        smt_solver.assertProp(logic.mkAnd({logic.mkOr(inv,id), TimeMachine(logic).sendFlaThroughTime(transition,1), logic.mkNot(shiftOnlyNextVars(inv, vars, logic))}));
                         // std::cout << "Solving!" << std::endl;
                         if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
                             return  Answer::YES;
                         } else {
                             // Left-restricted
                             smt_solver.resetSolver();
-                            smt_solver.assertProp(logic.mkAnd({init, inv, TimeMachine(logic).sendFlaThroughTime(transition,1), logic.mkNot(shiftOnlyNextVars(inv, vars, logic))}));
+                            smt_solver.assertProp(logic.mkAnd({init, logic.mkOr(inv,id), TimeMachine(logic).sendFlaThroughTime(transition,1), logic.mkNot(shiftOnlyNextVars(inv, vars, logic))}));
                             if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
                                 return  Answer::YES;
                             }
