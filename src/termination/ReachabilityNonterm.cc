@@ -430,13 +430,13 @@ vec<PTRef> extractStrictCandidates(PTRef itp, PTRef sink, ArithLogic& logic,  co
         // std::cout << "Checking candidate: " << logic.pp(cand) << std::endl;
         if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
             if (checkWellFounded(simpl_cand, logic, vars)) {
-                // std::cout << "Well-Founded: " << logic.pp(cand) << std::endl;
+                std::cout << "Well-Founded: " << logic.pp(cand) << std::endl;
                 strictCandidates.push(simpl_cand);
             } else {
                 for (auto sink_cand: dnfized_sink) {
                     if (checkWellFounded(logic.mkAnd(sink_cand,simpl_cand), logic, vars)) {
                         strictCandidates.push(logic.mkAnd(sink_cand,simpl_cand));
-                        // std::cout << "Well-Founded: " << logic.pp(logic.mkAnd(sink_cand,simpl_cand)) << std::endl;
+                        std::cout << "Well-Founded: " << logic.pp(logic.mkAnd(sink_cand,simpl_cand)) << std::endl;
                     }
                 }
             }
@@ -730,7 +730,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
                                     smt_solver.assertProp(logic.mkAnd({preTransition, transition, logic.mkNot(inv)}));
                                     if (smt_solver.check() == SMTSolver::Answer::UNSAT) return  Answer::YES;
                                 } else {
-                                    return  Answer::NO;
+                                   init = logic.mkAnd(init, logic.mkNot(preTransition));
                                 }
                             }
                         }
@@ -862,7 +862,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
                                     smt_solver.assertProp(logic.mkAnd({preTransition, transition, logic.mkNot(inv)}));
                                     if (smt_solver.check() == SMTSolver::Answer::UNSAT) return  Answer::YES;
                                 } else {
-                                    return  Answer::NO;
+                                   init = logic.mkAnd(init, logic.mkNot(preTransition));
                                 }
                                 // smt_solver.resetSolver();
                                 // PTRef terminatingInitStates = QuantifierElimination(logic).keepOnly(logic.mkAnd({inv, TimeMachine(logic).sendFlaThroughTime(sink, 1)}), vars);
