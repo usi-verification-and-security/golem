@@ -421,16 +421,22 @@ vec<PTRef> extractStrictCandidates(PTRef itp, PTRef sink, ArithLogic& logic,  co
     vec<PTRef> candidates = TermUtils(logic).getTopLevelDisjuncts(dnfized);
     for (auto cand:candidates) {
         smt_solver.resetSolver();
+        smt_solver.assertProp(cand);
+        if (smt_solver.check() == SMTSolver::Answer::UNSAT) {continue;}
+
+        smt_solver.resetSolver();
         smt_solver.assertProp(TermUtils(logic).varSubstitute(cand, varSubstitutions));
+        PTRef simpl_cand = TermUtils(logic).simplifyMax(cand);
         // std::cout << "Checking candidate: " << logic.pp(cand) << std::endl;
         if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
-            if (checkWellFounded(cand, logic, vars)) {
-                // std::cout << "Well-Founded!!!" << logic.pp(cand) << std::endl;
-                strictCandidates.push(cand);
+            if (checkWellFounded(simpl_cand, logic, vars)) {
+                // std::cout << "Well-Founded: " << logic.pp(cand) << std::endl;
+                strictCandidates.push(simpl_cand);
             } else {
                 for (auto sink_cand: dnfized_sink) {
-                    if (!checkWellFounded(logic.mkAnd(sink_cand,cand), logic, vars)) {
-                        strictCandidates.push(logic.mkAnd(sink_cand,cand));
+                    if (checkWellFounded(logic.mkAnd(sink_cand,simpl_cand), logic, vars)) {
+                        strictCandidates.push(logic.mkAnd(sink_cand,simpl_cand));
+                        // std::cout << "Well-Founded: " << logic.pp(logic.mkAnd(sink_cand,simpl_cand)) << std::endl;
                     }
                 }
             }
@@ -696,17 +702,17 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
                         //TODO: NOT SURE IF THIS CHECK IS NEEDED
                         if(smt_solver.check() == SMTSolver::Answer::SAT) { continue; }
 
-                        // std::cout<<"Considered candidate: " << logic.pp(inv) << std::endl;
+                        std::cout<<"Considered candidate: " << logic.pp(inv) << std::endl;
                         smt_solver.resetSolver();
                         // Check if inv is Transition Invariant
-                        smt_solver.assertProp(logic.mkAnd({logic.mkOr(inv,id), TimeMachine(logic).sendFlaThroughTime(transition,1), logic.mkNot(shiftOnlyNextVars(inv, vars, logic))}));
+                        smt_solver.assertProp(logic.mkAnd({inv, TimeMachine(logic).sendFlaThroughTime(transition,1), logic.mkNot(shiftOnlyNextVars(inv, vars, logic))}));
                         // std::cout << "Solving!" << std::endl;
                         if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
                             return  Answer::YES;
                         } else {
                             // Left-restricted
                             smt_solver.resetSolver();
-                            smt_solver.assertProp(logic.mkAnd({init, logic.mkOr(inv,id), TimeMachine(logic).sendFlaThroughTime(transition,1), logic.mkNot(shiftOnlyNextVars(inv, vars, logic))}));
+                            smt_solver.assertProp(logic.mkAnd({init, inv, TimeMachine(logic).sendFlaThroughTime(transition,1), logic.mkNot(shiftOnlyNextVars(inv, vars, logic))}));
                             if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
                                 return  Answer::YES;
                             }
