@@ -430,13 +430,13 @@ vec<PTRef> extractStrictCandidates(PTRef itp, PTRef sink, ArithLogic& logic,  co
         // std::cout << "Checking candidate: " << logic.pp(cand) << std::endl;
         if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
             if (checkWellFounded(simpl_cand, logic, vars)) {
-                std::cout << "Well-Founded: " << logic.pp(cand) << std::endl;
+                // std::cout << "Well-Founded: " << logic.pp(cand) << std::endl;
                 strictCandidates.push(simpl_cand);
             } else {
                 for (auto sink_cand: dnfized_sink) {
                     if (checkWellFounded(logic.mkAnd(sink_cand,simpl_cand), logic, vars)) {
                         strictCandidates.push(logic.mkAnd(sink_cand,simpl_cand));
-                        std::cout << "Well-Founded: " << logic.pp(logic.mkAnd(sink_cand,simpl_cand)) << std::endl;
+                        // std::cout << "Well-Founded: " << logic.pp(logic.mkAnd(sink_cand,simpl_cand)) << std::endl;
                     }
                 }
             }
