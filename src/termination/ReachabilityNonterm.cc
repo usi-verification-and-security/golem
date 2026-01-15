@@ -544,9 +544,9 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
     }
     // PTRef trInv = logic.getTerm_true();
     while (true) {
-        // std::cout << "Init:" << logic.pp(init) << std::endl;
-        // std::cout << "Transition:" << logic.pp(transition) << std::endl;
-        // std::cout << "Sink:" << logic.pp(sink) << std::endl;
+        std::cout << "Init:" << logic.pp(init) << std::endl;
+        std::cout << "Transition:" << logic.pp(transition) << std::endl;
+        std::cout << "Sink:" << logic.pp(sink) << std::endl;
         // Constructing a graph based on the currently considered TS
         auto graph = constructHyperGraph(init, transition, sink, logic, vars);
         auto engine = EngineFactory(logic, witnesses).getEngine(witnesses.getOrDefault(Options::ENGINE, "spacer"));
@@ -673,8 +673,8 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
                 SMTsolver.resetSolver();
                 SMTsolver.assertProp(logic.mkAnd({terminatingStates, statesThatCanTerm}));
                 if (SMTsolver.check() == SMTSolver::Answer::UNSAT) {
-                    std::cout<<"ERROR"<<'\n';
-                    // return Answer::ERROR;
+                    // std::cout<<"ERROR"<<'\n';
+                    return Answer::NO;
                 }
 
                 SMTsolver.resetSolver();
