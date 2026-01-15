@@ -588,7 +588,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
                 PTRef prev = TimeMachine(logic).sendVarThroughTime(var, num);
                 last_vars.push(prev);
             }
-            PTRef Result = QuantifierElimination(logic).keepOnly(logic.mkAnd({logic.mkAnd(init, terminatingStates), logic.mkAnd(formulas),logic.mkNot(TimeMachine(logic).sendFlaThroughTime(sink, num))}), last_vars);
+            PTRef Result = TimeMachine(logic).sendFlaThroughTime(sink, num);
             // Traversing trace from the Bad to Init, detecting the last transition where some variables
             // were assigned nondetermenistically
             if (!DETERMINISTIC_TRANSITION && SMTsolver.check() == SMTSolver::Answer::SAT) {
@@ -632,6 +632,9 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
             PTRef temp_tr = transition;
             if (j == 0) {
                 init = logic.mkAnd(init, logic.mkNot(terminatingStates));
+                // std::cout<<"Init: " << logic.pp(init) << std::endl;
+                // std::cout<<"terminatingStates: " << logic.pp(terminatingStates) << std::endl;
+                // std::cout<<"Result: " << logic.pp(Result) << std::endl;
                 SMTSolver SMT_solver(logic, SMTSolver::WitnessProduction::NONE);
                 SMT_solver.assertProp(logic.mkAnd(init, transition));
                 // We check if init state is blocked (it's impossible to make a transition from initial state)
@@ -781,7 +784,8 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
                             if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
                                 smt_solver.resetSolver();
                                 smt_solver.assertProp(logic.mkAnd({preTransition, transition, logic.mkNot(inv)}));
-                                if (smt_solver.check() == SMTSolver::Answer::UNSAT) return  Answer::YES;
+                                if (smt_solver.check() == SMTSolver::Answer::UNSAT)
+                                    return  Answer::YES;
                             } else {
                                init = logic.mkAnd(init, logic.mkNot(preTransition));
                             }
