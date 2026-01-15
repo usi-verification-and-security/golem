@@ -682,10 +682,14 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
 
                 SMTsolver.resetSolver();
                 SMTsolver.assertProp(logic.mkAnd({terminatingStates, logic.mkAnd(formulas), TimeMachine(logic).sendFlaThroughTime(sink, num)}));
+
+                // std::cout<<"terminatingFormula: \nInit:" << logic.pp(terminatingStates) << std::endl;
+                // std::cout<<"Transitions:" << logic.pp(logic.mkAnd(formulas)) << std::endl;
+                // std::cout<<"Sink:" << logic.pp(TimeMachine(logic).sendFlaThroughTime(sink, num)) << std::endl;
                 if(SMTsolver.check() != SMTSolver::Answer::SAT) {
                     return Answer::NO;
                 }
-                PTRef newTransitions = logic.mkAnd({terminatingStates, logic.mkAnd(formulas), TimeMachine(logic).sendFlaThroughTime(sink, num)});
+                PTRef newTransitions = logic.mkAnd({terminatingStates, logic.mkAnd(formulas)});
 
                 // Start buiding the trace that reaches sink states
                 vec<PTRef> eq_vars;
@@ -697,46 +701,27 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
                 }
                 std::vector<PTRef> deterministic_trace{temp_tr};
                 PTRef id = logic.mkAnd(eq_vars);
-
-                // for (uint k = 1; k < num; k++) {
-                //     // For every transition deterministic trace is updated, adding an Id or Tr// This is needed so that Interpolant overapproximates 1 <= n <= num transitionsfor (uint k = 1; k < num; k++) {
-                //     deterministic_trace.push_back(TimeMachine(logic).sendFlaThroughTime(logic.mkOr(temp_tr, logic.mkAnd(eq_vars)), k));
-                // }
-                // // This loop calculates the states reachable in 1 <= n <= num transitions
-                // std::vector<PTRef> checked_states;
-                // for (int k = 1; k < num; k++) {
-                //         vec<PTRef> temp_vars;
-                //         // Constructing vectors of variables x^(j-1) and x^(j)
-                //         for (auto var : vars) {
-                //             temp_vars.push(TimeMachine(logic).sendVarThroughTime(var,  k));
-                //         }
-                //         checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(QuantifierElimination(logic).keepOnly(newTransitions, temp_vars), num-k));
-                // }
-                // checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(sink, num));
-                // // temp_sink is a formula that describes states reachable in 1 <= n <= num transitions
-                // PTRef temp_sink = logic.mkOr(checked_states);
-
-                vec<PTRef> temp_vars;
-                for (auto var : vars) {
-                    temp_vars.push(TimeMachine(logic).sendVarThroughTime(var,  num-1));
+                for (uint k = 1; k < num; k++) {
+                    // For every transition deterministic trace is updated, adding an Id or Tr// This is needed so that Interpolant overapproximates 1 <= n <= num transitionsfor (uint k = 1; k < num; k++) {
+                    deterministic_trace.push_back(TimeMachine(logic).sendFlaThroughTime(logic.mkOr(temp_tr, logic.mkAnd(eq_vars)), k));
                 }
-
-                PTRef temp_sink = logic.getTerm_false();
+                // This if calculates the states reachable in 1 <= n <= num-1 transitions
+                std::vector<PTRef> checked_states;
                 if (num > 1) {
-                    // For every transition deterministic trace is updated, adding an Id or Tr
-                    // This is needed so that Interpolant overapproximates 1 <= n <= num transitions
-                    for (uint k = 1; k < num; k++) {
-                        deterministic_trace.push_back(TimeMachine(logic).sendFlaThroughTime(logic.mkOr(temp_tr, id), k));
+                    vec<PTRef> temp_vars;
+                    for (auto var : vars) {
+                        temp_vars.push(TimeMachine(logic).sendVarThroughTime(var,  num-1));
                     }
-                    temp_sink = QuantifierElimination(logic).keepOnly(logic.mkAnd(terminatingStates, logic.mkAnd(deterministic_trace)), temp_vars);
+                    checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(QuantifierElimination(logic).keepOnly(logic.mkAnd(terminatingStates, logic.mkAnd(deterministic_trace)), temp_vars), 1));
                 }
-                temp_sink = logic.mkOr(temp_sink, TimeMachine(logic).sendFlaThroughTime(sink, num));
-                // std::cout<<"Temp sink: " << logic.pp(temp_sink) << std::endl;
+                checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(sink, num));
+                // temp_sink is a formula that describes states reachable in 1 <= n <= num transitions
+                PTRef temp_sink = logic.mkOr(checked_states);
                 SMTSolver smt_solver(logic, SMTSolver::WitnessProduction::ONLY_INTERPOLANTS);
                 smt_solver.assertProp(logic.mkAnd(deterministic_trace));
-                // std::cout<<"Det trace: " << logic.pp(logic.mkAnd(deterministic_trace)) << std::endl;
                 smt_solver.push();
                 smt_solver.assertProp(logic.mkAnd(terminatingStates,logic.mkNot(temp_sink)));
+
                 // Formula should be unsat, because \lnot(temp_sink) is the states which can't be reached after n transitions
                 if(smt_solver.check() == SMTSolver::Answer::UNSAT) {
                     auto itpContext = smt_solver.getInterpolationContext();
@@ -803,6 +788,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
                     }
 
                 } else {
+                    // continue;
                     return Answer::ERROR;
                 }
 
