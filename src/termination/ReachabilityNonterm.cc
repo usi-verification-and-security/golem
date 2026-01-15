@@ -71,11 +71,11 @@ PTRef dnfize(PTRef input, ArithLogic & logic) {
                 postprocessJuncts.push(logic.mkNot(subjuncts[i]));
             }
             return dnfize(logic.mkAnd(postprocessJuncts), logic);
-        } else if (logic.isEquality(rev)) {
+        } else if (logic.isNumEq(rev)) {
             auto it = logic.getPterm(rev).begin();
             vec<PTRef> subjuncts;
-            subjuncts.push(logic.mkGeq(it[0], it[1]));
-            subjuncts.push(logic.mkLeq(it[0], it[1]));
+            subjuncts.push(logic.mkGeq(it[0], logic.mkPlus(it[1], logic.getTerm_IntOne())));
+            subjuncts.push(logic.mkLeq(it[0], logic.mkPlus(it[1], logic.getTerm_IntMinusOne())));
             return logic.mkOr(subjuncts);
         }
     }
@@ -170,14 +170,14 @@ void lequalize(PTRef conjunct, vec<PTRef> & leqs, ArithLogic& logic) {
     // x <= y
     // y <= x
     if (logic.isEquality(conjunct)) {
-        std::cout << "lequalized = " << logic.pp(logic.mkLeq(it[0], it[1])) << std::endl;
-        std::cout << "lequalized = " << logic.pp(logic.mkLeq(it[1], it[0])) << std::endl;
+        // std::cout << "lequalized = " << logic.pp(logic.mkLeq(it[0], it[1])) << std::endl;
+        // std::cout << "lequalized = " << logic.pp(logic.mkLeq(it[1], it[0])) << std::endl;
         leqs.push(logic.mkLeq(it[0], it[1]));
         leqs.push(logic.mkLeq(it[1], it[0]));
     } else if (logic.isLeq(conjunct)) {
         // x<=y
         leqs.push(conjunct);
-        std::cout << "lequalized = " << logic.pp(conjunct) << std::endl;
+        // std::cout << "lequalized = " << logic.pp(conjunct) << std::endl;
     } else if (logic.isGeq(conjunct)) {
         // x >= y <=>
         // y <= x
@@ -191,12 +191,12 @@ void lequalize(PTRef conjunct, vec<PTRef> & leqs, ArithLogic& logic) {
             // !(x <= y) <=>
             // y <= x-1
             leqs.push(logic.mkLeq(it[1], logic.mkPlus(it[0], logic.getTerm_IntMinusOne())));
-            std::cout << "lequalized = " << logic.pp(logic.mkLeq(it[1], logic.mkPlus(it[0], logic.getTerm_IntMinusOne()))) << std::endl;
+            // std::cout << "lequalized = " << logic.pp(logic.mkLeq(it[1], logic.mkPlus(it[0], logic.getTerm_IntMinusOne()))) << std::endl;
         } else if (logic.isGeq(inner_formula)) {
             // !(x >= y) <=>
             // x <= y-1
             leqs.push(logic.mkLeq(it[0], logic.mkPlus(it[1], logic.getTerm_IntMinusOne())));
-            std::cout << "lequalized = " << logic.pp(logic.mkLeq(it[0], logic.mkPlus(it[1], logic.getTerm_IntMinusOne()))) << std::endl;
+            // std::cout << "lequalized = " << logic.pp(logic.mkLeq(it[0], logic.mkPlus(it[1], logic.getTerm_IntMinusOne()))) << std::endl;
         }  else if (logic.isBoolAtom(inner_formula)) {
             return;
         } else {
@@ -213,7 +213,7 @@ void lequalize(PTRef conjunct, vec<PTRef> & leqs, ArithLogic& logic) {
 bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const & vars) {
     TermUtils utils {logic};
     PTRef dnfized = utils.simplifyMax(dnfize(formula, logic));
-    std::cout << "dnfized = " << logic.pp(dnfized) << std::endl;
+    // std::cout << "dnfized = " << logic.pp(dnfized) << std::endl;
     if (logic.isOr(dnfized)) {
         return false;
     }
@@ -235,7 +235,7 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
     vec<PTRef> temp_conjuncts;
     // Preprocessing, in the end conjuncts should be a set of formulas f(x) <= c, where c is some constant, and f(x) is a linear combination of variables
     for (auto conjunct: conjuncts) {
-        std::cout << "conjunct = " << logic.pp(conjunct) << std::endl;
+        // std::cout << "conjunct = " << logic.pp(conjunct) << std::endl;
         lequalize(conjunct, temp_conjuncts, logic);
     }
 
@@ -243,12 +243,12 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
         A.push_back(std::vector(int_vars.size(), logic.getTerm_IntZero()));
         A_p.push_back(std::vector(int_vars.size(), logic.getTerm_IntZero()));
         std::vector<PTRef> coefs;
-        std::cout << "conjunct = " << logic.pp(conjunct) << std::endl;
+        // std::cout << "conjunct = " << logic.pp(conjunct) << std::endl;
         getCoeffs(logic, coefs, conjunct);
         bool found = false;
         // std::cout << "coefs size = " << coefs.size() << std::endl;
         for (int i = 0; i < coefs.size(); i++) {
-            std::cout << "coefs[i] = " << logic.pp(coefs[i]) << std::endl;
+            // std::cout << "coefs[i] = " << logic.pp(coefs[i]) << std::endl;
             if (logic.isConstant(coefs[i])) {
                 b.push_back(coefs[i]);
                 assert(!found);
@@ -468,19 +468,21 @@ vec<PTRef> extractStrictCandidates(PTRef itp, PTRef sink, ArithLogic& logic,  co
         smt_solver.resetSolver();
         smt_solver.assertProp(TermUtils(logic).varSubstitute(cand, varSubstitutions));
         PTRef simpl_cand = TermUtils(logic).simplifyMax(cand);
-        std::cout << "Checking candidate: " << logic.pp(cand) << std::endl;
+        // std::cout << "Checking candidate: " << logic.pp(cand) << std::endl;
         if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
             if (checkWellFounded(simpl_cand, logic, vars)) {
-                std::cout << "Well-Founded: " << logic.pp(cand) << std::endl;
+                // std::cout << "Well-Founded: " << logic.pp(cand) << std::endl;
                 strictCandidates.push(simpl_cand);
             } else {
                 for (auto sink_cand: dnfized_sink) {
-                    std::cout << "Checking candidate: " << logic.pp(logic.mkAnd(sink_cand,simpl_cand)) << std::endl;
+                    // std::cout << "Checking candidate: " << logic.pp(logic.mkAnd(sink_cand,simpl_cand)) << std::endl;
                     smt_solver.resetSolver();
                     smt_solver.assertProp(logic.mkAnd(sink_cand,simpl_cand));
                     if (smt_solver.check() == SMTSolver::Answer::SAT && checkWellFounded(logic.mkAnd(sink_cand,simpl_cand), logic, vars)) {
                         strictCandidates.push(logic.mkAnd(sink_cand,simpl_cand));
-                        std::cout << "Well-Founded: " << logic.pp(logic.mkAnd(sink_cand,simpl_cand)) << std::endl;
+                        // std::cout << "Well-Founded: " << logic.pp(logic.mkAnd(sink_cand,simpl_cand)) << std::endl;
+                        // TODO: Maybe I can weaken recieved candidate using some kind of houdini.
+                        // TODO: Particularly, I should try to remove all equalities possible (also ones that are done via <= && >=)
                     }
                 }
             }
@@ -542,9 +544,9 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
     }
     // PTRef trInv = logic.getTerm_true();
     while (true) {
-        std::cout << "Init:" << logic.pp(init) << std::endl;
-        std::cout << "Transition:" << logic.pp(transition) << std::endl;
-        std::cout << "Sink:" << logic.pp(sink) << std::endl;
+        // std::cout << "Init:" << logic.pp(init) << std::endl;
+        // std::cout << "Transition:" << logic.pp(transition) << std::endl;
+        // std::cout << "Sink:" << logic.pp(sink) << std::endl;
         // Constructing a graph based on the currently considered TS
         auto graph = constructHyperGraph(init, transition, sink, logic, vars);
         auto engine = EngineFactory(logic, witnesses).getEngine(witnesses.getOrDefault(Options::ENGINE, "spacer"));
@@ -757,7 +759,11 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
                         strictCandidates.push(cand);
                     }
                     PTRef inv = logic.mkOr(strictCandidates);
-
+                    // TODO: Even when Considered Candidate is not inductive invariant, all states that can terminate via it should
+                    // TODO: be removed possibly, as any state for which Transition Invariant holds is guaranteed to terminate
+                    // TODO: to do it, we can check for which states inv is in fact transition invariant, and remove those.
+                    // TODO: Can be checked via:
+                    // TODO: TrInv /\ Tr => TrInv, by QE-ing everything except for x
                     std::cout<<"Considered candidate: " << logic.pp(inv) << std::endl;
                     smt_solver.resetSolver();
                     // Check if inv is Transition Invariant
