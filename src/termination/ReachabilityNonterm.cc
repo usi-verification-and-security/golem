@@ -771,27 +771,22 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
                         smt_solver.assertProp(logic.mkAnd({ transition, TimeMachine(logic).sendFlaThroughTime(logic.mkOr(inv,id),1), TimeMachine(logic).sendFlaThroughTime(sink,2), logic.mkNot(shiftOnlyNextVars(inv, vars, logic))}));
                         if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
                             PTRef preTransition = QuantifierElimination(logic).keepOnly(logic.mkAnd(logic.mkOr(inv,id), TimeMachine(logic).sendFlaThroughTime(sink,1)),vars);
-                            PTRef check = logic.mkAnd(logic.mkNot(preTransition), init);
+                            PTRef check = logic.mkAnd(preTransition, init);
                             smt_solver.resetSolver();
                             smt_solver.assertProp(check);
+                            // if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
+                            //     smt_solver.resetSolver();
+                            //     smt_solver.assertProp(logic.mkAnd({preTransition, transition, logic.mkNot(inv)}));
+                            //     if (smt_solver.check() == SMTSolver::Answer::UNSAT)
+                            //         smt_solver.resetSolver();
+                            //         smt_solver.assertProp(logic.mkAnd({preTransition, transition, TimeMachine(logic).sendFlaThroughTime(logic.mkOr(inv,id),1), logic.mkNot(shiftOnlyNextVars(inv, vars, logic))}));
+                            //         if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
+                            //             return  Answer::YES;
+                            //         } else {
+                            //             return Answer::NO;
+                            //         }
                             if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
-                                smt_solver.resetSolver();
-                                smt_solver.assertProp(logic.mkAnd({preTransition, transition, logic.mkNot(inv)}));
-                                if (smt_solver.check() == SMTSolver::Answer::UNSAT)
-                                    smt_solver.resetSolver();
-                                    smt_solver.assertProp(logic.mkAnd({preTransition, transition, TimeMachine(logic).sendFlaThroughTime(logic.mkOr(inv,id),1), logic.mkNot(shiftOnlyNextVars(inv, vars, logic))}));
-                                    if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
-                                        return  Answer::YES;
-                                    } else {
-                                        return Answer::NO;
-                                    }
-                            } else {
-                                init = logic.mkAnd(init, logic.mkNot(preTransition));
-                                smt_solver.resetSolver();
-                                smt_solver.assertProp(logic.mkAnd(preTransition, init));
-                                if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
                                     return  Answer::NO;
-                                }
                             }
                         }
                     }
