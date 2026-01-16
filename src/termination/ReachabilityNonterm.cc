@@ -547,9 +547,9 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
     }
     // PTRef trInv = logic.getTerm_true();
     while (true) {
-        // std::cout << "Init:" << logic.pp(init) << std::endl;
-        // std::cout << "Transition:" << logic.pp(transition) << std::endl;
-        // std::cout << "Sink:" << logic.pp(sink) << std::endl;
+        std::cout << "Init:" << logic.pp(init) << std::endl;
+        std::cout << "Transition:" << logic.pp(transition) << std::endl;
+        std::cout << "Sink:" << logic.pp(sink) << std::endl;
         // Constructing a graph based on the currently considered TS
         auto graph = constructHyperGraph(init, transition, sink, logic, vars);
         auto engine = EngineFactory(logic, witnesses).getEngine(witnesses.getOrDefault(Options::ENGINE, "spacer"));
@@ -753,7 +753,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
                     // TODO: to do it, we can check for which states inv is in fact transition invariant, and remove those.
                     // TODO: Can be checked via:
                     // TODO: TrInv /\ Tr => TrInv, by QE-ing everything except for x
-                    // std::cout<<"Considered candidate: " << logic.pp(inv) << std::endl;
+                    std::cout<<"Considered candidate: " << logic.pp(inv) << std::endl;
                     smt_solver.resetSolver();
                     // Check if inv is Transition Invariant
                     smt_solver.assertProp(logic.mkAnd({logic.mkOr(inv,id), TimeMachine(logic).sendFlaThroughTime(transition,1), logic.mkNot(shiftOnlyNextVars(inv, vars, logic))}));
@@ -780,9 +780,20 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
                                 smt_solver.resetSolver();
                                 smt_solver.assertProp(logic.mkAnd({preTransition, transition, logic.mkNot(inv)}));
                                 if (smt_solver.check() == SMTSolver::Answer::UNSAT)
-                                    return  Answer::YES;
+                                    smt_solver.resetSolver();
+                                    smt_solver.assertProp(logic.mkAnd({preTransition, transition, TimeMachine(logic).sendFlaThroughTime(logic.mkOr(inv,id),1), logic.mkNot(shiftOnlyNextVars(inv, vars, logic))}));
+                                    if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
+                                        return  Answer::YES;
+                                    } else {
+                                        return Answer::NO;
+                                    }
                             } else {
-                               init = logic.mkAnd(init, logic.mkNot(preTransition));
+                                init = logic.mkAnd(init, logic.mkNot(preTransition));
+                                smt_solver.resetSolver();
+                                smt_solver.assertProp(logic.mkAnd(preTransition, init));
+                                if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
+                                    return  Answer::NO;
+                                }
                             }
                         }
                     }
