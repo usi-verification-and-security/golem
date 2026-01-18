@@ -261,9 +261,7 @@ PTRef EdgeTranslator::translateEdge(DirectedEdge const & edge) {
         VarPosition varPosition{target, i};
         auto it = positionVarMap.find(varPosition);
         assert(it != positionVarMap.end());
-        source != graph.getEntry() ?
-        substitutionsMap.insert({nextStateVars[i], timeMachine.sendVarThroughTime(it->second, 1)}) :
-        substitutionsMap.insert({nextStateVars[i], timeMachine.sendVarThroughTime(it->second, 0)});
+        substitutionsMap.insert({nextStateVars[i], timeMachine.sendVarThroughTime(it->second, 1)});
     }
 
     // Translate the constraint
@@ -275,9 +273,9 @@ PTRef EdgeTranslator::translateEdge(DirectedEdge const & edge) {
         args.capacity(locationVarMap.size() * 2);
         for (auto && entry : locationVarMap) {
             if (entry.second != targetLocationVar) {
-                args.push(logic.mkNot(timeMachine.sendVarThroughTime(entry.second, source != graph.getEntry() ? 1 : 0)));
+                args.push(logic.mkNot(timeMachine.sendVarThroughTime(entry.second, 1)));
             }
-            if (entry.second != sourceLocationVar && source != graph.getEntry()) { args.push(logic.mkNot(entry.second)); }
+            if (entry.second != sourceLocationVar) { args.push(logic.mkNot(entry.second)); }
         }
         return logic.mkAnd(std::move(args));
     }();
@@ -285,7 +283,7 @@ PTRef EdgeTranslator::translateEdge(DirectedEdge const & edge) {
     // values. The paper uses frame equalities that keep the values from previous step. Now, we do not restrict
     // the values of these variables in any way.
     // This is sound because we still force the right variables to be considered using the location variables.
-    vec<PTRef> components{sourceLocationVar, translatedConstraint, timeMachine.sendVarThroughTime(targetLocationVar,  source != graph.getEntry() ? 1 : 0),
+    vec<PTRef> components{sourceLocationVar, translatedConstraint, timeMachine.sendVarThroughTime(targetLocationVar,  1),
                           updatedLocation};
     return logic.mkAnd(std::move(components));
 }
