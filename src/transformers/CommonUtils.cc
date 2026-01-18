@@ -283,7 +283,7 @@ PTRef EdgeTranslator::translateEdge(DirectedEdge const & edge) {
     // values. The paper uses frame equalities that keep the values from previous step. Now, we do not restrict
     // the values of these variables in any way.
     // This is sound because we still force the right variables to be considered using the location variables.
-    vec<PTRef> components{sourceLocationVar, translatedConstraint, timeMachine.sendVarThroughTime(targetLocationVar,  1),
+    vec<PTRef> components{sourceLocationVar, translatedConstraint, timeMachine.sendVarThroughTime(targetLocationVar, 1),
                           updatedLocation};
     return logic.mkAnd(std::move(components));
 }
