@@ -6,9 +6,6 @@
 
 #include "ReachabilityNonterm.h"
 
-#include <iostream>
-#include <ostream>
-
 #include "ChcSystem.h"
 #include "ModelBasedProjection.h"
 #include "QuantifierElimination.h"
@@ -20,14 +17,18 @@
 
 namespace golem::termination {
 
-
+// Function to convert UFLIA formula into the DNF
 PTRef dnfize(PTRef input, ArithLogic & logic) {
     TermUtils utils {logic};
+    // if formula is a conjunction, then it is needed to check if any of the conjuncts is a disjunction
     if (logic.isAnd(input)) {
+        // x /\ (y \/ v) <=> (x /\ y) \/ (x /\ v)
         auto juncts = utils.getTopLevelConjuncts(input);
 
         for (int i = 0; i < juncts.size(); i++) {
+            // every conjunct is being dnfized
             PTRef after_junct = dnfize(juncts[i], logic);
+            // if any of the conjuncts is a disjunction, then the whole formula is converted into disjunction of conjs
             if (logic.isOr(after_junct)) {
                 auto subjuncts = utils.getTopLevelDisjuncts(after_junct);
                 vec<PTRef> postprocessJuncts;
@@ -39,7 +40,9 @@ PTRef dnfize(PTRef input, ArithLogic & logic) {
                 return dnfize(logic.mkOr(postprocessJuncts), logic);
             }
         }
+    // if formula is a disjunction, every disjunct should be checked to move all disjunctions to top level
     } else if (logic.isOr(input)) {
+        // x \/ (y /\ (z \/ v)) <=> x \/ (y /\ z) \/ (y /\ v)
         auto juncts = utils.getTopLevelDisjuncts(input);
         vec<PTRef> postprocessJuncts;
         for (int i = 0; i < (int)juncts.size(); i++) {
@@ -54,10 +57,12 @@ PTRef dnfize(PTRef input, ArithLogic & logic) {
             }
         }
         return logic.mkOr(postprocessJuncts);
+    // if formula is a negation, then the results of negation is calculated for conjunction, disjunction and
+    // EQUALITY. For EQUALITY, the formula is transferred into disjunction of two <= formulas
     } else if (logic.isNot(input)) {
         PTRef rev = utils.simplifyMax(logic.mkNot(input));
-        // TODO: THINK IF IT IS CORRECT!!!
         if (logic.isAnd(rev)) {
+            // !(x /\ y) <=> !x \/ !y
             auto subjuncts = utils.getTopLevelConjuncts(rev);
             vec<PTRef> postprocessJuncts;
             for (int i = 0; i < (int)subjuncts.size(); i++) {
@@ -65,6 +70,7 @@ PTRef dnfize(PTRef input, ArithLogic & logic) {
             }
             return dnfize(logic.mkOr(postprocessJuncts), logic);
         } else if (logic.isOr(rev)) {
+            // !(x \/ y) <=> !x /\ !y
             auto subjuncts = utils.getTopLevelDisjuncts(input);
             vec<PTRef> postprocessJuncts;
             for (int i = 0; i < (int)subjuncts.size(); i++) {
@@ -74,6 +80,7 @@ PTRef dnfize(PTRef input, ArithLogic & logic) {
         } else if (logic.isNumEq(rev)) {
             auto it = logic.getPterm(rev).begin();
             vec<PTRef> subjuncts;
+            // x != y <=> x <= y-1 \/ x >= y+1
             subjuncts.push(logic.mkGeq(it[0], logic.mkPlus(it[1], logic.getTerm_IntOne())));
             subjuncts.push(logic.mkLeq(it[0], logic.mkPlus(it[1], logic.getTerm_IntMinusOne())));
             return logic.mkOr(subjuncts);
@@ -82,6 +89,7 @@ PTRef dnfize(PTRef input, ArithLogic & logic) {
     return input;
 }
 
+// This function is needed to extract coefficient from a specific atom inside of the arithmetic formula
 void unrollAtom(ArithLogic & logic, std::vector<PTRef>& coefs, PTRef atom, bool reverse) {
     assert(logic.isVar(atom) || logic.isConstant(atom) || logic.isTimes(atom) || logic.isIntMinus(atom) || logic.isRealMinus(atom) || logic.isPlus(atom) || logic.isIntDiv(atom) || logic.isRealDiv(atom));
     if (logic.isConstant(atom)) {
@@ -155,6 +163,7 @@ void unrollAtom(ArithLogic & logic, std::vector<PTRef>& coefs, PTRef atom, bool 
 
 }
 
+// TODO: Think about sums of atoms
 void getCoeffs(ArithLogic & logic, std::vector<PTRef>& coefs, PTRef formula) {
     assert (logic.isLeq(formula));
     auto it = logic.getPterm(formula).begin();
@@ -255,13 +264,16 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
             if (logic.isConstant(coefs[i])) {
                 b.push_back(coefs[i]);
                 assert(!found);
+                if (found) exit(1);
                 found = true;
             } else if (logic.isVar(coefs[i])) {
                 for (int j = 0; j < int_vars.size(); j++) {
                     if (coefs[i] == int_vars[j]) {
+                        if (A[A.size()-1][j] != logic.getTerm_IntZero()) {exit(1);}
                         A[A.size()-1][j] = logic.getTerm_IntOne();
                         break;
                     } else if (coefs[i] == next_vars[j]) {
+                        if (A_p[A_p.size()-1][j] != logic.getTerm_IntZero()) {exit(1);}
                         A_p[A_p.size()-1][j] = logic.getTerm_IntOne();
                     }
                 }
@@ -279,9 +291,11 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
                 assert(logic.isConstant(constant));
                 for (int j = 0; j < int_vars.size(); j++) {
                     if (subatom == int_vars[j]) {
+                        if (A_p[A.size()-1][j] != logic.getTerm_IntZero()) {exit(1);}
                         A[A.size()-1][j] = constant;
                         break;
                     } else if (subatom == next_vars[j]) {
+                        if (A_p[A_p.size()-1][j] != logic.getTerm_IntZero()) {exit(1);}
                         A_p[A_p.size()-1][j] = constant;
                         break;
                     }
@@ -774,20 +788,21 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
                             PTRef check = logic.mkAnd(preTransition, init);
                             smt_solver.resetSolver();
                             smt_solver.assertProp(check);
-                            // if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
-                            //     smt_solver.resetSolver();
-                            //     smt_solver.assertProp(logic.mkAnd({preTransition, transition, logic.mkNot(inv)}));
-                            //     if (smt_solver.check() == SMTSolver::Answer::UNSAT)
-                            //         smt_solver.resetSolver();
-                            //         smt_solver.assertProp(logic.mkAnd({preTransition, transition, TimeMachine(logic).sendFlaThroughTime(logic.mkOr(inv,id),1), logic.mkNot(shiftOnlyNextVars(inv, vars, logic))}));
-                            //         if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
-                            //             return  Answer::YES;
-                            //         } else {
-                            //             return Answer::NO;
-                            //         }
+
+
                             if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
-                                    return  Answer::NO;
+                                return  Answer::NO;
                             }
+
+                            //TODO: If exists a path to state outside of preTransition, then TS is nonterminating.
+                            // auto graph = constructHyperGraph(init, transition, logic.mkNot(preTransition), logic, vars);
+                            // auto engine = EngineFactory(logic, witnesses).getEngine(witnesses.getOrDefault(Options::ENGINE, "spacer"));
+                            //
+                            // // Check if sink states are reachable within TS
+                            // auto res = engine->solve(*graph);
+                            // if (res.getAnswer() == VerificationAnswer::UNSAFE) {
+                            //     return Answer::NO;
+                            // }
                         }
                     }
 
