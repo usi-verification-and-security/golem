@@ -504,7 +504,7 @@ vec<PTRef> extractStrictCandidates(PTRef itp, PTRef sink, ArithLogic& logic,  co
     vec<PTRef> strictCandidates;
     auto dnfized_sink = TermUtils(logic).getTopLevelDisjuncts(dnfize(logic.mkNot(sink), logic));
     // if (logic.isOr(itp)) {
-    std::cout << "Pre-dnfization:" << logic.pp(itp) << std::endl;
+    // std::cout << "Pre-dnfization:" << logic.pp(itp) << std::endl;
     PTRef dnfized = dnfize(itp, logic);
     // std::cout << "Post-dnfization:" << logic.pp(dnfized) << std::endl;
     vec<PTRef> candidates = TermUtils(logic).getTopLevelDisjuncts(dnfized);
@@ -593,9 +593,9 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
     // PTRef trInv = logic.getTerm_true();
     while (true) {
 
-        std::cout<<"Init: " << logic.pp(init) << std::endl;
-        std::cout<<"Transition: " << logic.pp(transition) << std::endl;
-        std::cout<<"Sink: " << logic.pp(sink) << std::endl;
+        // std::cout<<"Init: " << logic.pp(init) << std::endl;
+        // std::cout<<"Transition: " << logic.pp(transition) << std::endl;
+        // std::cout<<"Sink: " << logic.pp(sink) << std::endl;
         // Constructing a graph based on the currently considered TS
         auto graph = constructHyperGraph(init, transition, sink, logic, vars);
         auto engine = EngineFactory(logic, witnesses).getEngine(witnesses.getOrDefault(Options::ENGINE, "spacer"));
