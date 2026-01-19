@@ -48,7 +48,7 @@ PTRef dnfize(PTRef input, ArithLogic & logic) {
             // into n disjunctions (corresponding to each disjunct)
             } else if (subjuncts[i].size() > 1) {
                 uint size = output.size();
-                for (uint j = 0; j < subjuncts[i].size(); j ++) {
+                for (uint j = 0; j < subjuncts[i].size()-1; j ++) {
                     // first we extend number of disjuncts (initially m) into m*n
                     for (uint k = 0; k < size; k ++) {
                         output.push_back(output[k]);
@@ -513,11 +513,11 @@ vec<PTRef> extractStrictCandidates(PTRef itp, PTRef sink, ArithLogic& logic,  co
         smt_solver.assertProp(cand);
         if (smt_solver.check() == SMTSolver::Answer::UNSAT) {continue;}
 
-        smt_solver.resetSolver();
-        smt_solver.assertProp(TermUtils(logic).varSubstitute(cand, varSubstitutions));
+        // smt_solver.resetSolver();
+        // smt_solver.assertProp(TermUtils(logic).varSubstitute(cand, varSubstitutions));
         PTRef simpl_cand = TermUtils(logic).simplifyMax(cand);
         // std::cout << "Checking candidate: " << logic.pp(cand) << std::endl;
-        if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
+        // if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
             if (checkWellFounded(simpl_cand, logic, vars)) {
                 // std::cout << "Well-Founded: " << logic.pp(cand) << std::endl;
                 strictCandidates.push(simpl_cand);
@@ -534,7 +534,7 @@ vec<PTRef> extractStrictCandidates(PTRef itp, PTRef sink, ArithLogic& logic,  co
                     }
                 }
             }
-        }
+        // }
     }
     // }
 
@@ -735,7 +735,6 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
                 if(SMTsolver.check() != SMTSolver::Answer::SAT) {
                     return Answer::NO;
                 }
-                PTRef newTransitions = logic.mkAnd({terminatingStates, logic.mkAnd(formulas)});
 
                 // Start buiding the trace that reaches sink states
                 vec<PTRef> eq_vars;
