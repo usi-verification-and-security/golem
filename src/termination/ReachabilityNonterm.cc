@@ -608,7 +608,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
                 PTRef prev = TimeMachine(logic).sendVarThroughTime(var, num);
                 last_vars.push(prev);
             }
-            PTRef Result = TimeMachine(logic).sendFlaThroughTime(logic.mkAnd({logic.mkAnd(init, terminatingStates), logic.mkAnd(formulas),logic.mkNot(TimeMachine(logic).sendFlaThroughTime(sink, num))}), num);
+            PTRef Result = TimeMachine(logic).sendFlaThroughTime(logic.mkAnd({init, logic.mkAnd(formulas),logic.mkNot(TimeMachine(logic).sendFlaThroughTime(sink, num))}), num);
             // Traversing trace from the Bad to Init, detecting the last transition where some variables
             // were assigned nondetermenistically
             if (!DETERMINISTIC_TRANSITION && SMTsolver.check() == SMTSolver::Answer::SAT) {
