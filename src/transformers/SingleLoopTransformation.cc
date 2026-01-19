@@ -38,17 +38,16 @@ SingleLoopTransformation::transform(const ChcDirectedGraph & graph) const {
 
     EdgeTranslator edgeTranslator{graph, locationVars, argVars, {}};
     vec<PTRef> transitionRelationComponent;
-    graph.forEachEdge([&](auto const & edge) { transitionRelationComponent.push(edgeTranslator.translateEdge(edge)); });
-
-    PTRef transitionRelation = logic.mkOr(std::move(transitionRelationComponent));
-    PTRef initialStates = [&]() -> PTRef {
-        vec<PTRef> negatedLocations;
-        negatedLocations.capacity(locationVars.size());
-        for (auto && entry : locationVars) {
-            negatedLocations.push(logic.mkNot(entry.second));
+    vec<PTRef> initialComponent;
+    graph.forEachEdge([&](auto const & edge) {
+        if (edge.from == graph.getEntry()) {
+            initialComponent.push(edgeTranslator.translateEdge(edge));
+        } else {
+            transitionRelationComponent.push(edgeTranslator.translateEdge(edge));
         }
-        return logic.mkAnd(std::move(negatedLocations));
-    }();
+    });
+    PTRef initialStates = logic.mkOr(std::move(initialComponent));
+    PTRef transitionRelation = logic.mkOr(std::move(transitionRelationComponent));
 
     PTRef badStates = locationVars.at(graph.getExit());
 

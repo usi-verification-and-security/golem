@@ -561,7 +561,10 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
     }
     // PTRef trInv = logic.getTerm_true();
     while (true) {
-        // std::cout << "Init:" << logic.pp(inimak) << std::endl;
+
+        // std::cout<<"Init: " << logic.pp(init) << std::endl;
+        // std::cout<<"Transition: " << logic.pp(transition) << std::endl;
+        // std::cout<<"Sink: " << logic.pp(sink) << std::endl;
         // Constructing a graph based on the currently considered TS
         auto graph = constructHyperGraph(init, transition, sink, logic, vars);
         auto engine = EngineFactory(logic, witnesses).getEngine(witnesses.getOrDefault(Options::ENGINE, "spacer"));
@@ -605,7 +608,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
                 PTRef prev = TimeMachine(logic).sendVarThroughTime(var, num);
                 last_vars.push(prev);
             }
-            PTRef Result = TimeMachine(logic).sendFlaThroughTime(sink, num);
+            PTRef Result = TimeMachine(logic).sendFlaThroughTime(logic.mkAnd({logic.mkAnd(init, terminatingStates), logic.mkAnd(formulas),logic.mkNot(TimeMachine(logic).sendFlaThroughTime(sink, num))}), num);
             // Traversing trace from the Bad to Init, detecting the last transition where some variables
             // were assigned nondetermenistically
             if (!DETERMINISTIC_TRANSITION && SMTsolver.check() == SMTSolver::Answer::SAT) {
