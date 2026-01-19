@@ -25,21 +25,52 @@ PTRef dnfize(PTRef input, ArithLogic & logic) {
         // x /\ (y \/ v) <=> (x /\ y) \/ (x /\ v)
         auto juncts = utils.getTopLevelConjuncts(input);
 
+        std::vector<vec<PTRef>> subjuncts;
         for (int i = 0; i < juncts.size(); i++) {
             // every conjunct is being dnfized
             PTRef after_junct = dnfize(juncts[i], logic);
             // if any of the conjuncts is a disjunction, then the whole formula is converted into disjunction of conjs
             if (logic.isOr(after_junct)) {
-                auto subjuncts = utils.getTopLevelDisjuncts(after_junct);
-                vec<PTRef> postprocessJuncts;
-                juncts[i] = juncts.last();
-                juncts.pop();
-                for (auto subjunct: subjuncts) {
-                    postprocessJuncts.push(logic.mkAnd(logic.mkAnd(juncts), subjunct));
-                }
-                return dnfize(logic.mkOr(postprocessJuncts), logic);
+                subjuncts.push_back(utils.getTopLevelDisjuncts(after_junct));
+            } else {
+                subjuncts.push_back({after_junct});
             }
         }
+        std::vector<std::vector<PTRef>> output {{logic.getTerm_true()}};
+        // Iterate over all subjuncts, composing a resulting formula
+        for (uint i = 0; i < subjuncts.size(); i ++) {
+            // if subjuncts size is 1, it is added to every conjunct
+            if (subjuncts[i].size() == 1) {
+                for (uint j = 0; j < output.size(); j ++) {
+                    output[j].push_back(subjuncts[i][0]);
+                }
+            // else, if some subjunct is a disjunction composed of n disjuncts, then conjunctions should be split
+            // into n disjunctions (corresponding to each disjunct)
+            } else if (subjuncts[i].size() > 1) {
+                uint size = output.size();
+                for (uint j = 0; j < subjuncts[i].size(); j ++) {
+                    // first we extend number of disjuncts (initially m) into m*n
+                    for (uint k = 0; k < size; k ++) {
+                        output.push_back(output[k]);
+                    }
+                }
+
+                // then every disjunct is conjoined with corresponding disjunct
+                for (uint j = 0; j < subjuncts[i].size(); j ++) {
+                    // first we extend number of disjuncts (initially m) into m*n
+                    for (uint k = 0; k < size; k ++) {
+                        output[j*size + k].push_back(subjuncts[i][j]);
+                    }
+                }
+            } else {
+                assert(false);
+            }
+        }
+        vec<PTRef> disjuncts;
+        for (auto sub: output) {
+            disjuncts.push(logic.mkAnd(sub));
+        }
+        return  logic.mkOr(disjuncts);
     // if formula is a disjunction, every disjunct should be checked to move all disjunctions to top level
     } else if (logic.isOr(input)) {
         // x \/ (y /\ (z \/ v)) <=> x \/ (y /\ z) \/ (y /\ v)
@@ -473,7 +504,7 @@ vec<PTRef> extractStrictCandidates(PTRef itp, PTRef sink, ArithLogic& logic,  co
     vec<PTRef> strictCandidates;
     auto dnfized_sink = TermUtils(logic).getTopLevelDisjuncts(dnfize(logic.mkNot(sink), logic));
     // if (logic.isOr(itp)) {
-    // std::cout << "Pre-dnfization:" << logic.pp(itp) << std::endl;
+    std::cout << "Pre-dnfization:" << logic.pp(itp) << std::endl;
     PTRef dnfized = dnfize(itp, logic);
     // std::cout << "Post-dnfization:" << logic.pp(dnfized) << std::endl;
     vec<PTRef> candidates = TermUtils(logic).getTopLevelDisjuncts(dnfized);
@@ -562,9 +593,9 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
     // PTRef trInv = logic.getTerm_true();
     while (true) {
 
-        // std::cout<<"Init: " << logic.pp(init) << std::endl;
-        // std::cout<<"Transition: " << logic.pp(transition) << std::endl;
-        // std::cout<<"Sink: " << logic.pp(sink) << std::endl;
+        std::cout<<"Init: " << logic.pp(init) << std::endl;
+        std::cout<<"Transition: " << logic.pp(transition) << std::endl;
+        std::cout<<"Sink: " << logic.pp(sink) << std::endl;
         // Constructing a graph based on the currently considered TS
         auto graph = constructHyperGraph(init, transition, sink, logic, vars);
         auto engine = EngineFactory(logic, witnesses).getEngine(witnesses.getOrDefault(Options::ENGINE, "spacer"));
