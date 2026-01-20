@@ -253,9 +253,6 @@ void lequalize(PTRef conjunct, vec<PTRef> & leqs, ArithLogic& logic) {
 bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const & vars) {
     TermUtils utils {logic};
 
-    SMTSolver solver(logic, SMTSolver::WitnessProduction::NONE);
-    solver.assertProp(logic.mkAnd(formula, TimeMachine(logic).sendFlaThroughTime(formula, 1)));
-    if (solver.check() == SMTSolver::Answer::UNSAT) {return  true;}
     PTRef dnfized = utils.simplifyMax(dnfize(formula, logic));
     // std::cout << "dnfized = " << logic.pp(dnfized) << std::endl;
     if (logic.isOr(dnfized)) {
@@ -282,6 +279,7 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
         // std::cout << "conjunct = " << logic.pp(conjunct) << std::endl;
         lequalize(conjunct, temp_conjuncts, logic);
     }
+
     if (temp_conjuncts.size() == 0) {
         return false;
     }
@@ -439,6 +437,7 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
 
     // Final check:
     PTRef finalCheck = logic.mkAnd({ZeroIneq, firstEq, secondEq, thirdEq, constCheck});
+    SMTSolver solver(logic, SMTSolver::WitnessProduction::NONE);
     solver.resetSolver();
     solver.assertProp(finalCheck);
     return solver.check() == SMTSolver::Answer::SAT;
@@ -498,7 +497,6 @@ PTRef shiftOnlyNextVars(PTRef formula, const std::vector<PTRef> & vars, Logic& l
 }
 
 vec<PTRef> extractStrictCandidates(PTRef itp, PTRef sink, ArithLogic& logic,  const std::vector<PTRef> & vars) {
-
     SMTSolver smt_solver(logic, SMTSolver::WitnessProduction::NONE);
     TermUtils::substitutions_map varSubstitutions;
     for (uint32_t i = 0u; i < vars.size(); ++i) {
@@ -517,31 +515,36 @@ vec<PTRef> extractStrictCandidates(PTRef itp, PTRef sink, ArithLogic& logic,  co
         smt_solver.assertProp(cand);
         if (smt_solver.check() == SMTSolver::Answer::UNSAT) {continue;}
 
-        // smt_solver.resetSolver();
+        smt_solver.resetSolver();
+        smt_solver.assertProp(logic.mkAnd(cand, logic.mkNot(sink)));
+        if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
+            strictCandidates.push(cand);
+            continue;
+        }
         // smt_solver.assertProp(TermUtils(logic).varSubstitute(cand, varSubstitutions));
         PTRef simpl_cand = TermUtils(logic).simplifyMax(cand);
         // std::cout << "Checking candidate: " << logic.pp(cand) << std::endl;
         // TODO: Think what to do with the strict check, in particular with
         // bools, bc even if transition itself is not wellfounded, but it's impossible to take twice - it is
         // well-founded
+        // TODO: What does it mean to be well-founded relation for the boolean variables?
         // if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
-            if (checkWellFounded(simpl_cand, logic, vars)) {
-                // std::cout << "Well-Founded: " << logic.pp(cand) << std::endl;
-                strictCandidates.push(simpl_cand);
-            } else {
-                for (auto sink_cand: dnfized_sink) {
-                    // std::cout << "Checking candidate: " << logic.pp(logic.mkAnd(sink_cand,simpl_cand)) << std::endl;
-                    smt_solver.resetSolver();
-                    smt_solver.assertProp(logic.mkAnd(sink_cand,simpl_cand));
-                    if (smt_solver.check() == SMTSolver::Answer::SAT && checkWellFounded(logic.mkAnd(sink_cand,simpl_cand), logic, vars)) {
-                        strictCandidates.push(logic.mkAnd(sink_cand,simpl_cand));
-                        // std::cout << "Well-Founded: " << logic.pp(logic.mkAnd(sink_cand,simpl_cand)) << std::endl;
-                        // TODO: Maybe I can weaken recieved candidate using some kind of houdini.
-                        // TODO: Particularly, I should try to remove all equalities possible (also ones that are done via <= && >=)
-                    }
+        if (checkWellFounded(simpl_cand, logic, vars)) {
+            // std::cout << "Well-Founded: " << logic.pp(cand) << std::endl;
+            strictCandidates.push(simpl_cand);
+        } else {
+            for (auto sink_cand: dnfized_sink) {
+                // std::cout << "Checking candidate: " << logic.pp(logic.mkAnd(sink_cand,simpl_cand)) << std::endl;
+                smt_solver.resetSolver();
+                smt_solver.assertProp(logic.mkAnd(sink_cand,simpl_cand));
+                if (smt_solver.check() == SMTSolver::Answer::SAT && checkWellFounded(logic.mkAnd(sink_cand,simpl_cand), logic, vars)) {
+                    strictCandidates.push(logic.mkAnd(sink_cand,simpl_cand));
+                    // std::cout << "Well-Founded: " << logic.pp(logic.mkAnd(sink_cand,simpl_cand)) << std::endl;
+                    // TODO: Maybe I can weaken recieved candidate using some kind of houdini.
+                    // TODO: Particularly, I should try to remove all equalities possible (also ones that are done via <= && >=)
                 }
             }
-        // }
+        }
     }
 
 
