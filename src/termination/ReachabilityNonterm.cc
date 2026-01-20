@@ -252,6 +252,10 @@ void lequalize(PTRef conjunct, vec<PTRef> & leqs, ArithLogic& logic) {
 
 bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const & vars) {
     TermUtils utils {logic};
+
+    SMTSolver solver(logic, SMTSolver::WitnessProduction::NONE);
+    solver.assertProp(logic.mkAnd(formula, TimeMachine(logic).sendFlaThroughTime(formula, 1)));
+    if (solver.check() == SMTSolver::Answer::UNSAT) {return  true;}
     PTRef dnfized = utils.simplifyMax(dnfize(formula, logic));
     // std::cout << "dnfized = " << logic.pp(dnfized) << std::endl;
     if (logic.isOr(dnfized)) {
@@ -279,7 +283,7 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
         lequalize(conjunct, temp_conjuncts, logic);
     }
     if (temp_conjuncts.size() == 0) {
-        return true;
+        return false;
     }
 
     for (auto conjunct:temp_conjuncts) {
@@ -435,7 +439,7 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
 
     // Final check:
     PTRef finalCheck = logic.mkAnd({ZeroIneq, firstEq, secondEq, thirdEq, constCheck});
-    SMTSolver solver(logic, SMTSolver::WitnessProduction::NONE);
+    solver.resetSolver();
     solver.assertProp(finalCheck);
     return solver.check() == SMTSolver::Answer::SAT;
 }
@@ -517,6 +521,9 @@ vec<PTRef> extractStrictCandidates(PTRef itp, PTRef sink, ArithLogic& logic,  co
         // smt_solver.assertProp(TermUtils(logic).varSubstitute(cand, varSubstitutions));
         PTRef simpl_cand = TermUtils(logic).simplifyMax(cand);
         // std::cout << "Checking candidate: " << logic.pp(cand) << std::endl;
+        // TODO: Think what to do with the strict check, in particular with
+        // bools, bc even if transition itself is not wellfounded, but it's impossible to take twice - it is
+        // well-founded
         // if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
             if (checkWellFounded(simpl_cand, logic, vars)) {
                 // std::cout << "Well-Founded: " << logic.pp(cand) << std::endl;
@@ -536,7 +543,6 @@ vec<PTRef> extractStrictCandidates(PTRef itp, PTRef sink, ArithLogic& logic,  co
             }
         // }
     }
-    // }
 
 
     return strictCandidates;
@@ -806,6 +812,9 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
                     if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
                         return  Answer::YES;
                     } else {
+                        //TODO: Compute all states, for which inv would be transition invariant!
+                        //TODO: These states can be excluded from the search and added to sink, since those states are guaranteed to
+                        // lead to the termination!!
                         // Left-restricted
                         smt_solver.resetSolver();
                         smt_solver.assertProp(logic.mkAnd({init, logic.mkOr(inv,id), TimeMachine(logic).sendFlaThroughTime(transition,1), logic.mkNot(shiftOnlyNextVars(inv, vars, logic))}));
