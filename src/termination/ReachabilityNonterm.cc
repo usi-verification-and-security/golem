@@ -204,7 +204,7 @@ void getCoeffs(ArithLogic & logic, std::vector<PTRef>& coefs, PTRef formula) {
 
 }
 
-void lequalize(PTRef conjunct, vec<PTRef> & leqs, ArithLogic& logic) {
+void lequalize(PTRef conjunct, vec<PTRef> & leqs, vec<PTRef> & bools, ArithLogic& logic) {
     auto it = logic.getPterm(conjunct).begin();
     // x = y <=>
     // x <= y
@@ -238,12 +238,12 @@ void lequalize(PTRef conjunct, vec<PTRef> & leqs, ArithLogic& logic) {
             leqs.push(logic.mkLeq(it[0], logic.mkPlus(it[1], logic.getTerm_IntMinusOne())));
             // std::cout << "lequalized = " << logic.pp(logic.mkLeq(it[0], logic.mkPlus(it[1], logic.getTerm_IntMinusOne()))) << std::endl;
         }  else if (logic.isBoolAtom(inner_formula)) {
-            return;
+            bools.push(conjunct);
         } else {
             assert(false);
         }
     } else if (logic.isBoolAtom(conjunct)) {
-        return;
+        bools.push(conjunct);
     } else {
         assert(false);
     }
@@ -252,6 +252,7 @@ void lequalize(PTRef conjunct, vec<PTRef> & leqs, ArithLogic& logic) {
 
 bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const & vars) {
     TermUtils utils {logic};
+    SMTSolver solver(logic, SMTSolver::WitnessProduction::NONE);
 
     PTRef dnfized = utils.simplifyMax(dnfize(formula, logic));
     // std::cout << "dnfized = " << logic.pp(dnfized) << std::endl;
@@ -274,14 +275,29 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
     std::vector<std::vector<PTRef>> A;
     std::vector<std::vector<PTRef>> A_p;
     vec<PTRef> temp_conjuncts;
+    vec<PTRef> bools;
     // Preprocessing, in the end conjuncts should be a set of formulas f(x) <= c, where c is some constant, and f(x) is a linear combination of variables
     for (auto conjunct: conjuncts) {
         // std::cout << "conjunct = " << logic.pp(conjunct) << std::endl;
-        lequalize(conjunct, temp_conjuncts, logic);
+        lequalize(conjunct, temp_conjuncts, bools, logic);
     }
 
+    // TODO: Think about termination in the presence of booleans
     if (temp_conjuncts.size() == 0) {
-        return false;
+        TermUtils::substitutions_map varSubstitutions;
+        for (uint32_t i = 0u; i < vars.size(); ++i) {
+            varSubstitutions.insert({TimeMachine(logic).sendVarThroughTime(vars[i], 1), vars[i]});
+        }
+        solver.assertProp(TermUtils(logic).varSubstitute(logic.mkAnd(bools), varSubstitutions));
+        return solver.check() == SMTSolver::Answer::UNSAT;
+    } else if (bools.size() > 0) {
+        TermUtils::substitutions_map varSubstitutions;
+        for (uint32_t i = 0u; i < vars.size(); ++i) {
+            varSubstitutions.insert({TimeMachine(logic).sendVarThroughTime(vars[i], 1), vars[i]});
+        }
+        solver.assertProp(TermUtils(logic).varSubstitute(logic.mkAnd(bools), varSubstitutions));
+        if (solver.check() == SMTSolver::Answer::UNSAT) { return true; }
+        solver.resetSolver();
     }
 
     for (auto conjunct:temp_conjuncts) {
@@ -437,7 +453,6 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
 
     // Final check:
     PTRef finalCheck = logic.mkAnd({ZeroIneq, firstEq, secondEq, thirdEq, constCheck});
-    SMTSolver solver(logic, SMTSolver::WitnessProduction::NONE);
     solver.resetSolver();
     solver.assertProp(finalCheck);
     return solver.check() == SMTSolver::Answer::SAT;
@@ -498,10 +513,6 @@ PTRef shiftOnlyNextVars(PTRef formula, const std::vector<PTRef> & vars, Logic& l
 
 vec<PTRef> extractStrictCandidates(PTRef itp, PTRef sink, ArithLogic& logic,  const std::vector<PTRef> & vars) {
     SMTSolver smt_solver(logic, SMTSolver::WitnessProduction::NONE);
-    TermUtils::substitutions_map varSubstitutions;
-    for (uint32_t i = 0u; i < vars.size(); ++i) {
-        varSubstitutions.insert({TimeMachine(logic).sendVarThroughTime(vars[i], 1), vars[i]});
-    }
 
     vec<PTRef> strictCandidates;
     auto dnfized_sink = TermUtils(logic).getTopLevelDisjuncts(dnfize(logic.mkNot(sink), logic));
@@ -515,20 +526,15 @@ vec<PTRef> extractStrictCandidates(PTRef itp, PTRef sink, ArithLogic& logic,  co
         smt_solver.assertProp(cand);
         if (smt_solver.check() == SMTSolver::Answer::UNSAT) {continue;}
 
-        smt_solver.resetSolver();
-        smt_solver.assertProp(logic.mkAnd(cand, logic.mkNot(sink)));
-        if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
-            strictCandidates.push(cand);
-            continue;
-        }
-        // smt_solver.assertProp(TermUtils(logic).varSubstitute(cand, varSubstitutions));
         PTRef simpl_cand = TermUtils(logic).simplifyMax(cand);
         // std::cout << "Checking candidate: " << logic.pp(cand) << std::endl;
-        // TODO: Think what to do with the strict check, in particular with
-        // bools, bc even if transition itself is not wellfounded, but it's impossible to take twice - it is
-        // well-founded
         // TODO: What does it mean to be well-founded relation for the boolean variables?
-        // if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
+        // TODO: If candidate disjunct leads to a different boolean state - it is well-founded.
+        // TODO: But what if we encounter 2 well-founded ops like this
+        //      not x1 /\ x2 /\ x1' /\ not x2' and
+        //      x1 /\ not x2 /\ not x1' /\ x2'
+        //    These are both well-founded disjuncts, but they don't prove termination together
+
         if (checkWellFounded(simpl_cand, logic, vars)) {
             // std::cout << "Well-Founded: " << logic.pp(cand) << std::endl;
             strictCandidates.push(simpl_cand);
@@ -545,6 +551,7 @@ vec<PTRef> extractStrictCandidates(PTRef itp, PTRef sink, ArithLogic& logic,  co
                 }
             }
         }
+
     }
 
 
@@ -838,6 +845,13 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
                             if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
                                 return  Answer::NO;
                             }
+                            // else {
+                            //     auto graph = constructHyperGraph(init, transition, logic.mkNot(preTransition), logic, vars);
+                            //     auto engine = EngineFactory(logic, witnesses).getEngine(witnesses.getOrDefault(Options::ENGINE, "spacer"));
+                            //     if (engine->solve(*graph).getAnswer() == VerificationAnswer::UNSAFE) {
+                            //         return Answer::NO;
+                            //     }
+                            // }
 
                             //TODO: If exists a path to state outside of preTransition, then TS is nonterminating.
                             // auto graph = constructHyperGraph(init, transition, logic.mkNot(preTransition), logic, vars);
