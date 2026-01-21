@@ -608,7 +608,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
     }
     // PTRef trInv = logic.getTerm_true();
     while (true) {
-
+        // TODO: Do smth with extensive transition growth...
         // std::cout<<"Init: " << logic.pp(init) << std::endl;
         // std::cout<<"Transition: " << logic.pp(transition) << std::endl;
         // std::cout<<"Sink: " << logic.pp(sink) << std::endl;
@@ -655,7 +655,8 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
                 PTRef prev = TimeMachine(logic).sendVarThroughTime(var, num);
                 last_vars.push(prev);
             }
-            PTRef Result = TimeMachine(logic).sendFlaThroughTime(logic.mkAnd({init, logic.mkAnd(formulas),logic.mkNot(TimeMachine(logic).sendFlaThroughTime(sink, num))}), num);
+            PTRef Result = TimeMachine(logic).sendFlaThroughTime(sink, num);
+            // PTRef Result = QuantifierElimination(logic).keepOnly(logic.mkAnd({init, logic.mkAnd(formulas),logic.mkNot(TimeMachine(logic).sendFlaThroughTime(sink, num))}), last_vars);
             // Traversing trace from the Bad to Init, detecting the last transition where some variables
             // were assigned nondetermenistically
             if (!DETERMINISTIC_TRANSITION && SMTsolver.check() == SMTSolver::Answer::SAT) {
@@ -710,7 +711,9 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
                     return Answer::YES;
                 }
             } else {
+                // std::cout<<"Result: " << logic.pp(Result) << std::endl;
                 PTRef block = TimeMachine(logic).sendFlaThroughTime(Result, -j + 1);
+                // std::cout<<"Block: " << logic.pp(block) << std::endl;
                 assert(block != logic.getTerm_true());
                 transition = logic.mkAnd(transition, logic.mkNot(block));
             }
@@ -817,32 +820,38 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
                     // std::cout<<"Considered candidate: " << logic.pp(inv) << std::endl;
                     smt_solver.resetSolver();
                     // Check if inv is Transition Invariant
-                    smt_solver.assertProp(logic.mkAnd({logic.mkOr(inv,id), TimeMachine(logic).sendFlaThroughTime(transition,1), logic.mkNot(shiftOnlyNextVars(inv, vars, logic))}));
+                    // //TODO: Sink
+                    SMTSolver smt_checker(logic, SMTSolver::WitnessProduction::NONE);
+                    smt_checker.assertProp(logic.mkAnd({logic.mkOr(inv,id), TimeMachine(logic).sendFlaThroughTime(temp_tr,1), logic.mkNot(shiftOnlyNextVars(inv, vars, logic))}));
+                    // PTRef terminatingStates = QuantifierElimination(logic).keepOnly((logic.mkAnd({logic.mkOr(inv,id), TimeMachine(logic).sendFlaThroughTime(transition,1), logic.mkNot(shiftOnlyNextVars(inv, vars, logic))})), vars);
+                    // sink = logic.mkAnd(terminatingStates, sink);
                     // std::cout << "Solving!" << std::endl;
-                    if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
+                    if (smt_checker.check() == SMTSolver::Answer::UNSAT) {
+                        std::cout<<"Center"<<'\n';
                         return  Answer::YES;
                     } else {
                         //TODO: Compute all states, for which inv would be transition invariant!
                         //TODO: These states can be excluded from the search and added to sink, since those states are guaranteed to
                         // lead to the termination!!
                         // Left-restricted
-                        smt_solver.resetSolver();
-                        smt_solver.assertProp(logic.mkAnd({init, logic.mkOr(inv,id), TimeMachine(logic).sendFlaThroughTime(transition,1), logic.mkNot(shiftOnlyNextVars(inv, vars, logic))}));
-                        if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
+                        smt_checker.resetSolver();
+                        smt_checker.assertProp(logic.mkAnd({init, logic.mkOr(inv,id), TimeMachine(logic).sendFlaThroughTime(temp_tr,1), logic.mkNot(shiftOnlyNextVars(inv, vars, logic))}));
+                        if (smt_checker.check() == SMTSolver::Answer::UNSAT) {
+                            std::cout<<"Left"<<'\n';
                             return  Answer::YES;
                         }
 
                         // Right-restricted
-                        smt_solver.resetSolver();
-                        smt_solver.assertProp(logic.mkAnd({ transition, TimeMachine(logic).sendFlaThroughTime(logic.mkOr(inv,id),1), TimeMachine(logic).sendFlaThroughTime(sink,2), logic.mkNot(shiftOnlyNextVars(inv, vars, logic))}));
-                        if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
+                        smt_checker.resetSolver();
+                        smt_checker.assertProp(logic.mkAnd({ temp_tr, TimeMachine(logic).sendFlaThroughTime(logic.mkOr(inv,id),1), TimeMachine(logic).sendFlaThroughTime(sink,2), logic.mkNot(shiftOnlyNextVars(inv, vars, logic))}));
+                        if (smt_checker.check() == SMTSolver::Answer::UNSAT) {
                             PTRef preTransition = QuantifierElimination(logic).keepOnly(logic.mkAnd(logic.mkOr(inv,id), TimeMachine(logic).sendFlaThroughTime(sink,1)),vars);
                             PTRef check = logic.mkAnd(preTransition, init);
-                            smt_solver.resetSolver();
-                            smt_solver.assertProp(check);
+                            smt_checker.resetSolver();
+                            smt_checker.assertProp(check);
 
 
-                            if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
+                            if (smt_checker.check() == SMTSolver::Answer::UNSAT) {
                                 return  Answer::NO;
                             }
                             // else {
@@ -852,18 +861,9 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
                             //         return Answer::NO;
                             //     }
                             // }
-
-                            //TODO: If exists a path to state outside of preTransition, then TS is nonterminating.
-                            // auto graph = constructHyperGraph(init, transition, logic.mkNot(preTransition), logic, vars);
-                            // auto engine = EngineFactory(logic, witnesses).getEngine(witnesses.getOrDefault(Options::ENGINE, "spacer"));
-                            //
-                            // // Check if sink states are reachable within TS
-                            // auto res = engine->solve(*graph);
-                            // if (res.getAnswer() == VerificationAnswer::UNSAFE) {
-                            //     return Answer::NO;
-                            // }
                         }
                     }
+                    smt_solver.resetSolver();
 
                 } else {
                     // continue;
