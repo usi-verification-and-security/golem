@@ -289,6 +289,7 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
             varSubstitutions.insert({TimeMachine(logic).sendVarThroughTime(vars[i], 1), vars[i]});
         }
         solver.assertProp(TermUtils(logic).varSubstitute(logic.mkAnd(bools), varSubstitutions));
+        // std::cout << "Pure Boolean wf"  << std::endl;
         return solver.check() == SMTSolver::Answer::UNSAT;
     } else if (bools.size() > 0) {
         TermUtils::substitutions_map varSubstitutions;
@@ -296,7 +297,10 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
             varSubstitutions.insert({TimeMachine(logic).sendVarThroughTime(vars[i], 1), vars[i]});
         }
         solver.assertProp(TermUtils(logic).varSubstitute(logic.mkAnd(bools), varSubstitutions));
-        if (solver.check() == SMTSolver::Answer::UNSAT) { return true; }
+        if (solver.check() == SMTSolver::Answer::UNSAT) {
+            std::cout << "Boolean wf"  << std::endl;
+            // return true;
+        }
         solver.resetSolver();
     }
 
@@ -536,7 +540,7 @@ vec<PTRef> extractStrictCandidates(PTRef itp, PTRef sink, ArithLogic& logic,  co
         //    These are both well-founded disjuncts, but they don't prove termination together
 
         if (checkWellFounded(simpl_cand, logic, vars)) {
-            // std::cout << "Well-Founded: " << logic.pp(cand) << std::endl;
+            std::cout << "Well-Founded: " << logic.pp(cand) << std::endl;
             strictCandidates.push(simpl_cand);
         } else {
             for (auto sink_cand: dnfized_sink) {
@@ -545,7 +549,7 @@ vec<PTRef> extractStrictCandidates(PTRef itp, PTRef sink, ArithLogic& logic,  co
                 smt_solver.assertProp(logic.mkAnd(sink_cand,simpl_cand));
                 if (smt_solver.check() == SMTSolver::Answer::SAT && checkWellFounded(logic.mkAnd(sink_cand,simpl_cand), logic, vars)) {
                     strictCandidates.push(logic.mkAnd(sink_cand,simpl_cand));
-                    // std::cout << "Well-Founded: " << logic.pp(logic.mkAnd(sink_cand,simpl_cand)) << std::endl;
+                    std::cout << "Well-Founded: " << logic.pp(logic.mkAnd(sink_cand,simpl_cand)) << std::endl;
                     // TODO: Maybe I can weaken recieved candidate using some kind of houdini.
                     // TODO: Particularly, I should try to remove all equalities possible (also ones that are done via <= && >=)
                 }
@@ -726,6 +730,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
                 // Calculate the states that are guaranteed to terminate within num transitions:
                 // Tr^n(x,x') /\ not Sink(x') - is a formula, which can be satisfied by any x which can not terminate
                 // after n transitions
+                PTRef R = QuantifierElimination(logic).keepOnly(logic.mkAnd(logic.mkAnd(formulas), TimeMachine(logic).sendFlaThroughTime(sink, num )),vars);
 
 
                 // std::cout<<"Basic transition: "<< logic.pp(formulas[0])<<std::endl;
@@ -736,6 +741,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
                 PTRef F = QuantifierElimination(logic).keepOnly(logic.mkAnd(logic.mkAnd(formulas), logic.mkNot(TimeMachine(logic).sendFlaThroughTime(sink, num ))),vars);
                 // States that can not reach non-terminating state in <= n transitions:
                 PTRef T = logic.mkNot(F);
+
 
                 SMTsolver.resetSolver();
                 SMTsolver.assertProp(logic.mkAnd(init, F));
@@ -751,6 +757,9 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
                 // x>0 /\ x' = x-3 /\ x' = x-6 where there does not exist a state that can reach termination in 2 transitions,
                 // but not in one transition, but generally in a lot of cases it is the situation
                 // TODO: I need to think how to distinguish it
+                // SMTsolver.resetSolver();
+                // SMTsolver.assertProp(logic.mkAnd(R, T));
+                // if (SMTsolver.check() == SMTSolver::Answer::UNSAT)  return Answer::NO;
 
                 // std::cout<<"T: "<< logic.pp(T)<<std::endl;
                 SMTsolver.resetSolver();
@@ -849,10 +858,14 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
                             std::cout<<"Left"<<'\n';
 
                             std::cout<<"Init: " << logic.pp(init) << std::endl;
-                            std::cout<<"Transition: " << logic.pp(transition) << std::endl;
+                            std::cout<<"Transition: " << logic.pp(temp_tr) << std::endl;
                             std::cout<<"Sink: " << logic.pp(sink) << std::endl;
                             std::cout<<"Left Invariant: " << logic.pp(inv) << std::endl;
-
+                            smt_checker.resetSolver();
+                            smt_checker.assertProp(logic.mkAnd({init, inv, TimeMachine(logic).sendFlaThroughTime(temp_tr,1)}));
+                            if (smt_checker.check() == SMTSolver::Answer::UNSAT) {
+                                return Answer::ERROR;
+                            }
                             return  Answer::YES;
                         }
 
