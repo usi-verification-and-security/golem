@@ -733,9 +733,9 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
                 // std::cout<<"Sink: "<< logic.pp(sink)<<std::endl;
 
                 // States that can reach non-terminating state in n transitions:
-                PTRef F = logic.mkAnd(logic.mkAnd(formulas), logic.mkNot(TimeMachine(logic).sendFlaThroughTime(sink, num )));
+                PTRef F = QuantifierElimination(logic).keepOnly(logic.mkAnd(logic.mkAnd(formulas), logic.mkNot(TimeMachine(logic).sendFlaThroughTime(sink, num ))),vars);
                 // States that can not reach non-terminating state in <= n transitions:
-                PTRef T = logic.mkNot(QuantifierElimination(logic).keepOnly(F, vars));
+                PTRef T = logic.mkNot(F);
 
                 SMTsolver.resetSolver();
                 SMTsolver.assertProp(logic.mkAnd(init, F));
@@ -756,9 +756,9 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
                 SMTsolver.resetSolver();
                 SMTsolver.assertProp(logic.mkAnd({T, temp_tr, TimeMachine(logic).sendFlaThroughTime(sink, num)}));
 
-                // std::cout<<"terminatingFormula: \nInit:" << logic.pp(terminatingStates) << std::endl;
-                // std::cout<<"Transitions:" << logic.pp(logic.mkAnd(formulas)) << std::endl;
-                // std::cout<<"Sink:" << logic.pp(TimeMachine(logic).sendFlaThroughTime(sink, num)) << std::endl;
+                // This check guarantees the states T (states that cannot reach nonterminating states in n transition)
+                // contain the states that terminate in at least one transition (otherwise system is nonterminating)
+                // because there doesn't exist state that can reach sink states.
                 if(SMTsolver.check() == SMTSolver::Answer::UNSAT) {
                     return Answer::NO;
                 }
@@ -847,6 +847,12 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
                         smt_checker.assertProp(logic.mkAnd({init, logic.mkOr(inv,id), TimeMachine(logic).sendFlaThroughTime(temp_tr,1), logic.mkNot(shiftOnlyNextVars(inv, vars, logic))}));
                         if (smt_checker.check() == SMTSolver::Answer::UNSAT) {
                             std::cout<<"Left"<<'\n';
+
+                            std::cout<<"Init: " << logic.pp(init) << std::endl;
+                            std::cout<<"Transition: " << logic.pp(transition) << std::endl;
+                            std::cout<<"Sink: " << logic.pp(sink) << std::endl;
+                            std::cout<<"Left Invariant: " << logic.pp(inv) << std::endl;
+
                             return  Answer::YES;
                         }
 
