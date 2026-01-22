@@ -752,8 +752,9 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
                 // but not in one transition, but generally in a lot of cases it is the situation
                 // TODO: I need to think how to distinguish it
 
+                // std::cout<<"T: "<< logic.pp(T)<<std::endl;
                 SMTsolver.resetSolver();
-                SMTsolver.assertProp(logic.mkAnd({T, transition, TimeMachine(logic).sendFlaThroughTime(sink, num)}));
+                SMTsolver.assertProp(logic.mkAnd({T, temp_tr, TimeMachine(logic).sendFlaThroughTime(sink, num)}));
 
                 // std::cout<<"terminatingFormula: \nInit:" << logic.pp(terminatingStates) << std::endl;
                 // std::cout<<"Transitions:" << logic.pp(logic.mkAnd(formulas)) << std::endl;
