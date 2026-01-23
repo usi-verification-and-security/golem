@@ -13,8 +13,8 @@
 #include "TransitionSystem.h"
 
 namespace golem::termination {
-class ReachabilityNonterm {
 
+class ReachabilityNonterm {
 public:
     explicit ReachabilityNonterm(Options const & options) : options(options) {}
 
