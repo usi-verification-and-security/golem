@@ -14,6 +14,7 @@
 
 namespace golem::termination {
 class ReachabilityNonterm {
+
 public:
     explicit ReachabilityNonterm(Options const & options) : options(options) {}
 
