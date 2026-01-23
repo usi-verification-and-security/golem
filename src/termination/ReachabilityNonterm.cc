@@ -244,7 +244,7 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
 
     PTRef dnfized = utils.simplifyMax(dnfize(formula, logic));
 
-    if (logic.isOr(dnfized)) { return false; }
+    if (logic.isOr(dnfized)) return false;
 
     vec<PTRef> int_vars;
     vec<PTRef> next_vars;
@@ -719,11 +719,11 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
                 }
                 checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(sink, num));
                 // sink is updated, representing states that are guaranteed to reach termination
-                sink = logic.mkOr(checked_states);
+                PTRef temp_sink = logic.mkOr(checked_states);
                 SMTSolver smt_solver(logic, SMTSolver::WitnessProduction::ONLY_INTERPOLANTS);
                 smt_solver.assertProp(logic.mkAnd(deterministic_trace));
                 smt_solver.push();
-                smt_solver.assertProp(logic.mkAnd(T, logic.mkNot(sink)));
+                smt_solver.assertProp(logic.mkAnd(T, logic.mkNot(temp_sink)));
 
                 // Formula should be unsat, because \lnot(sink) are the states which can't be reached after n
                 // transitions
