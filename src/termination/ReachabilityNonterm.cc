@@ -440,6 +440,26 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
     return solver.check() == SMTSolver::Answer::SAT;
 }
 
+
+
+PTRef houdiniCheck(PTRef candidate, ArithLogic& logic, const std::vector<PTRef> & vars) {
+   assert(logic.isAnd(candidate));
+   auto conjuncts = TermUtils(logic).getTopLevelConjuncts(candidate);
+   for (int i = 0; i < conjuncts.size();) {
+       PTRef conjunct = conjuncts[i];
+       conjuncts[i] = conjuncts.last();
+       conjuncts.pop();
+       if (checkWellFounded(logic.mkAnd(conjuncts),logic, vars)) {
+           continue;
+       } else {
+           conjuncts.push(conjuncts[i]);
+           conjuncts[i] = conjunct;
+           i++;
+       }
+   }
+   return logic.mkAnd(conjuncts);
+}
+
 std::unique_ptr<ChcDirectedHyperGraph> constructHyperGraph(PTRef const init, PTRef const transition, PTRef const query,
                                                            Logic & logic, std::vector<PTRef> vars) {
     ChcSystem chcs;
@@ -510,14 +530,16 @@ vec<PTRef> extractWellFoundedCandidate(PTRef itp, PTRef sink, ArithLogic & logic
         PTRef simpl_cand = TermUtils(logic).simplifyMax(cand);
         if (checkWellFounded(cand, logic, vars)) {
             // std::cout << "Wellfounded: " << logic.pp(simpl_cand) << std::endl;
-            strictCandidates.push(simpl_cand);
+            // std::cout << "Houdini: " << logic.pp(houdiniCheck(simpl_cand, logic, vars)) << std::endl;
+            strictCandidates.push(houdiniCheck(simpl_cand, logic, vars));
         } else {
             for (auto sink_cand : sink_disjuncts) {
                 smt_solver.resetSolver();
                 smt_solver.assertProp(logic.mkAnd(sink_cand, simpl_cand));
                 if (smt_solver.check() == SMTSolver::Answer::SAT &&
-                    checkWellFounded(logic.mkAnd(sink_cand, simpl_cand), logic, vars)) {
-                    // std::cout << "Wellfounded: " << logic.pp(TermUtils(logic).simplifyMax(logic.mkAnd(sink_cand, simpl_cand))) << std::endl;
+                checkWellFounded(logic.mkAnd(sink_cand, simpl_cand), logic, vars)) {
+                    // std::cout << "Wellfounded: " << logic.pp(simpl_cand) << std::endl;
+                    // std::cout << "Houdini: " << logic.pp(houdiniCheck(simpl_cand, logic, vars)) << std::endl;
                     // TODO: Maybe I can weaken recieved candidate using some kind of houdini, dropping not needed
                     // conjuncts
                     // TODO: Particularly, I can remove all equalities (also ones that are done via <= && >=)
@@ -570,9 +592,9 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
     vec<PTRef> strictCandidates;
     // Main nonterm-checking loop
 
-    // std::cout << "Init: " << logic.pp(init) << std::endl;
-    // std::cout << "Transition: " << logic.pp(transition) << std::endl;
-    // std::cout << "Sink: " << logic.pp(sink) << std::endl;
+    std::cout << "Init: " << logic.pp(init) << std::endl;
+    std::cout << "Transition: " << logic.pp(transition) << std::endl;
+    std::cout << "Sink: " << logic.pp(sink) << std::endl;
     while (true) {
         // TODO: Do smth with exponential transition growth in some cases via blocks...
         // Constructing a graph based on the currently considered TS
