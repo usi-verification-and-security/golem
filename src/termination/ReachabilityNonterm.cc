@@ -509,7 +509,7 @@ vec<PTRef> extractWellFoundedCandidate(PTRef itp, PTRef sink, ArithLogic & logic
 
         PTRef simpl_cand = TermUtils(logic).simplifyMax(cand);
         if (checkWellFounded(cand, logic, vars)) {
-            std::cout << "Wellfounded: " << logic.pp(simpl_cand) << std::endl;
+            // std::cout << "Wellfounded: " << logic.pp(simpl_cand) << std::endl;
             strictCandidates.push(simpl_cand);
         } else {
             for (auto sink_cand : sink_disjuncts) {
@@ -517,7 +517,7 @@ vec<PTRef> extractWellFoundedCandidate(PTRef itp, PTRef sink, ArithLogic & logic
                 smt_solver.assertProp(logic.mkAnd(sink_cand, simpl_cand));
                 if (smt_solver.check() == SMTSolver::Answer::SAT &&
                     checkWellFounded(logic.mkAnd(sink_cand, simpl_cand), logic, vars)) {
-                    std::cout << "Wellfounded: " << logic.pp(TermUtils(logic).simplifyMax(logic.mkAnd(sink_cand, simpl_cand))) << std::endl;
+                    // std::cout << "Wellfounded: " << logic.pp(TermUtils(logic).simplifyMax(logic.mkAnd(sink_cand, simpl_cand))) << std::endl;
                     // TODO: Maybe I can weaken recieved candidate using some kind of houdini, dropping not needed
                     // conjuncts
                     // TODO: Particularly, I can remove all equalities (also ones that are done via <= && >=)
@@ -570,9 +570,9 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
     vec<PTRef> strictCandidates;
     // Main nonterm-checking loop
 
-    std::cout << "Init: " << logic.pp(init) << std::endl;
-    std::cout << "Transition: " << logic.pp(transition) << std::endl;
-    std::cout << "Sink: " << logic.pp(sink) << std::endl;
+    // std::cout << "Init: " << logic.pp(init) << std::endl;
+    // std::cout << "Transition: " << logic.pp(transition) << std::endl;
+    // std::cout << "Sink: " << logic.pp(sink) << std::endl;
     while (true) {
         // TODO: Do smth with exponential transition growth in some cases via blocks...
         // Constructing a graph based on the currently considered TS
@@ -752,7 +752,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
                     }
                     // Then interpolant is translated, so it would correspond to transition relation Itp(x,x')
                     itp = TermUtils(logic).varSubstitute(itp, varSubstitutions);
-                    std::cout << "Itp: " << logic.pp(itp) << std::endl;
+                    // std::cout << "Itp: " << logic.pp(itp) << std::endl;
                     // Check if some part of interpolant is transition invariant
                     auto newCands = extractWellFoundedCandidate(itp, sink, logic, vars);
                     if (newCands.size() == 0) continue;
