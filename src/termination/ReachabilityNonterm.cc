@@ -273,7 +273,7 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
     if (leq_conjuncts.size() == 0) {
         // This is pure boolean formula
         TermUtils::substitutions_map varSubstitutions;
-        for (auto i = 0u; i < vars.size(); ++i) {
+        for (int i = 0; i < vars.size(); ++i) {
             varSubstitutions.insert({TimeMachine(logic).sendVarThroughTime(vars[i], 1), vars[i]});
         }
         solver.assertProp(TermUtils(logic).varSubstitute(logic.mkAnd(bools), varSubstitutions));
@@ -299,7 +299,7 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
         std::vector<PTRef> coefs;
         getCoeffs(logic, coefs, conjunct);
         bool found = false;
-        for (auto i = 0; i < coefs.size(); i++) {
+        for (size_t i = 0; i < coefs.size(); i++) {
             if (logic.isConstant(coefs[i])) {
                 b.push_back(coefs[i]);
                 assert(!found);
@@ -346,7 +346,7 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
 
     // Well-foundness check by Podelski - by synthesizing the ranking function
     vec<PTRef> lambda_1, lambda_2;
-    for (auto i = 0; i < A.size(); i++) {
+    for (size_t i = 0; i < A.size(); i++) {
         lambda_1.push(logic.mkIntVar(("lambda_1" + std::to_string(i)).c_str()));
         lambda_2.push(logic.mkIntVar(("lambda_2" + std::to_string(i)).c_str()));
     }
@@ -402,9 +402,9 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
     PTRef thirdEq;
     {
         std::vector<std::vector<PTRef>> sumM;
-        for (auto i = 0; i < A.size(); i++) {
+        for (size_t i = 0; i < A.size(); i++) {
             sumM.push_back(std::vector(int_vars.size(), logic.getTerm_IntZero()));
-            for (uint j = 0; j < int_vars.size(); j++) {
+            for (int j = 0; j < int_vars.size(); j++) {
                 sumM[i][j] = logic.mkPlus(A[i][j], A_p[i][j]);
             }
         }
@@ -632,7 +632,6 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
                     if (SMTsolver.check() == SMTSolver::Answer::SAT) {
                         // We restrict the nondeterminism that leads to the termination, removing the states
                         // which are guaranteed to terminate in n-j transitions
-                        if (j == 1) { nnondetfirst += 1; }
                         break;
                     } else {
                         Result = Base;
