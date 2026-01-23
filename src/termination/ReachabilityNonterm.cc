@@ -367,7 +367,7 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
         vec<PTRef> sums;
         for (auto j = 0; j < int_vars.size(); j++) {
             vec<PTRef> mults;
-            for (uint i = 0; i < lambda_1.size(); ++i) {
+            for (auto i = 0; i < lambda_1.size(); ++i) {
                 mults.push(logic.mkTimes(lambda_1[i], A_p[i][j]));
             }
             PTRef sum = logic.mkPlus(mults);
