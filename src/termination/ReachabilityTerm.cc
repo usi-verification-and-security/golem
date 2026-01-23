@@ -24,7 +24,7 @@ ReachabilityTerm::Answer ReachabilityTerm::termination(TransitionSystem const & 
     // initial condition: counter > const * (|x_1| + |x_2| + ... + |x_n|)
     PTRef sum = logic.getTerm_IntZero();
     vec<PTRef> sumCheck;
-    for (auto i = 0; i < vars.size(); i++) {
+    for (size_t i = 0; i < vars.size(); i++) {
         if (logic.isSortInt(logic.getSortRef(vars[i]))) {
             PTRef temp = TimeMachine(logic).getVarVersionZero(logic.mkIntVar(("y" + std::to_string(i)).c_str()));
             // y_i >=0 /\ (y_i = -1 * x_i \/ y_i = x_i) <=> y_i = |x_i|
