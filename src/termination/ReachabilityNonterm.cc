@@ -509,6 +509,7 @@ vec<PTRef> extractWellFoundedCandidate(PTRef itp, PTRef sink, ArithLogic & logic
 
         PTRef simpl_cand = TermUtils(logic).simplifyMax(cand);
         if (checkWellFounded(cand, logic, vars)) {
+            std::cout << "Wellfounded: " << logic.pp(simpl_cand) << std::endl;
             strictCandidates.push(simpl_cand);
         } else {
             for (auto sink_cand : sink_disjuncts) {
@@ -516,6 +517,7 @@ vec<PTRef> extractWellFoundedCandidate(PTRef itp, PTRef sink, ArithLogic & logic
                 smt_solver.assertProp(logic.mkAnd(sink_cand, simpl_cand));
                 if (smt_solver.check() == SMTSolver::Answer::SAT &&
                     checkWellFounded(logic.mkAnd(sink_cand, simpl_cand), logic, vars)) {
+                    std::cout << "Wellfounded: " << logic.pp(TermUtils(logic).simplifyMax(logic.mkAnd(sink_cand, simpl_cand))) << std::endl;
                     // TODO: Maybe I can weaken recieved candidate using some kind of houdini, dropping not needed
                     // conjuncts
                     // TODO: Particularly, I can remove all equalities (also ones that are done via <= && >=)
@@ -567,6 +569,10 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
     // This is vector that stores candidates for Disjunctively Well-Founded Transition Invariant
     vec<PTRef> strictCandidates;
     // Main nonterm-checking loop
+
+    std::cout << "Init: " << logic.pp(init) << std::endl;
+    std::cout << "Transition: " << logic.pp(transition) << std::endl;
+    std::cout << "Sink: " << logic.pp(sink) << std::endl;
     while (true) {
         // TODO: Do smth with exponential transition growth in some cases via blocks...
         // Constructing a graph based on the currently considered TS
@@ -724,7 +730,8 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
                 smt_solver.assertProp(logic.mkAnd(deterministic_trace));
                 smt_solver.push();
                 smt_solver.assertProp(logic.mkAnd(T, logic.mkNot(temp_sink)));
-                sink = TimeMachine(logic).sendFlaThroughTime(temp_sink, -num);
+                // TODO: Think why this constraint does not work
+                // sink = TimeMachine(logic).sendFlaThroughTime(temp_sink, -num);
 
                 // Formula should be unsat, because \lnot(sink) are the states which can't be reached after n
                 // transitions
@@ -745,7 +752,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
                     }
                     // Then interpolant is translated, so it would correspond to transition relation Itp(x,x')
                     itp = TermUtils(logic).varSubstitute(itp, varSubstitutions);
-
+                    std::cout << "Itp: " << logic.pp(itp) << std::endl;
                     // Check if some part of interpolant is transition invariant
                     auto newCands = extractWellFoundedCandidate(itp, sink, logic, vars);
                     if (newCands.size() == 0) continue;
@@ -781,10 +788,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
                             logic.mkAnd({init, logic.mkOr(inv, id), TimeMachine(logic).sendFlaThroughTime(temp_tr, 1),
                                          logic.mkNot(shiftOnlyNextVars(inv, vars, logic))}));
                         if (smt_checker.check() == SMTSolver::Answer::UNSAT) {
-                            smt_checker.resetSolver();
-                            smt_checker.assertProp(
-                                logic.mkAnd({init, inv, TimeMachine(logic).sendFlaThroughTime(temp_tr, 1)}));
-                            if (smt_checker.check() == SMTSolver::Answer::UNSAT) { return Answer::ERROR; }
+                            std::cout << "Left"  << std::endl;
                             return Answer::YES;
                         }
 
@@ -802,14 +806,14 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
                             smt_checker.assertProp(check);
 
                             if (smt_checker.check() == SMTSolver::Answer::UNSAT) { return Answer::NO; }
-                            // else {
-                            //     auto graph = constructHyperGraph(init, transition, logic.mkNot(preTransition), logic,
-                            //     vars); auto engine = EngineFactory(logic,
-                            //     witnesses).getEngine(witnesses.getOrDefault(Options::ENGINE, "spacer")); if
-                            //     (engine->solve(*graph).getAnswer() == VerificationAnswer::UNSAFE) {
-                            //         return Answer::NO;
-                            //     }
-                            // }
+                            else {
+                                auto graph = constructHyperGraph(init, transition, logic.mkNot(preTransition), logic,
+                                vars); auto engine = EngineFactory(logic,
+                                witnesses).getEngine(witnesses.getOrDefault(Options::ENGINE, "spacer")); if
+                                (engine->solve(*graph).getAnswer() == VerificationAnswer::UNSAFE) {
+                                    return Answer::NO;
+                                }
+                            }
                         }
                     }
                 } else {
