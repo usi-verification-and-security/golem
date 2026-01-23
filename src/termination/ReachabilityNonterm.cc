@@ -47,7 +47,7 @@ PTRef dnfize(PTRef input, ArithLogic & logic) {
                 // into n disjunctions (corresponding to each disjunct)
             } else if (subjuncts[i].size() > 1) {
                 uint size = output.size();
-                for (uint j = 0; j < subjuncts[i].size() - 1; j++) {
+                for (int j = 0; j < subjuncts[i].size() - 1; j++) {
                     // first we extend number of disjuncts (initially m) into m*n
                     for (uint k = 0; k < size; k++) {
                         output.push_back(output[k]);
@@ -55,7 +55,7 @@ PTRef dnfize(PTRef input, ArithLogic & logic) {
                 }
 
                 // then every disjunct is conjoined with corresponding disjunct
-                for (uint j = 0; j < subjuncts[i].size(); j++) {
+                for (int j = 0; j < subjuncts[i].size(); j++) {
                     for (uint k = 0; k < size; k++) {
                         output[j * size + k].push_back(subjuncts[i][j]);
                     }
@@ -147,7 +147,7 @@ void unrollAtom(ArithLogic & logic, std::vector<PTRef> & coefs, PTRef atom, bool
         }
         assert(logic.isConstant(constant));
         unrollAtom(logic, coefs, subatom, reverse);
-        for (int i = size; i < coefs.size(); i++) {
+        for (auto i = size; i < coefs.size(); i++) {
             if (logic.isVar(coefs[i]) or logic.isConstant(coefs[i])) {
                 coefs[i] = logic.mkTimes(constant, coefs[i]);
             } else if (logic.isTimes(coefs[i])) {
@@ -181,7 +181,7 @@ void unrollAtom(ArithLogic & logic, std::vector<PTRef> & coefs, PTRef atom, bool
         assert(logic.isConstant(constant));
         PTRef subatom = it[0];
         unrollAtom(logic, coefs, subatom, reverse);
-        for (int i = size; i < coefs.size(); i++) {
+        for (auto i = size; i < coefs.size(); i++) {
             if (logic.isIntDiv(atom)) {
                 coefs[i] = logic.mkTimes(logic.mkIntDiv(logic.getPterm(coefs[i]).begin()[0], constant),
                                          logic.getPterm(coefs[i]).begin()[1]);
@@ -273,7 +273,7 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
     if (leq_conjuncts.size() == 0) {
         // This is pure boolean formula
         TermUtils::substitutions_map varSubstitutions;
-        for (uint32_t i = 0u; i < vars.size(); ++i) {
+        for (auto i = 0u; i < vars.size(); ++i) {
             varSubstitutions.insert({TimeMachine(logic).sendVarThroughTime(vars[i], 1), vars[i]});
         }
         solver.assertProp(TermUtils(logic).varSubstitute(logic.mkAnd(bools), varSubstitutions));
@@ -299,7 +299,7 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
         std::vector<PTRef> coefs;
         getCoeffs(logic, coefs, conjunct);
         bool found = false;
-        for (int i = 0; i < coefs.size(); i++) {
+        for (auto i = 0; i < coefs.size(); i++) {
             if (logic.isConstant(coefs[i])) {
                 b.push_back(coefs[i]);
                 assert(!found);
@@ -346,7 +346,7 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
 
     // Well-foundness check by Podelski - by synthesizing the ranking function
     vec<PTRef> lambda_1, lambda_2;
-    for (int i = 0; i < A.size(); i++) {
+    for (auto i = 0; i < A.size(); i++) {
         lambda_1.push(logic.mkIntVar(("lambda_1" + std::to_string(i)).c_str()));
         lambda_2.push(logic.mkIntVar(("lambda_2" + std::to_string(i)).c_str()));
     }
@@ -354,7 +354,7 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
     PTRef ZeroIneq;
     {
         vec<PTRef> ineqs;
-        for (uint i = 0; i < lambda_1.size(); ++i) {
+        for (auto i = 0; i < lambda_1.size(); ++i) {
             ineqs.push(logic.mkGeq(lambda_1[i], logic.getTerm_IntZero()));
             ineqs.push(logic.mkGeq(lambda_2[i], logic.getTerm_IntZero()));
         }
@@ -365,7 +365,7 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
     PTRef firstEq;
     {
         vec<PTRef> sums;
-        for (uint j = 0; j < int_vars.size(); j++) {
+        for (auto j = 0; j < int_vars.size(); j++) {
             vec<PTRef> mults;
             for (uint i = 0; i < lambda_1.size(); ++i) {
                 mults.push(logic.mkTimes(lambda_1[i], A_p[i][j]));
@@ -381,14 +381,14 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
     PTRef secondEq;
     {
         vec<PTRef> minuses(lambda_1.size());
-        for (uint i = 0; i < lambda_1.size(); i++) {
+        for (auto i = 0; i < lambda_1.size(); i++) {
             minuses[i] = logic.mkMinus(lambda_1[i], lambda_2[i]);
         }
 
         vec<PTRef> sums;
-        for (uint j = 0; j < int_vars.size(); j++) {
+        for (auto j = 0; j < int_vars.size(); j++) {
             vec<PTRef> mults;
-            for (uint i = 0; i < lambda_1.size(); ++i) {
+            for (auto i = 0; i < lambda_1.size(); ++i) {
                 mults.push(logic.mkTimes(minuses[i], A[i][j]));
             }
             PTRef sum = logic.mkPlus(mults);
@@ -402,16 +402,16 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
     PTRef thirdEq;
     {
         std::vector<std::vector<PTRef>> sumM;
-        for (uint i = 0; i < A.size(); i++) {
+        for (auto i = 0; i < A.size(); i++) {
             sumM.push_back(std::vector(int_vars.size(), logic.getTerm_IntZero()));
             for (uint j = 0; j < int_vars.size(); j++) {
                 sumM[i][j] = logic.mkPlus(A[i][j], A_p[i][j]);
             }
         }
         vec<PTRef> sums;
-        for (uint j = 0; j < int_vars.size(); j++) {
+        for (auto j = 0; j < int_vars.size(); j++) {
             vec<PTRef> mults;
-            for (uint i = 0; i < lambda_2.size(); ++i) {
+            for (auto i = 0; i < lambda_2.size(); ++i) {
                 mults.push(logic.mkTimes(lambda_2[i], sumM[i][j]));
             }
             PTRef sum = logic.mkPlus(mults);
@@ -425,7 +425,7 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
     PTRef constCheck;
     {
         vec<PTRef> sums;
-        for (uint j = 0; j < lambda_2.size(); j++) {
+        for (auto j = 0; j < lambda_2.size(); j++) {
             PTRef mult = logic.mkTimes(lambda_2[j], b[j]);
             sums.push(mult);
         }
@@ -534,7 +534,6 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
     PTRef transition = ts.getTransition();
     uint nunsafe = 0;
     uint nsafe = 0;
-    uint nnondetfirst = 0;
     if (checkWellFounded(transition, logic, vars)) return Answer::YES;
     // In this case query is a set of sink states - states from which transition is not possible.
     // sink /\ transition is UNSAT
