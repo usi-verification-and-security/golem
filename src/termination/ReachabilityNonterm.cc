@@ -825,7 +825,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
             // initially.
             auto witness = res.getValidityWitness();
             assert(witness.getDefinitions().size() == 3);
-            PTRef inv;
+            PTRef inv = logic.getTerm_true();
             std::vector<PTRef> repr;
             // First, we extract the invariant from the witness. It is interpretation of predicate P.
             for (auto wtn : witness.getDefinitions()) {
