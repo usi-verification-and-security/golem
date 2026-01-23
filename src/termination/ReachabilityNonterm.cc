@@ -724,6 +724,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
                 smt_solver.assertProp(logic.mkAnd(deterministic_trace));
                 smt_solver.push();
                 smt_solver.assertProp(logic.mkAnd(T, logic.mkNot(temp_sink)));
+                sink = TimeMachine(logic).sendFlaThroughTime(temp_sink, -num);
 
                 // Formula should be unsat, because \lnot(sink) are the states which can't be reached after n
                 // transitions
