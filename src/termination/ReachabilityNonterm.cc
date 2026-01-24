@@ -358,7 +358,6 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
         }
         if (!found) { b.push_back(logic.getTerm_IntZero()); }
     }
-    std::cout<<"A_p: " << A_p.size() << std::endl;
 
     // Well-foundness check by Podelski - by synthesizing the ranking function
     vec<PTRef> lambda_1, lambda_2;
