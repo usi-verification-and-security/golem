@@ -443,21 +443,22 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
 
 
 PTRef houdiniCheck(PTRef candidate, ArithLogic& logic, const std::vector<PTRef> & vars) {
-   assert(logic.isAnd(candidate));
-   auto conjuncts = TermUtils(logic).getTopLevelConjuncts(candidate);
-   for (int i = 0; i < conjuncts.size();) {
-       PTRef conjunct = conjuncts[i];
-       conjuncts[i] = conjuncts.last();
-       conjuncts.pop();
-       if (checkWellFounded(logic.mkAnd(conjuncts),logic, vars)) {
-           continue;
-       } else {
-           conjuncts.push(conjuncts[i]);
-           conjuncts[i] = conjunct;
-           i++;
-       }
-   }
-   return logic.mkAnd(conjuncts);
+   // assert(logic.isAnd(candidate));
+   // auto conjuncts = TermUtils(logic).getTopLevelConjuncts(candidate);
+   // for (int i = 0; i < conjuncts.size();) {
+   //     PTRef conjunct = conjuncts[i];
+   //     conjuncts[i] = conjuncts.last();
+   //     conjuncts.pop();
+   //     if (checkWellFounded(logic.mkAnd(conjuncts),logic, vars)) {
+   //         continue;
+   //     } else {
+   //         conjuncts.push(conjuncts[i]);
+   //         conjuncts[i] = conjunct;
+   //         i++;
+   //     }
+   // }
+   // return logic.mkAnd(conjuncts);
+    return candidate;
 }
 
 std::unique_ptr<ChcDirectedHyperGraph> constructHyperGraph(PTRef const init, PTRef const transition, PTRef const query,
