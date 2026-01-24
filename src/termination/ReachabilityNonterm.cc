@@ -266,8 +266,23 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
     // Preprocessing, conjuncts should be a set of formulas f(x) <= c, where c is some constant, and f(x)
     // is a linear combination of variables
     for (auto conjunct : conjuncts) {
-        lequalize(conjunct, leq_conjuncts, bools, logic);
+        auto leq_vars = TermUtils(logic).getVars(conjunct) ;
+        bool found = false;
+        for (auto var : leq_vars) {
+            for (auto sys_var: vars) {
+                if (var == sys_var || var == TimeMachine(logic).sendVarThroughTime(sys_var, 1)) {
+                    found = true;
+                    break;
+                }
+            }
+            if (found)  break;
+        }
+        if (found) lequalize(conjunct, leq_conjuncts, bools, logic);
     }
+    // for (auto conjunct : leq_conjuncts) {
+    //     std::cout<<"Leq conjunct: " << logic.pp(conjunct) << std::endl;
+    // }
+
 
     // TODO: Think about termination in the presence of booleans
     if (leq_conjuncts.size() == 0) {
@@ -343,6 +358,7 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
         }
         if (!found) { b.push_back(logic.getTerm_IntZero()); }
     }
+    std::cout<<"A_p: " << A_p.size() << std::endl;
 
     // Well-foundness check by Podelski - by synthesizing the ranking function
     vec<PTRef> lambda_1, lambda_2;
@@ -559,7 +575,12 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
     PTRef transition = ts.getTransition();
     uint nunsafe = 0;
     uint nsafe = 0;
-    if (checkWellFounded(transition, logic, vars)) return Answer::YES;
+    std::cout << "Init: " << logic.pp(init) << std::endl;
+    std::cout << "Transition: " << logic.pp(transition) << std::endl;
+    if (checkWellFounded(transition, logic, vars)) {
+        std::cout<<"Transitions are well-founded"<<std::endl;
+        return Answer::YES;
+    }
     // In this case query is a set of sink states - states from which transition is not possible.
     // sink /\ transition is UNSAT
     PTRef sink = logic.mkNot(QuantifierElimination(logic).keepOnly(transition, vars));
@@ -593,8 +614,6 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
     vec<PTRef> strictCandidates;
     // Main nonterm-checking loop
 
-    std::cout << "Init: " << logic.pp(init) << std::endl;
-    std::cout << "Transition: " << logic.pp(transition) << std::endl;
     std::cout << "Sink: " << logic.pp(sink) << std::endl;
     while (true) {
         // TODO: Do smth with exponential transition growth in some cases via blocks...
@@ -680,7 +699,10 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
             SMTsolver.assertProp(logic.mkAnd(init, transition));
             // We check if init state is blocked (it's impossible to make a transition from initial state)
             // When it is the case, TS is terminating
-            if (SMTsolver.check() == SMTSolver::Answer::UNSAT) { return Answer::YES; }
+            if (SMTsolver.check() == SMTSolver::Answer::UNSAT) {
+                std::cout<<"Init and Transition"<<std::endl;
+                return Answer::YES;
+            }
             if (num > 0) {
                 // Calculate the states that are guaranteed to terminate within num transitions:
                 // Tr^n(x,x') /\ not Sink(x') - is a formula, which can be satisfied by any x which can not terminate
@@ -699,7 +721,10 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
                 SMTsolver.assertProp(logic.mkAnd(init, F));
                 // If no initial states can reach nonterminating states in n transitions, then they won't be able to do
                 // it in n+1 => system terminates
-                if (SMTsolver.check() == SMTSolver::Answer::UNSAT) return Answer::YES;
+                if (SMTsolver.check() == SMTSolver::Answer::UNSAT) {
+                    std::cout<<"No init states can nonterminate in n transitions"<<std::endl;
+                    return Answer::YES;
+                }
 
                 // assume R = set of states which can terminate in n transitions
                 // R /\ T = \bot - so there are no states which are both:
@@ -799,6 +824,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
                         logic.mkAnd({logic.mkOr(inv, id), TimeMachine(logic).sendFlaThroughTime(temp_tr, 1),
                                      logic.mkNot(shiftOnlyNextVars(inv, vars, logic))}));
                     if (smt_checker.check() == SMTSolver::Answer::UNSAT) {
+                        std::cout<<"Center"<<std::endl;
                         return Answer::YES;
                     } else {
                         // TODO: Compute all states, for which inv would be transition invariant!
