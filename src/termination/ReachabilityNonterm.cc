@@ -751,7 +751,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                 smt_solver.push();
                 smt_solver.assertProp(logic.mkAnd(T, logic.mkNot(temp_sink)));
                 // TODO: Think why this constraint does not work
-                sink = TimeMachine(logic).sendFlaThroughTime(temp_sink, -num);
+                // sink = TimeMachine(logic).sendFlaThroughTime(temp_sink, -num);
 
                 // Formula should be unsat, because \lnot(sink) are the states which can't be reached after n
                 // transitions
