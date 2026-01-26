@@ -24,6 +24,7 @@ public:
 
 private:
     Options const & options;
+    Answer analyzeTS(PTRef init, PTRef transition, PTRef sink, Options const & witnesses, ArithLogic& logic, std::vector<PTRef>& vars);
 };
 } // namespace golem::termination
 
