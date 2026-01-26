@@ -569,7 +569,6 @@ vec<PTRef> extractWellFoundedCandidate(PTRef itp, PTRef sink, ArithLogic & logic
 
 
 ReachabilityNonterm::Answer ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options const & witnesses, ArithLogic& logic, std::vector<PTRef>& vars) {
-
     SMTSolver detChecker(logic, SMTSolver::WitnessProduction::NONE);
     TermUtils::substitutions_map detSubstitutions;
     vec<PTRef> neq;
@@ -752,7 +751,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::analyzeTS(PTRef init, PTRef tra
                 smt_solver.push();
                 smt_solver.assertProp(logic.mkAnd(T, logic.mkNot(temp_sink)));
                 // TODO: Think why this constraint does not work
-                // sink = TimeMachine(logic).sendFlaThroughTime(temp_sink, -num);
+                sink = TimeMachine(logic).sendFlaThroughTime(temp_sink, -num);
 
                 // Formula should be unsat, because \lnot(sink) are the states which can't be reached after n
                 // transitions
@@ -890,7 +889,6 @@ ReachabilityNonterm::Answer ReachabilityNonterm::analyzeTS(PTRef init, PTRef tra
                 // from this state If it is the case, there exist a sink state in the invariant - otherwise, invariant
                 // is a recurrent set
                 if (SMTsolver.check() == SMTSolver::Answer::UNSAT) {
-                    // std::cout<<"Final check:" << logic.pp(logic.mkAnd({inv, constr})) << "\n";
                     return Answer::NO;
                 } else {
                     // We update the sink states by the detected sink states and rerun the verification
