@@ -813,9 +813,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                             smt_checker.assertProp(logic.mkAnd(
                                 {init, logic.mkOr(inv, id), TimeMachine(logic).sendFlaThroughTime(temp_tr, 1),
                                  logic.mkNot(TimeMachine(logic).sendFlaThroughTime(logic.mkNot(inv), 1))}));
-                            if (smt_checker.check() == SMTSolver::Answer::UNSAT) {
-                                return {Answer::YES, inv};
-                            }
+                            if (smt_checker.check() == SMTSolver::Answer::UNSAT) { return {Answer::YES, inv}; }
                         }
 
                         // Right-restricted
