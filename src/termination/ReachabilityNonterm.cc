@@ -823,9 +823,17 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                             logic.mkAnd({init, logic.mkOr(inv, id), TimeMachine(logic).sendFlaThroughTime(temp_tr, 1),
                                          logic.mkNot(shiftOnlyNextVars(inv, vars, logic))}));
                         if (smt_checker.check() == SMTSolver::Answer::UNSAT) {
-                            std::cout << "Invariant: " << logic.pp(inv) << std::endl;
-                            std::cout << "Left"  << std::endl;
-                            return {Answer::YES, inv};
+                            // Check that for all of the reachable states TrInv => TR:
+                            smt_checker.resetSolver();
+                            smt_checker.assertProp(logic.mkAnd({init, logic.mkOr(inv, id), TimeMachine(logic).sendFlaThroughTime(temp_tr, 1),
+                                logic.mkNot(TimeMachine(logic).sendFlaThroughTime(logic.mkNot(inv), 1))}));
+                            if (smt_checker.check() == SMTSolver::Answer::UNSAT) {
+                                std::cout << "Invariant: " << logic.pp(inv) << std::endl;
+                                std::cout << "Left"  << std::endl;
+                                return {Answer::YES, inv};
+                            } else {
+                                std::cout << "Does not overapprox enough" <<std::endl;
+                            }
                         }
 
                         // Right-restricted
