@@ -279,9 +279,6 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
         }
         if (found) lequalize(conjunct, leq_conjuncts, bools, logic);
     }
-    // for (auto conjunct : leq_conjuncts) {
-    //     std::cout<<"Leq conjunct: " << logic.pp(conjunct) << std::endl;
-    // }
 
 
     // TODO: Think about termination in the presence of booleans
@@ -293,20 +290,21 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
         }
         solver.assertProp(TermUtils(logic).varSubstitute(logic.mkAnd(bools), varSubstitutions));
         return solver.check() == SMTSolver::Answer::UNSAT;
-    } else if (bools.size() > 0) {
+    }
+    // else if (bools.size() > 0) {
         // TODO: If transition is possible to take only once it should be well-founded
         // TODO: However, such disjuncts tend to create loops within trInvariants
         // TODO: like TrInv(x,x') = (!a /\ b /\ a' /\ !b') \/ (a /\ !b /\ b' /\ !a'), which violates termination
         // TODO: These are both well-founded disjuncts, but they don't prove termination taken together
-        // TODO: However, if there are no booolean loops, it is sufficient to prove termination...
-        solver.assertProp(
-            logic.mkAnd(logic.mkAnd(bools), TimeMachine(logic).sendFlaThroughTime(logic.mkAnd(bools), 1)));
+        // TODO: However, they still should be able to prove left-term, as we check inductiveness...
+        // solver.assertProp(
+        //     logic.mkAnd(logic.mkAnd(bools), TimeMachine(logic).sendFlaThroughTime(logic.mkAnd(bools), 1)));
         // This is a check to see if it is possible to take transition twice
         // (Otherwise it is trivially well-founded)
-        //TODO: If if is commented out, we get uniqueness.
-        if (solver.check() == SMTSolver::Answer::UNSAT) return true;
-        solver.resetSolver();
-    }
+        // TODO: If if is commented out, we get uniqueness.
+        // if (solver.check() == SMTSolver::Answer::UNSAT) return true;
+        // solver.resetSolver();
+    // }
 
     // Computation of matrixes A, A_p, and vector b based on the coefficients of vars and constants
     for (auto conjunct : leq_conjuncts) {
@@ -458,7 +456,7 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
 
 
 
-PTRef houdiniCheck(PTRef candidate, ArithLogic& logic, const std::vector<PTRef> & vars) {
+// PTRef houdiniCheck(PTRef candidate, ArithLogic& logic, const std::vector<PTRef> & vars) {
    // assert(logic.isAnd(candidate));
    // auto conjuncts = TermUtils(logic).getTopLevelConjuncts(candidate);
    // for (int i = 0; i < conjuncts.size();) {
@@ -474,8 +472,8 @@ PTRef houdiniCheck(PTRef candidate, ArithLogic& logic, const std::vector<PTRef> 
    //     }
    // }
    // return logic.mkAnd(conjuncts);
-    return candidate;
-}
+    // return candidate;
+// }
 
 std::unique_ptr<ChcDirectedHyperGraph> constructHyperGraph(PTRef const init, PTRef const transition, PTRef const query,
                                                            Logic & logic, std::vector<PTRef> vars) {
@@ -546,17 +544,13 @@ vec<PTRef> extractWellFoundedCandidate(PTRef itp, PTRef sink, ArithLogic & logic
 
         PTRef simpl_cand = TermUtils(logic).simplifyMax(cand);
         if (checkWellFounded(cand, logic, vars)) {
-            // std::cout << "Wellfounded: " << logic.pp(simpl_cand) << std::endl;
-            // std::cout << "Houdini: " << logic.pp(houdiniCheck(simpl_cand, logic, vars)) << std::endl;
-            strictCandidates.push(houdiniCheck(simpl_cand, logic, vars));
+            strictCandidates.push(simpl_cand);
         } else {
             for (auto sink_cand : sink_disjuncts) {
                 smt_solver.resetSolver();
                 smt_solver.assertProp(logic.mkAnd(sink_cand, simpl_cand));
                 if (smt_solver.check() == SMTSolver::Answer::SAT &&
                 checkWellFounded(logic.mkAnd(sink_cand, simpl_cand), logic, vars)) {
-                    // std::cout << "Wellfounded: " << logic.pp(simpl_cand) << std::endl;
-                    // std::cout << "Houdini: " << logic.pp(houdiniCheck(simpl_cand, logic, vars)) << std::endl;
                     // TODO: Maybe I can weaken recieved candidate using some kind of houdini, dropping not needed
                     // conjuncts
                     // TODO: Particularly, I can remove all equalities (also ones that are done via <= && >=)
@@ -569,7 +563,8 @@ vec<PTRef> extractWellFoundedCandidate(PTRef itp, PTRef sink, ArithLogic & logic
 }
 
 
-std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options const & witnesses, ArithLogic& logic, std::vector<PTRef>& vars) {
+std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink,
+    Options const & witnesses, ArithLogic& logic, std::vector<PTRef>& vars) {
     SMTSolver detChecker(logic, SMTSolver::WitnessProduction::NONE);
     TermUtils::substitutions_map detSubstitutions;
     vec<PTRef> neq;
@@ -758,6 +753,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                 // Formula should be unsat, because \lnot(sink) are the states which can't be reached after n
                 // transitions
                 if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
+                    std::cout<<"Post interpolation"<<std::endl;
                     auto itpContext = smt_solver.getInterpolationContext();
                     vec<PTRef> itps;
                     ipartitions_t mask = 1;
@@ -777,6 +773,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                     // std::cout << "Itp: " << logic.pp(itp) << std::endl;
                     // Check if some part of interpolant is transition invariant
                     auto newCands = extractWellFoundedCandidate(itp, sink, logic, vars);
+                    std::cout<<"Post candidates"<<std::endl;
                     if (newCands.size() == 0) continue;
 
                     for (auto cand : newCands) {
