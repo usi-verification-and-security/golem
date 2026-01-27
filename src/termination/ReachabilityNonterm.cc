@@ -303,7 +303,8 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
             logic.mkAnd(logic.mkAnd(bools), TimeMachine(logic).sendFlaThroughTime(logic.mkAnd(bools), 1)));
         // This is a check to see if it is possible to take transition twice
         // (Otherwise it is trivially well-founded)
-        // if (solver.check() == SMTSolver::Answer::UNSAT) return true;
+        //TODO: If if is commented out, we get uniqueness.
+        if (solver.check() == SMTSolver::Answer::UNSAT) return true;
         solver.resetSolver();
     }
 
@@ -589,6 +590,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
     }
 
      vec<PTRef> strictCandidates;
+     bool locked = false;
      while (true) {
         // TODO: Do smth with exponential transition growth in some cases via blocks...
         // Constructing a graph based on the currently considered TS
@@ -675,7 +677,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                 std::cout<<"Init and Transition"<<std::endl;
                 return {Answer::YES, logic.getTerm_true()};
             }
-            if (num > 0) {
+            if (num > 0 && !locked) {
                 // Calculate the states that are guaranteed to terminate within num transitions:
                 // Tr^n(x,x') /\ not Sink(x') - is a formula, which can be satisfied by any x which can not terminate
                 // after n transitions
@@ -713,6 +715,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                 // This check guarantees the states T (states that cannot reach nonterminating states in n transition)
                 // contain the states that terminate in at least one transition (otherwise system is nonterminating)
                 // because there doesn't exist state that can reach sink states.
+                std::cout<<"Num blocked"<<std::endl;
                 if (SMTsolver.check() == SMTSolver::Answer::UNSAT) { return {Answer::NO, init}; }
 
                 // Start buiding the trace that reaches sink states
@@ -790,8 +793,32 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                     // TODO: Can be checked via:
                     // TODO: TrInv /\ Tr => TrInv, by QE-ing everything except for x
                     smt_solver.resetSolver();
+
+                    PTRef Equality;
+                    {
+                        vec<PTRef> eqs;
+                        for (auto var:vars) {
+                            eqs.push(logic.mkEq(var, TimeMachine(logic).sendVarThroughTime(var, 2)));
+                        }
+                        Equality = logic.mkAnd(eqs);
+                    }
+
+
+
                     // Check if inv is Transition Invariant
                     SMTSolver smt_checker(logic, SMTSolver::WitnessProduction::NONE);
+
+                    //AD-Hock check for looping
+                    // TODO: handle bools better
+                    smt_checker.assertProp(logic.mkAnd({inv, TimeMachine(logic).sendFlaThroughTime(inv, 1), Equality}));
+                    if (smt_checker.check() == SMTSolver::Answer::SAT) {
+                        locked = true;
+                        std::cout<<"Locked"<<std::endl;
+                        continue;
+                    }
+
+                    smt_checker.resetSolver();
+
                     smt_checker.assertProp(
                         logic.mkAnd({logic.mkOr(inv, id), TimeMachine(logic).sendFlaThroughTime(temp_tr, 1),
                                      logic.mkNot(shiftOnlyNextVars(inv, vars, logic))}));
@@ -827,6 +854,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                             smt_checker.resetSolver();
                             smt_checker.assertProp(check);
                             // TODO think about it.
+                            std::cout<<"Right b"<<std::endl;
                             if (smt_checker.check() == SMTSolver::Answer::UNSAT) { return {Answer::NO, init}; }
                             else {
                                 auto graph = constructHyperGraph(init, transition, logic.mkNot(preTransition), logic,
@@ -834,6 +862,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                                 witnesses).getEngine(witnesses.getOrDefault(Options::ENGINE, "spacer")); if
                                 (engine->solve(*graph).getAnswer() == VerificationAnswer::UNSAFE) {
                                     // TODO: think about it.
+                                    std::cout<<"Right"<<std::endl;
                                     return {Answer::NO, init};
                                 }
                             }
@@ -890,6 +919,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                 // from this state If it is the case, there exist a sink state in the invariant - otherwise, invariant
                 // is a recurrent set
                 if (SMTsolver.check() == SMTSolver::Answer::UNSAT) {
+                    std::cout<<"Original"<<std::endl;
                     return {Answer::NO, inv};
                 } else {
                     // We update the sink states by the detected sink states and rerun the verification
