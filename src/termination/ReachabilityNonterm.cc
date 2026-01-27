@@ -590,7 +590,6 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
     }
 
      vec<PTRef> strictCandidates;
-     bool locked = false;
      while (true) {
         // TODO: Do smth with exponential transition growth in some cases via blocks...
         // Constructing a graph based on the currently considered TS
@@ -677,7 +676,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                 std::cout<<"Init and Transition"<<std::endl;
                 return {Answer::YES, logic.getTerm_true()};
             }
-            if (num > 0 && !locked) {
+            if (num > 0) {
                 // Calculate the states that are guaranteed to terminate within num transitions:
                 // Tr^n(x,x') /\ not Sink(x') - is a formula, which can be satisfied by any x which can not terminate
                 // after n transitions
@@ -807,15 +806,6 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
 
                     // Check if inv is Transition Invariant
                     SMTSolver smt_checker(logic, SMTSolver::WitnessProduction::NONE);
-
-                    //AD-Hock check for looping
-                    // TODO: handle bools better
-                    smt_checker.assertProp(logic.mkAnd({inv, TimeMachine(logic).sendFlaThroughTime(inv, 1), Equality}));
-                    if (smt_checker.check() == SMTSolver::Answer::SAT) {
-                        locked = true;
-                        std::cout<<"Locked"<<std::endl;
-                        continue;
-                    }
 
                     smt_checker.resetSolver();
 
