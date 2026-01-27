@@ -266,20 +266,19 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
     // Preprocessing, conjuncts should be a set of formulas f(x) <= c, where c is some constant, and f(x)
     // is a linear combination of variables
     for (auto conjunct : conjuncts) {
-        auto leq_vars = TermUtils(logic).getVars(conjunct) ;
+        auto leq_vars = TermUtils(logic).getVars(conjunct);
         bool found = false;
         for (auto var : leq_vars) {
-            for (auto sys_var: vars) {
+            for (auto sys_var : vars) {
                 if (var == sys_var || var == TimeMachine(logic).sendVarThroughTime(sys_var, 1)) {
                     found = true;
                     break;
                 }
             }
-            if (found)  break;
+            if (found) break;
         }
         if (found) lequalize(conjunct, leq_conjuncts, bools, logic);
     }
-
 
     // TODO: Think about termination in the presence of booleans
     if (leq_conjuncts.size() == 0) {
@@ -292,18 +291,18 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
         return solver.check() == SMTSolver::Answer::UNSAT;
     }
     // else if (bools.size() > 0) {
-        // TODO: If transition is possible to take only once it should be well-founded
-        // TODO: However, such disjuncts tend to create loops within trInvariants
-        // TODO: like TrInv(x,x') = (!a /\ b /\ a' /\ !b') \/ (a /\ !b /\ b' /\ !a'), which violates termination
-        // TODO: These are both well-founded disjuncts, but they don't prove termination taken together
-        // TODO: However, they still should be able to prove left-term, as we check inductiveness...
-        // solver.assertProp(
-        //     logic.mkAnd(logic.mkAnd(bools), TimeMachine(logic).sendFlaThroughTime(logic.mkAnd(bools), 1)));
-        // This is a check to see if it is possible to take transition twice
-        // (Otherwise it is trivially well-founded)
-        // TODO: If if is commented out, we get uniqueness.
-        // if (solver.check() == SMTSolver::Answer::UNSAT) return true;
-        // solver.resetSolver();
+    // TODO: If transition is possible to take only once it should be well-founded
+    // TODO: However, such disjuncts tend to create loops within trInvariants
+    // TODO: like TrInv(x,x') = (!a /\ b /\ a' /\ !b') \/ (a /\ !b /\ b' /\ !a'), which violates termination
+    // TODO: These are both well-founded disjuncts, but they don't prove termination taken together
+    // TODO: However, they still should be able to prove left-term, as we check inductiveness...
+    // solver.assertProp(
+    //     logic.mkAnd(logic.mkAnd(bools), TimeMachine(logic).sendFlaThroughTime(logic.mkAnd(bools), 1)));
+    // This is a check to see if it is possible to take transition twice
+    // (Otherwise it is trivially well-founded)
+    // TODO: If if is commented out, we get uniqueness.
+    // if (solver.check() == SMTSolver::Answer::UNSAT) return true;
+    // solver.resetSolver();
     // }
 
     // Computation of matrixes A, A_p, and vector b based on the coefficients of vars and constants
@@ -454,25 +453,23 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
     return solver.check() == SMTSolver::Answer::SAT;
 }
 
-
-
 // PTRef houdiniCheck(PTRef candidate, ArithLogic& logic, const std::vector<PTRef> & vars) {
-   // assert(logic.isAnd(candidate));
-   // auto conjuncts = TermUtils(logic).getTopLevelConjuncts(candidate);
-   // for (int i = 0; i < conjuncts.size();) {
-   //     PTRef conjunct = conjuncts[i];
-   //     conjuncts[i] = conjuncts.last();
-   //     conjuncts.pop();
-   //     if (checkWellFounded(logic.mkAnd(conjuncts),logic, vars)) {
-   //         continue;
-   //     } else {
-   //         conjuncts.push(conjuncts[i]);
-   //         conjuncts[i] = conjunct;
-   //         i++;
-   //     }
-   // }
-   // return logic.mkAnd(conjuncts);
-    // return candidate;
+// assert(logic.isAnd(candidate));
+// auto conjuncts = TermUtils(logic).getTopLevelConjuncts(candidate);
+// for (int i = 0; i < conjuncts.size();) {
+//     PTRef conjunct = conjuncts[i];
+//     conjuncts[i] = conjuncts.last();
+//     conjuncts.pop();
+//     if (checkWellFounded(logic.mkAnd(conjuncts),logic, vars)) {
+//         continue;
+//     } else {
+//         conjuncts.push(conjuncts[i]);
+//         conjuncts[i] = conjunct;
+//         i++;
+//     }
+// }
+// return logic.mkAnd(conjuncts);
+// return candidate;
 // }
 
 std::unique_ptr<ChcDirectedHyperGraph> constructHyperGraph(PTRef const init, PTRef const transition, PTRef const query,
@@ -550,7 +547,7 @@ vec<PTRef> extractWellFoundedCandidate(PTRef itp, PTRef sink, ArithLogic & logic
                 smt_solver.resetSolver();
                 smt_solver.assertProp(logic.mkAnd(sink_cand, simpl_cand));
                 if (smt_solver.check() == SMTSolver::Answer::SAT &&
-                checkWellFounded(logic.mkAnd(sink_cand, simpl_cand), logic, vars)) {
+                    checkWellFounded(logic.mkAnd(sink_cand, simpl_cand), logic, vars)) {
                     // TODO: Maybe I can weaken recieved candidate using some kind of houdini, dropping not needed
                     // conjuncts
                     // TODO: Particularly, I can remove all equalities (also ones that are done via <= && >=)
@@ -562,9 +559,10 @@ vec<PTRef> extractWellFoundedCandidate(PTRef itp, PTRef sink, ArithLogic & logic
     return strictCandidates;
 }
 
-
 std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink,
-    Options const & witnesses, ArithLogic& logic, std::vector<PTRef>& vars) {
+                                                                              Options const & witnesses,
+                                                                              ArithLogic & logic,
+                                                                              std::vector<PTRef> & vars) {
     SMTSolver detChecker(logic, SMTSolver::WitnessProduction::NONE);
     TermUtils::substitutions_map detSubstitutions;
     vec<PTRef> neq;
@@ -584,8 +582,8 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
         DETERMINISTIC_TRANSITION = true;
     }
 
-     vec<PTRef> strictCandidates;
-     while (true) {
+    vec<PTRef> strictCandidates;
+    while (true) {
         // TODO: Do smth with exponential transition growth in some cases via blocks...
         // Constructing a graph based on the currently considered TS
         auto graph = constructHyperGraph(init, transition, sink, logic, vars);
@@ -668,7 +666,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
             // We check if init state is blocked (it's impossible to make a transition from initial state)
             // When it is the case, TS is terminating
             if (SMTsolver.check() == SMTSolver::Answer::UNSAT) {
-                std::cout<<"Init and Transition"<<std::endl;
+                std::cout << "Init and Transition" << std::endl;
                 return {Answer::YES, logic.getTerm_true()};
             }
             if (num > 0) {
@@ -690,7 +688,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                 // If no initial states can reach nonterminating states in n transitions, then they won't be able to do
                 // it in n+1 => system terminates
                 if (SMTsolver.check() == SMTSolver::Answer::UNSAT) {
-                    std::cout<<"No init states can nonterminate in n transitions"<<std::endl;
+                    std::cout << "No init states can nonterminate in n transitions" << std::endl;
                     return {Answer::YES, logic.getTerm_true()};
                 }
 
@@ -709,7 +707,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                 // This check guarantees the states T (states that cannot reach nonterminating states in n transition)
                 // contain the states that terminate in at least one transition (otherwise system is nonterminating)
                 // because there doesn't exist state that can reach sink states.
-                std::cout<<"Num blocked"<<std::endl;
+                std::cout << "Num blocked" << std::endl;
                 if (SMTsolver.check() == SMTSolver::Answer::UNSAT) { return {Answer::NO, init}; }
 
                 // Start buiding the trace that reaches sink states
@@ -753,7 +751,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                 // Formula should be unsat, because \lnot(sink) are the states which can't be reached after n
                 // transitions
                 if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
-                    std::cout<<"Post interpolation"<<std::endl;
+                    std::cout << "Post interpolation" << std::endl;
                     auto itpContext = smt_solver.getInterpolationContext();
                     vec<PTRef> itps;
                     ipartitions_t mask = 1;
@@ -773,7 +771,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                     // std::cout << "Itp: " << logic.pp(itp) << std::endl;
                     // Check if some part of interpolant is transition invariant
                     auto newCands = extractWellFoundedCandidate(itp, sink, logic, vars);
-                    std::cout<<"Post candidates"<<std::endl;
+                    std::cout << "Post candidates" << std::endl;
                     if (newCands.size() == 0) continue;
 
                     for (auto cand : newCands) {
@@ -793,13 +791,11 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                     PTRef Equality;
                     {
                         vec<PTRef> eqs;
-                        for (auto var:vars) {
+                        for (auto var : vars) {
                             eqs.push(logic.mkEq(var, TimeMachine(logic).sendVarThroughTime(var, 2)));
                         }
                         Equality = logic.mkAnd(eqs);
                     }
-
-
 
                     // Check if inv is Transition Invariant
                     SMTSolver smt_checker(logic, SMTSolver::WitnessProduction::NONE);
@@ -810,7 +806,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                         logic.mkAnd({logic.mkOr(inv, id), TimeMachine(logic).sendFlaThroughTime(temp_tr, 1),
                                      logic.mkNot(shiftOnlyNextVars(inv, vars, logic))}));
                     if (smt_checker.check() == SMTSolver::Answer::UNSAT) {
-                        std::cout<<"Center"<<std::endl;
+                        std::cout << "Center" << std::endl;
                         return {Answer::YES, inv};
                     } else {
                         // TODO: Compute all states, for which inv would be transition invariant!
@@ -825,14 +821,15 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                         if (smt_checker.check() == SMTSolver::Answer::UNSAT) {
                             // Check that for all of the reachable states TrInv => TR:
                             smt_checker.resetSolver();
-                            smt_checker.assertProp(logic.mkAnd({init, logic.mkOr(inv, id), TimeMachine(logic).sendFlaThroughTime(temp_tr, 1),
-                                logic.mkNot(TimeMachine(logic).sendFlaThroughTime(logic.mkNot(inv), 1))}));
+                            smt_checker.assertProp(logic.mkAnd(
+                                {init, logic.mkOr(inv, id), TimeMachine(logic).sendFlaThroughTime(temp_tr, 1),
+                                 logic.mkNot(TimeMachine(logic).sendFlaThroughTime(logic.mkNot(inv), 1))}));
                             if (smt_checker.check() == SMTSolver::Answer::UNSAT) {
                                 std::cout << "Invariant: " << logic.pp(inv) << std::endl;
-                                std::cout << "Left"  << std::endl;
+                                std::cout << "Left" << std::endl;
                                 return {Answer::YES, inv};
                             } else {
-                                std::cout << "Does not overapprox enough" <<std::endl;
+                                std::cout << "Does not overapprox enough" << std::endl;
                             }
                         }
 
@@ -849,15 +846,17 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                             smt_checker.resetSolver();
                             smt_checker.assertProp(check);
                             // TODO think about it.
-                            std::cout<<"Right b"<<std::endl;
-                            if (smt_checker.check() == SMTSolver::Answer::UNSAT) { return {Answer::NO, init}; }
-                            else {
-                                auto graph = constructHyperGraph(init, transition, logic.mkNot(preTransition), logic,
-                                vars); auto engine = EngineFactory(logic,
-                                witnesses).getEngine(witnesses.getOrDefault(Options::ENGINE, "spacer")); if
-                                (engine->solve(*graph).getAnswer() == VerificationAnswer::UNSAFE) {
+                            std::cout << "Right b" << std::endl;
+                            if (smt_checker.check() == SMTSolver::Answer::UNSAT) {
+                                return {Answer::NO, init};
+                            } else {
+                                auto graph =
+                                    constructHyperGraph(init, transition, logic.mkNot(preTransition), logic, vars);
+                                auto engine = EngineFactory(logic, witnesses)
+                                                  .getEngine(witnesses.getOrDefault(Options::ENGINE, "spacer"));
+                                if (engine->solve(*graph).getAnswer() == VerificationAnswer::UNSAFE) {
                                     // TODO: think about it.
-                                    std::cout<<"Right"<<std::endl;
+                                    std::cout << "Right" << std::endl;
                                     return {Answer::NO, init};
                                 }
                             }
@@ -914,7 +913,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                 // from this state If it is the case, there exist a sink state in the invariant - otherwise, invariant
                 // is a recurrent set
                 if (SMTsolver.check() == SMTSolver::Answer::UNSAT) {
-                    std::cout<<"Original"<<std::endl;
+                    std::cout << "Original" << std::endl;
                     return {Answer::NO, inv};
                 } else {
                     // We update the sink states by the detected sink states and rerun the verification
@@ -925,13 +924,10 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
             assert(false && "Unreachable!");
             return {Answer::ERROR, logic.getTerm_false()};
         }
-     }
+    }
 
     return {Answer::ERROR, logic.getTerm_false()};
 }
-
-
-
 
 ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts) {
     auto vars = ts.getStateVars();
@@ -946,7 +942,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
     std::vector<PTRef> tmp_vars = vars;
     tmp_vars.insert(tmp_vars.end(), aux_vars.begin(), aux_vars.end());
     if (checkWellFounded(transition, logic, tmp_vars)) {
-        std::cout<<"Transitions are well-founded"<<std::endl;
+        std::cout << "Transitions are well-founded" << std::endl;
         return Answer::YES;
     }
     // In this case query is a set of sink states - states from which transition is not possible.
