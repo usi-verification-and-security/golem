@@ -290,12 +290,8 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
         solver.assertProp(TermUtils(logic).varSubstitute(logic.mkAnd(bools), varSubstitutions));
         return solver.check() == SMTSolver::Answer::UNSAT;
     }
+    // TODO: Think about adding this check as well (it is sufficient for w-f)
     // else if (bools.size() > 0) {
-    // TODO: If transition is possible to take only once it should be well-founded
-    // TODO: However, such disjuncts tend to create loops within trInvariants
-    // TODO: like TrInv(x,x') = (!a /\ b /\ a' /\ !b') \/ (a /\ !b /\ b' /\ !a'), which violates termination
-    // TODO: These are both well-founded disjuncts, but they don't prove termination taken together
-    // TODO: However, they still should be able to prove left-term, as we check inductiveness...
     // solver.assertProp(
     //     logic.mkAnd(logic.mkAnd(bools), TimeMachine(logic).sendFlaThroughTime(logic.mkAnd(bools), 1)));
     // This is a check to see if it is possible to take transition twice
@@ -453,6 +449,7 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
     return solver.check() == SMTSolver::Answer::SAT;
 }
 
+// TODO: Think about using Houdini
 // PTRef houdiniCheck(PTRef candidate, ArithLogic& logic, const std::vector<PTRef> & vars) {
 // assert(logic.isAnd(candidate));
 // auto conjuncts = TermUtils(logic).getTopLevelConjuncts(candidate);
@@ -594,7 +591,6 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
         if (res.getAnswer() == VerificationAnswer::UNSAFE) {
             // When sink states are reachable, extract the number of transitions needed to reach the sink states
             uint num = res.getInvalidityWitness().getDerivation().size() - 3;
-            std::cout << "Original number: " << num << "\n";
             // Construct the logical formula representing the trace:
             // Init(x) /\ Tr(x,x') /\ ... /\ Bad(x^(num))
             std::vector<PTRef> formulas;
@@ -707,7 +703,6 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                 // This check guarantees the states T (states that cannot reach nonterminating states in n transition)
                 // contain the states that terminate in at least one transition (otherwise system is nonterminating)
                 // because there doesn't exist state that can reach sink states.
-                std::cout << "Num blocked" << std::endl;
                 if (SMTsolver.check() == SMTSolver::Answer::UNSAT) { return {Answer::NO, init}; }
 
                 // Start buiding the trace that reaches sink states
@@ -751,7 +746,6 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                 // Formula should be unsat, because \lnot(sink) are the states which can't be reached after n
                 // transitions
                 if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
-                    std::cout << "Post interpolation" << std::endl;
                     auto itpContext = smt_solver.getInterpolationContext();
                     vec<PTRef> itps;
                     ipartitions_t mask = 1;
@@ -768,10 +762,8 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                     }
                     // Then interpolant is translated, so it would correspond to transition relation Itp(x,x')
                     itp = TermUtils(logic).varSubstitute(itp, varSubstitutions);
-                    // std::cout << "Itp: " << logic.pp(itp) << std::endl;
                     // Check if some part of interpolant is transition invariant
                     auto newCands = extractWellFoundedCandidate(itp, sink, logic, vars);
-                    std::cout << "Post candidates" << std::endl;
                     if (newCands.size() == 0) continue;
 
                     for (auto cand : newCands) {
@@ -779,12 +771,10 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                     }
                     PTRef inv = logic.mkOr(strictCandidates);
                     // TODO: Even when Considered Candidate is not inductive invariant, all states that can terminate
-                    // via it should
-                    // TODO: be removed possibly, as any state for which Transition Invariant holds is guaranteed to
-                    // terminate
-                    // TODO: to do it, we can check for which states inv is in fact transition invariant, and remove
-                    // those.
-                    // TODO: Can be checked via:
+                    //   via it should be removed possibly, as any state for which Transition Invariant holds is
+                    //   guaranteed to terminate.
+                    // TODO: To do it, we can check for which states inv is in fact transition invariant, and remove
+                    //   those. Can be checked via:
                     // TODO: TrInv /\ Tr => TrInv, by QE-ing everything except for x
                     smt_solver.resetSolver();
 
@@ -811,9 +801,8 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                     } else {
                         // TODO: Compute all states, for which inv would be transition invariant!
                         // TODO: These states can be excluded from the search and added to sink, since those states are
-                        // guaranteed to
-                        //  lead to the termination!!
-                        //  Left-restricted
+                        //   guaranteed to lead to the termination!!
+                        // Left-restricted
                         smt_checker.resetSolver();
                         smt_checker.assertProp(
                             logic.mkAnd({init, logic.mkOr(inv, id), TimeMachine(logic).sendFlaThroughTime(temp_tr, 1),
@@ -825,11 +814,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                                 {init, logic.mkOr(inv, id), TimeMachine(logic).sendFlaThroughTime(temp_tr, 1),
                                  logic.mkNot(TimeMachine(logic).sendFlaThroughTime(logic.mkNot(inv), 1))}));
                             if (smt_checker.check() == SMTSolver::Answer::UNSAT) {
-                                std::cout << "Invariant: " << logic.pp(inv) << std::endl;
-                                std::cout << "Left" << std::endl;
                                 return {Answer::YES, inv};
-                            } else {
-                                std::cout << "Does not overapprox enough" << std::endl;
                             }
                         }
 
@@ -845,8 +830,6 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                             PTRef check = logic.mkAnd(preTransition, init);
                             smt_checker.resetSolver();
                             smt_checker.assertProp(check);
-                            // TODO think about it.
-                            std::cout << "Right b" << std::endl;
                             if (smt_checker.check() == SMTSolver::Answer::UNSAT) {
                                 return {Answer::NO, init};
                             } else {
@@ -855,8 +838,6 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                                 auto engine = EngineFactory(logic, witnesses)
                                                   .getEngine(witnesses.getOrDefault(Options::ENGINE, "spacer"));
                                 if (engine->solve(*graph).getAnswer() == VerificationAnswer::UNSAFE) {
-                                    // TODO: think about it.
-                                    std::cout << "Right" << std::endl;
                                     return {Answer::NO, init};
                                 }
                             }
@@ -935,8 +916,6 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
     ArithLogic & logic = dynamic_cast<ArithLogic &>(ts.getLogic());
     PTRef init = ts.getInit();
     PTRef transition = ts.getTransition();
-    uint nunsafe = 0;
-    uint nsafe = 0;
     std::cout << "Init: " << logic.pp(init) << std::endl;
     std::cout << "Transition: " << logic.pp(transition) << std::endl;
     std::vector<PTRef> tmp_vars = vars;
