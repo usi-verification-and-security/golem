@@ -110,13 +110,13 @@ SingleLoopTransformation::WitnessBackTranslator::translateErrorPath(std::size_t 
     std::vector<SymRef> pathVertices;
     pathVertices.push_back(graph.getEntry());
     auto allVertices = graph.getVertices();
-    for (auto i = 0u; i < unrolling; ++i) {
+    for (auto i = 0u; i <= unrolling; ++i) {
         auto it = std::find_if(allVertices.begin(), allVertices.end(), [&](auto vertex) {
             if (vertex == graph.getEntry()) { return false; }
             auto varName = ".loc_" + std::to_string(vertex.x);
             auto vertexVar = logic.mkBoolVar(varName.c_str());
             vertexVar = tm.getVarVersionZero(vertexVar);
-            vertexVar = tm.sendVarThroughTime(vertexVar, i + 1);
+            vertexVar = tm.sendVarThroughTime(vertexVar, i);
             return model->evaluate(vertexVar) == logic.getTerm_true();
         });
         assert(it != allVertices.end());
