@@ -10,6 +10,8 @@
 #include "engine/EngineFactory.h"
 #include "graph/ChcGraphBuilder.h"
 
+#define MAX_MULTIPLIER 64
+
 namespace golem::termination {
 
 ReachabilityTerm::Answer ReachabilityTerm::termination(TransitionSystem const & ts) {
@@ -32,10 +34,10 @@ ReachabilityTerm::Answer ReachabilityTerm::termination(TransitionSystem const & 
     // sum = sum + y_i
     PTRef sum = sumCheck.size() == 0 ? logic.getTerm_IntOne() : logic.mkPlus(sumCheck);
     vars.push_back(counter0);
-    while (multiplier < 64) {
-        // counter = multiplier * (y_1 + ... + y_n)
+    while (multiplier < MAX_MULTIPLIER) {
+        // counter = multiplier * (|x_1| + ... + |x_n|)
         PTRef countEq = logic.mkGt(counter0, logic.mkTimes(logic.mkIntConst(Number(multiplier)), sum));
-        // init = init /\ counter = multiplier * (y_1 + ... + y_n) /\ (y_1 = |x_1| /\ ... /\ y_n = |x_n|)
+        // init = init /\ counter = multiplier * (|x_1| + ... + |x_n|)
         PTRef init = logic.mkAnd({ts.getInit(), countEq});
         // transition = transition /\ counter' = counter - 1
         PTRef counterDec = logic.mkEq(counter1, logic.mkMinus(counter0, logic.getTerm_IntOne()));
