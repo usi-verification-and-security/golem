@@ -291,7 +291,7 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
         return solver.check() == SMTSolver::Answer::UNSAT;
     }
     // TODO: Think about adding this check as well (it is sufficient for w-f)
-    else if (bools.size() > 0) {
+    if (bools.size() > 0) {
     solver.assertProp(
         logic.mkAnd(logic.mkAnd(bools), TimeMachine(logic).sendFlaThroughTime(logic.mkAnd(bools), 1)));
     // This is a check to see if it is possible to take transition twice
@@ -746,6 +746,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                 // Formula should be unsat, because \lnot(sink) are the states which can't be reached after n
                 // transitions
                 if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
+                    // TODO: for interpolation try using weaker interpolamts (McMillan try using strong and weak)
                     auto itpContext = smt_solver.getInterpolationContext();
                     vec<PTRef> itps;
                     ipartitions_t mask = 1;
@@ -810,10 +811,16 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                         if (smt_checker.check() == SMTSolver::Answer::UNSAT) {
                             // Check that for all of the reachable states TrInv => TR:
                             smt_checker.resetSolver();
+                            vec<PTRef> next_vars;
+                            // Extract integer variables from the inequalities
+
+
                             smt_checker.assertProp(logic.mkAnd(
-                                {init, logic.mkOr(inv, id), TimeMachine(logic).sendFlaThroughTime(temp_tr, 1),
-                                TimeMachine(logic).sendFlaThroughTime(logic.mkNot(inv), 1)}));
-                            if (smt_checker.check() == SMTSolver::Answer::UNSAT) { return {Answer::YES, inv}; }
+{logic.mkAnd(init, logic.mkOr(inv, id)), TimeMachine(logic).sendFlaThroughTime(logic.mkAnd({logic.mkOr(inv, id), TimeMachine(logic).sendFlaThroughTime(temp_tr, 1),
+                                         logic.mkNot(shiftOnlyNextVars(inv, vars, logic))}), 1)}));
+                            if (smt_checker.check() == SMTSolver::Answer::UNSAT) {
+                                return {Answer::YES, inv};
+                            }
                             else {std::cout << "Not overapproximate enough" << std::endl;}
                         }
 
