@@ -10,35 +10,31 @@
 #include "engine/EngineFactory.h"
 #include "graph/ChcGraphBuilder.h"
 
-#define MAX_MULTIPLIER 64
-
 namespace golem::termination {
 
 ReachabilityTerm::Answer ReachabilityTerm::termination(TransitionSystem const & ts) {
     auto & logic = dynamic_cast<ArithLogic &>(ts.getLogic());
     auto vars = ts.getStateVars();
     uint multiplier = 1;
+    constexpr uint MAX_MULTIPLIER = 64;
 
     // Adding a counter variable
     PTRef counter = logic.mkIntVar("counter");
     PTRef counter0 = TimeMachine(logic).getVarVersionZero(counter);
     PTRef counter1 = TimeMachine(logic).sendVarThroughTime(counter0, 1);
-    // initial condition: counter > const * (|x_1| + |x_2| + ... + |x_n|)
-    vec<PTRef> sumCheck;
-    for (size_t i = 0; i < vars.size(); i++) {
-        if (logic.isSortInt(logic.getSortRef(vars[i]))) {
-            // x_i >=0 then x_i else -x_i
-            sumCheck.push(logic.mkIte(logic.mkGeq(vars[i], logic.getTerm_IntZero()), vars[i], logic.mkNeg(vars[i])));
+    vec<PTRef> sumArgs;
+    for (auto var : vars) {
+        if (logic.isSortInt(logic.getSortRef(var))) {
+            // abs(x_i) := ite(x_i >= 0, x_i, -x_i)
+            sumArgs.push(logic.mkIte(logic.mkGeq(var, logic.getTerm_IntZero()), var, logic.mkNeg(var)));
         }
     }
-    // sum = sum + y_i
-    PTRef sum = sumCheck.size() == 0 ? logic.getTerm_IntOne() : logic.mkPlus(sumCheck);
+    PTRef sum = sumArgs.size() == 0 ? logic.getTerm_IntOne() : logic.mkPlus(std::move(sumArgs));
     vars.push_back(counter0);
     while (multiplier < MAX_MULTIPLIER) {
-        // counter = multiplier * (|x_1| + ... + |x_n|)
-        PTRef countEq = logic.mkGt(counter0, logic.mkTimes(logic.mkIntConst(Number(multiplier)), sum));
-        // init = init /\ counter = multiplier * (|x_1| + ... + |x_n|)
-        PTRef init = logic.mkAnd({ts.getInit(), countEq});
+        // init = init /\ counterInit = multiplier * (|x_1| + ... + |x_n|)
+        PTRef counterInit = logic.mkGt(counter0, logic.mkTimes(logic.mkIntConst(Number(multiplier)), sum));
+        PTRef init = logic.mkAnd(ts.getInit(), counterInit);
         // transition = transition /\ counter' = counter - 1
         PTRef counterDec = logic.mkEq(counter1, logic.mkMinus(counter0, logic.getTerm_IntOne()));
         PTRef transition = logic.mkAnd(ts.getTransition(), counterDec);
