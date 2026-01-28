@@ -22,25 +22,21 @@ ReachabilityTerm::Answer ReachabilityTerm::termination(TransitionSystem const & 
     PTRef counter0 = TimeMachine(logic).getVarVersionZero(counter);
     PTRef counter1 = TimeMachine(logic).sendVarThroughTime(counter0, 1);
     // initial condition: counter > const * (|x_1| + |x_2| + ... + |x_n|)
-    PTRef sum = logic.getTerm_IntZero();
     vec<PTRef> sumCheck;
     for (size_t i = 0; i < vars.size(); i++) {
         if (logic.isSortInt(logic.getSortRef(vars[i]))) {
-            PTRef temp = TimeMachine(logic).getVarVersionZero(logic.mkIntVar(("y" + std::to_string(i)).c_str()));
-            // y_i >=0 /\ (y_i = -1 * x_i \/ y_i = x_i) <=> y_i = |x_i|
-            sumCheck.push(logic.mkAnd(logic.mkOr(logic.mkEq(temp, vars[i]), logic.mkEq(temp, logic.mkNeg(vars[i]))),
-                                      logic.mkGeq(temp, logic.getTerm_IntZero())));
-            // sum = sum + y_i
-            sum = logic.mkPlus(sum, temp);
+            // x_i >=0 then x_i else -x_i
+            sumCheck.push(logic.mkIte(logic.mkGeq(vars[i], logic.getTerm_IntZero()), vars[i], logic.mkNeg(vars[i])));
         }
     }
+    // sum = sum + y_i
+    PTRef sum = sumCheck.size() == 0 ? logic.getTerm_IntOne() : logic.mkPlus(sumCheck);
     vars.push_back(counter0);
     while (multiplier < 64) {
         // counter = multiplier * (y_1 + ... + y_n)
-        PTRef countEq = logic.mkEq(counter0, logic.mkTimes(logic.mkIntConst(Number(multiplier)), sum));
+        PTRef countEq = logic.mkGt(counter0, logic.mkTimes(logic.mkIntConst(Number(multiplier)), sum));
         // init = init /\ counter = multiplier * (y_1 + ... + y_n) /\ (y_1 = |x_1| /\ ... /\ y_n = |x_n|)
-        PTRef init = sumCheck.size() != 0 ? logic.mkAnd({ts.getInit(), countEq, logic.mkAnd(sumCheck)})
-                                          : logic.mkAnd({ts.getInit(), logic.mkGt(counter0, logic.getTerm_IntZero())});
+        PTRef init = logic.mkAnd({ts.getInit(), countEq});
         // transition = transition /\ counter' = counter - 1
         PTRef counterDec = logic.mkEq(counter1, logic.mkMinus(counter0, logic.getTerm_IntOne()));
         PTRef transition = logic.mkAnd(ts.getTransition(), counterDec);
