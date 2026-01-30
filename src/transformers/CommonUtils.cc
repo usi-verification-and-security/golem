@@ -12,14 +12,10 @@
 namespace golem {
 using DerivationStep = InvalidityWitness::Derivation::DerivationStep;
 
-InvalidityWitness::Derivation replaceSummarizingStep(
-    InvalidityWitness::Derivation const & derivation,
-    std::size_t stepIndex,
-    std::vector<DirectedHyperEdge> const & replacedChain,
-    DirectedHyperEdge const & replacingEdge,
-    NonlinearCanonicalPredicateRepresentation const & predicateRepresentation,
-    Logic & logic
-    ) {
+InvalidityWitness::Derivation
+replaceSummarizingStep(InvalidityWitness::Derivation const & derivation, std::size_t stepIndex,
+                       std::vector<DirectedHyperEdge> const & replacedChain, DirectedHyperEdge const & replacingEdge,
+                       NonlinearCanonicalPredicateRepresentation const & predicateRepresentation, Logic & logic) {
     assert(stepIndex < derivation.size());
     // Replace this step with the sequence of steps corresponding to the summarized chain
     std::vector<DerivationStep> newSteps;
@@ -37,7 +33,7 @@ InvalidityWitness::Derivation replaceSummarizingStep(
     std::transform(replacedChain.begin(), replacedChain.end(), std::back_inserter(simpleChain), converter);
     for (std::size_t i = 0; i < simpleChain.size(); ++i) {
         PTRef baseConstraint = simpleChain[i].fla.fla;
-        edgeConstraints.push(TimeMachine(logic).sendFlaThroughTime(baseConstraint,i));
+        edgeConstraints.push(TimeMachine(logic).sendFlaThroughTime(baseConstraint, i));
     }
     // 2ab Compute constraints for the end points
     TermUtils::substitutions_map subst;
@@ -48,10 +44,12 @@ InvalidityWitness::Derivation replaceSummarizingStep(
     assert(logic.getSymRef(derivation[summarizedStep.premises.front()].derivedFact) == replacingEdge.from[0]);
     VersionedPredicate versionPredicate(logic, predicateRepresentation);
     const PTRef sourcePredicate = versionPredicate(replacingEdge.from[0]);
-    const PTRef targetPredicate = LinearPredicateVersioning(logic).sendPredicateThroughTime(versionPredicate(replacingEdge.to),simpleChain.size());
+    const PTRef targetPredicate = LinearPredicateVersioning(logic).sendPredicateThroughTime(
+        versionPredicate(replacingEdge.to), simpleChain.size());
     utils.mapFromPredicate(targetPredicate, summarizedStep.derivedFact, subst);
     utils.mapFromPredicate(sourcePredicate, derivation[summarizedStep.premises.front()].derivedFact, subst);
-    assert(std::all_of(subst.begin(), subst.end(), [&](auto const & pair) { return logic.isVar(pair.first) and logic.isConstant(pair.second); }));
+    assert(std::all_of(subst.begin(), subst.end(),
+                       [&](auto const & pair) { return logic.isVar(pair.first) and logic.isConstant(pair.second); }));
     PTRef chainConstraint = logic.mkAnd(std::move(edgeConstraints));
     chainConstraint = TermUtils(logic).varSubstitute(chainConstraint, subst);
     SMTSolver solver(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
@@ -63,7 +61,8 @@ InvalidityWitness::Derivation replaceSummarizingStep(
     std::vector<PTRef> intermediatePredicateInstances;
     for (std::size_t i = 1; i < simpleChain.size(); ++i) {
         SymRef sourceSymbol = simpleChain[i].from;
-        const PTRef predicate = LinearPredicateVersioning(logic).sendPredicateThroughTime(versionPredicate(sourceSymbol),i);
+        const PTRef predicate =
+            LinearPredicateVersioning(logic).sendPredicateThroughTime(versionPredicate(sourceSymbol), i);
         auto vars = utils.predicateArgsInOrder(predicate);
         subst.clear();
         for (PTRef var : vars) {
@@ -93,30 +92,24 @@ InvalidityWitness::Derivation replaceSummarizingStep(
     step.clauseId = simpleChain.back().id;
     newSteps.push_back(std::move(step));
     // 3. copy all steps after the one replaced and update their premise indices
-    std::transform(derivation.begin() + stepIndex + 1, derivation.end(), std::back_inserter(newSteps), [diff, firstShiftedIndex](auto const & step){
-        auto newStep = step;
-        for (auto & premiseIndex : newStep.premises) {
-            if (premiseIndex >= firstShiftedIndex) {
-                premiseIndex += diff;
-            }
-        }
-        newStep.index += diff;
-        return newStep;
-    });
+    std::transform(derivation.begin() + stepIndex + 1, derivation.end(), std::back_inserter(newSteps),
+                   [diff, firstShiftedIndex](auto const & step) {
+                       auto newStep = step;
+                       for (auto & premiseIndex : newStep.premises) {
+                           if (premiseIndex >= firstShiftedIndex) { premiseIndex += diff; }
+                       }
+                       newStep.index += diff;
+                       return newStep;
+                   });
     // 4. Return the derivation
     InvalidityWitness::Derivation newDerivation(std::move(newSteps));
     return newDerivation;
 }
 
-
-
-InvalidityWitness::Derivation expandStepWithHyperEdge(
-    InvalidityWitness::Derivation const & derivation,
-    std::size_t stepIndex,
-    ContractionInfo const & contractionInfo,
-    NonlinearCanonicalPredicateRepresentation const & predicateRepresentation,
-    Logic & logic
-    ) {
+InvalidityWitness::Derivation
+expandStepWithHyperEdge(InvalidityWitness::Derivation const & derivation, std::size_t stepIndex,
+                        ContractionInfo const & contractionInfo,
+                        NonlinearCanonicalPredicateRepresentation const & predicateRepresentation, Logic & logic) {
     assert(stepIndex < derivation.size());
     // Replace this step with the sequence of steps corresponding to the summarized chain
     std::vector<DerivationStep> newSteps;
@@ -130,8 +123,10 @@ InvalidityWitness::Derivation expandStepWithHyperEdge(
     // 2aa. Compute path constraint
     auto const & incoming = contractionInfo.second.first;
     auto const & outgoing = contractionInfo.second.second;
+    auto const & outgoingSources = outgoing.from;
     auto contractedNode = incoming.to;
-    assert(std::count(outgoing.from.begin(), outgoing.from.end(), contractedNode) == 1); // It has to be there, and currently not more than once
+    // Contracted node must be among the sources of outgoing edge (currently exactly once)
+    assert(std::count(outgoingSources.begin(), outgoingSources.end(), contractedNode) == 1);
     assert(incoming.from.size() == 1);
     bool sourceIsEntry = incoming.from.at(0) == logic.getSym_true();
     PTRef constraint = logic.mkAnd(incoming.fla.fla, outgoing.fla.fla);
@@ -166,7 +161,7 @@ InvalidityWitness::Derivation expandStepWithHyperEdge(
 
     SMTSolver solver(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
     solver.assertProp(unifiedConstraint);
-    for (auto const & [var,value] : subst) {
+    for (auto const & [var, value] : subst) {
         assert(logic.isVar(var) and logic.isConstant(value));
         solver.assertProp(logic.mkEq(var, value));
     }
@@ -189,8 +184,8 @@ InvalidityWitness::Derivation expandStepWithHyperEdge(
     intermediateStep.derivedFact = contractedNodeInstance;
     intermediateStep.index = newSteps.size();
     auto originalSourcePremiseIndex = [&]() -> std::size_t {
-        for (auto i = 0u; i < outgoing.from.size(); ++i) {
-            if (outgoing.from[i] == contractedNode) {
+        for (auto i = 0u; i < outgoingSources.size(); ++i) {
+            if (outgoingSources[i] == contractedNode) {
                 // If the source of incoming is entry node, it will not be included in the premises after contraction!
                 return sourceIsEntry ? 0u : summarizedStep.premises[i];
             }
@@ -205,9 +200,9 @@ InvalidityWitness::Derivation expandStepWithHyperEdge(
     // 2c. fix the step deriving the target of the summarized chain
     DerivationStep step = summarizedStep;
     if (sourceIsEntry) {
-        auto it = std::find(outgoing.from.begin(), outgoing.from.end(), contractedNode);
-        assert(it != outgoing.from.end());
-        auto position = it - outgoing.from.begin();
+        auto it = std::find(outgoingSources.begin(), outgoingSources.end(), contractedNode);
+        assert(it != outgoingSources.end());
+        auto position = it - outgoingSources.begin();
         step.premises.insert(step.premises.begin() + position, newSteps.size() - 1);
     } else {
         std::replace(step.premises.begin(), step.premises.end(), originalSourcePremiseIndex, newSteps.size() - 1);
@@ -216,16 +211,15 @@ InvalidityWitness::Derivation expandStepWithHyperEdge(
     step.clauseId = outgoing.id;
     newSteps.push_back(std::move(step));
     // 3. copy all steps after the one replaced and update their premise indices
-    std::transform(derivation.begin() + stepIndex + 1, derivation.end(), std::back_inserter(newSteps), [diff, firstShiftedIndex](auto const & step){
-        auto newStep = step;
-        for (auto & premiseIndex : newStep.premises) {
-            if (premiseIndex >= firstShiftedIndex) {
-                premiseIndex += diff;
-            }
-        }
-        newStep.index += diff;
-        return newStep;
-    });
+    std::transform(derivation.begin() + stepIndex + 1, derivation.end(), std::back_inserter(newSteps),
+                   [diff, firstShiftedIndex](auto const & step) {
+                       auto newStep = step;
+                       for (auto & premiseIndex : newStep.premises) {
+                           if (premiseIndex >= firstShiftedIndex) { premiseIndex += diff; }
+                       }
+                       newStep.index += diff;
+                       return newStep;
+                   });
     // 4. Return the derivation
     InvalidityWitness::Derivation newDerivation(std::move(newSteps));
     return newDerivation;

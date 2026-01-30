@@ -54,6 +54,8 @@ src/termination/ReachabilityTerm.h
 src/termination/ReachabilityNonterm.cc
 src/termination/ReachabilityNonterm.h
 
+src/transformers/CommonUtils.cc
+src/transformers/CommonUtils.h
 src/transformers/EdgeInliner.cc
 src/transformers/EdgeInliner.h
 src/transformers/MultiEdgeMerger.cc

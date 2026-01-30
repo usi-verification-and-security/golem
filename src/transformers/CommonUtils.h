@@ -7,8 +7,8 @@
 #ifndef GOLEM_COMMONUTILS_H
 #define GOLEM_COMMONUTILS_H
 
-#include "graph/ChcGraph.h"
 #include "Witnesses.h"
+#include "graph/ChcGraph.h"
 
 namespace golem {
 class EdgeConverter {
@@ -17,9 +17,14 @@ class EdgeConverter {
     TimeMachine timeMachine;
     VersionManager manager;
     NonlinearCanonicalPredicateRepresentation const & predicateRepresentation;
+
 public:
-    EdgeConverter(Logic & logic, NonlinearCanonicalPredicateRepresentation const & predicateRepresentation) :
-        logic(logic), utils(logic), timeMachine(logic), manager(logic), predicateRepresentation(predicateRepresentation) {}
+    EdgeConverter(Logic & logic, NonlinearCanonicalPredicateRepresentation const & predicateRepresentation)
+        : logic(logic),
+          utils(logic),
+          timeMachine(logic),
+          manager(logic),
+          predicateRepresentation(predicateRepresentation) {}
 
     DirectedEdge operator()(DirectedHyperEdge const & edge) {
         assert(edge.from.size() == 1);
@@ -36,7 +41,8 @@ public:
         {
             auto targetVars = utils.predicateArgsInOrder(predicateRepresentation.getTargetTermFor(target));
             for (PTRef targetVar : targetVars) {
-                PTRef newVar = timeMachine.sendVarThroughTime(timeMachine.getVarVersionZero(manager.toBase(targetVar)), 1);
+                PTRef newVar =
+                    timeMachine.sendVarThroughTime(timeMachine.getVarVersionZero(manager.toBase(targetVar)), 1);
                 subst.insert({targetVar, newVar});
             }
         }
@@ -52,9 +58,14 @@ class VersionedPredicate {
     TimeMachine timeMachine;
     VersionManager manager;
     NonlinearCanonicalPredicateRepresentation const & predicateRepresentation;
+
 public:
-    VersionedPredicate(Logic & logic, NonlinearCanonicalPredicateRepresentation const & predicateRepresentation) :
-        logic(logic), utils(logic), timeMachine(logic), manager(logic), predicateRepresentation(predicateRepresentation) {}
+    VersionedPredicate(Logic & logic, NonlinearCanonicalPredicateRepresentation const & predicateRepresentation)
+        : logic(logic),
+          utils(logic),
+          timeMachine(logic),
+          manager(logic),
+          predicateRepresentation(predicateRepresentation) {}
 
     PTRef operator()(SymRef predicateSymbol) {
         vec<PTRef> baseVars;
@@ -67,24 +78,17 @@ public:
     }
 };
 
-InvalidityWitness::Derivation replaceSummarizingStep(
-    InvalidityWitness::Derivation const & derivation,
-    std::size_t stepIndex,
-    std::vector<DirectedHyperEdge> const & replacedChain,
-    DirectedHyperEdge const & replacingEdge,
-    NonlinearCanonicalPredicateRepresentation const & predicateRepresentation,
-    Logic & logic
-    );
+InvalidityWitness::Derivation
+replaceSummarizingStep(InvalidityWitness::Derivation const & derivation, std::size_t stepIndex,
+                       std::vector<DirectedHyperEdge> const & replacedChain, DirectedHyperEdge const & replacingEdge,
+                       NonlinearCanonicalPredicateRepresentation const & predicateRepresentation, Logic & logic);
 
 using ContractionInfo = std::pair<DirectedHyperEdge, std::pair<DirectedHyperEdge, DirectedHyperEdge>>;
 
-InvalidityWitness::Derivation expandStepWithHyperEdge(
-    InvalidityWitness::Derivation const & derivation,
-    std::size_t stepIndex,
-    ContractionInfo const & contractionInfo,
-    NonlinearCanonicalPredicateRepresentation const & predicateRepresentation,
-    Logic & logic
-);
+InvalidityWitness::Derivation
+expandStepWithHyperEdge(InvalidityWitness::Derivation const & derivation, std::size_t stepIndex,
+                        ContractionInfo const & contractionInfo,
+                        NonlinearCanonicalPredicateRepresentation const & predicateRepresentation, Logic & logic);
 
 struct EdgeTranslator {
     ChcDirectedGraph const & graph;
