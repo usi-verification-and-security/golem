@@ -17,6 +17,20 @@
 
 namespace golem::termination {
 
+PTRef MBPdnfize(PTRef input, ArithLogic & logic) {
+    TermUtils utils{logic};
+    ModelBasedProjection proj(logic);
+    SMTSolver solver(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
+    solver.assertProp(input);
+    std::vector<PTRef> disjuncts;
+    while (solver.check() == SMTSolver::Answer::SAT) {
+        PTRef projection = proj.project(input, {}, *solver.getModel());
+        disjuncts.push_back(projection);
+        solver.assertProp(logic.mkNot(projection));
+    }
+    return logic.mkOr(disjuncts);
+}
+
 // Function to convert UFLIA formula into the DNF
 PTRef dnfize(PTRef input, ArithLogic & logic) {
     TermUtils utils{logic};
@@ -243,6 +257,7 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
     SMTSolver solver(logic, SMTSolver::WitnessProduction::NONE);
 
     PTRef dnfized = utils.simplifyMax(dnfize(formula, logic));
+    std::cout<<"Dnfized: " << logic.pp(dnfized) << std::endl;
 
     if (logic.isOr(dnfized)) return false;
 
@@ -529,6 +544,7 @@ vec<PTRef> extractWellFoundedCandidate(PTRef itp, PTRef sink, ArithLogic & logic
 
     auto sink_disjuncts = TermUtils(logic).getTopLevelDisjuncts(dnfize(logic.mkNot(sink), logic));
     PTRef dnfized_interpolant = dnfize(itp, logic);
+    std::cout<<"Dnfized itp: " << logic.pp(dnfized_interpolant) << std::endl;
     vec<PTRef> candidates = TermUtils(logic).getTopLevelDisjuncts(dnfized_interpolant);
     vec<PTRef> strictCandidates;
     for (auto cand : candidates) {
