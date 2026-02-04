@@ -257,7 +257,7 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
     SMTSolver solver(logic, SMTSolver::WitnessProduction::NONE);
 
     PTRef dnfized = utils.simplifyMax(dnfize(formula, logic));
-    std::cout<<"Dnfized: " << logic.pp(dnfized) << std::endl;
+    // std::cout<<"Dnfized: " << logic.pp(dnfized) << std::endl;
 
     if (logic.isOr(dnfized)) return false;
 
@@ -306,15 +306,15 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
         return solver.check() == SMTSolver::Answer::UNSAT;
     }
     // TODO: Think about adding this check as well (it is sufficient for w-f)
-    if (bools.size() > 0) {
-    solver.assertProp(
-        logic.mkAnd(logic.mkAnd(bools), TimeMachine(logic).sendFlaThroughTime(logic.mkAnd(bools), 1)));
+    // if (bools.size() > 0) {
+    // solver.assertProp(
+    //     logic.mkAnd(logic.mkAnd(bools), TimeMachine(logic).sendFlaThroughTime(logic.mkAnd(bools), 1)));
     // This is a check to see if it is possible to take transition twice
     // (Otherwise it is trivially well-founded)
     // TODO: If if is commented out, we get uniqueness.
-    if (solver.check() == SMTSolver::Answer::UNSAT) return true;
-    solver.resetSolver();
-    }
+    // if (solver.check() == SMTSolver::Answer::UNSAT) return true;
+    // solver.resetSolver();
+    // }
 
     // Computation of matrixes A, A_p, and vector b based on the coefficients of vars and constants
     for (auto conjunct : leq_conjuncts) {
@@ -544,7 +544,7 @@ vec<PTRef> extractWellFoundedCandidate(PTRef itp, PTRef sink, ArithLogic & logic
 
     auto sink_disjuncts = TermUtils(logic).getTopLevelDisjuncts(dnfize(logic.mkNot(sink), logic));
     PTRef dnfized_interpolant = dnfize(itp, logic);
-    std::cout<<"Dnfized itp: " << logic.pp(dnfized_interpolant) << std::endl;
+    // std::cout<<"Dnfized itp: " << logic.pp(dnfized_interpolant) << std::endl;
     vec<PTRef> candidates = TermUtils(logic).getTopLevelDisjuncts(dnfized_interpolant);
     vec<PTRef> strictCandidates;
     for (auto cand : candidates) {
@@ -819,6 +819,33 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                         // TODO: Compute all states, for which inv would be transition invariant!
                         // TODO: These states can be excluded from the search and added to sink, since those states are
                         //   guaranteed to lead to the termination!!
+
+                        PTRef noncoveredStates = QuantifierElimination(logic).keepOnly(logic.mkAnd({logic.mkOr(inv, id), TimeMachine(logic).sendFlaThroughTime(temp_tr, 1),
+                                     logic.mkNot(shiftOnlyNextVars(inv, vars, logic))}), vars);
+                        // std::cout<<"Noncovered states: " << logic.pp(noncoveredStates) << std::endl;
+                        auto graph =
+                               constructHyperGraph(init, transition, noncoveredStates, logic, vars);
+                        auto engine = EngineFactory(logic, witnesses)
+                                          .getEngine(witnesses.getOrDefault(Options::ENGINE, "spacer"));
+                        if (engine->solve(*graph).getAnswer() == VerificationAnswer::SAFE) {
+                            return {Answer::YES, init};
+                        } else {
+                            auto [answer, subinv] = analyzeTS(noncoveredStates, transition, sink, witnesses, logic, vars);
+                            // return {answer, subinv};
+                            if (answer == Answer::YES) { return {Answer::YES, subinv}; }
+                            // TODO: If doesn't terminate, check the reachability of recurrent set
+                            // TODO: If reachable from init, then doesnt terminate
+                            else if (answer == Answer::NO) {
+                                auto graph =
+                               constructHyperGraph(init, transition, subinv, logic, vars);
+                                auto engine = EngineFactory(logic, witnesses)
+                                                  .getEngine(witnesses.getOrDefault(Options::ENGINE, "spacer"));
+                                if (engine->solve(*graph).getAnswer() == VerificationAnswer::UNSAFE) {
+                                    return {Answer::NO, subinv};
+                                }
+                            }
+                        }
+
                         // Left-restricted
                         smt_checker.resetSolver();
                         smt_checker.assertProp(
@@ -849,19 +876,12 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                         if (smt_checker.check() == SMTSolver::Answer::UNSAT) {
                             PTRef preTransition = QuantifierElimination(logic).keepOnly(
                                 logic.mkAnd(logic.mkOr(inv, id), TimeMachine(logic).sendFlaThroughTime(sink, 1)), vars);
-                            PTRef check = logic.mkAnd(preTransition, init);
-                            smt_checker.resetSolver();
-                            smt_checker.assertProp(check);
-                            if (smt_checker.check() == SMTSolver::Answer::UNSAT) {
+                            auto graph =
+                                constructHyperGraph(init, transition, logic.mkNot(preTransition), logic, vars);
+                            auto engine = EngineFactory(logic, witnesses)
+                                              .getEngine(witnesses.getOrDefault(Options::ENGINE, "spacer"));
+                            if (engine->solve(*graph).getAnswer() == VerificationAnswer::UNSAFE) {
                                 return {Answer::NO, init};
-                            } else {
-                                auto graph =
-                                    constructHyperGraph(init, transition, logic.mkNot(preTransition), logic, vars);
-                                auto engine = EngineFactory(logic, witnesses)
-                                                  .getEngine(witnesses.getOrDefault(Options::ENGINE, "spacer"));
-                                if (engine->solve(*graph).getAnswer() == VerificationAnswer::UNSAFE) {
-                                    return {Answer::NO, init};
-                                }
                             }
                         }
                     }
