@@ -306,15 +306,15 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
         return solver.check() == SMTSolver::Answer::UNSAT;
     }
     // TODO: Think about adding this check as well (it is sufficient for w-f)
-    // if (bools.size() > 0) {
-    // solver.assertProp(
-    //     logic.mkAnd(logic.mkAnd(bools), TimeMachine(logic).sendFlaThroughTime(logic.mkAnd(bools), 1)));
+    if (bools.size() > 0) {
+    solver.assertProp(
+        logic.mkAnd(logic.mkAnd(bools), TimeMachine(logic).sendFlaThroughTime(logic.mkAnd(bools), 1)));
     // This is a check to see if it is possible to take transition twice
     // (Otherwise it is trivially well-founded)
     // TODO: If if is commented out, we get uniqueness.
-    // if (solver.check() == SMTSolver::Answer::UNSAT) return true;
-    // solver.resetSolver();
-    // }
+    if (solver.check() == SMTSolver::Answer::UNSAT) return true;
+    solver.resetSolver();
+    }
 
     // Computation of matrixes A, A_p, and vector b based on the coefficients of vars and constants
     for (auto conjunct : leq_conjuncts) {
@@ -822,7 +822,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
 
                         PTRef noncoveredStates = QuantifierElimination(logic).keepOnly(logic.mkAnd({logic.mkOr(inv, id), TimeMachine(logic).sendFlaThroughTime(temp_tr, 1),
                                      logic.mkNot(shiftOnlyNextVars(inv, vars, logic))}), vars);
-                        // std::cout<<"Noncovered states: " << logic.pp(noncoveredStates) << std::endl;
+                        std::cout<<"Noncovered states: " << logic.pp(noncoveredStates) << std::endl;
                         auto graph =
                                constructHyperGraph(init, transition, noncoveredStates, logic, vars);
                         auto engine = EngineFactory(logic, witnesses)
