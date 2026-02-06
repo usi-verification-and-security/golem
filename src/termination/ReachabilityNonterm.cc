@@ -786,7 +786,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                                                  TimeMachine(logic).sendVarThroughTime(vars[i], 1)});
                     }
                     // Then interpolant is translated, so it would correspond to transition relation Itp(x,x')
-                    itp = TermUtils(logic).varSubstitute(itp, varSubstitutions);
+                    itp = TermUtils(logic).simplifyMax(TermUtils(logic).varSubstitute(itp, varSubstitutions));
                     // Check if some part of interpolant is transition invariant
                     auto newCands = extractWellFoundedCandidate(itp, sink, logic, vars);
                     if (newCands.size() == 0) continue;
