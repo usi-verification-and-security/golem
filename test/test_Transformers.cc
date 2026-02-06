@@ -22,6 +22,7 @@
 #include "transformers/NodeEliminator.h"
 #include "transformers/RemoveUnreachableNodes.h"
 #include "transformers/SimpleChainSummarizer.h"
+#include "transformers/SingleLoopTransformation.h"
 #include "transformers/TransformationPipeline.h"
 #include "utils/SmtSolver.h"
 
@@ -1172,6 +1173,53 @@ TEST_F(Transformer_New_Test, test_EdgeInliner_OutgoingLoop) {
     stages.push_back(std::make_unique<RemoveUnreachableNodes>());
     auto [transformedGraph, translator] = TransformationPipeline(std::move(stages)).transform(std::move(hyperGraph));
     ASSERT_EQ(transformedGraph->getEdges().size(), 1);
+}
+
+TEST_F(Transformer_New_Test, test_SingleLoopTransformation_AuxVars) {
+    SymRef s1 = mkPredicateSymbol("s1", {intSort()});
+    SymRef s2 = mkPredicateSymbol("s2", {intSort()});
+    PTRef b = logic->mkBoolVar("b");
+    PTRef nb = logic->mkNot(b);
+    // true => S1(0)
+    // S1(x) and (b => x' = x + 1) and (~b => x' = x) => S2(x')
+    // S2(x) and (b => x' = x - 1) and (~b => x' = x) => S1(x')
+    // S1(1) => false
+    std::vector<ChClause> clauses{
+        {
+            ChcHead{UninterpretedPredicate{instantiatePredicate(s1, {zero})}},
+            ChcBody{{logic->getTerm_true()}, {}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{instantiatePredicate(s2, {xp})}},
+            ChcBody{{logic->mkAnd(
+                logic->mkImpl(b, logic->mkEq(xp,logic->mkPlus(x, one))),
+                logic->mkImpl(nb,logic->mkEq(xp, x)))},
+                {UninterpretedPredicate{instantiatePredicate(s1, {x})}}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{instantiatePredicate(s1, {xp})}},
+            ChcBody{{logic->mkAnd(
+                logic->mkImpl(b, logic->mkEq(xp,logic->mkMinus(x, one))),
+                logic->mkImpl(nb,logic->mkEq(xp, x)))},
+                {UninterpretedPredicate{instantiatePredicate(s2, {x})}}}
+        },
+        {
+            ChcHead{UninterpretedPredicate{logic->getTerm_false()}},
+            ChcBody{{logic->getTerm_true()}, {UninterpretedPredicate{instantiatePredicate(s1, {one})}}}
+        }};
+
+    for (auto const & clause : clauses) { system.addClause(clause); }
+
+    Logic & logic = *this->logic;
+    auto normalizedSystem = Normalizer(logic).normalize(system);
+    auto hyperGraph = ChcGraphBuilder(logic).buildGraph(normalizedSystem);
+    ASSERT_TRUE(hyperGraph->isNormalGraph());
+    auto graph = hyperGraph->toNormalGraph();
+    auto [ts, _] = SingleLoopTransformation{}.transform(*graph);
+    options.addOption(Options::COMPUTE_WITNESS, "true");
+    TPASplit engine(logic, options);
+    auto res = engine.solveTransitionSystem(*ts);
+    ASSERT_EQ(res, VerificationAnswer::UNSAFE);
 }
 
 class Transformer_ArrayTest : public ALIAEngineTest {
