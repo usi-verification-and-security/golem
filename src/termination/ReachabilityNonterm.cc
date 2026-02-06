@@ -17,16 +17,23 @@
 
 namespace golem::termination {
 
-PTRef MBPdnfize(PTRef input, ArithLogic & logic) {
+PTRef MBPdnfize(PTRef input, ArithLogic & logic, vec<PTRef> vars) {
     TermUtils utils{logic};
     ModelBasedProjection proj(logic);
     SMTSolver solver(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
     solver.assertProp(input);
     std::vector<PTRef> disjuncts;
+    vec<PTRef> next_vars;
+    // Extract integer variables from the inequalities
+    for (auto var : vars) {
+        next_vars.push(TimeMachine(logic).sendVarThroughTime(var, 1));
+    }
     while (solver.check() == SMTSolver::Answer::SAT) {
-        PTRef projection = proj.project(input, {}, *solver.getModel());
-        disjuncts.push_back(projection);
-        solver.assertProp(logic.mkNot(projection));
+        PTRef projection_pre = proj.project(input, vars, *solver.getModel());
+        PTRef projection_post = proj.project(input, next_vars, *solver.getModel());
+        disjuncts.push_back(logic.mkAnd(projection_post, projection_pre));
+        solver.push();
+        solver.assertProp(logic.mkNot(disjuncts.back()));
     }
     return logic.mkOr(disjuncts);
 }
@@ -824,7 +831,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                             logic.mkAnd({logic.mkOr(inv, id), TimeMachine(logic).sendFlaThroughTime(temp_tr, 1),
                                          logic.mkNot(shiftOnlyNextVars(inv, vars, logic))}),
                             vars);
-                        std::cout << "Noncovered states: " << logic.pp(noncoveredStates) << std::endl;
+                        // std::cout << "Noncovered states: " << logic.pp(noncoveredStates) << std::endl;
                         auto graph = constructHyperGraph(init, transition, noncoveredStates, logic, vars);
                         auto engine = EngineFactory(logic, witnesses)
                                           .getEngine(witnesses.getOrDefault(Options::ENGINE, "spacer"));
