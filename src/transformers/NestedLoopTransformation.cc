@@ -12,14 +12,30 @@
 #include "utils/SmtSolver.h"
 
 namespace golem {
+
+namespace {
+std::vector<SymRef> getVerticesFromLoop(ChcDirectedGraph const & graph, std::vector<EId> const & loop) {
+    assert(std::adjacent_find(loop.begin(), loop.end(), [&](auto first, auto second) {
+               return graph.getTarget(first) != graph.getSource(second);
+           }) == loop.end());
+    std::vector<SymRef> vertices;
+    vertices.reserve(loop.size());
+    for (auto eid : loop) {
+        vertices.push_back(graph.getSource(eid));
+    }
+    return vertices;
+}
+} // namespace
+
 std::tuple<std::unique_ptr<ChcDirectedGraph>, std::unique_ptr<NestedLoopTransformation::WitnessBackTranslator>>
 NestedLoopTransformation::transform(ChcDirectedGraph const & graph) {
     auto vertices = graph.getVertices();
     auto copyGraph = std::make_unique<ChcDirectedGraph>(graph);
     std::vector<EId> loop = detectLoop(*copyGraph);
-    std::vector<WitnessInfo> loops;
+    std::vector<ContractionData> loops;
     while (loop.size() > 1) {
-        auto wtnsInfo = copyGraph->contractConnectedVertices(loop);
+        std::vector<SymRef> loopVertices = getVerticesFromLoop(*copyGraph, loop);
+        auto wtnsInfo = copyGraph->contractVertices(loopVertices);
         loops.push_back(wtnsInfo);
         loop = detectLoop(*copyGraph);
     }
@@ -71,7 +87,7 @@ NestedLoopTransformation::WitnessBackTranslator::translateErrorPath(InvalidityWi
     for (std::size_t i = 1; i < errorPath.size(); ++i) {
         SymRef target = graph.getTarget(errorPath[i].clauseId);
         auto loopNode = std::find_if(loopContractionInfos.begin(), loopContractionInfos.end(),
-                                     [&target](const WitnessInfo & x) { return x.loopVertex == target; });
+                                     [&target](ContractionData const & x) { return x.loopVertex == target; });
         if (loopNode != loopContractionInfos.end()) {
             auto it = std::find_if(allVertices.begin(), allVertices.end(), [&](auto vertex) {
                 if (loopNode->locations.find(vertex) == loopNode->locations.end()) { return false; }
@@ -192,7 +208,7 @@ NestedLoopTransformation::WitnessBackTranslator::translateInvariant(ValidityWitn
 }
 
 std::unordered_set<PTRef, PTRefHash>
-NestedLoopTransformation::WitnessBackTranslator::getVarsForVertex(WitnessInfo wtns) const {
+NestedLoopTransformation::WitnessBackTranslator::getVarsForVertex(ContractionData const & wtns) const {
     std::unordered_set<PTRef, PTRefHash> vars;
     for (auto const & entry : wtns.positions) {
         vars.insert(entry.second);

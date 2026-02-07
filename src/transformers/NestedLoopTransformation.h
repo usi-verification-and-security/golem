@@ -44,12 +44,12 @@ public:
     class WitnessBackTranslator {
         ChcDirectedGraph const & initialGraph;
         ChcDirectedGraph const & graph;
-        std::vector<WitnessInfo> loopContractionInfos;
+        std::vector<ContractionData> loopContractionInfos;
 
     public:
         WitnessBackTranslator(ChcDirectedGraph const & initialGraph, ChcDirectedGraph const & graph,
-                              std::vector<WitnessInfo> _loops)
-            : initialGraph(initialGraph), graph(graph), loopContractionInfos(_loops) {}
+                              std::vector<ContractionData> loops)
+            : initialGraph(initialGraph), graph(graph), loopContractionInfos(std::move(loops)) {}
 
         VerificationResult translate(VerificationResult & result);
 
@@ -60,7 +60,7 @@ public:
 
         ErrorOr<ValidityWitness> translateInvariant(ValidityWitness);
 
-        std::unordered_set<PTRef, PTRefHash> getVarsForVertex(WitnessInfo) const;
+        std::unordered_set<PTRef, PTRefHash> getVarsForVertex(ContractionData const &) const;
     };
 
     std::tuple<std::unique_ptr<ChcDirectedGraph>, std::unique_ptr<WitnessBackTranslator>>

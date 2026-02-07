@@ -132,7 +132,7 @@ struct VarPositionHasher {
 using LocationVarMap = std::unordered_map<SymRef, PTRef, SymRefHash>;
 using PositionVarMap = std::unordered_map<VarPosition, PTRef, VarPositionHasher>;
 
-struct WitnessInfo {
+struct ContractionData {
     SymRef loopVertex;
     LocationVarMap locations;
     PositionVarMap positions;
@@ -143,11 +143,6 @@ class ChcDirectedGraph {
     LinearCanonicalPredicateRepresentation predicates;
     Logic & logic;
     mutable std::size_t freeId{0};
-
-    // graph transformations
-    friend class NestedLoopTransformation;
-    friend class SingleLoopTransformation;
-    WitnessInfo contractConnectedVertices(std::vector<EId> edges);
 
 public:
     ChcDirectedGraph(std::vector<DirectedEdge> const & edges, LinearCanonicalPredicateRepresentation predicates,
@@ -185,6 +180,8 @@ public:
     SymRef getTarget(EId eid) const { return getEdge(eid).to; }
 
     std::unique_ptr<ChcDirectedHyperGraph> toHyperGraph() const;
+
+    ContractionData contractVertices(std::vector<SymRef> const & vertices);
 
     template<typename TAction> void forEachEdge(TAction action) const {
         for (auto const & edge : edges) {
