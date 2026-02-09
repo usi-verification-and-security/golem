@@ -760,7 +760,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                 // sink is updated, representing states that are guaranteed to reach termination
                 PTRef temp_sink = logic.mkOr(checked_states);
                 SMTSolver smt_solver(logic, SMTSolver::WitnessProduction::ONLY_INTERPOLANTS);
-                // smt_solver.getConfig().setSimplifyInterpolant(4);
+                smt_solver.getConfig().setSimplifyInterpolant(4);
                 smt_solver.assertProp(logic.mkAnd(deterministic_trace));
                 smt_solver.push();
                 smt_solver.assertProp(logic.mkAnd(T, logic.mkNot(temp_sink)));
