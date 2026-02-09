@@ -849,9 +849,10 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                             // take place:
                             // 1. Detect all of the states outside of TrInv that are reachable
                             // 2. Using those states as initial states attempt to reach states that lead to termination
-
+                            // TODO: If I use sink, then I have uniqueness
+                            // TODO: However, if I use noncoveredStates, then I get more solved instances
                             auto [answer, subinv] =
-                                analyzeTS(noncoveredStates, transition, sink, witnesses, logic, vars);
+                                analyzeTS(noncoveredStates, transition, logic.mkNot(noncoveredStates), witnesses, logic, vars);
                             if (answer == Answer::YES) {
                                 return {Answer::YES, subinv};
                             }
