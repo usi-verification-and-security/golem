@@ -794,54 +794,45 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                     for (auto cand : newCands) {
                         strictCandidates.push(cand);
                     }
-                    PTRef inv = logic.mkOr(strictCandidates);
-                    // TODO: Even when Considered Candidate is not inductive invariant, all states that can terminate
-                    //   via it should be removed possibly, as any state for which Transition Invariant holds is
-                    //   guaranteed to terminate.
-                    // TODO: To do it, we can check for which states inv is in fact transition invariant, and remove
-                    //   those. Can be checked via:
-                    // TODO: TrInv /\ Tr => TrInv, by QE-ing everything except for x
+                    PTRef trInv = logic.mkOr(strictCandidates);
                     smt_solver.resetSolver();
 
-                    PTRef Equality;
-                    {
-                        vec<PTRef> eqs;
-                        for (auto var : vars) {
-                            eqs.push(logic.mkEq(var, TimeMachine(logic).sendVarThroughTime(var, 2)));
-                        }
-                        Equality = logic.mkAnd(eqs);
-                    }
 
-                    // Check if inv is Transition Invariant
                     SMTSolver smt_checker(logic, SMTSolver::WitnessProduction::NONE);
 
                     smt_checker.resetSolver();
 
                     smt_checker.assertProp(
-                        logic.mkAnd({logic.mkOr(inv, id), TimeMachine(logic).sendFlaThroughTime(temp_tr, 1),
-                                     logic.mkNot(shiftOnlyNextVars(inv, vars, logic))}));
+                        logic.mkAnd({logic.mkOr(trInv, id), TimeMachine(logic).sendFlaThroughTime(temp_tr, 1),
+                                     logic.mkNot(shiftOnlyNextVars(trInv, vars, logic))}));
+                    // Check if trInv is Transition Invariant
                     if (smt_checker.check() == SMTSolver::Answer::UNSAT) {
+                        // If trInv is Transition invariant, then Tr leads to termination on the whole state-space
                         std::cout << "Center" << std::endl;
-                        return {Answer::YES, inv};
+                        return {Answer::YES, trInv};
                     } else {
-                        // TODO: Compute all states, for which inv would be transition invariant!
-                        // TODO: These states can be excluded from the search and added to sink, since those states are
-                        //   guaranteed to lead to the termination!!
-
+                        // If trInv is not Transition invariant, then we can calculate the states which are not covered by trInv
                         PTRef noncoveredStates = QuantifierElimination(logic).keepOnly(
-                            logic.mkAnd({logic.mkOr(inv, id), TimeMachine(logic).sendFlaThroughTime(temp_tr, 1),
-                                         logic.mkNot(shiftOnlyNextVars(inv, vars, logic))}),
+                            logic.mkAnd({logic.mkOr(trInv, id), TimeMachine(logic).sendFlaThroughTime(temp_tr, 1),
+                                         logic.mkNot(shiftOnlyNextVars(trInv, vars, logic))}),
                             vars);
-                        // std::cout << "Noncovered states: " << logic.pp(noncoveredStates) << std::endl;
+                        std::cout << "Noncovered states: " << logic.pp(noncoveredStates) << std::endl;
+                        // We check if the states that are not covered by TrInv are reachable
                         auto graph = constructHyperGraph(init, transition, noncoveredStates, logic, vars);
                         auto engine = EngineFactory(logic, witnesses)
                                           .getEngine(witnesses.getOrDefault(Options::ENGINE, "spacer"));
+                        // If states not covered by TrInv are not reachable - then TrInv is transition invariant on all
+                        // reachable states, therefore it is well-founded transition invariant
                         if (engine->solve(*graph).getAnswer() == VerificationAnswer::SAFE) {
-                            return {Answer::YES, init};
+                            return {Answer::YES, trInv};
                         } else {
+                            // Otherwise, if states not covered by TrInv are reachable, then the following procedure should
+                            // take place:
+                            // 1. Detect all of the states outside of TrInv that are reachable
+                            // 2. Using those states as initial states attempt to reach states that lead to termination
+
                             auto [answer, subinv] =
-                                analyzeTS(noncoveredStates, transition, sink, witnesses, logic, vars);
-                            // return {answer, subinv};
+                                analyzeTS(noncoveredStates, transition, logic.mkNot(noncoveredStates), witnesses, logic, vars);
                             if (answer == Answer::YES) {
                                 return {Answer::YES, subinv};
                             }
@@ -860,8 +851,8 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                         // Left-restricted
                         smt_checker.resetSolver();
                         smt_checker.assertProp(
-                            logic.mkAnd({init, logic.mkOr(inv, id), TimeMachine(logic).sendFlaThroughTime(temp_tr, 1),
-                                         logic.mkNot(shiftOnlyNextVars(inv, vars, logic))}));
+                            logic.mkAnd({init, logic.mkOr(trInv, id), TimeMachine(logic).sendFlaThroughTime(temp_tr, 1),
+                                         logic.mkNot(shiftOnlyNextVars(trInv, vars, logic))}));
                         if (smt_checker.check() == SMTSolver::Answer::UNSAT) {
                             // Check that for all of the reachable states TrInv => TR:
                             smt_checker.resetSolver();
@@ -869,14 +860,14 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                             // Extract integer variables from the inequalities
 
                             smt_checker.assertProp(
-                                logic.mkAnd({logic.mkAnd(init, logic.mkOr(inv, id)),
+                                logic.mkAnd({logic.mkAnd(init, logic.mkOr(trInv, id)),
                                              TimeMachine(logic).sendFlaThroughTime(
-                                                 logic.mkAnd({logic.mkOr(inv, id),
+                                                 logic.mkAnd({logic.mkOr(trInv, id),
                                                               TimeMachine(logic).sendFlaThroughTime(temp_tr, 1),
-                                                              logic.mkNot(shiftOnlyNextVars(inv, vars, logic))}),
+                                                              logic.mkNot(shiftOnlyNextVars(trInv, vars, logic))}),
                                                  1)}));
                             if (smt_checker.check() == SMTSolver::Answer::UNSAT) {
-                                return {Answer::YES, inv};
+                                return {Answer::YES, trInv};
                             } else {
                                 std::cout << "Not overapproximate enough" << std::endl;
                             }
@@ -885,12 +876,12 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                         // Right-restricted
                         smt_checker.resetSolver();
                         smt_checker.assertProp(
-                            logic.mkAnd({temp_tr, TimeMachine(logic).sendFlaThroughTime(logic.mkOr(inv, id), 1),
+                            logic.mkAnd({temp_tr, TimeMachine(logic).sendFlaThroughTime(logic.mkOr(trInv, id), 1),
                                          TimeMachine(logic).sendFlaThroughTime(sink, 2),
-                                         logic.mkNot(shiftOnlyNextVars(inv, vars, logic))}));
+                                         logic.mkNot(shiftOnlyNextVars(trInv, vars, logic))}));
                         if (smt_checker.check() == SMTSolver::Answer::UNSAT) {
                             PTRef preTransition = QuantifierElimination(logic).keepOnly(
-                                logic.mkAnd(logic.mkOr(inv, id), TimeMachine(logic).sendFlaThroughTime(sink, 1)), vars);
+                                logic.mkAnd(logic.mkOr(trInv, id), TimeMachine(logic).sendFlaThroughTime(sink, 1)), vars);
                             auto graph = constructHyperGraph(init, transition, logic.mkNot(preTransition), logic, vars);
                             auto engine = EngineFactory(logic, witnesses)
                                               .getEngine(witnesses.getOrDefault(Options::ENGINE, "spacer"));
