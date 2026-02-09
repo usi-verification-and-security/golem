@@ -816,7 +816,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                             logic.mkAnd({logic.mkOr(trInv, id), TimeMachine(logic).sendFlaThroughTime(temp_tr, 1),
                                          logic.mkNot(shiftOnlyNextVars(trInv, vars, logic))}),
                             vars);
-                        std::cout << "Noncovered states: " << logic.pp(noncoveredStates) << std::endl;
+                        // std::cout << "Noncovered states: " << logic.pp(noncoveredStates) << std::endl;
 
                         // Left-restricted
                         smt_checker.resetSolver();
