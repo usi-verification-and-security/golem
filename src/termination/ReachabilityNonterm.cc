@@ -760,7 +760,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                 // sink is updated, representing states that are guaranteed to reach termination
                 PTRef temp_sink = logic.mkOr(checked_states);
                 SMTSolver smt_solver(logic, SMTSolver::WitnessProduction::ONLY_INTERPOLANTS);
-                smt_solver.getConfig().setSimplifyInterpolant(4);
+                // smt_solver.getConfig().setSimplifyInterpolant(4);
                 smt_solver.assertProp(logic.mkAnd(deterministic_trace));
                 smt_solver.push();
                 smt_solver.assertProp(logic.mkAnd(T, logic.mkNot(temp_sink)));
@@ -786,7 +786,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                                                  TimeMachine(logic).sendVarThroughTime(vars[i], 1)});
                     }
                     // Then interpolant is translated, so it would correspond to transition relation Itp(x,x')
-                    itp = TermUtils(logic).simplifyMax(TermUtils(logic).varSubstitute(itp, varSubstitutions));
+                    itp = TermUtils(logic).varSubstitute(itp, varSubstitutions);
                     // Check if some part of interpolant is transition invariant
                     auto newCands = extractWellFoundedCandidate(itp, sink, logic, vars);
                     if (newCands.size() == 0) continue;
@@ -816,37 +816,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                             logic.mkAnd({logic.mkOr(trInv, id), TimeMachine(logic).sendFlaThroughTime(temp_tr, 1),
                                          logic.mkNot(shiftOnlyNextVars(trInv, vars, logic))}),
                             vars);
-                        // std::cout << "Noncovered states: " << logic.pp(noncoveredStates) << std::endl;
-                        // We check if the states that are not covered by TrInv are reachable
-                        auto graph = constructHyperGraph(init, transition, noncoveredStates, logic, vars);
-                        auto engine = EngineFactory(logic, witnesses)
-                                          .getEngine(witnesses.getOrDefault(Options::ENGINE, "spacer"));
-                        // If states not covered by TrInv are not reachable - then TrInv is transition invariant on all
-                        // reachable states, therefore it is well-founded transition invariant
-                        if (engine->solve(*graph).getAnswer() == VerificationAnswer::SAFE) {
-                            return {Answer::YES, trInv};
-                        } else {
-                            // Otherwise, if states not covered by TrInv are reachable, then the following procedure should
-                            // take place:
-                            // 1. Detect all of the states outside of TrInv that are reachable
-                            // 2. Using those states as initial states attempt to reach states that lead to termination
-
-                            auto [answer, subinv] =
-                                analyzeTS(noncoveredStates, transition, logic.mkNot(noncoveredStates), witnesses, logic, vars);
-                            if (answer == Answer::YES) {
-                                return {Answer::YES, subinv};
-                            }
-                            // TODO: If doesn't terminate, check the reachability of recurrent set
-                            // TODO: If reachable from init, then doesnt terminate
-                            else if (answer == Answer::NO) {
-                                auto graph = constructHyperGraph(init, transition, subinv, logic, vars);
-                                auto engine = EngineFactory(logic, witnesses)
-                                                  .getEngine(witnesses.getOrDefault(Options::ENGINE, "spacer"));
-                                if (engine->solve(*graph).getAnswer() == VerificationAnswer::UNSAFE) {
-                                    return {Answer::NO, subinv};
-                                }
-                            }
-                        }
+                        std::cout << "Noncovered states: " << logic.pp(noncoveredStates) << std::endl;
 
                         // Left-restricted
                         smt_checker.resetSolver();
@@ -887,6 +857,38 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                                               .getEngine(witnesses.getOrDefault(Options::ENGINE, "spacer"));
                             if (engine->solve(*graph).getAnswer() == VerificationAnswer::UNSAFE) {
                                 return {Answer::NO, init};
+                            }
+                        }
+
+
+                         // We check if the states that are not covered by TrInv are reachable
+                        auto graph = constructHyperGraph(init, transition, noncoveredStates, logic, vars);
+                        auto engine = EngineFactory(logic, witnesses)
+                                          .getEngine(witnesses.getOrDefault(Options::ENGINE, "spacer"));
+                        // If states not covered by TrInv are not reachable - then TrInv is transition invariant on all
+                        // reachable states, therefore it is well-founded transition invariant
+                        if (engine->solve(*graph).getAnswer() == VerificationAnswer::SAFE) {
+                            return {Answer::YES, trInv};
+                        } else {
+                            // Otherwise, if states not covered by TrInv are reachable, then the following procedure should
+                            // take place:
+                            // 1. Detect all of the states outside of TrInv that are reachable
+                            // 2. Using those states as initial states attempt to reach states that lead to termination
+
+                            auto [answer, subinv] =
+                                analyzeTS(noncoveredStates, transition, sink, witnesses, logic, vars);
+                            if (answer == Answer::YES) {
+                                return {Answer::YES, subinv};
+                            }
+                            // TODO: If doesn't terminate, check the reachability of recurrent set
+                            // TODO: If reachable from init, then doesnt terminate
+                            else if (answer == Answer::NO) {
+                                auto graph = constructHyperGraph(init, transition, subinv, logic, vars);
+                                auto engine = EngineFactory(logic, witnesses)
+                                                  .getEngine(witnesses.getOrDefault(Options::ENGINE, "spacer"));
+                                if (engine->solve(*graph).getAnswer() == VerificationAnswer::UNSAFE) {
+                                    return {Answer::NO, subinv};
+                                }
                             }
                         }
                     }
