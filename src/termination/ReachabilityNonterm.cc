@@ -811,37 +811,6 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                         std::cout << "Center" << std::endl;
                         return {Answer::YES, trInv};
                     } else {
-                        // If trInv is not Transition invariant, then we can calculate the states which are not covered by trInv
-                        PTRef noncoveredStates = QuantifierElimination(logic).keepOnly(
-                            logic.mkAnd({logic.mkOr(trInv, id), TimeMachine(logic).sendFlaThroughTime(temp_tr, 1),
-                                         logic.mkNot(shiftOnlyNextVars(trInv, vars, logic))}),
-                            vars);
-                        // std::cout << "Noncovered states: " << logic.pp(noncoveredStates) << std::endl;
-
-                        // Left-restricted
-                        smt_checker.resetSolver();
-                        smt_checker.assertProp(
-                            logic.mkAnd({init, logic.mkOr(trInv, id), TimeMachine(logic).sendFlaThroughTime(temp_tr, 1),
-                                         logic.mkNot(shiftOnlyNextVars(trInv, vars, logic))}));
-                        if (smt_checker.check() == SMTSolver::Answer::UNSAT) {
-                            // Check that for all of the reachable states TrInv => TR:
-                            smt_checker.resetSolver();
-                            vec<PTRef> next_vars;
-                            // Extract integer variables from the inequalities
-
-                            smt_checker.assertProp(
-                                logic.mkAnd({logic.mkAnd(init, logic.mkOr(trInv, id)),
-                                             TimeMachine(logic).sendFlaThroughTime(
-                                                 logic.mkAnd({logic.mkOr(trInv, id),
-                                                              TimeMachine(logic).sendFlaThroughTime(temp_tr, 1),
-                                                              logic.mkNot(shiftOnlyNextVars(trInv, vars, logic))}),
-                                                 1)}));
-                            if (smt_checker.check() == SMTSolver::Answer::UNSAT) {
-                                return {Answer::YES, trInv};
-                            } else {
-                                std::cout << "Not overapproximate enough" << std::endl;
-                            }
-                        }
 
                         // Right-restricted
                         smt_checker.resetSolver();
@@ -860,6 +829,12 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                             }
                         }
 
+                        // If trInv is not Transition invariant, then we can calculate the states which are not covered by trInv
+                        PTRef noncoveredStates = QuantifierElimination(logic).keepOnly(
+                            logic.mkAnd({logic.mkOr(trInv, id), TimeMachine(logic).sendFlaThroughTime(temp_tr, 1),
+                                         logic.mkNot(shiftOnlyNextVars(trInv, vars, logic))}),
+                            vars);
+                        // std::cout << "Noncovered states: " << logic.pp(noncoveredStates) << std::endl;
 
                          // We check if the states that are not covered by TrInv are reachable
                         auto graph = constructHyperGraph(init, transition, noncoveredStates, logic, vars);
