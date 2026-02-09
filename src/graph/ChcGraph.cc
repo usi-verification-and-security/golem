@@ -584,6 +584,29 @@ std::unique_ptr<ChcDirectedHyperGraph> ChcDirectedHyperGraph::makeEmpty(Logic & 
                                                    logic);
 }
 
+/**
+ * This method contracts a given set of vertices into one vertex, simulating any transitions inside the contracted set
+ * by a single self-looping transition on the new vertex.
+ * This is a generalization of a transformation from a general linear CHC system to a transition system (defined by initial
+ * states, transition relation and bad states), as it can be applied to a selected subset of vertices.
+ * The idea was described in the short paper Horn2VMT: Translating Horn Reachability into Transition Systems
+ * presented in HCVS 2020. See, e.g., https://www.osti.gov/biblio/1783647
+ *
+ * The idea behind the transformation is the following.
+ * We introduce a new vertex/predicate with the following variables:
+ * A separate boolean variable for each location (predicate/vertex) in the given set.
+ * A new argument variable for each predicate and each argument of the predicate.
+ * Then, for each edge inside the given set, we create a new disjunct of the new transition.
+ * This fragment captures the changes to the variables as defined by the edge constraint;
+ * It enforces that the current source location is variable is true and next target variable is true.
+ * All other location variables are false (or alternatively keep their previous value).
+ * The edge's constraint is translated to be over corresponding state variables (state vars from source, next state
+ * vars from target), all other variables are unchanged (or kept free).
+ * Moreover, we need to update each edge that crosses the boundary between the given set and the rest of the graph.
+ *
+ * This method returns information about the transformation executed: the new vertex and mappings connecting original
+ * predicates with the variables of the new predicate.
+ **/
 ContractionData ChcDirectedGraph::contractVertices(std::vector<SymRef> const & vertices) {
     assert(vertices.size() >= 2);
     assert((std::unordered_set<SymRef, SymRefHash>(vertices.begin(), vertices.end())).size() == vertices.size());

@@ -6,68 +6,27 @@
 
 #include "SingleLoopTransformation.h"
 
+#include "MultiEdgeMerger.h"
 #include "QuantifierElimination.h"
 #include "TransformationUtils.h"
 #include "utils/SmtSolver.h"
 
 namespace golem {
 SingleLoopTransformation::TransformationResult
-SingleLoopTransformation::transform(const ChcDirectedGraph & graph) const {
-    Logic & logic = graph.getLogic();
+SingleLoopTransformation::transform(ChcDirectedGraph const & original) const {
+    auto graph = std::make_unique<ChcDirectedGraph>(original);
+    Logic & logic = graph->getLogic();
     TimeMachine timeMachine(logic);
-    auto vertices = graph.getVertices();
-    // MB: It is useful to have exit location, so we do not remove exit from the vertices
-    std::erase(vertices, graph.getEntry());
-    LocationVarMap locationVars;
-    locationVars.reserve(vertices.size());
-    for (auto vertex : vertices) {
-        auto varName = std::string(".loc_") + std::to_string(vertex.x);
-        locationVars.insert({vertex, timeMachine.getVarVersionZero(varName, logic.getSort_bool())});
-    }
-
-    PositionVarMap argVars;
-    for (auto vertex : vertices) {
-        auto args_count = logic.getSym(vertex).nargs();
-        for (uint32_t i = 0; i < args_count; ++i) {
-            VarPosition pos = {vertex, i};
-            auto varName = std::string(".arg_") + std::to_string(vertex.x) + '_' + std::to_string(i);
-            PTRef var = timeMachine.getVarVersionZero(varName, logic.getSym(vertex)[i]);
-            argVars.insert({pos, var});
-        }
-    }
-
-    EdgeTranslator edgeTranslator{graph, locationVars, argVars, {}};
-    vec<PTRef> transitionRelationComponent;
-    graph.forEachEdge([&](auto const & edge) { transitionRelationComponent.push(edgeTranslator.translateEdge(edge)); });
-
-    PTRef transitionRelation = logic.mkOr(std::move(transitionRelationComponent));
-    PTRef initialStates = [&]() -> PTRef {
-        vec<PTRef> negatedLocations;
-        negatedLocations.capacity(locationVars.size());
-        for (auto && entry : locationVars) {
-            negatedLocations.push(logic.mkNot(entry.second));
-        }
-        return logic.mkAnd(std::move(negatedLocations));
+    auto vertices = graph->getVertices();
+    std::erase_if(vertices, [&](auto v) { return v == graph->getEntry() or v == graph->getExit(); });
+    auto contractionData = graph->contractVertices(vertices);
+    auto finalGraph = [&]() {
+        auto result = MultiEdgeMerger().transform(graph->toHyperGraph());
+        return result.first->toNormalGraph();
     }();
 
-    PTRef badStates = locationVars.at(graph.getExit());
-
-    vec<PTRef> stateVars = [&locationVars, &argVars]() {
-        vec<PTRef> ret;
-        ret.capacity(locationVars.size() + argVars.size());
-        for (auto && entry : locationVars) {
-            ret.push(entry.second);
-        }
-        for (auto && entry : argVars) {
-            ret.push(entry.second);
-        }
-        return ret;
-    }();
-    auto systemType = std::make_unique<SystemType>(stateVars, edgeTranslator.auxiliaryVariables, logic);
-    auto ts =
-        std::make_unique<TransitionSystem>(logic, std::move(systemType), initialStates, transitionRelation, badStates);
-    auto backTranslator =
-        std::make_unique<WitnessBackTranslator>(graph, *ts, std::move(locationVars), std::move(argVars));
+    auto ts = toTransitionSystem(*finalGraph, true);
+    auto backTranslator = std::make_unique<WitnessBackTranslator>(original, *graph, std::move(contractionData));
     return {std::move(ts), std::move(backTranslator)};
 }
 
@@ -94,75 +53,77 @@ SingleLoopTransformation::WitnessBackTranslator::translate(TransitionSystemVerif
 SingleLoopTransformation::WitnessBackTranslator::ErrorOr<InvalidityWitness>
 SingleLoopTransformation::WitnessBackTranslator::translateErrorPath(std::size_t unrolling) {
     // We need to get the CEX path, which will define the locations in the graph
-    Logic & logic = graph.getLogic();
+    Logic & logic = originalGraph.getLogic();
     TimeMachine tm(logic);
+    std::vector<PTRef> inputs;
+    std::vector<PTRef> outputs;
+    PTRef transition = PTRef_Undef;
+    contractedGraph.forEachEdge([&](DirectedEdge const & edge) {
+        assert(edge.from != contractedGraph.getEntry() or edge.to != contractedGraph.getExit());
+        if (edge.from == contractedGraph.getEntry()) {
+            inputs.push_back(tm.sendFlaThroughTime(edge.fla.fla, -1));
+        } else if (edge.to == contractedGraph.getExit()) {
+            outputs.push_back(edge.fla.fla);
+        } else {
+            assert(edge.from == edge.to);
+            assert(transition == PTRef_Undef);
+            transition = edge.fla.fla;
+        }
+    });
     SMTSolver solver(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
-    solver.assertProp(transitionSystem.getInit());
-    PTRef transition = transitionSystem.getTransition();
+    solver.assertProp(logic.mkOr(inputs));
     for (auto i = 0u; i < unrolling; ++i) {
         solver.assertProp(tm.sendFlaThroughTime(transition, i));
     }
-    solver.assertProp(tm.sendFlaThroughTime(transitionSystem.getQuery(), unrolling));
+    solver.assertProp(tm.sendFlaThroughTime(logic.mkOr(outputs), unrolling));
     auto res = solver.check();
     assert(res == SMTSolver::Answer::SAT);
     if (res != SMTSolver::Answer::SAT) { throw std::logic_error("Unrolling should have been satisfiable"); }
     auto model = solver.getModel();
-    std::vector<SymRef> pathVertices;
-    pathVertices.push_back(graph.getEntry());
-    auto allVertices = graph.getVertices();
-    for (auto i = 0u; i < unrolling; ++i) {
-        auto it = std::find_if(allVertices.begin(), allVertices.end(), [&](auto vertex) {
-            if (vertex == graph.getEntry()) { return false; }
-            auto varName = ".loc_" + std::to_string(vertex.x);
-            auto vertexVar = logic.mkBoolVar(varName.c_str());
-            vertexVar = tm.getVarVersionZero(vertexVar);
-            vertexVar = tm.sendVarThroughTime(vertexVar, i + 1);
-            return model->evaluate(vertexVar) == logic.getTerm_true();
-        });
-        assert(it != allVertices.end());
-        pathVertices.push_back(*it);
-    }
 
-    // Build error path from the vertices
     std::vector<EId> errorEdges;
-    auto adj = AdjacencyListsGraphRepresentation::from(graph);
-    for (auto i = 1u; i < pathVertices.size(); ++i) {
-        auto source = pathVertices[i - 1];
-        auto target = pathVertices[i];
-        auto const & outgoing = adj.getOutgoingEdgesFor(source);
-        auto it =
-            std::find_if(outgoing.begin(), outgoing.end(), [&](EId eid) { return target == graph.getTarget(eid); });
-        assert(it != outgoing.end());
+    auto adj = AdjacencyListsGraphRepresentation::from(originalGraph);
+    auto currentVertex = originalGraph.getEntry();
+    for (auto i = 0u; i <= unrolling + 1; ++i) {
+        auto canBeTaken = [&](EId eid) {
+            // TODO: We should evaluate also the constraint of the edge
+            auto target = originalGraph.getTarget(eid);
+            if (target == originalGraph.getExit()) { return i == unrolling + 1; }
+            if (i == unrolling + 1) { return false; }
+            auto locVar = tm.sendVarThroughTime(contractionData.locations.at(target), i);
+            return model->evaluate(locVar) == logic.getTerm_true();
+        };
+        auto const & outgoing = adj.getOutgoingEdgesFor(currentVertex);
+        auto it = std::find_if(outgoing.begin(), outgoing.end(), canBeTaken);
+        if (it == outgoing.end()) { return NoWitness("SingleLoopTransformation: Could not backtranslate path"); }
+        auto next = std::find_if(it + 1, outgoing.end(), canBeTaken);
+        if (next != outgoing.end()) { return NoWitness("SingleLoopTransformation: Multiple edges possible"); }
+        currentVertex = originalGraph.getTarget(*it);
         errorEdges.push_back(*it);
-        // TODO: deal with multiedges properly
-        if (std::find_if(it + 1, outgoing.end(), [&](EId eid) { return target == graph.getTarget(eid); }) !=
-            outgoing.end()) {
-            // Bail out in this case
-            return NoWitness{"Could not backtranslate invalidity witness in single-loop transformation"};
-        }
     }
+    assert(errorEdges.size() == unrolling + 2);
     ErrorPath errorPath;
     errorPath.setPath(std::move(errorEdges));
-    return InvalidityWitness::fromErrorPath(errorPath, graph);
+    return InvalidityWitness::fromErrorPath(errorPath, originalGraph);
 }
 
 SingleLoopTransformation::WitnessBackTranslator::ErrorOr<ValidityWitness>
 SingleLoopTransformation::WitnessBackTranslator::translateInvariant(PTRef inductiveInvariant) {
-    Logic & logic = graph.getLogic();
-    //    std::cout << "Invariant is " << logic.pp(inductiveInvariant) << std::endl;
-    auto vertices = graph.getVertices();
+    Logic & logic = originalGraph.getLogic();
+    // std::cout << "Invariant is " << logic.pp(inductiveInvariant) << std::endl;
+    auto vertices = originalGraph.getVertices();
     TermUtils utils(logic);
     TermUtils::substitutions_map substitutions;
     for (auto vertex : vertices) {
-        if (vertex == graph.getEntry()) { continue; }
-        PTRef locationVar = this->locationVarMap.at(vertex);
+        if (vertex == originalGraph.getEntry() or vertex == originalGraph.getExit()) { continue; }
+        PTRef locationVar = contractionData.locations.at(vertex);
         substitutions.insert({locationVar, logic.getTerm_false()});
     }
 
-    auto vertexInvariants = ValidityWitness::trivialDefinitions(graph);
+    auto vertexInvariants = ValidityWitness::trivialDefinitions(originalGraph);
     for (auto vertex : vertices) {
-        if (vertex == graph.getEntry() or vertex == graph.getExit()) { continue; }
-        PTRef locationVar = this->locationVarMap.at(vertex);
+        if (vertex == originalGraph.getEntry() or vertex == originalGraph.getExit()) { continue; }
+        PTRef locationVar = contractionData.locations.at(vertex);
         substitutions.at(locationVar) = logic.getTerm_true();
         auto vertexInvariant = utils.varSubstitute(inductiveInvariant, substitutions);
         substitutions.at(locationVar) = logic.getTerm_false();
@@ -196,10 +157,10 @@ SingleLoopTransformation::WitnessBackTranslator::translateInvariant(PTRef induct
         }
         // No alien variable, we can translate the invariant using predicate's variables
         TermUtils::substitutions_map varSubstitutions;
-        PTRef basePredicate = TimeMachine(logic).versionedFormulaToUnversioned(graph.getStateVersion(vertex));
+        PTRef basePredicate = TimeMachine(logic).versionedFormulaToUnversioned(originalGraph.getStateVersion(vertex));
         auto argsNum = logic.getPterm(basePredicate).nargs();
         for (auto i = 0u; i < argsNum; ++i) {
-            PTRef positionVar = positionVarMap.at(VarPosition{vertex, i});
+            PTRef positionVar = contractionData.positions.at(VarPosition{vertex, i});
             varSubstitutions.insert({positionVar, logic.getPterm(basePredicate)[i]});
         }
         vertexInvariant = utils.varSubstitute(vertexInvariant, varSubstitutions);
@@ -212,7 +173,7 @@ SingleLoopTransformation::WitnessBackTranslator::translateInvariant(PTRef induct
 std::unordered_set<PTRef, PTRefHash>
 SingleLoopTransformation::WitnessBackTranslator::getVarsForVertex(SymRef vertex) const {
     std::unordered_set<PTRef, PTRefHash> vars;
-    for (auto const & entry : positionVarMap) {
+    for (auto const & entry : contractionData.positions) {
         if (entry.first.vertex == vertex) { vars.insert(entry.second); }
     }
     return vars;
