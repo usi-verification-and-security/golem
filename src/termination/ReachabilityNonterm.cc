@@ -691,7 +691,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
             if (num > 0) {
                 // Calculate the states that are guaranteed to terminate within num transitions:
                 // Tr^n(x,x') /\ not Sink(x') - is a formula, which can be satisfied by any x which can not terminate
-                // after n transitions
+                // in >= n transitions
                 // PTRef R = QuantifierElimination(logic).keepOnly(logic.mkAnd(logic.mkAnd(formulas),
                 // TimeMachine(logic).sendFlaThroughTime(sink, num )),vars);
 
@@ -710,15 +710,6 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                     std::cout << "No init states can nonterminate in n transitions" << std::endl;
                     return {Answer::YES, logic.getTerm_true()};
                 }
-
-                // assume R = set of states which can terminate in n transitions
-                // R /\ T = \bot - so there are no states which are both:
-                // 1: Can terminate in n transitions
-                // 2: Can not reach non-terminating state in n transitions
-                // There exist some extra cases, for example:
-                // x>0 /\ x' = x-3 /\ x' = x-6 where there does not exist a state that can reach termination in 2
-                // transitions, but not in one transition, but generally in a lot of cases it is the situation
-                // TODO: I need to think how to distinguish it
 
                 SMTsolver.resetSolver();
                 SMTsolver.assertProp(logic.mkAnd({T, temp_tr, TimeMachine(logic).sendFlaThroughTime(sink, num)}));
@@ -764,9 +755,6 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                 smt_solver.assertProp(logic.mkAnd(deterministic_trace));
                 smt_solver.push();
                 smt_solver.assertProp(logic.mkAnd(T, logic.mkNot(temp_sink)));
-                // TODO: Think why this constraint does not work
-                // sink = TimeMachine(logic).sendFlaThroughTime(temp_sink, -num);
-
                 // Formula should be unsat, because \lnot(sink) are the states which can't be reached after n
                 // transitions
                 if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
@@ -798,7 +786,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                     smt_solver.resetSolver();
 
 
-                    SMTSolver smt_checker(logic, SMTSolver::WitnessProduction::NONE);
+                    SMTSolver smt_checker(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
 
                     smt_checker.resetSolver();
 
@@ -813,17 +801,23 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                     } else {
 
                         // Right-restricted
+                        // This is a check if TrInv is right-restricted invariant
+                        // Tr /\ TrInv /\ Sink => TrInv
                         smt_checker.resetSolver();
                         smt_checker.assertProp(
                             logic.mkAnd({temp_tr, TimeMachine(logic).sendFlaThroughTime(logic.mkOr(trInv, id), 1),
                                          TimeMachine(logic).sendFlaThroughTime(sink, 2),
                                          logic.mkNot(shiftOnlyNextVars(trInv, vars, logic))}));
                         if (smt_checker.check() == SMTSolver::Answer::UNSAT) {
+                            // If TrInv is right restricted, then we can compute a set of states
+                            // which can potentially terminate
                             PTRef preTransition = QuantifierElimination(logic).keepOnly(
                                 logic.mkAnd(logic.mkOr(trInv, id), TimeMachine(logic).sendFlaThroughTime(sink, 1)), vars);
                             auto graph = constructHyperGraph(init, transition, logic.mkNot(preTransition), logic, vars);
                             auto engine = EngineFactory(logic, witnesses)
                                               .getEngine(witnesses.getOrDefault(Options::ENGINE, "spacer"));
+                            // If it is possible to reach states that can not potentially terminate from initial states,
+                            // Then TS is nonterminating
                             if (engine->solve(*graph).getAnswer() == VerificationAnswer::UNSAFE) {
                                 return {Answer::NO, init};
                             }
@@ -832,32 +826,75 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                         // If trInv is not Transition invariant, then we can calculate the states which are not covered by trInv
                         PTRef noncoveredStates = QuantifierElimination(logic).keepOnly(
                             logic.mkAnd({logic.mkOr(trInv, id), TimeMachine(logic).sendFlaThroughTime(temp_tr, 1),
-                                         logic.mkNot(shiftOnlyNextVars(trInv, vars, logic))}),
-                            vars);
-                        // std::cout << "Noncovered states: " << logic.pp(noncoveredStates) << std::endl;
+                                         logic.mkNot(shiftOnlyNextVars(trInv, vars, logic))}), vars);
 
                          // We check if the states that are not covered by TrInv are reachable
-                        auto graph = constructHyperGraph(init, transition, noncoveredStates, logic, vars);
+                        auto graph = constructHyperGraph(init, transition,  noncoveredStates, logic, vars);
                         auto engine = EngineFactory(logic, witnesses)
                                           .getEngine(witnesses.getOrDefault(Options::ENGINE, "spacer"));
                         // If states not covered by TrInv are not reachable - then TrInv is transition invariant on all
                         // reachable states, therefore it is well-founded transition invariant
-                        if (engine->solve(*graph).getAnswer() == VerificationAnswer::SAFE) {
+                        auto res = engine->solve(*graph);
+                        if (res.getAnswer() == VerificationAnswer::SAFE) {
                             return {Answer::YES, trInv};
                         } else {
                             // Otherwise, if states not covered by TrInv are reachable, then the following procedure should
                             // take place:
                             // 1. Detect all of the states outside of TrInv that are reachable
-                            // 2. Using those states as initial states attempt to reach states that lead to termination
+                            // 2. Check if those states are terminating or not
+                            // 3. Construct transition invariant for these states
                             // TODO: If I use sink, then I have uniqueness
-                            // TODO: However, if I use noncoveredStates, then I get more solved instances
+                            //  However, if I use noncoveredStates, then I get more solved instances
+                            // TODO: I also can do it in a smarter way, using specific reached states (using MBP or smth)
+                            //  instead of using the whole set of states. It is much easier to verify for a subset.
+                            assert(res.getAnswer() == VerificationAnswer::UNSAFE);
+
+
+                            //TODO: Different approach
+                            uint num_non = res.getInvalidityWitness().getDerivation().size() - 3;
+                            vec<PTRef> last_vars;
+                            // Extract integer variables from the inequalities
+                            for (auto var : vars) {
+                                last_vars.push(TimeMachine(logic).sendVarThroughTime(var, num_non));
+                            }
+                            // Construct the logical formula representing the trace:
+                            // Init(x) /\ Tr(x,x') /\ ... /\ Bad(x^(num))
+                            std::vector<PTRef> formulas;
+                            for (uint j = 0; j < num_non; j++) {
+                                formulas.push_back(TimeMachine(logic).sendFlaThroughTime(transition, j));
+                            }
+                            smt_checker.resetSolver();
+                            PTRef transitions =
+                                logic.mkAnd({init, logic.mkAnd(formulas), TimeMachine(logic).sendFlaThroughTime(noncoveredStates, num_non)});
+                            smt_checker.assertProp(transitions);
+                            smt_checker.check();
+                            assert(smt_checker.check() == SMTSolver::Answer::SAT);
+                            PTRef reachedStates = ModelBasedProjection(logic).keepOnly(transitions, last_vars, *smt_checker.getModel());
+
+
                             auto [answer, subinv] =
-                                analyzeTS(noncoveredStates, transition, logic.mkNot(noncoveredStates), witnesses, logic, vars);
+                                analyzeTS(reachedStates, transition, logic.mkNot(noncoveredStates), witnesses, logic, vars);
+                            // TODO: If it terminates for noncoveredStates, then it terminates for all states
                             if (answer == Answer::YES) {
-                                return {Answer::YES, subinv};
+                                strictCandidates.push(subinv);
+                                trInv = logic.mkOr(strictCandidates);
+                                noncoveredStates = QuantifierElimination(logic).keepOnly(
+                                    logic.mkAnd({logic.mkOr(trInv, id), TimeMachine(logic).sendFlaThroughTime(temp_tr, 1),
+                                         logic.mkNot(shiftOnlyNextVars(trInv, vars, logic))}), vars);
+
+                                // We check if the states that are not covered by TrInv are reachable
+                                auto graph = constructHyperGraph(init, transition,  noncoveredStates, logic, vars);
+                                auto engine = EngineFactory(logic, witnesses)
+                                                  .getEngine(witnesses.getOrDefault(Options::ENGINE, "spacer"));
+                                // If states not covered by TrInv are not reachable - then TrInv is transition invariant on all
+                                // reachable states, therefore it is well-founded transition invariant
+                                auto res = engine->solve(*graph);
+                                if (res.getAnswer() == VerificationAnswer::SAFE) {
+                                    return {Answer::YES, trInv};
+                                }
                             }
                             // TODO: If doesn't terminate, check the reachability of recurrent set
-                            // TODO: If reachable from init, then doesnt terminate
+                            // TODO: If reachable from init, then it does not terminate
                             else if (answer == Answer::NO) {
                                 auto graph = constructHyperGraph(init, transition, subinv, logic, vars);
                                 auto engine = EngineFactory(logic, witnesses)
@@ -919,7 +956,6 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                 // from this state If it is the case, there exist a sink state in the invariant - otherwise, invariant
                 // is a recurrent set
                 if (SMTsolver.check() == SMTSolver::Answer::UNSAT) {
-                    std::cout << "Original" << std::endl;
                     return {Answer::NO, inv};
                 } else {
                     // We update the sink states by the detected sink states and rerun the verification
