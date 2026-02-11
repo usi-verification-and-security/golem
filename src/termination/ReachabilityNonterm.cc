@@ -829,7 +829,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                         PTRef noncoveredStates = QuantifierElimination(logic).keepOnly(
                             logic.mkAnd({logic.mkOr(trInv, id), TimeMachine(logic).sendFlaThroughTime(temp_tr, 1),
                                          logic.mkNot(shiftOnlyNextVars(trInv, vars, logic))}), vars);
-                        std::cout << "Noncovered: " << logic.pp(noncoveredStates) << std::endl;
+                        // std::cout << "Noncovered: " << logic.pp(noncoveredStates) << std::endl;
 
                          // We check if the states that are not covered by TrInv are reachable
                         auto graph = constructHyperGraph(init, transition,  noncoveredStates, logic, vars);
