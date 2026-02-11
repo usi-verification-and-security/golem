@@ -886,7 +886,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                                 if (smt_checker.check() == SMTSolver::Answer::UNSAT) {
                                     // If trInv is Transition invariant, then Tr leads to termination on the whole state-space
                                     std::cout << "Center" << std::endl;
-                                    return {Answer::YES, trInv};
+                                    return {Answer::YES, subinv};
                                 }
                                 strictCandidates.push(subinv);
                                 trInv = logic.mkOr(strictCandidates);
