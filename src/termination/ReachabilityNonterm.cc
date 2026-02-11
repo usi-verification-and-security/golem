@@ -831,7 +831,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                                          logic.mkNot(shiftOnlyNextVars(trInv, vars, logic))}), vars);
                         // std::cout << "Noncovered: " << logic.pp(noncoveredStates) << std::endl;
 
-                         // We check if the states that are not covered by TrInv are reachable
+                        // We check if the states that are not covered by TrInv are reachable
                         auto graph = constructHyperGraph(init, transition,  noncoveredStates, logic, vars);
                         auto engine = EngineFactory(logic, witnesses)
                                           .getEngine(witnesses.getOrDefault(Options::ENGINE, "spacer"));
@@ -841,19 +841,13 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                         if (res.getAnswer() == VerificationAnswer::SAFE) {
                             return {Answer::YES, trInv};
                         } else {
-                            // Otherwise, if states not covered by TrInv are reachable, then the following procedure should
-                            // take place:
-                            // 1. Detect all of the states outside of TrInv that are reachable
+                            // Otherwise, if states not covered by TrInv are reachable, then the following procedure
+                            // takes place:
+                            // 1. Detect states outside of TrInv that are reachable
                             // 2. Check if those states are terminating or not
                             // 3. Construct transition invariant for these states
-                            // TODO: If I use sink, then I have uniqueness
-                            //  However, if I use noncoveredStates, then I get more solved instances
-                            // TODO: I also can do it in a smarter way, using specific reached states (using MBP or smth)
-                            //  instead of using the whole set of states. It is much easier to verify for a subset.
                             assert(res.getAnswer() == VerificationAnswer::UNSAFE);
 
-
-                            //TODO: Different approach
                             uint num_non = res.getInvalidityWitness().getDerivation().size() - 3;
                             vec<PTRef> last_vars;
                             // Extract integer variables from the inequalities
@@ -872,16 +866,19 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                             smt_checker.assertProp(transitions);
                             smt_checker.check();
                             assert(smt_checker.check() == SMTSolver::Answer::SAT);
+
+                            // We've constructed set of states, which are possible to reach from init, which are not covered by TrInv
                             PTRef reachedStates = ModelBasedProjection(logic).keepOnly(transitions, last_vars, *smt_checker.getModel());
+                            std::cout << "Reached: " << logic.pp(noncoveredStates) << std::endl;
 
-
+                            // Algorithm checks if these states terminate or not
                             auto [answer, subinv] =
                                 analyzeTS(reachedStates, transition, logic.mkNot(noncoveredStates), witnesses, logic, vars, DETERMINISTIC_TRANSITION);
-                            // TODO: If it terminates for noncoveredStates, then it terminates for all states
+                            // If those states terminate, the transition invariant can be used to improve the transition invariant
                             if (answer == Answer::YES) {
                                 smt_checker.resetSolver();
                                 smt_checker.assertProp(
-                                    logic.mkAnd({logic.mkOr(subinv, id), TimeMachine(logic).sendFlaThroughTime(transition, 1),
+                                    logic.mkAnd({noncoveredStates, logic.mkOr(subinv, id), TimeMachine(logic).sendFlaThroughTime(transition, 1),
                                                  logic.mkNot(shiftOnlyNextVars(subinv, vars, logic))}));
                                 // Check if trInv is Transition Invariant on the whole state-space
                                 if (smt_checker.check() == SMTSolver::Answer::UNSAT) {
