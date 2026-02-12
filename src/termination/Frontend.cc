@@ -440,6 +440,15 @@ void solve(Options const & options, std::unique_ptr<TransitionSystem> ts) {
     auto result = solve(maybeMethod.value(), options, *ts);
     printAnswer(result);
 }
+
+bool isTriviallyTerminating(ChcDirectedGraph const & graph) {
+    auto eids = graph.getEdges();
+    if (eids.empty()) { return true; }
+    if (std::all_of(eids.begin(), eids.end(), [&](auto eid) { return graph.getSource(eid) == graph.getEntry(); })) {
+        return true;
+    }
+    return false;
+}
 } // namespace
 
 void run(std::string const & filename, Options const & options) {
@@ -468,6 +477,10 @@ void run(std::string const & filename, Options const & options) {
         auto [transformedGraph, _] = TransformationPipeline(std::move(stages)).transform(std::move(hypergraph));
         assert(transformedGraph->isNormalGraph());
         auto graph = transformedGraph->toNormalGraph();
+        if (isTriviallyTerminating(*graph)) {
+            printAnswer(TerminationAnswer::TERMINATING);
+            return;
+        }
         auto ts = [&]() -> std::unique_ptr<TransitionSystem> {
             if (isTransitionSystemWithoutQuery(*graph)) { return toTransitionSystem(*graph, true); }
             auto [ts, bt] = SingleLoopTransformation{}.transform(*graph);
