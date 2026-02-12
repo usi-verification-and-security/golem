@@ -868,7 +868,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                             assert(smt_checker.check() == SMTSolver::Answer::SAT);
 
                             // We've constructed set of states, which are possible to reach from init, which are not covered by TrInv
-                            PTRef reachedStates = ModelBasedProjection(logic).keepOnly(transitions, last_vars, *smt_checker.getModel());
+                            PTRef reachedStates = TimeMachine(logic).sendFlaThroughTime(ModelBasedProjection(logic).keepOnly(transitions, last_vars, *smt_checker.getModel()), -num_non);
                             std::cout << "Reached: " << logic.pp(noncoveredStates) << std::endl;
 
                             // Algorithm checks if these states terminate or not
