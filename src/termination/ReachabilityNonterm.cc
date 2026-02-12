@@ -872,7 +872,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                             smt_checker.assertProp(transitions);
                             smt_checker.check();
                             assert(smt_checker.check() == SMTSolver::Answer::SAT);
-                            PTRef reachedStates = ModelBasedProjection(logic).keepOnly(transitions, last_vars, *smt_checker.getModel());
+                            PTRef reachedStates = TimeMachine(logic).sendFlaThroughTime(ModelBasedProjection(logic).keepOnly(transitions, last_vars, *smt_checker.getModel()), -num_non);
 
 
                             auto [answer, subinv] =
