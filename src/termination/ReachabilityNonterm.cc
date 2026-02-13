@@ -881,7 +881,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                             if (answer == Answer::YES) {
                                 smt_checker.resetSolver();
                                 smt_checker.assertProp(
-                                    logic.mkAnd({logic.mkOr(subinv, id), TimeMachine(logic).sendFlaThroughTime(transition, 1),
+                                    logic.mkAnd({noncoveredStates, logic.mkOr(subinv, id), TimeMachine(logic).sendFlaThroughTime(transition, 1),
                                                  logic.mkNot(shiftOnlyNextVars(subinv, vars, logic))}));
                                 // Check if trInv is Transition Invariant on the whole state-space
                                 if (smt_checker.check() == SMTSolver::Answer::UNSAT) {
