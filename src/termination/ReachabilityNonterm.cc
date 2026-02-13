@@ -689,7 +689,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
             // When it is the case, TS is terminating
             if (SMTsolver.check() == SMTSolver::Answer::UNSAT) {
                 std::cout << "Init and Transition" << std::endl;
-                return {Answer::YES, logic.getTerm_true()};
+                return {Answer::YES, logic.getTerm_false()};
             }
 
             // This is an extension of the approach, constructing TrInv and attempting to prove termination
@@ -712,7 +712,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                 // it in n+1 => system terminates
                 if (SMTsolver.check() == SMTSolver::Answer::UNSAT) {
                     std::cout << "No init states can nonterminate in n transitions" << std::endl;
-                    return {Answer::YES, logic.getTerm_true()};
+                    return {Answer::YES, logic.getTerm_false()};
                 }
 
                 SMTsolver.resetSolver();
@@ -832,7 +832,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                         // std::cout << "Noncovered: " << logic.pp(noncoveredStates) << std::endl;
 
                          // We check if the states that are not covered by TrInv are reachable
-                        auto graph = constructHyperGraph(init, transition,  noncoveredStates, logic, vars);
+                        auto graph = constructHyperGraph(init, transition,  logic.mkAnd(noncoveredStates, logic.mkNot(sink)), logic, vars);
                         auto engine = EngineFactory(logic, witnesses)
                                           .getEngine(witnesses.getOrDefault(Options::ENGINE, "spacer"));
                         // If states not covered by TrInv are not reachable - then TrInv is transition invariant on all
@@ -887,6 +887,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                                 if (smt_checker.check() == SMTSolver::Answer::UNSAT) {
                                     // If trInv is Transition invariant, then Tr leads to termination on the whole state-space
                                     std::cout << "Center" << std::endl;
+                                    std::cout << logic.pp(subinv) << std::endl;
                                     return {Answer::YES, subinv};
                                 }
                                 strictCandidates.push(subinv);
@@ -946,7 +947,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
             // We check if init state is blocked (it's impossible to make a transition from initial state)
             // When it is the case, TS is terminating
             if (SMTsolver.check() == SMTSolver::Answer::UNSAT) {
-                return {Answer::YES, logic.getTerm_true()};
+                return {Answer::YES, logic.getTerm_false()};
             } else {
                 SMTsolver.resetSolver();
                 SMTsolver.assertProp(
