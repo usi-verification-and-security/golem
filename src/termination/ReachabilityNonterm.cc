@@ -607,6 +607,9 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                                                                               bool DETERMINISTIC_TRANSITION) {
 
     vec<PTRef> strictCandidates;
+    // std::cout << "Init: " << logic.pp(init) << std::endl;
+    // std::cout << "Transition: " << logic.pp(transition) << std::endl;
+    // std::cout << "Sink: " << logic.pp(sink) << std::endl;
     while (true) {
         // TODO: Do smth with exponential transition growth in some cases via blocks...
         // Constructing a graph based on the currently considered TS
@@ -869,7 +872,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
 
                             // We've constructed set of states, which are possible to reach from init, which are not covered by TrInv
                             PTRef reachedStates = TimeMachine(logic).sendFlaThroughTime(ModelBasedProjection(logic).keepOnly(transitions, last_vars, *smt_checker.getModel()), -num_non);
-                            std::cout << "Reached: " << logic.pp(noncoveredStates) << std::endl;
+                            // std::cout << "Reached: " << logic.pp(noncoveredStates) << std::endl;
 
                             // Algorithm checks if these states terminate or not
                             auto [answer, subinv] =
@@ -960,6 +963,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                 // from this state If it is the case, there exist a sink state in the invariant - otherwise, invariant
                 // is a recurrent set
                 if (SMTsolver.check() == SMTSolver::Answer::UNSAT) {
+                    std::cout << "Invariant: "  << logic.pp(inv) << std::endl;
                     return {Answer::NO, inv};
                 } else {
                     // We update the sink states by the detected sink states and rerun the verification
