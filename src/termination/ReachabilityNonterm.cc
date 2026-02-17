@@ -904,16 +904,21 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                     // std::cout << "TrInv: " << logic.pp(logic.mkNot(trInv)) << std::endl;
                     // std::cout << "Sink: " << logic.pp(logic.mkNot(noncoveredStates)) << std::endl;
                     // Algorithm checks if reachable states are terminating
+                    // std::cout<<"Deeper\n";
                     auto [answer, subinv] =
                         analyzeTS(reached, transition, logic.mkOr(sink, logic.mkNot(noncoveredStates)), witnesses, logic, vars, DETERMINISTIC_TRANSITION);
+                    // std::cout<<"Higher\n";
                     // TODO: If it terminates for noncoveredStates, then it terminates for all states
                     if (answer == Answer::YES) {
                         smt_checker.resetSolver();
                         strictCandidates.push(subinv);
+                        // std::cout<<"Strict: "<<logic.pp(subinv)<<std::endl;
                         PTRef fullInv = logic.mkOr(strictCandidates);
+                        // std::cout<<"fullInv: "<<logic.pp(fullInv)<<std::endl;
+                        // TODO: It should work for  subinv \/ TrInv, but for some reason it does not
                         smt_checker.assertProp(
-                            logic.mkAnd({noncoveredStates, logic.mkOr(fullInv, id), TimeMachine(logic).sendFlaThroughTime(transition, 1),
-                                         logic.mkNot(shiftOnlyNextVars(fullInv, vars, logic))}));
+                            logic.mkAnd({noncoveredStates, logic.mkOr(subinv, id), TimeMachine(logic).sendFlaThroughTime(transition, 1),
+                                         logic.mkNot(shiftOnlyNextVars(subinv, vars, logic))}));
                         // Check if trInv is Transition Invariant on the whole state-space
                         if (smt_checker.check() == SMTSolver::Answer::UNSAT) {
                             // If trInv is Transition invariant, then Tr leads to termination on the whole state-space
