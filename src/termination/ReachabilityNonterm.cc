@@ -594,9 +594,79 @@ bool determinismCheck(const PTRef& transition, Logic & logic, const std::vector<
     // Tr(x,x') /\ Tr(x, x'') /\ ! x' = x''
     detChecker.assertProp(logic.mkAnd({transition, newTransition, logic.mkOr(neq)}));
     if (detChecker.check() == SMTSolver::Answer::UNSAT) {
+        std::cout << "DETERMINISTIC;" << std::endl;
         return true;
     } else {
         return false;
+    }
+}
+
+PTRef getId ( const std::vector<PTRef> & vars, Logic& logic) {
+    // Start buiding the trace that reaches sink states
+    vec<PTRef> eq_vars;
+    // Constructing vectors of equations x^(j-1) = x^(j)
+    for (auto var : vars) {
+        PTRef curr = TimeMachine(logic).sendVarThroughTime(var, 0);
+        PTRef next = TimeMachine(logic).sendVarThroughTime(var, 1);
+        eq_vars.push(logic.mkEq(curr, next));
+    }
+    return logic.mkAnd(eq_vars);
+}
+
+PTRef constructTransitionInvariantCandidates(PTRef init, PTRef transition, PTRef sink, int depth,  Logic & logic, const std::vector<PTRef> & vars) {
+    PTRef id = getId(vars, logic);
+    std::vector<PTRef> deterministic_trace{transition};
+    // Building Identity relation formula
+    for (uint k = 1; k < depth; k++) {
+        // For every transition deterministic trace is updated, adding an Id or Tr
+        // This is needed so that Interpolant overapproximates 1 <= n <= num transitions
+        deterministic_trace.push_back(
+            TimeMachine(logic).sendFlaThroughTime(logic.mkOr(transition, id), k));
+    }
+    std::vector<PTRef> checked_states;
+    // This if calculates the states reachable in 1 <= n <= num-1 transitions
+    if (depth > 1) {
+        vec<PTRef> temp_vars;
+        for (auto var : vars) {
+            temp_vars.push(TimeMachine(logic).sendVarThroughTime(var, depth - 1));
+        }
+        checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(
+            QuantifierElimination(logic).keepOnly(logic.mkAnd(init, logic.mkAnd(deterministic_trace)),
+                                                  temp_vars),
+            1));
+    }
+    checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(sink, depth));
+    // sink is updated, representing states that are guaranteed to reach termination
+    PTRef temp_sink = logic.mkOr(checked_states);
+    SMTSolver smt_solver(logic, SMTSolver::WitnessProduction::ONLY_INTERPOLANTS);
+    smt_solver.getConfig().setSimplifyInterpolant(4);
+    smt_solver.assertProp(logic.mkAnd(deterministic_trace));
+    smt_solver.push();
+    smt_solver.assertProp(logic.mkAnd(init, logic.mkNot(temp_sink)));
+    // Formula should be unsat, because \lnot(sink) are the states which can't be reached after n
+    // transitions
+    if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
+        // TODO: for interpolation try using weaker interpolants (McMillan try using strong and weak)
+        auto itpContext = smt_solver.getInterpolationContext();
+        vec<PTRef> itps;
+        ipartitions_t mask = 1;
+        itpContext->getSingleInterpolant(itps, mask);
+        assert(itps.size() == 1);
+        // Extracting Itp(Tr /\ ... /\ Tr, Init /\ not Sink) - overapproximation of 1 <= n <= num
+        // transitions
+        PTRef itp = itps[0];
+
+        TermUtils::substitutions_map varSubstitutions;
+        for (uint32_t i = 0u; i < vars.size(); ++i) {
+            varSubstitutions.insert({TimeMachine(logic).sendVarThroughTime(vars[i], depth),
+                                     TimeMachine(logic).sendVarThroughTime(vars[i], 1)});
+        }
+        // Then interpolant is translated, so it would correspond to transition relation Itp(x,x')
+        itp = TermUtils(logic).varSubstitute(itp, varSubstitutions);
+        return itp;
+    } else {
+        assert(false);
+        return logic.getTerm_false();
     }
 }
 
@@ -673,9 +743,10 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                 }
             }
 
+            PTRef temp_init = transition;
             PTRef temp_tr = transition;
             if (j == 0) {
-                // If transitions were determenistic, initial states are blocked
+                // If transitions were deterministic, initial states are blocked
                 init = logic.mkAnd(init, logic.mkNot(terminatingStates));
             } else {
                 // Otherwise, states leading to termination are blocked from transition
@@ -723,199 +794,142 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                 // because there doesn't exist state that can reach sink states.
                 if (SMTsolver.check() == SMTSolver::Answer::UNSAT) { return {Answer::NO, init}; }
 
-                // Start buiding the trace that reaches sink states
-                vec<PTRef> eq_vars;
-                // Constructing vectors of equations x^(j-1) = x^(j)
-                for (auto var : vars) {
-                    PTRef curr = TimeMachine(logic).sendVarThroughTime(var, 0);
-                    PTRef next = TimeMachine(logic).sendVarThroughTime(var, 1);
-                    eq_vars.push(logic.mkEq(curr, next));
-                }
-                std::vector<PTRef> deterministic_trace{temp_tr};
-                // Building Identity relation formula
-                PTRef id = logic.mkAnd(eq_vars);
-                for (uint k = 1; k < num; k++) {
-                    // For every transition deterministic trace is updated, adding an Id or Tr
-                    // This is needed so that Interpolant overapproximates 1 <= n <= num transitions
-                    deterministic_trace.push_back(
-                        TimeMachine(logic).sendFlaThroughTime(logic.mkOr(temp_tr, logic.mkAnd(eq_vars)), k));
-                }
-                std::vector<PTRef> checked_states;
-                // This if calculates the states reachable in 1 <= n <= num-1 transitions
-                if (num > 1) {
-                    vec<PTRef> temp_vars;
-                    for (auto var : vars) {
-                        temp_vars.push(TimeMachine(logic).sendVarThroughTime(var, num - 1));
-                    }
-                    checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(
-                        QuantifierElimination(logic).keepOnly(logic.mkAnd(T, logic.mkAnd(deterministic_trace)),
-                                                              temp_vars),
-                        1));
-                }
-                checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(sink, num));
-                // sink is updated, representing states that are guaranteed to reach termination
-                PTRef temp_sink = logic.mkOr(checked_states);
-                SMTSolver smt_solver(logic, SMTSolver::WitnessProduction::ONLY_INTERPOLANTS);
-                smt_solver.getConfig().setSimplifyInterpolant(4);
-                smt_solver.assertProp(logic.mkAnd(deterministic_trace));
-                smt_solver.push();
-                smt_solver.assertProp(logic.mkAnd(T, logic.mkNot(temp_sink)));
-                // Formula should be unsat, because \lnot(sink) are the states which can't be reached after n
-                // transitions
-                if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
-                    // TODO: for interpolation try using weaker interpolants (McMillan try using strong and weak)
-                    auto itpContext = smt_solver.getInterpolationContext();
-                    vec<PTRef> itps;
-                    ipartitions_t mask = 1;
-                    itpContext->getSingleInterpolant(itps, mask);
-                    assert(itps.size() == 1);
-                    // Extracting Itp(Tr /\ ... /\ Tr, Init /\ not Sink) - overapproximation of 1 <= n <= num
-                    // transitions
-                    PTRef itp = itps[0];
+                // The procedure to construct transition invariants is executed
+                PTRef itp = constructTransitionInvariantCandidates(T, temp_tr, sink, num, logic, vars);
+                // std::cout << "Interpolant: " << logic.pp(itp) << std::endl;
 
-                    TermUtils::substitutions_map varSubstitutions;
-                    for (uint32_t i = 0u; i < vars.size(); ++i) {
-                        varSubstitutions.insert({TimeMachine(logic).sendVarThroughTime(vars[i], num),
-                                                 TimeMachine(logic).sendVarThroughTime(vars[i], 1)});
-                    }
-                    // Then interpolant is translated, so it would correspond to transition relation Itp(x,x')
-                    itp = TermUtils(logic).varSubstitute(itp, varSubstitutions);
+                // Extract well-founded disjuncts from the transition invariant
+                auto newCands = extractWellFoundedCandidate(itp, sink, logic, vars);
+                if (newCands.size() == 0) continue;
 
+                for (auto cand : newCands) { strictCandidates.push(cand); }
+                PTRef trInv = logic.mkOr(strictCandidates);
+                PTRef id = getId(vars, logic);
 
+                SMTSolver smt_checker(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
+                smt_checker.resetSolver();
+                smt_checker.assertProp(
+                    logic.mkAnd({logic.mkOr(trInv, id), TimeMachine(logic).sendFlaThroughTime(temp_tr, 1),
+                                 logic.mkNot(shiftOnlyNextVars(trInv, vars, logic))}));
+                // Check if trInv is Transition Invariant on the whole state-space
+                if (smt_checker.check() == SMTSolver::Answer::UNSAT) {
+                    // If trInv is Transition invariant, then Tr leads to termination on the whole state-space
+                    std::cout << "Center" << std::endl;
+                    return {Answer::YES, trInv};
+                } else {
 
-                    // Extract well-founded disjuncts from the transition invariant
-                    auto newCands = extractWellFoundedCandidate(itp, sink, logic, vars);
-                    if (newCands.size() == 0) continue;
-
-                    for (auto cand : newCands) { strictCandidates.push(cand); }
-                    PTRef trInv = logic.mkOr(strictCandidates);
-
-                    SMTSolver smt_checker(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
+                    // Right-restricted
+                    // This is a check if TrInv is right-restricted invariant
+                    // Tr /\ TrInv /\ Sink => TrInv
                     smt_checker.resetSolver();
                     smt_checker.assertProp(
-                        logic.mkAnd({logic.mkOr(trInv, id), TimeMachine(logic).sendFlaThroughTime(temp_tr, 1),
+                        logic.mkAnd({temp_tr, TimeMachine(logic).sendFlaThroughTime(logic.mkOr(trInv, id), 1),
+                                     TimeMachine(logic).sendFlaThroughTime(sink, 2),
                                      logic.mkNot(shiftOnlyNextVars(trInv, vars, logic))}));
-                    // Check if trInv is Transition Invariant on the whole state-space
                     if (smt_checker.check() == SMTSolver::Answer::UNSAT) {
-                        // If trInv is Transition invariant, then Tr leads to termination on the whole state-space
-                        std::cout << "Center" << std::endl;
-                        return {Answer::YES, trInv};
-                    } else {
-
-                        // Right-restricted
-                        // This is a check if TrInv is right-restricted invariant
-                        // Tr /\ TrInv /\ Sink => TrInv
-                        smt_checker.resetSolver();
-                        smt_checker.assertProp(
-                            logic.mkAnd({temp_tr, TimeMachine(logic).sendFlaThroughTime(logic.mkOr(trInv, id), 1),
-                                         TimeMachine(logic).sendFlaThroughTime(sink, 2),
-                                         logic.mkNot(shiftOnlyNextVars(trInv, vars, logic))}));
-                        if (smt_checker.check() == SMTSolver::Answer::UNSAT) {
-                            // If TrInv is right restricted, then we can compute a set of states
-                            // which can potentially terminate
-                            PTRef preTransition = QuantifierElimination(logic).keepOnly(
-                                logic.mkAnd(logic.mkOr(trInv, id), TimeMachine(logic).sendFlaThroughTime(sink, 1)), vars);
-                            auto graph = constructHyperGraph(init, transition, logic.mkNot(preTransition), logic, vars);
-                            auto engine = EngineFactory(logic, witnesses)
-                                              .getEngine(witnesses.getOrDefault(Options::ENGINE, "spacer"));
-                            // If it is possible to reach states that can not potentially terminate from initial states,
-                            // Then TS is nonterminating
-                            if (engine->solve(*graph).getAnswer() == VerificationAnswer::UNSAFE) {
-                                return {Answer::NO, init};
-                            }
-                        }
-
-                        // If trInv is not Transition invariant, then we can calculate the states which are not covered by trInv
-                        PTRef noncoveredStates = QuantifierElimination(logic).keepOnly(
-                            logic.mkAnd({logic.mkOr(trInv, id), TimeMachine(logic).sendFlaThroughTime(temp_tr, 1),
-                                         logic.mkNot(shiftOnlyNextVars(trInv, vars, logic))}), vars);
-                        // std::cout << "Noncovered: " << logic.pp(noncoveredStates) << std::endl;
-
-                         // We check if the states that are not covered by TrInv are reachable
-                        auto graph = constructHyperGraph(init, transition,  logic.mkAnd(noncoveredStates, logic.mkNot(sink)), logic, vars);
+                        // If TrInv is right restricted, then we can compute a set of states
+                        // which can potentially terminate
+                        PTRef preTransition = QuantifierElimination(logic).keepOnly(
+                            logic.mkAnd(logic.mkOr(trInv, id), TimeMachine(logic).sendFlaThroughTime(sink, 1)), vars);
+                        auto graph = constructHyperGraph(init, transition, logic.mkNot(preTransition), logic, vars);
                         auto engine = EngineFactory(logic, witnesses)
                                           .getEngine(witnesses.getOrDefault(Options::ENGINE, "spacer"));
-                        // If states not covered by TrInv are not reachable - then TrInv is transition invariant on all
-                        // reachable states, therefore it is well-founded transition invariant
-                        auto res = engine->solve(*graph);
-                        if (res.getAnswer() == VerificationAnswer::SAFE) {
-                            return {Answer::YES, trInv};
-                        } else {
-                            // Otherwise, if states not covered by TrInv are reachable, then the following procedure should
-                            // take place:
-                            // 1. Detect all of the states outside of TrInv that are reachable
-                            // 2. Check if those states are terminating or not
-                            // 3. Construct transition invariant for these states
-                            // TODO: If I use sink, then I have uniqueness
-                            //  However, if I use noncoveredStates, then I get more solved instances
-                            // TODO: I also can do it in a smarter way, using specific reached states (using MBP or smth)
-                            //  instead of using the whole set of states. It is much easier to verify for a subset.
-                            assert(res.getAnswer() == VerificationAnswer::UNSAFE);
-
-
-                            //TODO: Different approach
-                            uint num_non = res.getInvalidityWitness().getDerivation().size() - 3;
-                            vec<PTRef> last_vars;
-                            // Extract integer variables from the inequalities
-                            for (auto var : vars) {
-                                last_vars.push(TimeMachine(logic).sendVarThroughTime(var, num_non));
-                            }
-                            // Construct the logical formula representing the trace:
-                            // Init(x) /\ Tr(x,x') /\ ... /\ Bad(x^(num))
-                            std::vector<PTRef> formulas;
-                            for (uint j = 0; j < num_non; j++) {
-                                formulas.push_back(TimeMachine(logic).sendFlaThroughTime(transition, j));
-                            }
-                            smt_checker.resetSolver();
-                            PTRef transitions =
-                                logic.mkAnd({init, logic.mkAnd(formulas), TimeMachine(logic).sendFlaThroughTime(noncoveredStates, num_non)});
-                            smt_checker.assertProp(transitions);
-                            smt_checker.check();
-                            assert(smt_checker.check() == SMTSolver::Answer::SAT);
-                            PTRef reachedStates = TimeMachine(logic).sendFlaThroughTime(ModelBasedProjection(logic).keepOnly(transitions, last_vars, *smt_checker.getModel()), -num_non);
-
-
-                            auto [answer, subinv] =
-                                analyzeTS(reachedStates, transition, logic.mkNot(noncoveredStates), witnesses, logic, vars, DETERMINISTIC_TRANSITION);
-                            // TODO: If it terminates for noncoveredStates, then it terminates for all states
-                            if (answer == Answer::YES) {
-                                smt_checker.resetSolver();
-                                smt_checker.assertProp(
-                                    logic.mkAnd({noncoveredStates, logic.mkOr(subinv, id), TimeMachine(logic).sendFlaThroughTime(transition, 1),
-                                                 logic.mkNot(shiftOnlyNextVars(subinv, vars, logic))}));
-                                // Check if trInv is Transition Invariant on the whole state-space
-                                if (smt_checker.check() == SMTSolver::Answer::UNSAT) {
-                                    // If trInv is Transition invariant, then Tr leads to termination on the whole state-space
-                                    std::cout << "Center" << std::endl;
-                                    std::cout << logic.pp(subinv) << std::endl;
-                                    return {Answer::YES, subinv};
-                                }
-                                strictCandidates.push(subinv);
-                                trInv = logic.mkOr(strictCandidates);
-                                noncoveredStates = QuantifierElimination(logic).keepOnly(
-                                    logic.mkAnd({logic.mkOr(trInv, id), TimeMachine(logic).sendFlaThroughTime(transition, 1),
-                                        logic.mkNot(shiftOnlyNextVars(trInv, vars, logic))}), vars);
-
-                                // We check if the states that are not covered by TrInv are reachable
-                                auto graph = constructHyperGraph(init, transition,  noncoveredStates, logic, vars);
-                                auto engine = EngineFactory(logic, witnesses)
-                                                  .getEngine(witnesses.getOrDefault(Options::ENGINE, "spacer"));
-                                // If states not covered by TrInv are not reachable - then TrInv is transition invariant on all
-                                // reachable states, therefore it is well-founded transition invariant
-                                auto res = engine->solve(*graph);
-
-                                if (res.getAnswer() == VerificationAnswer::SAFE) {
-                                    return {Answer::YES, trInv};
-                                }
-                            }
-                            // TODO: If doesn't terminate, check the reachability of recurrent set
-                            // TODO: If reachable from init, then it does not terminate
-                            else if (answer == Answer::NO) return {Answer::NO, subinv};
+                        // If it is possible to reach states that can not potentially terminate from initial states,
+                        // Then TS is nonterminating
+                        if (engine->solve(*graph).getAnswer() == VerificationAnswer::UNSAFE) {
+                            return {Answer::NO, init};
                         }
                     }
-                } else {
-                    return {Answer::ERROR, logic.getTerm_false()};
+
+                    // If trInv is not Transition invariant, then we can calculate the states which are not covered by trInv
+                    PTRef noncoveredStates = QuantifierElimination(logic).keepOnly(
+                        logic.mkAnd({logic.mkOr(trInv, id), TimeMachine(logic).sendFlaThroughTime(temp_tr, 1),
+                                     logic.mkNot(shiftOnlyNextVars(trInv, vars, logic))}), vars);
+                    // std::cout << "Noncovered: " << logic.pp(noncoveredStates) << std::endl;
+
+                     // We check if the states that are not covered by TrInv are reachable
+                    auto graph = constructHyperGraph(init, transition,  logic.mkAnd(noncoveredStates, logic.mkNot(sink)), logic, vars);
+                    auto engine = EngineFactory(logic, witnesses)
+                                      .getEngine(witnesses.getOrDefault(Options::ENGINE, "spacer"));
+                    // If states not covered by TrInv are not reachable - then TrInv is transition invariant on all
+                    // reachable states, therefore it is well-founded transition invariant
+                    auto res = engine->solve(*graph);
+                    if (res.getAnswer() == VerificationAnswer::SAFE) {
+                        return {Answer::YES, trInv};
+                    } else {
+                        // Otherwise, if states not covered by TrInv are reachable, then the following procedure should
+                        // take place:
+                        // 1. Detect all of the states outside of TrInv that are reachable
+                        // 2. Check if those states are terminating or not
+                        // 3. Construct transition invariant for these states
+                        // TODO: If I use sink, then I have uniqueness
+                        //  However, if I use noncoveredStates, then I get more solved instances
+                        // TODO: I also can do it in a smarter way, using specific reached states (using MBP or smth)
+                        //  instead of using the whole set of states. It is much easier to verify for a subset.
+                        assert(res.getAnswer() == VerificationAnswer::UNSAFE);
+
+
+                        //TODO: Different approach
+                        uint num_non = res.getInvalidityWitness().getDerivation().size() - 3;
+                        vec<PTRef> last_vars;
+                        // Extract integer variables from the inequalities
+                        for (auto var : vars) {
+                            last_vars.push(TimeMachine(logic).sendVarThroughTime(var, num_non));
+                        }
+                        // Construct the logical formula representing the trace:
+                        // Init(x) /\ Tr(x,x') /\ ... /\ Bad(x^(num))
+                        std::vector<PTRef> formulas;
+                        for (uint j = 0; j < num_non; j++) {
+                            formulas.push_back(TimeMachine(logic).sendFlaThroughTime(transition, j));
+                        }
+                        smt_checker.resetSolver();
+                        PTRef transitions =
+                            logic.mkAnd({init, logic.mkAnd(formulas), TimeMachine(logic).sendFlaThroughTime(noncoveredStates, num_non)});
+                        smt_checker.assertProp(transitions);
+                        smt_checker.check();
+                        assert(smt_checker.check() == SMTSolver::Answer::SAT);
+                        PTRef reachedStates = TimeMachine(logic).sendFlaThroughTime(ModelBasedProjection(logic).keepOnly(transitions, last_vars, *smt_checker.getModel()), -num_non);
+
+
+                        auto [answer, subinv] =
+                            analyzeTS(reachedStates, transition, logic.mkNot(noncoveredStates), witnesses, logic, vars, DETERMINISTIC_TRANSITION);
+                        // TODO: If it terminates for noncoveredStates, then it terminates for all states
+                        if (answer == Answer::YES) {
+                            smt_checker.resetSolver();
+                            smt_checker.assertProp(
+                                logic.mkAnd({noncoveredStates, logic.mkOr(subinv, id), TimeMachine(logic).sendFlaThroughTime(transition, 1),
+                                             logic.mkNot(shiftOnlyNextVars(subinv, vars, logic))}));
+                            // Check if trInv is Transition Invariant on the whole state-space
+                            if (smt_checker.check() == SMTSolver::Answer::UNSAT) {
+                                // If trInv is Transition invariant, then Tr leads to termination on the whole state-space
+                                std::cout << "Center" << std::endl;
+                                // std::cout << logic.pp(subinv) << std::endl;
+                                return {Answer::YES, subinv};
+                            }
+                            strictCandidates.push(subinv);
+                            trInv = logic.mkOr(strictCandidates);
+                            noncoveredStates = QuantifierElimination(logic).keepOnly(
+                                logic.mkAnd({logic.mkOr(trInv, id), TimeMachine(logic).sendFlaThroughTime(transition, 1),
+                                    logic.mkNot(shiftOnlyNextVars(trInv, vars, logic))}), vars);
+
+                            // We check if the states that are not covered by TrInv are reachable
+                            auto graph = constructHyperGraph(init, transition,  noncoveredStates, logic, vars);
+                            auto engine = EngineFactory(logic, witnesses)
+                                              .getEngine(witnesses.getOrDefault(Options::ENGINE, "spacer"));
+                            // If states not covered by TrInv are not reachable - then TrInv is transition invariant on all
+                            // reachable states, therefore it is well-founded transition invariant
+                            auto res = engine->solve(*graph);
+
+                            if (res.getAnswer() == VerificationAnswer::SAFE) {
+                                return {Answer::YES, trInv};
+                            }
+                        }
+                        // TODO: If doesn't terminate, check the reachability of recurrent set
+                        // TODO: If reachable from init, then it does not terminate
+                        else if (answer == Answer::NO) return {Answer::NO, subinv};
+                    }
                 }
+
             }
 
         } else if (res.getAnswer() == VerificationAnswer::SAFE) {
