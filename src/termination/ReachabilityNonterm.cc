@@ -910,15 +910,15 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                     }
 
                     assert(reached != logic.getTerm_false());
-                    std::cout << "init: " << logic.pp(init) << std::endl;
-                    std::cout << "Reached: " << logic.pp(reached) << std::endl;
-                    std::cout << "TrInv: " << logic.pp(logic.mkNot(trInv)) << std::endl;
-                    std::cout << "Sink: " << logic.pp(sink) << std::endl;
+                    // std::cout << "init: " << logic.pp(init) << std::endl;
+                    // std::cout << "Reached: " << logic.pp(reached) << std::endl;
+                    // std::cout << "TrInv: " << logic.pp(logic.mkNot(trInv)) << std::endl;
+                    // std::cout << "Sink: " << logic.pp(sink) << std::endl;
                     // Algorithm checks if reachable states are terminating
-                    std::cout<<"Deeper\n";
+                    // std::cout<<"Deeper\n";
                     auto [answer, subinv] =
                         analyzeTS(reached, transition,  logic.mkNot(noncoveredStates), witnesses, logic, vars, DETERMINISTIC_TRANSITION);
-                    std::cout<<"Higher\n";
+                    // std::cout<<"Higher\n";
                     // TODO: If it terminates for noncoveredStates, then it terminates for all states
                     if (answer == Answer::YES) {
                         smt_checker.resetSolver();
