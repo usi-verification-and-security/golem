@@ -853,7 +853,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                 PTRef noncoveredStates = QuantifierElimination(logic).keepOnly(
                     logic.mkAnd({logic.mkOr(trInv, id), TimeMachine(logic).sendFlaThroughTime(temp_tr, 1),
                                  logic.mkNot(shiftOnlyNextVars(trInv, vars, logic))}), vars);
-                // std::cout << "Noncovered: " << logic.pp(noncoveredStates) << std::endl;
+                std::cout << "Noncovered: " << logic.pp(noncoveredStates) << std::endl;
 
                  // We check if the states that are not covered by TrInv are reachable
                 auto graph = constructHyperGraph(init, transition,
@@ -902,7 +902,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                         //     auto moved = TimeMachine(logic).sendVarThroughTime(var, num_non);
                         //     state.push(logic.mkEq(moved, m->evaluate(moved)));
                         // }
-                        // reached = TimeMachine(logic).sendFlaThroughTime(logic.mkAnd(state), -1);
+                         // reached = TimeMachine(logic).sendFlaThroughTime(logic.mkAnd(state), -1);
 
                         // reached = TermUtils(logic).getTopLevelDisjuncts(dnfize(TermUtils(logic).simplifyMax(TimeMachine(logic).sendFlaThroughTime(ModelBasedProjection(logic).keepOnly(transitions, last_vars, *smt_checker.getModel()), -num_non)), logic))[0];
                         reached =TermUtils(logic).simplifyMax(TimeMachine(logic).sendFlaThroughTime(ModelBasedProjection(logic).keepOnly(transitions, last_vars, *smt_checker.getModel()), -num_non));
@@ -910,15 +910,15 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                     }
 
                     assert(reached != logic.getTerm_false());
-                    // std::cout << "init: " << logic.pp(init) << std::endl;
-                    // std::cout << "Reached: " << logic.pp(reached) << std::endl;
-                    // std::cout << "TrInv: " << logic.pp(logic.mkNot(trInv)) << std::endl;
-                    // std::cout << "Sink: " << logic.pp(logic.mkNot(noncoveredStates)) << std::endl;
+                    std::cout << "init: " << logic.pp(init) << std::endl;
+                    std::cout << "Reached: " << logic.pp(reached) << std::endl;
+                    std::cout << "TrInv: " << logic.pp(logic.mkNot(trInv)) << std::endl;
+                    std::cout << "Sink: " << logic.pp(sink) << std::endl;
                     // Algorithm checks if reachable states are terminating
-                    // std::cout<<"Deeper\n";
+                    std::cout<<"Deeper\n";
                     auto [answer, subinv] =
                         analyzeTS(reached, transition,  logic.mkNot(noncoveredStates), witnesses, logic, vars, DETERMINISTIC_TRANSITION);
-                    // std::cout<<"Higher\n";
+                    std::cout<<"Higher\n";
                     // TODO: If it terminates for noncoveredStates, then it terminates for all states
                     if (answer == Answer::YES) {
                         smt_checker.resetSolver();
@@ -1049,7 +1049,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
     Options witnesses = options;
     witnesses.addOption(options.COMPUTE_WITNESS, "true");
     bool DETERMINISTIC_TRANSITION = determinismCheck(transition, logic, vars);
-    auto [answer, trInvOrRecurringSet] = analyzeTS(init, transition, sink, witnesses, logic, vars, DETERMINISTIC_TRANSITION);
+    auto [answer, trInvOrRecurringSet] = analyzeTS(init, transition, dnfize(sink,logic), witnesses, logic, vars, DETERMINISTIC_TRANSITION);
     return answer;
 }
 
