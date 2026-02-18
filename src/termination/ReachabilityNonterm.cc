@@ -896,13 +896,24 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                         assert(smt_checker.check() == SMTSolver::Answer::SAT);
 
                         // We get some of the reachable states
-                        reached = TermUtils(logic).simplifyMax(TimeMachine(logic).sendFlaThroughTime(ModelBasedProjection(logic).keepOnly(transitions, last_vars, *smt_checker.getModel()), -num_non));
+                        // auto m = smt_checker.getModel();
+                        // vec<PTRef> state;
+                        // for (auto var: vars) {
+                        //     auto moved = TimeMachine(logic).sendVarThroughTime(var, num_non);
+                        //     state.push(logic.mkEq(moved, m->evaluate(moved)));
+                        // }
+                        // reached = TimeMachine(logic).sendFlaThroughTime(logic.mkAnd(state), -1);
+
+                        reached = TermUtils(logic).getTopLevelDisjuncts(dnfize(TermUtils(logic).simplifyMax(TimeMachine(logic).sendFlaThroughTime(ModelBasedProjection(logic).keepOnly(transitions, last_vars, *smt_checker.getModel()), -num_non)), logic))[0];
+                        // reached =TermUtils(logic).simplifyMax(TimeMachine(logic).sendFlaThroughTime(ModelBasedProjection(logic).keepOnly(transitions, last_vars, *smt_checker.getModel()), -num_non));
+
                     }
 
                     assert(reached != logic.getTerm_false());
                     std::cout << "init: " << logic.pp(init) << std::endl;
+                    std::cout << "Reached: " << logic.pp(reached) << std::endl;
                     // std::cout << "TrInv: " << logic.pp(logic.mkNot(trInv)) << std::endl;
-                    // std::cout << "Sink: " << logic.pp(sink) << std::endl;
+                    std::cout << "Sink: " << logic.pp(logic.mkNot(noncoveredStates)) << std::endl;
                     // Algorithm checks if reachable states are terminating
                     std::cout<<"Deeper\n";
                     auto [answer, subinv] =
