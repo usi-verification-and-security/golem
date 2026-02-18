@@ -373,6 +373,132 @@ PTRef TermUtils::toNNF(PTRef fla) {
     return nnfTransformer.toNNF(fla);
 }
 
+class DNFTransformer {
+public:
+    explicit DNFTransformer(Logic & logic) : logic(logic) {}
+    PTRef toDNF(PTRef fla) {
+        run(fla);
+        auto it = cubes.find(fla);
+        assert(it != cubes.end());
+        vec<PTRef> cubeTerms;
+        cubeTerms.capacity(it->second.size());
+        for (auto const & cube : it->second) {
+            vec<PTRef> literals;
+            literals.capacity(cube.literals.size());
+            for (PtAsgn const & lit : cube.literals) {
+                literals.push(lit.sgn == l_True ? lit.tr : logic.mkNot(lit.tr));
+            }
+            cubeTerms.push(logic.mkAnd(std::move(literals)));
+        }
+        return logic.mkOr(std::move(cubeTerms));
+    }
+
+private:
+    struct Cube {
+        std::vector<PtAsgn> literals;
+    };
+    using Cubes = std::vector<Cube>;
+    Logic & logic;
+    std::unordered_map<PTRef, Cubes, PTRefHash> cubes;
+
+    void run(PTRef);
+    static Cube makeSingletonCube(PtAsgn lit) { return {{lit}}; }
+    static Cubes fromSingleCube(Cube c) { return {std::move(c)}; }
+    static Cubes unite(std::vector<Cubes> && toUnite) {
+        // TODO: Discard subsumed cubes?
+        Cubes final;
+        for (auto && cubes : toUnite) {
+            for (auto && cube : cubes) {
+                final.push_back(std::move(cube));
+            }
+        }
+        return final;
+    }
+
+    static Cubes conjunctionAsCubes(std::vector<Cubes> && toConjoin) {
+        Cubes result;
+        std::vector<Cube> currentCombination;
+        currentCombination.reserve(toConjoin.size());
+        auto dfs = [&](auto && self, std::size_t depth) -> void {
+            if (depth == toConjoin.size()) {
+                assert(currentCombination.size() == depth);
+                // process current combination
+                // Create a combined cube
+                Cube final;
+                auto & literals = final.literals;
+                for (auto const & cube : currentCombination) {
+                    literals.insert(literals.end(), cube.literals.begin(), cube.literals.end());
+                }
+                std::sort(literals.begin(), literals.end());
+                auto it = std::adjacent_find(
+                    literals.begin(), literals.end(),
+                    [](PtAsgn const & p1, PtAsgn const & p2) -> bool { return p1.tr == p2.tr && p1.sgn != p2.sgn; });
+                if (it == literals.end()) { // No conflict, we add the cube to the result
+                    result.push_back(std::move(final));
+                }
+                return;
+            }
+            // Not at the end yet
+            for (auto const & cube : toConjoin[depth]) {
+                currentCombination.push_back(cube);
+                self(self, depth + 1);
+                currentCombination.pop_back();
+            }
+        };
+
+        dfs(dfs, 0);
+        return result;
+    }
+};
+
+PTRef TermUtils::toDNF(PTRef fla) {
+    if (not logic.hasSortBool(fla)) { throw std::invalid_argument("toDNF called with non-boolean formula!"); }
+    PTRef const nnf = toNNF(fla);
+    DNFTransformer dnfTransformer(logic);
+    return dnfTransformer.toDNF(nnf);
+}
+
+void DNFTransformer::run(PTRef fla) {
+    if (auto const it = cubes.find(fla); it != cubes.end()) { return; }
+    if (logic.isAtom(fla)) {
+        cubes.insert({fla, fromSingleCube(makeSingletonCube(PtAsgn(fla, l_True)))});
+        return;
+    }
+    if (logic.isNot(fla)) {
+        PTRef const inner = logic.getPterm(fla)[0];
+        assert(logic.isAtom(inner)); // Input to DNF transformation must be in NNF already.
+        cubes.insert({fla, fromSingleCube(makeSingletonCube(PtAsgn(inner, l_False)))});
+        return;
+    }
+    if (logic.isOr(fla)) {
+        // Union over cubes of children.
+        for (PTRef const child : logic.getPterm(fla)) {
+            run(child);
+        }
+        std::vector<Cubes> childrenCubes;
+        childrenCubes.reserve(logic.getPterm(fla).size());
+        for (PTRef const child : logic.getPterm(fla)) {
+            childrenCubes.push_back(cubes.at(child));
+        }
+        cubes.insert({fla, unite(std::move(childrenCubes))});
+        return;
+    }
+    if (logic.isAnd(fla)) {
+        for (PTRef const child : logic.getPterm(fla)) {
+            run(child);
+        }
+        std::vector<Cubes> childrenCubes;
+        childrenCubes.reserve(logic.getPterm(fla).size());
+        for (PTRef const child : logic.getPterm(fla)) {
+            childrenCubes.push_back(cubes.at(child));
+        }
+        cubes.insert({fla, conjunctionAsCubes(std::move(childrenCubes))});
+        return;
+    }
+    assert(false);
+    throw std::logic_error("Unexpected formula given to DNF transformation");
+}
+
 PTRef TermUtils::conjoin(PTRef what, PTRef to) {
     auto args = getTopLevelConjuncts(to);
     args.push(what);
