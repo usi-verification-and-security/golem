@@ -904,8 +904,8 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                         // }
                         // reached = TimeMachine(logic).sendFlaThroughTime(logic.mkAnd(state), -1);
 
-                        reached = TermUtils(logic).getTopLevelDisjuncts(dnfize(TermUtils(logic).simplifyMax(TimeMachine(logic).sendFlaThroughTime(ModelBasedProjection(logic).keepOnly(transitions, last_vars, *smt_checker.getModel()), -num_non)), logic))[0];
-                        // reached =TermUtils(logic).simplifyMax(TimeMachine(logic).sendFlaThroughTime(ModelBasedProjection(logic).keepOnly(transitions, last_vars, *smt_checker.getModel()), -num_non));
+                        // reached = TermUtils(logic).getTopLevelDisjuncts(dnfize(TermUtils(logic).simplifyMax(TimeMachine(logic).sendFlaThroughTime(ModelBasedProjection(logic).keepOnly(transitions, last_vars, *smt_checker.getModel()), -num_non)), logic))[0];
+                        reached =TermUtils(logic).simplifyMax(TimeMachine(logic).sendFlaThroughTime(ModelBasedProjection(logic).keepOnly(transitions, last_vars, *smt_checker.getModel()), -num_non));
 
                     }
 
