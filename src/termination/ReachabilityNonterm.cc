@@ -121,7 +121,7 @@ PTRef dnfize(PTRef input, ArithLogic & logic) {
             return dnfize(logic.mkOr(postprocessJuncts), logic);
         } else if (logic.isOr(rev)) {
             // !(x \/ y) <=> !x /\ !y
-            auto subjuncts = utils.getTopLevelDisjuncts(input);
+            auto subjuncts = utils.getTopLevelDisjuncts(rev);
             vec<PTRef> postprocessJuncts;
             for (int i = 0; i < (int)subjuncts.size(); i++) {
                 postprocessJuncts.push(logic.mkNot(subjuncts[i]));
@@ -1049,7 +1049,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
     Options witnesses = options;
     witnesses.addOption(options.COMPUTE_WITNESS, "true");
     bool DETERMINISTIC_TRANSITION = determinismCheck(transition, logic, vars);
-    auto [answer, trInvOrRecurringSet] = analyzeTS(init, transition, dnfize(sink,logic), witnesses, logic, vars, DETERMINISTIC_TRANSITION);
+    auto [answer, trInvOrRecurringSet] = analyzeTS(init, transition, sink, witnesses, logic, vars, DETERMINISTIC_TRANSITION);
     return answer;
 }
 
