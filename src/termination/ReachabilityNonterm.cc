@@ -676,6 +676,10 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                                                                               std::vector<PTRef> const & vars,
                                                                               bool DETERMINISTIC_TRANSITION) {
 
+    // std::cout << "Init: " << logic.pp(init) << std::endl;
+    // std::cout << "Transition: " << logic.pp(transition) << std::endl;
+    // std::cout << "Sink: " << logic.pp(sink) << std::endl;
+
     vec<PTRef> strictCandidates;
     while (true) {
         // TODO: Do smth with exponential transition growth in some cases via blocks...
@@ -853,7 +857,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                 PTRef noncoveredStates = QuantifierElimination(logic).keepOnly(
                     logic.mkAnd({logic.mkOr(trInv, id), TimeMachine(logic).sendFlaThroughTime(temp_tr, 1),
                                  logic.mkNot(shiftOnlyNextVars(trInv, vars, logic))}), vars);
-                std::cout << "Noncovered: " << logic.pp(noncoveredStates) << std::endl;
+                // std::cout << "Noncovered: " << logic.pp(noncoveredStates) << std::endl;
 
                  // We check if the states that are not covered by TrInv are reachable
                 auto graph = constructHyperGraph(init, transition,
@@ -935,7 +939,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                             // If trInv is Transition invariant, then Tr leads to termination on the whole state-space
                             std::cout << "Center" << std::endl;
                             // std::cout << logic.pp(subinv) << std::endl;
-                            return {Answer::YES, fullInv};
+                            return {Answer::YES, subinv};
                         }
                         trInv = logic.mkOr(strictCandidates);
                         noncoveredStates = QuantifierElimination(logic).keepOnly(
@@ -1029,14 +1033,15 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
     ArithLogic & logic = dynamic_cast<ArithLogic &>(ts.getLogic());
     PTRef init = ts.getInit();
     PTRef transition = ts.getTransition();
-    std::cout << "Init: " << logic.pp(init) << std::endl;
-    std::cout << "Transition: " << logic.pp(transition) << std::endl;
     std::vector<PTRef> tmp_vars = vars;
     tmp_vars.insert(tmp_vars.end(), aux_vars.begin(), aux_vars.end());
     if (checkWellFounded(transition, logic, tmp_vars)) {
         std::cout << "Transitions are well-founded" << std::endl;
         return Answer::YES;
     }
+    std::cout << "Init: " << logic.pp(init) << std::endl;
+    std::cout << "Transition: " << logic.pp(transition) << std::endl;
+    // std::cout << "Sink: " << logic.pp(sink) << std::endl;
     // In this case query is a set of sink states - states from which transition is not possible.
     // sink /\ transition is UNSAT
     PTRef sink = logic.mkNot(QuantifierElimination(logic).keepOnly(transition, vars));
