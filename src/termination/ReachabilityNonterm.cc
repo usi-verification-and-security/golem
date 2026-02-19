@@ -1054,7 +1054,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
     Options witnesses = options;
     witnesses.addOption(options.COMPUTE_WITNESS, "true");
     bool DETERMINISTIC_TRANSITION = determinismCheck(transition, logic, vars);
-    auto [answer, trInvOrRecurringSet] = analyzeTS(init, transition, sink, witnesses, logic, vars, DETERMINISTIC_TRANSITION);
+    auto [answer, trInvOrRecurringSet] = analyzeTS(init, transition, dnfize(sink, logic), witnesses, logic, vars, DETERMINISTIC_TRANSITION);
     return answer;
 }
 
