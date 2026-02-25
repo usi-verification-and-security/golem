@@ -17,12 +17,11 @@
 
 namespace golem::termination {
 
-
-// Function to convert UFLIA formula into the DNF
+// Function to convert != into disjunction of leq
 PTRef unwrapEqs(PTRef input, ArithLogic & logic) {
     TermUtils utils{logic};
     if (logic.isAnd(input)) {
-        // x /\ (y \/ v) <=> (x /\ y) \/ (x /\ v)
+        // Refine every conjunct
         auto juncts = utils.getTopLevelConjuncts(input);
 
        vec<PTRef> subjuncts;
@@ -35,7 +34,7 @@ PTRef unwrapEqs(PTRef input, ArithLogic & logic) {
         }
         return logic.mkAnd(subjuncts);
     } else if (logic.isOr(input)) {
-        // x \/ (y /\ (z \/ v)) <=> x \/ (y /\ z) \/ (y /\ v)
+        // Refine every disjunct
         auto juncts = utils.getTopLevelDisjuncts(input);
         vec<PTRef> subjuncts;
         for (int i = 0; i < juncts.size(); i++) {
@@ -46,10 +45,17 @@ PTRef unwrapEqs(PTRef input, ArithLogic & logic) {
 
         }
         return logic.mkOr(subjuncts);
+    } else if (logic.isNumEq(input)) {
+        auto it = logic.getPterm(input).begin();
+        vec<PTRef> subjuncts;
+        // x = y <=> x >= y /\ x <= y
+        subjuncts.push(logic.mkGeq(it[0], it[1]));
+        subjuncts.push(logic.mkLeq(it[0], it[1]));
+        return logic.mkAnd(subjuncts);
     } else if (logic.isNot(input)) {
+        // propagate negarion
         PTRef rev = utils.simplifyMax(logic.mkNot(input));
         if (logic.isAnd(rev)) {
-              // !(x /\ y) <=> !x \/ !y
             auto subjuncts = utils.getTopLevelConjuncts(rev);
             vec<PTRef> postprocessJuncts;
             for (int i = 0; i < (int)subjuncts.size(); i++) {
@@ -57,7 +63,6 @@ PTRef unwrapEqs(PTRef input, ArithLogic & logic) {
             }
             return logic.mkOr(postprocessJuncts);
         } else if (logic.isOr(rev)) {
-            // !(x \/ y) <=> !x /\ !y
             auto subjuncts = utils.getTopLevelDisjuncts(rev);
             vec<PTRef> postprocessJuncts;
             for (int i = 0; i < (int)subjuncts.size(); i++) {
@@ -342,24 +347,13 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
         if (found) lequalize(conjunct, leq_conjuncts, bools, logic);
     }
 
-    // TODO: Think about termination in the presence of booleans
-    if (leq_conjuncts.size() == 0) {
-        // This is pure boolean formula
-        TermUtils::substitutions_map varSubstitutions;
-        for (int i = 0; i < vars.size(); ++i) {
-            varSubstitutions.insert({TimeMachine(logic).sendVarThroughTime(vars[i], 1), vars[i]});
-        }
-        solver.assertProp(TermUtils(logic).varSubstitute(logic.mkAnd(bools), varSubstitutions));
-        return solver.check() == SMTSolver::Answer::UNSAT;
-    }
-    // TODO: Think about adding this check as well (it is sufficient for w-f)
     if (bools.size() > 0) {
         solver.assertProp(
             logic.mkAnd(logic.mkAnd(bools), TimeMachine(logic).sendFlaThroughTime(logic.mkAnd(bools), 1)));
         // This is a check to see if it is possible to take transition twice
         // (Otherwise it is trivially well-founded)
-        // TODO: If if is commented out, we get uniqueness.
         if (solver.check() == SMTSolver::Answer::UNSAT) return true;
+        else if (leq_conjuncts.size() == 0) return false;
         solver.resetSolver();
     }
 
@@ -590,7 +584,8 @@ vec<PTRef> extractWellFoundedCandidates(PTRef itp, PTRef sink, ArithLogic & logi
     SMTSolver smt_solver(logic, SMTSolver::WitnessProduction::NONE);
 
     // auto sink_disjuncts = TermUtils(logic).getTopLevelDisjuncts(dnfize(logic.mkNot(sink), logic));
-    auto sink_disjuncts = TermUtils(logic).getTopLevelDisjuncts(TermUtils(logic).toDNF(unwrapEqs(logic.mkNot(sink), logic)));
+    auto sink_disjuncts = TermUtils(logic).getTopLevelDisjuncts(
+        TermUtils(logic).toDNF(unwrapEqs(logic.mkNot(sink), logic)));
     PTRef dnfized_interpolant = unwrapEqs(itp, logic);
     dnfized_interpolant = TermUtils(logic).toDNF(dnfized_interpolant);
     // PTRef dnfized_interpolant = dnfize(itp, logic);
@@ -613,8 +608,7 @@ vec<PTRef> extractWellFoundedCandidates(PTRef itp, PTRef sink, ArithLogic & logi
                 if (smt_solver.check() == SMTSolver::Answer::SAT &&
                     checkWellFounded(logic.mkAnd(sink_cand, simpl_cand), logic, vars)) {
                     // TODO: Maybe I can weaken recieved candidate using some kind of houdini, dropping not needed
-                    // conjuncts
-                    // TODO: Particularly, I can remove all equalities (also ones that are done via <= && >=)
+                    //  conjuncts. Particularly, I can remove all equalities (also ones that are done via <= && >=)
                     strictCandidates.push(TermUtils(logic).simplifyMax(logic.mkAnd(sink_cand, simpl_cand)));
                 }
             }
@@ -637,12 +631,12 @@ bool determinismCheck(const PTRef& transition, Logic & logic, const std::vector<
     PTRef newTransition = TermUtils(logic).varSubstitute(transition, detSubstitutions);
     // Tr(x,x') /\ Tr(x, x'') /\ ! x' = x''
     detChecker.assertProp(logic.mkAnd({transition, newTransition, logic.mkOr(neq)}));
+
     if (detChecker.check() == SMTSolver::Answer::UNSAT) {
         std::cout << "DETERMINISTIC;" << std::endl;
         return true;
-    } else {
-        return false;
     }
+    return false;
 }
 
 PTRef getId ( const std::vector<PTRef> & vars, Logic& logic) {
@@ -719,10 +713,6 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                                                                               ArithLogic & logic,
                                                                               std::vector<PTRef> const & vars,
                                                                               bool DETERMINISTIC_TRANSITION) {
-
-    // std::cout << "Init: " << logic.pp(init) << std::endl;
-    // std::cout << "Transition: " << logic.pp(transition) << std::endl;
-    // std::cout << "Sink: " << logic.pp(sink) << std::endl;
 
     vec<PTRef> strictCandidates;
     while (true) {
@@ -1083,9 +1073,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
         std::cout << "Transitions are well-founded" << std::endl;
         return Answer::YES;
     }
-    std::cout << "Init: " << logic.pp(init) << std::endl;
-    std::cout << "Transition: " << logic.pp(transition) << std::endl;
-    // std::cout << "Sink: " << logic.pp(sink) << std::endl;
+
     // In this case query is a set of sink states - states from which transition is not possible.
     // sink /\ transition is UNSAT
     PTRef sink = logic.mkNot(QuantifierElimination(logic).keepOnly(transition, vars));
