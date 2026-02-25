@@ -17,26 +17,65 @@
 
 namespace golem::termination {
 
-PTRef MBPdnfize(PTRef input, ArithLogic & logic, vec<PTRef> vars) {
+
+// Function to convert UFLIA formula into the DNF
+PTRef unwrapEqs(PTRef input, ArithLogic & logic) {
     TermUtils utils{logic};
-    ModelBasedProjection proj(logic);
-    SMTSolver solver(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
-    solver.assertProp(input);
-    std::vector<PTRef> disjuncts;
-    vec<PTRef> next_vars;
-    // Extract integer variables from the inequalities
-    for (auto var : vars) {
-        next_vars.push(TimeMachine(logic).sendVarThroughTime(var, 1));
+    if (logic.isAnd(input)) {
+        // x /\ (y \/ v) <=> (x /\ y) \/ (x /\ v)
+        auto juncts = utils.getTopLevelConjuncts(input);
+
+       vec<PTRef> subjuncts;
+        for (int i = 0; i < juncts.size(); i++) {
+            // every conjunct is being dnfized
+            PTRef after_junct = unwrapEqs(juncts[i], logic);
+            // if any of the conjuncts is a disjunction, then the whole formula is converted into disjunction of conjs
+            subjuncts.push(after_junct);
+
+        }
+        return logic.mkAnd(subjuncts);
+    } else if (logic.isOr(input)) {
+        // x \/ (y /\ (z \/ v)) <=> x \/ (y /\ z) \/ (y /\ v)
+        auto juncts = utils.getTopLevelDisjuncts(input);
+        vec<PTRef> subjuncts;
+        for (int i = 0; i < juncts.size(); i++) {
+            // every conjunct is being dnfized
+            PTRef after_junct = unwrapEqs(juncts[i], logic);
+            // if any of the conjuncts is a disjunction, then the whole formula is converted into disjunction of conjs
+            subjuncts.push(after_junct);
+
+        }
+        return logic.mkOr(subjuncts);
+    } else if (logic.isNot(input)) {
+        PTRef rev = utils.simplifyMax(logic.mkNot(input));
+        if (logic.isAnd(rev)) {
+              // !(x /\ y) <=> !x \/ !y
+            auto subjuncts = utils.getTopLevelConjuncts(rev);
+            vec<PTRef> postprocessJuncts;
+            for (int i = 0; i < (int)subjuncts.size(); i++) {
+                postprocessJuncts.push(logic.mkNot(subjuncts[i]));
+            }
+            return logic.mkOr(postprocessJuncts);
+        } else if (logic.isOr(rev)) {
+            // !(x \/ y) <=> !x /\ !y
+            auto subjuncts = utils.getTopLevelDisjuncts(rev);
+            vec<PTRef> postprocessJuncts;
+            for (int i = 0; i < (int)subjuncts.size(); i++) {
+                postprocessJuncts.push(logic.mkNot(subjuncts[i]));
+            }
+            return logic.mkAnd(postprocessJuncts);
+        } else if (logic.isNumEq(rev)) {
+            auto it = logic.getPterm(rev).begin();
+            vec<PTRef> subjuncts;
+            // x != y <=> x <= y-1 \/ x >= y+1
+            subjuncts.push(logic.mkGeq(it[0], logic.mkPlus(it[1], logic.getTerm_IntOne())));
+            subjuncts.push(logic.mkLeq(it[0], logic.mkPlus(it[1], logic.getTerm_IntMinusOne())));
+            return logic.mkOr(subjuncts);
+        }
     }
-    while (solver.check() == SMTSolver::Answer::SAT) {
-        PTRef projection_pre = proj.project(input, vars, *solver.getModel());
-        PTRef projection_post = proj.project(input, next_vars, *solver.getModel());
-        disjuncts.push_back(logic.mkAnd(projection_post, projection_pre));
-        solver.push();
-        solver.assertProp(logic.mkNot(disjuncts.back()));
-    }
-    return logic.mkOr(disjuncts);
+    return input;
 }
+
 
 // Function to convert UFLIA formula into the DNF
 PTRef dnfize(PTRef input, ArithLogic & logic) {
@@ -262,8 +301,9 @@ void lequalize(PTRef conjunct, vec<PTRef> & leqs, vec<PTRef> & bools, ArithLogic
 bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const & vars) {
     TermUtils utils{logic};
     SMTSolver solver(logic, SMTSolver::WitnessProduction::NONE);
-
-    PTRef dnfized = utils.simplifyMax(dnfize(formula, logic));
+    PTRef dnfized = unwrapEqs(formula, logic);
+    dnfized = utils.simplifyMax(TermUtils(logic).toDNF(dnfized));
+    // PTRef dnfized = utils.simplifyMax(dnfize(formula, logic));
     // std::cout<<"Dnfized: " << logic.pp(dnfized) << std::endl;
 
     if (logic.isOr(dnfized)) return false;
@@ -549,8 +589,12 @@ PTRef shiftOnlyNextVars(PTRef formula, const std::vector<PTRef> & vars, Logic & 
 vec<PTRef> extractWellFoundedCandidates(PTRef itp, PTRef sink, ArithLogic & logic, const std::vector<PTRef> & vars) {
     SMTSolver smt_solver(logic, SMTSolver::WitnessProduction::NONE);
 
-    auto sink_disjuncts = TermUtils(logic).getTopLevelDisjuncts(dnfize(logic.mkNot(sink), logic));
-    PTRef dnfized_interpolant = dnfize(itp, logic);
+    // auto sink_disjuncts = TermUtils(logic).getTopLevelDisjuncts(dnfize(logic.mkNot(sink), logic));
+    auto sink_disjuncts = TermUtils(logic).getTopLevelDisjuncts(TermUtils(logic).toDNF(unwrapEqs(logic.mkNot(sink), logic)));
+    PTRef dnfized_interpolant = unwrapEqs(itp, logic);
+    dnfized_interpolant = TermUtils(logic).toDNF(dnfized_interpolant);
+    // PTRef dnfized_interpolant = dnfize(itp, logic);
+
     // std::cout<<"Dnfized itp: " << logic.pp(dnfized_interpolant) << std::endl;
     vec<PTRef> candidates = TermUtils(logic).getTopLevelDisjuncts(dnfized_interpolant);
     vec<PTRef> strictCandidates;
@@ -1054,7 +1098,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
     Options witnesses = options;
     witnesses.addOption(options.COMPUTE_WITNESS, "true");
     bool DETERMINISTIC_TRANSITION = determinismCheck(transition, logic, vars);
-    auto [answer, trInvOrRecurringSet] = analyzeTS(init, transition, dnfize(sink, logic), witnesses, logic, vars, DETERMINISTIC_TRANSITION);
+    auto [answer, trInvOrRecurringSet] = analyzeTS(init, transition, sink, witnesses, logic, vars, DETERMINISTIC_TRANSITION);
     return answer;
 }
 
