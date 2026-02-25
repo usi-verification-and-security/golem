@@ -45,14 +45,9 @@ PTRef unwrapEqs(PTRef input, ArithLogic & logic) {
 
         }
         return logic.mkOr(subjuncts);
-    } else if (logic.isNumEq(input)) {
-        auto it = logic.getPterm(input).begin();
-        vec<PTRef> subjuncts;
-        // x = y <=> x >= y /\ x <= y
-        subjuncts.push(logic.mkGeq(it[0], it[1]));
-        subjuncts.push(logic.mkLeq(it[0], it[1]));
-        return logic.mkAnd(subjuncts);
-    } else if (logic.isNot(input)) {
+    }
+
+    else if (logic.isNot(input)) {
         // propagate negarion
         PTRef rev = utils.simplifyMax(logic.mkNot(input));
         if (logic.isAnd(rev)) {
@@ -69,7 +64,8 @@ PTRef unwrapEqs(PTRef input, ArithLogic & logic) {
                 postprocessJuncts.push(logic.mkNot(subjuncts[i]));
             }
             return logic.mkAnd(postprocessJuncts);
-        } else if (logic.isNumEq(rev)) {
+        }
+        else if (logic.isNumEq(rev)) {
             auto it = logic.getPterm(rev).begin();
             vec<PTRef> subjuncts;
             // x != y <=> x <= y-1 \/ x >= y+1
