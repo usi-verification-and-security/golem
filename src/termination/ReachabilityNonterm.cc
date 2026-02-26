@@ -53,7 +53,7 @@ PTRef unwrapEqs(PTRef input, ArithLogic & logic) {
 // This function is needed to extract specific atoms from the arithmetic formula
 void unrollAtom(ArithLogic & logic, std::vector<PTRef> & coefs, PTRef atom, bool reverse) {
     assert(logic.isVar(atom) || logic.isConstant(atom) || logic.isTimes(atom) || logic.isIntMinus(atom) ||
-           logic.isRealMinus(atom) || logic.isPlus(atom) || logic.isIntDiv(atom) || logic.isRealDiv(atom));
+            logic.isPlus(atom) || logic.isIntDiv(atom));
     if (logic.isConstant(atom)) {
         reverse ? coefs.push_back(atom) : coefs.push_back(logic.mkTimes(logic.getTerm_IntMinusOne(), atom));
     } else if (logic.isVar(atom)) {
@@ -75,7 +75,7 @@ void unrollAtom(ArithLogic & logic, std::vector<PTRef> & coefs, PTRef atom, bool
         for (auto i = size; i < coefs.size(); i++) {
             coefs[i] = logic.mkTimes(constant, coefs[i]);
         }
-    } else if (logic.isIntMinus(atom) || logic.isRealMinus(atom)) {
+    } else if (logic.isIntMinus(atom)) {
         auto it = logic.getPterm(atom).begin();
         assert(logic.getPterm(atom).size() == 2);
         PTRef subatom1 = it[0];
@@ -88,7 +88,7 @@ void unrollAtom(ArithLogic & logic, std::vector<PTRef> & coefs, PTRef atom, bool
             unrollAtom(logic, coefs, *it, reverse);
             it++;
         }
-    } else if (logic.isIntDiv(atom) or logic.isRealDiv(atom)) {
+    } else if (logic.isIntDiv(atom)) {
         auto it = logic.getPterm(atom).begin();
         auto size = coefs.size();
         assert(logic.getPterm(atom).size() == 2);
@@ -97,13 +97,7 @@ void unrollAtom(ArithLogic & logic, std::vector<PTRef> & coefs, PTRef atom, bool
         PTRef subatom = it[0];
         unrollAtom(logic, coefs, subatom, reverse);
         for (auto i = size; i < coefs.size(); i++) {
-            if (logic.isIntDiv(atom)) {
-                coefs[i] = logic.mkTimes(logic.mkIntDiv(logic.getPterm(coefs[i]).begin()[0], constant),
-                                         logic.getPterm(coefs[i]).begin()[1]);
-            } else {
-                coefs[i] = logic.mkTimes(logic.mkRealDiv(logic.getPterm(coefs[i]).begin()[0], constant),
-                                         logic.getPterm(coefs[i]).begin()[1]);
-            }
+            coefs[i] = logic.mkIntDiv(logic.getPterm(coefs[i]).begin()[0], constant);
         }
     }
 }
