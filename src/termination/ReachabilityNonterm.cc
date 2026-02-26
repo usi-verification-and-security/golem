@@ -192,35 +192,27 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
         A_p.push_back(std::vector(int_vars.size(), logic.getTerm_IntZero()));
         std::vector<PTRef> coefs;
         getCoeffs(logic, coefs, conjunct);
-        bool found = false;
         for (size_t i = 0; i < coefs.size(); i++) {
             if (logic.isConstant(coefs[i])) {
                 assert(b[A.size() - 1] == logic.getTerm_IntZero());
                 b[A.size() - 1] = coefs[i];
-            } else if (logic.isVar(coefs[i])) {
-                for (int j = 0; j < int_vars.size(); j++) {
-                    if (coefs[i] == int_vars[j]) {
-                        assert (A[A.size() - 1][j] != logic.getTerm_IntZero());
-                        A[A.size() - 1][j] = logic.getTerm_IntOne();
-                        break;
-                    }
-                    if (coefs[i] == next_vars[j]) {
-                        assert (A_p[A_p.size() - 1][j] != logic.getTerm_IntZero());
-                        A_p[A_p.size() - 1][j] = logic.getTerm_IntOne();
-                        break;
-                    }
-                }
             } else {
-                auto it = logic.getPterm(coefs[i]).begin();
-                assert(logic.getPterm(coefs[i]).size() == 2);
                 PTRef constant, subatom;
-                if (logic.isConstant(it[0])) {
-                    constant = it[0];
-                    subatom = it[1];
+                if (logic.isVar(coefs[i])) {
+                    constant = logic.getTerm_IntOne();
+                    subatom = coefs[i];
                 } else {
-                    constant = it[1];
-                    subatom = it[0];
+                    auto it = logic.getPterm(coefs[i]).begin();
+                    assert(logic.isTimes(coefs[i]) && logic.getPterm(coefs[i]).size() == 2);
+                    if (logic.isConstant(it[0])) {
+                        constant = it[0];
+                        subatom = it[1];
+                    } else {
+                        constant = it[1];
+                        subatom = it[0];
+                    }
                 }
+
                 assert(logic.isConstant(constant));
                 for (int j = 0; j < int_vars.size(); j++) {
                     if (subatom == int_vars[j]) {
@@ -234,6 +226,7 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
                     }
                 }
             }
+
         }
     }
 
@@ -243,6 +236,7 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
         lambda_1.push(logic.mkIntVar(("lambda_1" + std::to_string(i)).c_str()));
         lambda_2.push(logic.mkIntVar(("lambda_2" + std::to_string(i)).c_str()));
     }
+
     // 0. Constraint on lambdas:
     PTRef ZeroIneq;
     {
