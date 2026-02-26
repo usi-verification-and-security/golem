@@ -97,7 +97,7 @@ void unrollAtom(ArithLogic & logic, std::vector<PTRef> & coefs, PTRef atom, bool
         PTRef subatom = it[0];
         unrollAtom(logic, coefs, subatom, reverse);
         for (auto i = size; i < coefs.size(); i++) {
-            coefs[i] = logic.mkIntDiv(logic.getPterm(coefs[i]).begin()[0], constant);
+            coefs[i] = logic.mkTimes(logic.mkIntDiv(logic.getPterm(coefs[i]).begin()[0], constant), subatom);
         }
     }
 }
