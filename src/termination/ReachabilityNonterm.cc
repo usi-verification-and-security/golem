@@ -162,40 +162,31 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
     }
 
     vec<PTRef> conjuncts = TermUtils(logic).getTopLevelConjuncts(formula);
-    std::vector<PTRef> b;
-    std::vector<std::vector<PTRef>> A;
-    std::vector<std::vector<PTRef>> A_p;
 
     vec<PTRef> leq_conjuncts;
     vec<PTRef> bools;
     // Preprocessing, conjuncts should be a set of formulas f(x) <= c, where c is some constant, and f(x)
     // is a linear combination of variables
     for (auto conjunct : conjuncts) {
-        auto leq_vars = TermUtils(logic).getVars(conjunct);
-        bool found = false;
-        for (auto var : leq_vars) {
-            for (auto sys_var : vars) {
-                if (var == sys_var || var == TimeMachine(logic).sendVarThroughTime(sys_var, 1)) {
-                    found = true;
-                    break;
-                }
-            }
-            if (found) break;
-        }
-        if (found) lequalize(conjunct, leq_conjuncts, bools, logic);
+        lequalize(conjunct, leq_conjuncts, bools, logic);
     }
 
     if (bools.size() > 0 || leq_conjuncts.size() == 0) {
         solver.assertProp(
             logic.mkAnd(logic.mkAnd(bools), TimeMachine(logic).sendFlaThroughTime(logic.mkAnd(bools), 1)));
         // This is a check to see if it is possible to take transition twice
-        // (Otherwise it is trivially well-founded)
+        // (Otherwise it is trivially well-founded, this check is specifically for bools)
         if (solver.check() == SMTSolver::Answer::UNSAT) return true;
         else if (leq_conjuncts.size() == 0) return false;
         solver.resetSolver();
     }
 
-    // Computation of matrixes A, A_p, and vector b based on the coefficients of vars and constants
+
+    std::vector<std::vector<PTRef>> A;
+    std::vector<std::vector<PTRef>> A_p;
+    std::vector<PTRef> b = std::vector<PTRef>(leq_conjuncts.size(), logic.getTerm_IntZero());
+
+    // Computation of matrices A, A_p, and vector b based on the coefficients of vars and constants
     for (auto conjunct : leq_conjuncts) {
         A.push_back(std::vector(int_vars.size(), logic.getTerm_IntZero()));
         A_p.push_back(std::vector(int_vars.size(), logic.getTerm_IntZero()));
@@ -204,19 +195,19 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
         bool found = false;
         for (size_t i = 0; i < coefs.size(); i++) {
             if (logic.isConstant(coefs[i])) {
-                b.push_back(coefs[i]);
-                assert(!found);
-                if (found) exit(1);
-                found = true;
+                assert(b[A.size() - 1] == logic.getTerm_IntZero());
+                b[A.size() - 1] = coefs[i];
             } else if (logic.isVar(coefs[i])) {
                 for (int j = 0; j < int_vars.size(); j++) {
                     if (coefs[i] == int_vars[j]) {
-                        if (A[A.size() - 1][j] != logic.getTerm_IntZero()) { exit(1); }
+                        assert (A[A.size() - 1][j] != logic.getTerm_IntZero());
                         A[A.size() - 1][j] = logic.getTerm_IntOne();
                         break;
-                    } else if (coefs[i] == next_vars[j]) {
-                        if (A_p[A_p.size() - 1][j] != logic.getTerm_IntZero()) { exit(1); }
+                    }
+                    if (coefs[i] == next_vars[j]) {
+                        assert (A_p[A_p.size() - 1][j] != logic.getTerm_IntZero());
                         A_p[A_p.size() - 1][j] = logic.getTerm_IntOne();
+                        break;
                     }
                 }
             } else {
@@ -244,7 +235,6 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
                 }
             }
         }
-        if (!found) { b.push_back(logic.getTerm_IntZero()); }
     }
 
     // Well-foundness check by Podelski - by synthesizing the ranking function
