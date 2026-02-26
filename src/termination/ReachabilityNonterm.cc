@@ -185,7 +185,7 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
         if (found) lequalize(conjunct, leq_conjuncts, bools, logic);
     }
 
-    if (bools.size() > 0) {
+    if (bools.size() > 0 || leq_conjuncts.size() == 0) {
         solver.assertProp(
             logic.mkAnd(logic.mkAnd(bools), TimeMachine(logic).sendFlaThroughTime(logic.mkAnd(bools), 1)));
         // This is a check to see if it is possible to take transition twice
@@ -900,8 +900,10 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
     auto aux_vars = ts.getAuxiliaryVars();
     ArithLogic & logic = dynamic_cast<ArithLogic &>(ts.getLogic());
     PTRef init = ts.getInit();
+    std::cout<<"Transition System: "<<logic.pp(ts.getTransition())<<std::endl;
     PTRef transition = unwrapEqs(ts.getTransition(), logic);
     transition = TermUtils(logic).toDNF(transition);
+    std::cout<<"Transition: "<<logic.pp(transition)<<std::endl;
     std::vector<PTRef> tmp_vars = vars;
     tmp_vars.insert(tmp_vars.end(), aux_vars.begin(), aux_vars.end());
     if (!logic.isOr(transition) && checkWellFounded(transition, logic, tmp_vars)) {
