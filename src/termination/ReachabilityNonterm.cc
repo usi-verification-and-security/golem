@@ -127,9 +127,8 @@ void lequalize(PTRef conjunct, vec<PTRef> & leqs, vec<PTRef> & bools, ArithLogic
     } else if (logic.isNot(conjunct)) {
         PTRef inner_formula = it[0];
         it = logic.getPterm(inner_formula).begin();
-        if (logic.isEquality(inner_formula)) {
-            assert(false);
-        } else if (logic.isLeq(inner_formula)) {
+        assert (!logic.isEquality(inner_formula));
+        if (logic.isLeq(inner_formula)) {
             // !(x <= y) <=> y <= x-1
             leqs.push(logic.mkLeq(it[1], logic.mkPlus(it[0], logic.getTerm_IntMinusOne())));
         } else if (logic.isGeq(inner_formula)) {
@@ -148,14 +147,9 @@ void lequalize(PTRef conjunct, vec<PTRef> & leqs, vec<PTRef> & bools, ArithLogic
 }
 
 bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const & vars) {
-    TermUtils utils{logic};
     SMTSolver solver(logic, SMTSolver::WitnessProduction::NONE);
-    PTRef dnfized = unwrapEqs(formula, logic);
-    dnfized = utils.simplifyMax(TermUtils(logic).toDNF(dnfized));
-    // PTRef dnfized = utils.simplifyMax(dnfize(formula, logic));
-    // std::cout<<"Dnfized: " << logic.pp(dnfized) << std::endl;
 
-    if (logic.isOr(dnfized)) return false;
+    assert (!logic.isOr(formula));
 
     vec<PTRef> int_vars;
     vec<PTRef> next_vars;
@@ -167,7 +161,7 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
         }
     }
 
-    vec<PTRef> conjuncts = TermUtils(logic).getTopLevelConjuncts(dnfized);
+    vec<PTRef> conjuncts = TermUtils(logic).getTopLevelConjuncts(formula);
     std::vector<PTRef> b;
     std::vector<std::vector<PTRef>> A;
     std::vector<std::vector<PTRef>> A_p;
@@ -450,7 +444,7 @@ vec<PTRef> extractWellFoundedCandidates(PTRef itp, PTRef sink, ArithLogic & logi
                 smt_solver.resetSolver();
                 smt_solver.assertProp(logic.mkAnd(sink_cand, simpl_cand));
                 if (smt_solver.check() == SMTSolver::Answer::SAT &&
-                    checkWellFounded(logic.mkAnd(sink_cand, simpl_cand), logic, vars)) {
+                    checkWellFounded(TermUtils(logic).simplifyMax(logic.mkAnd(sink_cand, simpl_cand)), logic, vars)) {
                     // TODO: Maybe I can weaken recieved candidate using some kind of houdini, dropping not needed
                     //  conjuncts. Particularly, I can remove all equalities (also ones that are done via <= && >=)
                     strictCandidates.push(TermUtils(logic).simplifyMax(logic.mkAnd(sink_cand, simpl_cand)));
@@ -906,10 +900,11 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
     auto aux_vars = ts.getAuxiliaryVars();
     ArithLogic & logic = dynamic_cast<ArithLogic &>(ts.getLogic());
     PTRef init = ts.getInit();
-    PTRef transition = ts.getTransition();
+    PTRef transition = unwrapEqs(ts.getTransition(), logic);
+    transition = TermUtils(logic).toDNF(transition);
     std::vector<PTRef> tmp_vars = vars;
     tmp_vars.insert(tmp_vars.end(), aux_vars.begin(), aux_vars.end());
-    if (checkWellFounded(transition, logic, tmp_vars)) {
+    if (!logic.isOr(transition) && checkWellFounded(transition, logic, tmp_vars)) {
         std::cout << "Transitions are well-founded" << std::endl;
         return Answer::YES;
     }
