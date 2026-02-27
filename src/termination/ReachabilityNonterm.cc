@@ -885,15 +885,9 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
     auto aux_vars = ts.getAuxiliaryVars();
     ArithLogic & logic = dynamic_cast<ArithLogic &>(ts.getLogic());
     PTRef init = ts.getInit();
+    // PTRef transition = ts.getTransition();
     PTRef transition = unwrapEqs(ts.getTransition(), logic);
     transition = TermUtils(logic).toDNF(transition);
-
-    SMTSolver SMTsolver(logic, SMTSolver::WitnessProduction::NONE);
-    SMTsolver.assertProp(logic.mkOr(logic.mkAnd(ts.getTransition(), logic.mkNot(transition)),logic.mkAnd(logic.mkNot(ts.getTransition()), transition) ));
-    auto res = SMTsolver.check();
-    if (res == SMTSolver::Answer::SAT) {
-        std::cout<<"TS is wroooooong!!!!!"<<std::endl;
-    }
     std::vector<PTRef> tmp_vars = vars;
     tmp_vars.insert(tmp_vars.end(), aux_vars.begin(), aux_vars.end());
     if (!logic.isOr(transition) && checkWellFounded(transition, logic, tmp_vars)) {
@@ -914,7 +908,8 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
     witnesses.addOption(options.COMPUTE_WITNESS, "true");
     bool DETERMINISTIC_TRANSITION = determinismCheck(transition, logic, vars);
     // Safety-Based Termination Analysis
-    auto [answer, trInvOrRecurringSet] = analyzeTS(init, ts.getTransition(), sink, witnesses, logic, vars, DETERMINISTIC_TRANSITION);
+    //TODO: Figure out why passing in transition is problematic
+    auto [answer, trInvOrRecurringSet] = analyzeTS(init, transition, sink, witnesses, logic, vars, DETERMINISTIC_TRANSITION);
     return answer;
 }
 
