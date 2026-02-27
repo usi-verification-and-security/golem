@@ -490,27 +490,14 @@ PTRef constructTransitionInvariantCandidates(PTRef init, PTRef transition, PTRef
     std::vector<PTRef> checked_states;
     // This if calculates the states reachable in 1 <= n <= num-1 transitions
     if (depth > 1) {
-        // vec<PTRef> temp_vars;
-        // for (auto var : vars) {
-        //     temp_vars.push(TimeMachine(logic).sendVarThroughTime(var, depth - 1));
-        // }
-        // checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(
-        //     QuantifierElimination(logic).keepOnly(logic.mkAnd(init, logic.mkAnd(deterministic_trace)),
-        //                                           temp_vars),
-        //     1));
-
-
         vec<PTRef> temp_vars;
         for (auto var : vars) {
-            temp_vars.push(TimeMachine(logic).sendVarThroughTime(var, 1));
+            temp_vars.push(TimeMachine(logic).sendVarThroughTime(var, depth - 1));
         }
-        //TODO: Think about QE optimization, one transition at a time
-        PTRef curr = init;
-        for (int i = 0; i < depth - 1; i++) {
-            curr = TimeMachine(logic).sendFlaThroughTime(
-            QuantifierElimination(logic).keepOnly(logic.mkAnd(curr, transition), temp_vars), -1);
-            checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(curr, depth));
-        }
+        checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(
+            QuantifierElimination(logic).keepOnly(logic.mkAnd(init, logic.mkAnd(deterministic_trace)),
+                                                  temp_vars),
+            1));
     }
     checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(sink, depth));
     // std::cout<<"Checked states: " <<logic.pp(logic.mkOr(checked_states)) <<std::endl;
