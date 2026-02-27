@@ -774,7 +774,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                     // Algorithm checks if reachable states are terminating
                     std::cout<<"Deeper\n";
                     auto [answer, subinv] =
-                        analyzeTS(reached, transition,  logic.mkNot(noncoveredStates), witnesses, logic, vars, DETERMINISTIC_TRANSITION);
+                        analyzeTS(reached, transition,  logic.mkOr(logic.mkNot(noncoveredStates), sink), witnesses, logic, vars, DETERMINISTIC_TRANSITION);
                     std::cout<<"Higher\n";
                     // TODO: If it terminates for noncoveredStates, then it terminates for all states
                     if (answer == Answer::YES) {
