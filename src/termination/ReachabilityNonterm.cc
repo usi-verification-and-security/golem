@@ -542,7 +542,6 @@ PTRef constructTransitionInvariantCandidates(PTRef init, PTRef transition, PTRef
         }
         // Then interpolant is translated, so it would correspond to transition relation Itp(x,x')
         itp = TermUtils(logic).varSubstitute(itp, varSubstitutions);
-        std::cout << "Itp: " << logic.pp(itp) << std::endl;
         return itp;
     } else {
         assert(false);
