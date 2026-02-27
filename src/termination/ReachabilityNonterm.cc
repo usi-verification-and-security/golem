@@ -833,13 +833,13 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                     // TODO: If doesn't terminate, check the reachability of recurrent set
                     // TODO: If reachable from init, then it does not terminate
                     else if (answer == Answer::NO) {
-                        auto [answer, subinv] =
-                            analyzeTS(reached, transition,  logic.mkOr(logic.mkNot(noncoveredStates), sink), witnesses, logic, vars, DETERMINISTIC_TRANSITION);
-                        if (answer == Answer::NO) {
+                        // auto [answer, subinv] =
+                        //     analyzeTS(reached, transition,  logic.mkOr(logic.mkNot(noncoveredStates), sink), witnesses, logic, vars, DETERMINISTIC_TRANSITION);
+                        // if (answer == Answer::NO) {
                             return {Answer::NO, subinv};
-                        } else {
-                            return {Answer::YES, subinv};
-                        }
+                        // } else {
+                        //     return {Answer::YES, subinv};
+                        // }
                     };
 
                 }
