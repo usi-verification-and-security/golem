@@ -514,7 +514,7 @@ PTRef constructTransitionInvariantCandidates(PTRef init, PTRef transition, PTRef
         }
     }
     checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(sink, depth));
-    std::cout<<"Checked states: " <<logic.pp(logic.mkOr(checked_states)) <<std::endl;
+    // std::cout<<"Checked states: " <<logic.pp(logic.mkOr(checked_states)) <<std::endl;
     // sink is updated, representing states that are guaranteed to reach termination
     PTRef temp_sink = logic.mkOr(checked_states);
     SMTSolver smt_solver(logic, SMTSolver::WitnessProduction::ONLY_INTERPOLANTS);
@@ -833,13 +833,13 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                     // TODO: If doesn't terminate, check the reachability of recurrent set
                     // TODO: If reachable from init, then it does not terminate
                     else if (answer == Answer::NO) {
-                        // auto [answer, subinv] =
-                        //     analyzeTS(reached, transition,  logic.mkOr(logic.mkNot(noncoveredStates), sink), witnesses, logic, vars, DETERMINISTIC_TRANSITION);
-                        // if (answer == Answer::NO) {
+                        auto [answer, subinv] =
+                            analyzeTS(reached, transition,  logic.mkOr(logic.mkNot(noncoveredStates), sink), witnesses, logic, vars, DETERMINISTIC_TRANSITION);
+                        if (answer == Answer::NO) {
                             return {Answer::NO, subinv};
-                        // } else {
-                        //     return {Answer::YES, subinv};
-                        // }
+                        } else {
+                            return {Answer::YES, subinv};
+                        }
                     };
 
                 }
