@@ -506,7 +506,6 @@ PTRef constructTransitionInvariantCandidates(PTRef init, PTRef transition, PTRef
         }
         //TODO: Think about QE optimization, one transition at a time
         PTRef curr = init;
-            std::cout << "Depth: " << depth << std::endl;
         for (int i = 0; i < depth - 1; i++) {
             curr = TimeMachine(logic).sendFlaThroughTime(
             QuantifierElimination(logic).keepOnly(logic.mkAnd(curr, transition), temp_vars), -1);
@@ -832,13 +831,13 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                     // TODO: If doesn't terminate, check the reachability of recurrent set
                     // TODO: If reachable from init, then it does not terminate
                     else if (answer == Answer::NO) {
-                        auto [answer, subinv] =
-                            analyzeTS(reached, transition,  logic.mkOr(logic.mkNot(noncoveredStates), sink), witnesses, logic, vars, DETERMINISTIC_TRANSITION);
-                        if (answer == Answer::NO) {
+                        // auto [answer, subinv] =
+                        //     analyzeTS(reached, transition,  logic.mkOr(logic.mkNot(noncoveredStates), sink), witnesses, logic, vars, DETERMINISTIC_TRANSITION);
+                        // if (answer == Answer::NO) {
                             return {Answer::NO, subinv};
-                        } else {
-                            return {Answer::YES, subinv};
-                        }
+                        // } else {
+                        //     return {Answer::YES, subinv};
+                        // }
                     };
 
                 }
