@@ -349,6 +349,7 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
 // return candidate;
 // }
 
+// Function is needed to construct CHC system out of TS
 std::unique_ptr<ChcDirectedHyperGraph> constructHyperGraph(PTRef const init, PTRef const transition, PTRef const query,
                                                            Logic & logic, std::vector<PTRef> vars) {
     ChcSystem chcs;
@@ -394,6 +395,7 @@ std::unique_ptr<ChcDirectedHyperGraph> constructHyperGraph(PTRef const init, PTR
     return hypergraph;
 }
 
+// This function takes transition relation formula Tr(x,x') and shifts next Vars, making it Tr(x,x'')
 PTRef shiftOnlyNextVars(PTRef formula, const std::vector<PTRef> & vars, Logic & logic) {
     TermUtils::substitutions_map varSubstitutions;
     for (uint32_t i = 0u; i < vars.size(); ++i) {
@@ -439,6 +441,7 @@ vec<PTRef> extractWellFoundedCandidates(PTRef itp, PTRef sink, ArithLogic & logi
     return strictCandidates;
 }
 
+// Function evaluates if Tr(x,x') determenistic
 bool determinismCheck(const PTRef& transition, Logic & logic, const std::vector<PTRef> & vars) {
     SMTSolver detChecker(logic, SMTSolver::WitnessProduction::NONE);
     TermUtils::substitutions_map detSubstitutions;
@@ -461,6 +464,7 @@ bool determinismCheck(const PTRef& transition, Logic & logic, const std::vector<
     return false;
 }
 
+// Function constructs Id relation, Id(x,x') = (x'=x)
 PTRef getId ( const std::vector<PTRef> & vars, Logic& logic) {
     // Start buiding the trace that reaches sink states
     vec<PTRef> eq_vars;
@@ -475,7 +479,7 @@ PTRef getId ( const std::vector<PTRef> & vars, Logic& logic) {
 
 PTRef constructTransitionInvariantCandidates(PTRef init, PTRef transition, PTRef sink, int depth,  Logic & logic, const std::vector<PTRef> & vars) {
     PTRef id = getId(vars, logic);
-    std::vector<PTRef> deterministic_trace{transition};
+    std::vector deterministic_trace{transition};
     // Building Identity relation formula
     for (uint k = 1; k < depth; k++) {
         // For every transition deterministic trace is updated, adding an Id or Tr
@@ -486,16 +490,31 @@ PTRef constructTransitionInvariantCandidates(PTRef init, PTRef transition, PTRef
     std::vector<PTRef> checked_states;
     // This if calculates the states reachable in 1 <= n <= num-1 transitions
     if (depth > 1) {
+        // vec<PTRef> temp_vars;
+        // for (auto var : vars) {
+        //     temp_vars.push(TimeMachine(logic).sendVarThroughTime(var, depth - 1));
+        // }
+        // checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(
+        //     QuantifierElimination(logic).keepOnly(logic.mkAnd(init, logic.mkAnd(deterministic_trace)),
+        //                                           temp_vars),
+        //     1));
+
+
         vec<PTRef> temp_vars;
         for (auto var : vars) {
-            temp_vars.push(TimeMachine(logic).sendVarThroughTime(var, depth - 1));
+            temp_vars.push(TimeMachine(logic).sendVarThroughTime(var, 1));
         }
-        checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(
-            QuantifierElimination(logic).keepOnly(logic.mkAnd(init, logic.mkAnd(deterministic_trace)),
-                                                  temp_vars),
-            1));
+        //TODO: Think about QE optimization, one transition at a time
+        PTRef curr = init;
+            std::cout << "Depth: " << depth << std::endl;
+        for (int i = 0; i < depth - 1; i++) {
+            curr = TimeMachine(logic).sendFlaThroughTime(
+            QuantifierElimination(logic).keepOnly(logic.mkAnd(curr, transition), temp_vars), -1);
+            checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(curr, depth));
+        }
     }
     checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(sink, depth));
+    std::cout<<"Checked states: " <<logic.pp(logic.mkOr(checked_states)) <<std::endl;
     // sink is updated, representing states that are guaranteed to reach termination
     PTRef temp_sink = logic.mkOr(checked_states);
     SMTSolver smt_solver(logic, SMTSolver::WitnessProduction::ONLY_INTERPOLANTS);
@@ -523,6 +542,7 @@ PTRef constructTransitionInvariantCandidates(PTRef init, PTRef transition, PTRef
         }
         // Then interpolant is translated, so it would correspond to transition relation Itp(x,x')
         itp = TermUtils(logic).varSubstitute(itp, varSubstitutions);
+        std::cout << "Itp: " << logic.pp(itp) << std::endl;
         return itp;
     } else {
         assert(false);
