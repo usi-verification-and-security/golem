@@ -25,6 +25,7 @@ PTRef unwrapEqs(PTRef input, ArithLogic & logic) {
     if (logic.isNot(input)) {
         // propagate negation
         rev = utils.simplifyMax(logic.mkNot(input));
+        if (logic.isNot(rev)) assert(false);
         reverse = true;
     }
 
@@ -404,21 +405,22 @@ PTRef shiftOnlyNextVars(PTRef formula, const std::vector<PTRef> & vars, Logic & 
 
 // This function extracts well-founded disjuncts from the interpolant
 vec<PTRef> extractWellFoundedCandidates(PTRef itp, PTRef sink, ArithLogic & logic, const std::vector<PTRef> & vars) {
+    TermUtils utils(logic);
     SMTSolver smt_solver(logic, SMTSolver::WitnessProduction::NONE);
 
-    auto sink_disjuncts = TermUtils(logic).getTopLevelDisjuncts(
-        TermUtils(logic).toDNF(unwrapEqs(logic.mkNot(sink), logic)));
+    auto sink_disjuncts = utils.getTopLevelDisjuncts(
+        utils.toDNF(unwrapEqs(logic.mkNot(sink), logic)));
     PTRef dnfized_interpolant = unwrapEqs(itp, logic);
-    dnfized_interpolant = TermUtils(logic).toDNF(dnfized_interpolant);
+    dnfized_interpolant = utils.toDNF(dnfized_interpolant);
 
-    vec<PTRef> candidates = TermUtils(logic).getTopLevelDisjuncts(dnfized_interpolant);
+    vec<PTRef> candidates = utils.getTopLevelDisjuncts(dnfized_interpolant);
     vec<PTRef> strictCandidates;
     for (auto cand : candidates) {
         smt_solver.resetSolver();
         smt_solver.assertProp(cand);
         if (smt_solver.check() == SMTSolver::Answer::UNSAT) { continue; }
 
-        PTRef simpl_cand = TermUtils(logic).simplifyMax(cand);
+        PTRef simpl_cand = utils.simplifyMax(cand);
         if (checkWellFounded(cand, logic, vars)) {
             strictCandidates.push(simpl_cand);
         } else {
@@ -426,10 +428,10 @@ vec<PTRef> extractWellFoundedCandidates(PTRef itp, PTRef sink, ArithLogic & logi
                 smt_solver.resetSolver();
                 smt_solver.assertProp(logic.mkAnd(sink_cand, simpl_cand));
                 if (smt_solver.check() == SMTSolver::Answer::SAT &&
-                    checkWellFounded(TermUtils(logic).simplifyMax(logic.mkAnd(sink_cand, simpl_cand)), logic, vars)) {
+                    checkWellFounded(utils.simplifyMax(logic.mkAnd(sink_cand, simpl_cand)), logic, vars)) {
                     // TODO: Maybe I can weaken recieved candidate using some kind of houdini, dropping not needed
                     //  conjuncts. Particularly, I can remove all equalities (also ones that are done via <= && >=)
-                    strictCandidates.push(TermUtils(logic).simplifyMax(logic.mkAnd(sink_cand, simpl_cand)));
+                    strictCandidates.push(utils.simplifyMax(logic.mkAnd(sink_cand, simpl_cand)));
                 }
             }
         }
