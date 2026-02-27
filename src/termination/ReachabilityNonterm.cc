@@ -885,10 +885,15 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
     auto aux_vars = ts.getAuxiliaryVars();
     ArithLogic & logic = dynamic_cast<ArithLogic &>(ts.getLogic());
     PTRef init = ts.getInit();
-    std::cout<<"Transition System: "<<logic.pp(ts.getTransition())<<std::endl;
     PTRef transition = unwrapEqs(ts.getTransition(), logic);
     transition = TermUtils(logic).toDNF(transition);
-    std::cout<<"Transition: "<<logic.pp(transition)<<std::endl;
+
+    SMTSolver SMTsolver(logic, SMTSolver::WitnessProduction::NONE);
+    SMTsolver.assertProp(logic.mkOr(logic.mkAnd(ts.getTransition(), logic.mkNot(transition)),logic.mkAnd(logic.mkNot(ts.getTransition()), transition) ));
+    auto res = SMTsolver.check();
+    if (res == SMTSolver::Answer::SAT) {
+        std::cout<<"TS is wroooooong!!!!!"<<std::endl;
+    }
     std::vector<PTRef> tmp_vars = vars;
     tmp_vars.insert(tmp_vars.end(), aux_vars.begin(), aux_vars.end());
     if (!logic.isOr(transition) && checkWellFounded(transition, logic, tmp_vars)) {
@@ -909,7 +914,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
     witnesses.addOption(options.COMPUTE_WITNESS, "true");
     bool DETERMINISTIC_TRANSITION = determinismCheck(transition, logic, vars);
     // Safety-Based Termination Analysis
-    auto [answer, trInvOrRecurringSet] = analyzeTS(init, transition, sink, witnesses, logic, vars, DETERMINISTIC_TRANSITION);
+    auto [answer, trInvOrRecurringSet] = analyzeTS(init, ts.getTransition(), sink, witnesses, logic, vars, DETERMINISTIC_TRANSITION);
     return answer;
 }
 
