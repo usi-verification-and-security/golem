@@ -406,14 +406,11 @@ PTRef shiftOnlyNextVars(PTRef formula, const std::vector<PTRef> & vars, Logic & 
 vec<PTRef> extractWellFoundedCandidates(PTRef itp, PTRef sink, ArithLogic & logic, const std::vector<PTRef> & vars) {
     SMTSolver smt_solver(logic, SMTSolver::WitnessProduction::NONE);
 
-    // auto sink_disjuncts = TermUtils(logic).getTopLevelDisjuncts(dnfize(logic.mkNot(sink), logic));
     auto sink_disjuncts = TermUtils(logic).getTopLevelDisjuncts(
         TermUtils(logic).toDNF(unwrapEqs(logic.mkNot(sink), logic)));
     PTRef dnfized_interpolant = unwrapEqs(itp, logic);
     dnfized_interpolant = TermUtils(logic).toDNF(dnfized_interpolant);
-    // PTRef dnfized_interpolant = dnfize(itp, logic);
 
-    // std::cout<<"Dnfized itp: " << logic.pp(dnfized_interpolant) << std::endl;
     vec<PTRef> candidates = TermUtils(logic).getTopLevelDisjuncts(dnfized_interpolant);
     vec<PTRef> strictCandidates;
     for (auto cand : candidates) {
@@ -774,7 +771,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                     // Algorithm checks if reachable states are terminating
                     std::cout<<"Deeper\n";
                     auto [answer, subinv] =
-                        analyzeTS(reached, transition,  logic.mkOr(logic.mkNot(noncoveredStates), sink), witnesses, logic, vars, DETERMINISTIC_TRANSITION);
+                        analyzeTS(reached, transition,  logic.mkNot(noncoveredStates), witnesses, logic, vars, DETERMINISTIC_TRANSITION);
                     std::cout<<"Higher\n";
                     // TODO: If it terminates for noncoveredStates, then it terminates for all states
                     if (answer == Answer::YES) {
@@ -813,7 +810,11 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                     }
                     // TODO: If doesn't terminate, check the reachability of recurrent set
                     // TODO: If reachable from init, then it does not terminate
-                    else if (answer == Answer::NO) return {Answer::NO, subinv};
+                    else if (answer == Answer::NO) {
+                        auto [answer, subinv] =
+                            analyzeTS(reached, transition,  logic.mkOr(logic.mkNot(noncoveredStates),sink), witnesses, logic, vars, DETERMINISTIC_TRANSITION);
+                        return {Answer::NO, subinv};
+                    };
 
                 }
 
