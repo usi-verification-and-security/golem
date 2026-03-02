@@ -542,6 +542,9 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                                                                               bool DETERMINISTIC_TRANSITION) {
 
     vec<PTRef> strictCandidates;
+    std::cout << "Init: " << logic.pp(init) << std::endl;
+    std::cout << "Transition: " << logic.pp(transition) << std::endl;
+    std::cout << "Sink: " << logic.pp(sink) << std::endl;
     while (true) {
         // TODO: Do smth with exponential transition growth in some cases via blocks...
         // Constructing a graph based on the currently considered TS
@@ -646,17 +649,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                 PTRef T = logic.mkNot(F);
 
                 SMTsolver.resetSolver();
-                SMTsolver.assertProp(logic.mkAnd(init, F));
-                // If no initial states can reach nonterminating states in n transitions, then they won't be able to do
-                // it in n+1 => system terminates
-                if (SMTsolver.check() == SMTSolver::Answer::UNSAT) {
-                    std::cout << "No init states can nonterminate in n transitions" << std::endl;
-                    return {Answer::YES, logic.getTerm_false()};
-                }
-
-                SMTsolver.resetSolver();
                 SMTsolver.assertProp(logic.mkAnd({T, temp_tr, TimeMachine(logic).sendFlaThroughTime(sink, num)}));
-
                 // This check guarantees the states T (states that cannot reach nonterminating states in n transition)
                 // contain the states that terminate in at least one transition (otherwise system is nonterminating)
                 // because there doesn't exist state that can reach sink states.
@@ -664,7 +657,6 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
 
                 // The procedure to construct transition invariants is executed
                 PTRef itp = constructTransitionInvariantCandidates(T, temp_tr, sink, num, logic, vars);
-                // std::cout << "Interpolant: " << logic.pp(itp) << std::endl;
 
                 // Extract well-founded disjuncts from the transition invariant
                 auto newCands = extractWellFoundedCandidates(itp, sink, logic, vars);
@@ -681,7 +673,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                 // We check if TrInv is an invariant for non-sink states
                 // States /\ trInv /\ Tr => TrInv
                 smt_checker.assertProp(
-                    logic.mkAnd({logic.mkNot(sink), logic.mkOr(trInv, id), TimeMachine(logic).sendFlaThroughTime(temp_tr, 1),
+                    logic.mkAnd({logic.mkOr(trInv, id), TimeMachine(logic).sendFlaThroughTime(temp_tr, 1),
                                  logic.mkNot(shiftOnlyNextVars(trInv, vars, logic))}));
                 // Check if trInv is Transition Invariant on the non-sink state-space
                 if (smt_checker.check() == SMTSolver::Answer::UNSAT) {
@@ -700,7 +692,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                                  logic.mkNot(shiftOnlyNextVars(trInv, vars, logic))}));
                 if (smt_checker.check() == SMTSolver::Answer::UNSAT) {
                     // If TrInv is right restricted, then we can compute a set of states
-                    // which can potentially terminate
+                    // which can potentially terminate, reaching sink states
                     PTRef preTransition = QuantifierElimination(logic).keepOnly(
                         logic.mkAnd(logic.mkOr(trInv, id), TimeMachine(logic).sendFlaThroughTime(sink, 1)), vars);
                     auto graph = constructHyperGraph(init, transition, logic.mkNot(preTransition), logic, vars);
@@ -828,9 +820,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                     };
 
                 }
-
             }
-
         } else if (res.getAnswer() == VerificationAnswer::SAFE) {
             // In case if sink states are not reachable, we need to construct the inductive invariant and demonstrate
             // that it doesn't contain any sink states itself.
