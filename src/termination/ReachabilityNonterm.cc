@@ -151,7 +151,10 @@ void lequalize(PTRef conjunct, vec<PTRef> & leqs, vec<PTRef> & bools, ArithLogic
 bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const & vars) {
     SMTSolver solver(logic, SMTSolver::WitnessProduction::NONE);
 
-    assert (!logic.isOr(formula));
+    PTRef dnfized = unwrapEqs(formula, logic);
+    dnfized = TermUtils(logic).toDNF(dnfized);
+
+    assert (!logic.isOr(dnfized));
 
     vec<PTRef> int_vars;
     vec<PTRef> next_vars;
@@ -163,7 +166,7 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
         }
     }
 
-    vec<PTRef> conjuncts = TermUtils(logic).getTopLevelConjuncts(formula);
+    vec<PTRef> conjuncts = TermUtils(logic).getTopLevelConjuncts(dnfized);
 
     vec<PTRef> leq_conjuncts;
     vec<PTRef> bools;
@@ -887,9 +890,9 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
     auto aux_vars = ts.getAuxiliaryVars();
     ArithLogic & logic = dynamic_cast<ArithLogic &>(ts.getLogic());
     PTRef init = ts.getInit();
-    // PTRef transition = ts.getTransition();
-    PTRef transition = unwrapEqs(ts.getTransition(), logic);
-    transition = TermUtils(logic).toDNF(transition);
+    PTRef transition = ts.getTransition();
+    // PTRef transition = unwrapEqs(ts.getTransition(), logic);
+    // transition = TermUtils(logic).toDNF(transition);
     std::vector<PTRef> tmp_vars = vars;
     tmp_vars.insert(tmp_vars.end(), aux_vars.begin(), aux_vars.end());
     if (!logic.isOr(transition) && checkWellFounded(transition, logic, tmp_vars)) {
