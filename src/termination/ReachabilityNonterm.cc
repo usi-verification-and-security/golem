@@ -545,9 +545,9 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                                                                               bool DETERMINISTIC_TRANSITION) {
 
     vec<PTRef> strictCandidates;
-    // std::cout << "Init: " << logic.pp(init) << std::endl;
-    // std::cout << "Transition: " << logic.pp(transition) << std::endl;
-    // std::cout << "Sink: " << logic.pp(sink) << std::endl;
+    std::cout << "Init: " << logic.pp(init) << std::endl;
+    std::cout << "Transition: " << logic.pp(transition) << std::endl;
+    std::cout << "Sink: " << logic.pp(sink) << std::endl;
     while (true) {
         // TODO: Do smth with exponential transition growth in some cases via blocks...
         // Constructing a graph based on the currently considered TS
