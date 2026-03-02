@@ -772,15 +772,13 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                     // Algorithm checks if reachable states are terminating
                     std::cout<<"Deeper\n";
                     auto [answer, subinv] =
-                        analyzeTS(reached, transition,  sink, witnesses, logic, vars, DETERMINISTIC_TRANSITION);
+                        analyzeTS(reached, transition,  logic.mkNot(noncoveredStates), witnesses, logic, vars, DETERMINISTIC_TRANSITION);
                     std::cout<<"Higher\n";
                     // TODO: If it terminates for noncoveredStates, then it terminates for all states
                     if (answer == Answer::YES) {
                         smt_checker.resetSolver();
                         strictCandidates.push(subinv);
-                        // std::cout<<"Strict: "<<logic.pp(subinv)<<std::endl;
                         PTRef fullInv = logic.mkOr(strictCandidates);
-                        // std::cout<<"fullInv: "<<logic.pp(fullInv)<<std::endl;
                         // TODO: It should work for  subinv \/ TrInv, but for some reason it does not
                         smt_checker.assertProp(
                             logic.mkAnd({noncoveredStates, logic.mkOr(subinv, id), TimeMachine(logic).sendFlaThroughTime(transition, 1),
