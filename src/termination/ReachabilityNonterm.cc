@@ -545,9 +545,9 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                                                                               bool DETERMINISTIC_TRANSITION) {
 
     vec<PTRef> strictCandidates;
-    std::cout << "Init: " << logic.pp(init) << std::endl;
-    std::cout << "Transition: " << logic.pp(transition) << std::endl;
-    std::cout << "Sink: " << logic.pp(sink) << std::endl;
+    // std::cout << "Init: " << logic.pp(init) << std::endl;
+    // std::cout << "Transition: " << logic.pp(transition) << std::endl;
+    // std::cout << "Sink: " << logic.pp(sink) << std::endl;
     while (true) {
         // TODO: Do smth with exponential transition growth in some cases via blocks...
         // Constructing a graph based on the currently considered TS
@@ -656,7 +656,9 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                 // This check guarantees the states T (states that cannot reach nonterminating states in n transition)
                 // contain the states that terminate in at least one transition (otherwise system is nonterminating)
                 // because there doesn't exist state that can reach sink states.
-                if (SMTsolver.check() == SMTSolver::Answer::UNSAT) { return {Answer::NO, init}; }
+                if (SMTsolver.check() == SMTSolver::Answer::UNSAT) {
+                    return {Answer::NO, init};
+                }
 
                 // The procedure to construct transition invariants is executed
                 PTRef itp = constructTransitionInvariantCandidates(T, temp_tr, sink, num, logic, vars);
@@ -773,7 +775,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                     // Algorithm checks if reachable states are terminating
                     std::cout<<"Deeper\n";
                     auto [answer, subinv] =
-                        analyzeTS(reached, transition,  logic.mkNot(noncoveredStates), witnesses, logic, vars, DETERMINISTIC_TRANSITION);
+                        analyzeTS(reached, transition,  sink, witnesses, logic, vars, DETERMINISTIC_TRANSITION);
                     std::cout<<"Higher\n";
                     // TODO: If it terminates for noncoveredStates, then it terminates for all states
                     if (answer == Answer::YES) {
@@ -905,7 +907,9 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
     PTRef sink = logic.mkNot(QuantifierElimination(logic).keepOnly(transition, vars));
 
     // if sink is false, there are no sink states in the TS, therefore it is nonterminating
-    if (sink == logic.getTerm_false()) { return Answer::NO; }
+    if (sink == logic.getTerm_false()) {
+        return Answer::NO;
+    }
 
     // Witness computation is required, as we need to use both counterexample traces to limit terminating states
     // and inductive invariants to prove nontermination
