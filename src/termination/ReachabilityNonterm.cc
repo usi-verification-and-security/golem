@@ -519,9 +519,6 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
 
     vec<PTRef> strictCandidates;
     while (true) {
-        std::cout << "Init: " << logic.pp(init) << std::endl;
-        std::cout << "Transition: " << logic.pp(transition) << std::endl;
-        std::cout << "Sink: " << logic.pp(sink) << std::endl;
         // TODO: Do smth with exponential transition growth in some cases via blocks...
         // Constructing a graph based on the currently considered TS
         auto graph = constructHyperGraph(init, transition, sink, logic, vars);
@@ -530,6 +527,7 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
         // Check if sink states are reachable within TS
         auto res = engine->solve(*graph);
         if (res.getAnswer() == VerificationAnswer::UNSAFE) {
+            std::cout << "UNSAFE" << std::endl;
             // When sink states are reachable, extract the number of transitions needed to reach the sink states
             uint num = res.getInvalidityWitness().getDerivation().size() - 3;
             // Construct the logical formula representing the trace:
@@ -695,6 +693,7 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                 // reachable states, therefore it is well-founded transition invariant
                 auto res = engine->solve(*graph);
                 if (res.getAnswer() == VerificationAnswer::SAFE) {
+                    std::cout << "States are unreachable\n";
                     return {Answer::YES, trInv};
                 } else {
                     // Otherwise, if states not covered by TrInv are reachable, then the following procedure should
@@ -802,6 +801,7 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
             // We check if init state is blocked (it's impossible to make a transition from initial state)
             // When it is the case, TS is terminating
             if (SMTsolver.check() == SMTSolver::Answer::UNSAT) {
+                std::cout << "Everything's blocked\n";
                 return {Answer::YES, logic.getTerm_false()};
             } else {
                 SMTsolver.resetSolver();
