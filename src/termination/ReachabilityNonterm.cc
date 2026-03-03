@@ -516,10 +516,10 @@ PTRef constructTransitionInvariantCandidates(PTRef init, PTRef transition, PTRef
 std::tuple<ReachabilityNonterm::Answer, PTRef>
 ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options const & witnesses, ArithLogic & logic,
                                std::vector<PTRef> const & vars, bool DETERMINISTIC_TRANSITION) {
-    std::cout << "Analyzing TS" << std::endl;
-    std::cout << "Init: " << logic.pp(init) << std::endl;
-    std::cout << "Transition: " << logic.pp(transition) << std::endl;
-    std::cout << "Sink: " << logic.pp(sink) << std::endl;
+    // std::cout << "Analyzing TS" << std::endl;
+    // std::cout << "Init: " << logic.pp(init) << std::endl;
+    // std::cout << "Transition: " << logic.pp(transition) << std::endl;
+    // std::cout << "Sink: " << logic.pp(sink) << std::endl;
 
     vec<PTRef> strictCandidates;
     while (true) {
@@ -740,10 +740,11 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                                                       logic, vars, DETERMINISTIC_TRANSITION);
                     std::cout << "Higher\n";
                     // TODO: It is possible to do check differently, analyzing <noncoveredStates, tr,
-                    // not(noncoveredStates)>
+                    //   not(noncoveredStates)>
                     //   If this terminates, then the whole TS terminates, but if it nonterinates we need to prove
                     //   reachability
                     if (answer == Answer::YES) {
+                        std::cout << "YES" << std::endl;
                         smt_checker.resetSolver();
                         // TODO: Need to change TrInv, adding found subinv in a better way
                         strictCandidates.push(subinv);
@@ -762,6 +763,7 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                     // TODO: If doesn't terminate, check the reachability of recurrent set
                     // TODO: If reachable from init, then it does not terminate
                     else if (answer == Answer::NO) {
+                        std::cout << "NO" << std::endl;
                         auto [answer, subinv] =
                             analyzeTS(reached, transition, sink, witnesses, logic, vars, DETERMINISTIC_TRANSITION);
                         if (answer == Answer::NO) {
