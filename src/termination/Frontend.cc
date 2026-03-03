@@ -29,6 +29,7 @@
 #include <csignal>
 #include <fstream>
 #include <iostream>
+#include <map>
 #include <memory>
 #include <sstream>
 #include <string>
@@ -69,7 +70,7 @@ struct Rule {
 struct ITS {
     std::string format;
     std::string theory;
-    std::unordered_map<std::string, LocationDeclaration> locations;
+    std::map<std::string, LocationDeclaration> locations;
     std::string entrypoint;
     std::vector<Rule> rules;
 
