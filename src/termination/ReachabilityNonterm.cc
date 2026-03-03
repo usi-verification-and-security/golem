@@ -744,7 +744,7 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                     //   If this terminates, then the whole TS terminates, but if it nonterinates we need to prove
                     //   reachability
                     if (answer == Answer::YES) {
-                        std::cout << "YES" << std::endl;
+                        std::cout << "Subinv: " << logic.pp(subinv) << std::endl ;
                         smt_checker.resetSolver();
                         // TODO: Need to change TrInv, adding found subinv in a better way
                         strictCandidates.push(subinv);
