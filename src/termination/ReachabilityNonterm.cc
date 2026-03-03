@@ -516,13 +516,12 @@ PTRef constructTransitionInvariantCandidates(PTRef init, PTRef transition, PTRef
 std::tuple<ReachabilityNonterm::Answer, PTRef>
 ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options const & witnesses, ArithLogic & logic,
                                std::vector<PTRef> const & vars, bool DETERMINISTIC_TRANSITION) {
-    // std::cout << "Analyzing TS" << std::endl;
-    // std::cout << "Init: " << logic.pp(init) << std::endl;
-    // std::cout << "Transition: " << logic.pp(transition) << std::endl;
-    // std::cout << "Sink: " << logic.pp(sink) << std::endl;
 
     vec<PTRef> strictCandidates;
     while (true) {
+        std::cout << "Init: " << logic.pp(init) << std::endl;
+        std::cout << "Transition: " << logic.pp(transition) << std::endl;
+        std::cout << "Sink: " << logic.pp(sink) << std::endl;
         // TODO: Do smth with exponential transition growth in some cases via blocks...
         // Constructing a graph based on the currently considered TS
         auto graph = constructHyperGraph(init, transition, sink, logic, vars);
