@@ -486,6 +486,9 @@ PTRef constructTransitionInvariantCandidates(PTRef init, PTRef transition, PTRef
     smt_solver.assertProp(logic.mkAnd(deterministic_trace));
     smt_solver.push();
     smt_solver.assertProp(logic.mkAnd(init, logic.mkNot(temp_sink)));
+
+    std::cout << "init: " << logic.pp(init) << std::endl;
+    std::cout << "sink: " << logic.pp(logic.mkNot(temp_sink)) << std::endl;
     // Formula should be unsat, because \lnot(sink) are the states which can't be reached after n
     // transitions
     if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
@@ -625,9 +628,6 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                 // contain the states that terminate in at least one transition (otherwise system is nonterminating)
                 // because there doesn't exist state that can reach sink states.
                 if (SMTsolver.check() == SMTSolver::Answer::UNSAT) { return {Answer::NO, init}; }
-                std::cout << "T: " << logic.pp(T) << std::endl;
-                std::cout << "temp_tr: " << logic.pp(temp_tr) << std::endl;
-                std::cout << "sink: " << logic.pp(sink) << std::endl;
                 // The procedure to construct transition invariants is executed
                 PTRef itp = constructTransitionInvariantCandidates(T, temp_tr, sink, num, logic, vars);
 
