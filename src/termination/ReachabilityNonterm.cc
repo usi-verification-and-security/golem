@@ -404,6 +404,7 @@ vec<PTRef> extractWellFoundedCandidates(PTRef itp, PTRef sink, ArithLogic & logi
         if (smt_solver.check() == SMTSolver::Answer::UNSAT) { continue; }
 
         PTRef simpl_cand = utils.simplifyMax(cand);
+        std::cout << "Cand: " << logic.pp(simpl_cand) << std::endl;
         if (checkWellFounded(cand, logic, vars)) {
             strictCandidates.push(simpl_cand);
         } else {
@@ -682,8 +683,6 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                     logic.mkAnd({logic.mkOr(trInv, id), TimeMachine(logic).sendFlaThroughTime(temp_tr, 1),
                                  logic.mkNot(shiftOnlyNextVars(trInv, vars, logic))}),
                     vars);
-                std::cout<< "TrInv: " << logic.pp(logic.mkOr(trInv, id)) <<std::endl;
-                std::cout<< "temp_tr: " << logic.pp(temp_tr) <<std::endl;
 
                 // We check if the states that are not covered by TrInv are reachable
                 auto graph = constructHyperGraph(init, transition, logic.mkAnd(noncoveredStates, logic.mkNot(sink)),
