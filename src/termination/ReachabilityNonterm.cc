@@ -488,6 +488,7 @@ PTRef constructTransitionInvariantCandidates(PTRef init, PTRef transition, PTRef
     smt_solver.assertProp(logic.mkAnd(init, logic.mkNot(temp_sink)));
 
     std::cout << "init: " << logic.pp(init) << std::endl;
+    std::cout << "num: " << depth << std::endl;
     std::cout << "sink: " << logic.pp(logic.mkNot(temp_sink)) << std::endl;
     // Formula should be unsat, because \lnot(sink) are the states which can't be reached after n
     // transitions
