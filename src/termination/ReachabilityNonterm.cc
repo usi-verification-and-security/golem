@@ -682,7 +682,8 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                     logic.mkAnd({logic.mkOr(trInv, id), TimeMachine(logic).sendFlaThroughTime(temp_tr, 1),
                                  logic.mkNot(shiftOnlyNextVars(trInv, vars, logic))}),
                     vars);
-                std::cout << "Noncovered states: " << logic.pp(noncoveredStates) << std::endl;
+                std::cout<< "TrInv: " << logic.pp(logic.mkOr(trInv, id)) <<std::endl;
+                std::cout<< "temp_tr: " << logic.pp(temp_tr) <<std::endl;
 
                 // We check if the states that are not covered by TrInv are reachable
                 auto graph = constructHyperGraph(init, transition, logic.mkAnd(noncoveredStates, logic.mkNot(sink)),
@@ -743,7 +744,6 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                     //   If this terminates, then the whole TS terminates, but if it nonterinates we need to prove
                     //   reachability
                     if (answer == Answer::YES) {
-                        std::cout << "Subinv: " << logic.pp(subinv) << std::endl ;
                         smt_checker.resetSolver();
                         // TODO: Need to change TrInv, adding found subinv in a better way
                         strictCandidates.push(subinv);
