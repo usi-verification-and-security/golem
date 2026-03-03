@@ -404,7 +404,6 @@ vec<PTRef> extractWellFoundedCandidates(PTRef itp, PTRef sink, ArithLogic & logi
         if (smt_solver.check() == SMTSolver::Answer::UNSAT) { continue; }
 
         PTRef simpl_cand = utils.simplifyMax(cand);
-        std::cout << "Cand: " << logic.pp(simpl_cand) << std::endl;
         if (checkWellFounded(cand, logic, vars)) {
             strictCandidates.push(simpl_cand);
         } else {
@@ -626,7 +625,9 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                 // contain the states that terminate in at least one transition (otherwise system is nonterminating)
                 // because there doesn't exist state that can reach sink states.
                 if (SMTsolver.check() == SMTSolver::Answer::UNSAT) { return {Answer::NO, init}; }
-
+                std::cout << "T: " << logic.pp(T) << std::endl;
+                std::cout << "temp_tr: " << logic.pp(temp_tr) << std::endl;
+                std::cout << "sink: " << logic.pp(sink) << std::endl;
                 // The procedure to construct transition invariants is executed
                 PTRef itp = constructTransitionInvariantCandidates(T, temp_tr, sink, num, logic, vars);
 
