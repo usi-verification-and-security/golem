@@ -477,8 +477,8 @@ PTRef constructTransitionInvariantCandidates(PTRef init, PTRef transition, PTRef
         }
         checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(
             QuantifierElimination(logic).keepOnly(logic.mkAnd(init, logic.mkAnd(deterministic_trace)), temp_vars), 1));
+        std::cout << "sink: " << logic.pp(checked_states[0]) << std::endl;
     }
-    std::cout << "sink: " << logic.pp(checked_states[0]) << std::endl;
     checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(sink, depth));
     // sink is updated, representing states that are guaranteed to reach termination
     PTRef temp_sink = logic.mkOr(checked_states);
