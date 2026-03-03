@@ -463,7 +463,7 @@ PTRef constructTransitionInvariantCandidates(PTRef init, PTRef transition, PTRef
     PTRef id = getId(vars, logic);
     std::vector deterministic_trace{transition};
     // Building Identity relation formula
-    for (uint k = 1; k < depth; k++) {
+    for (int k = 1; k < depth; k++) {
         // For every transition deterministic trace is updated, adding an Id or Tr
         // This is needed so that Interpolant overapproximates 1 <= n <= num transitions
         deterministic_trace.push_back(TimeMachine(logic).sendFlaThroughTime(logic.mkOr(transition, id), k));
@@ -722,8 +722,7 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                                          TimeMachine(logic).sendFlaThroughTime(noncoveredStates, num_non)});
                         smt_checker.assertProp(transitions);
                         auto res = smt_checker.check();
-                        assert(res == SMTSolver::Answer::SAT);
-
+                        if (res == SMTSolver::Answer::UNSAT) return {Answer::ERROR, logic.getTerm_false()};
                         // We get some of the reachable states
                         reached = TermUtils(logic).simplifyMax(TimeMachine(logic).sendFlaThroughTime(
                             ModelBasedProjection(logic).keepOnly(transitions, last_vars, *smt_checker.getModel()),
