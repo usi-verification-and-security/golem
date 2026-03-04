@@ -472,7 +472,6 @@ PTRef constructTransitionInvariantCandidates(PTRef init, PTRef transition, PTRef
     }
     std::vector<PTRef> checked_states;
     // This if calculates the states reachable in 1 <= n <= num-1 transitions
-    PTRef checked = init;
     if (depth > 1) {
         vec<PTRef> temp_vars;
         for (auto var : vars) {
@@ -745,7 +744,7 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                     if (answer == Answer::YES) {
                         smt_checker.resetSolver();
                         // TODO: Need to change TrInv, adding found subinv in a better way
-                        strictCandidates.push(subinv);
+                        // strictCandidates.push(subinv);
                         // TODO: It should work for  subinv \/ TrInv, but for some reason it does not
                         //    particularly, weaker TrInv seems to failing more often then stronger TrInv :(
                         smt_checker.assertProp(logic.mkAnd({noncoveredStates, logic.mkOr(subinv, id),
