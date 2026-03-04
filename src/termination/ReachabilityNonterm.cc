@@ -762,7 +762,7 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                     // TODO: If reachable from init, then it does not terminate
                     else if (answer == Answer::NO) {
                         auto [answer, subinv] =
-                            analyzeTS(reached, transition, sink, witnesses, logic, vars, DETERMINISTIC_TRANSITION);
+                            analyzeTS(reached, transition, logic.mkOr(sink, logic.mkNot(noncoveredStates)), witnesses, logic, vars, DETERMINISTIC_TRANSITION);
                         if (answer == Answer::NO) {
                             return {Answer::NO, subinv};
                         } else {
