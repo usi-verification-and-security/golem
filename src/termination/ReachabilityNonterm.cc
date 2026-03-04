@@ -761,7 +761,6 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                     // TODO: If doesn't terminate, check the reachability of recurrent set
                     // TODO: If reachable from init, then it does not terminate
                     else if (answer == Answer::NO) {
-                        std::cout << "NO" << std::endl;
                         auto [answer, subinv] =
                             analyzeTS(reached, transition, sink, witnesses, logic, vars, DETERMINISTIC_TRANSITION);
                         if (answer == Answer::NO) {
