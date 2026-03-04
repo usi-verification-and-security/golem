@@ -735,7 +735,7 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                     assert(reached != logic.getTerm_false());
                     // Algorithm checks if reachable states are terminating
                     std::cout << "Deeper\n";
-                    auto [answer, subinv] = analyzeTS(reached, transition, logic.mkNot(noncoveredStates), witnesses,
+                    auto [answer, subinv] = analyzeTS(reached, transition,  TermUtils(logic).simplifyMax(logic.mkNot(noncoveredStates)), witnesses,
                                                       logic, vars, DETERMINISTIC_TRANSITION);
                     std::cout << "Higher\n";
                     // TODO: It is possible to do check differently, analyzing <noncoveredStates, tr,
@@ -762,7 +762,7 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                     // TODO: If reachable from init, then it does not terminate
                     else if (answer == Answer::NO) {
                         auto [answer, subinv] =
-                            analyzeTS(reached, transition, logic.mkOr(sink, logic.mkNot(noncoveredStates)), witnesses, logic, vars, DETERMINISTIC_TRANSITION);
+                            analyzeTS(reached, transition, TermUtils(logic).simplifyMax(logic.mkOr(sink, logic.mkNot(noncoveredStates))), witnesses, logic, vars, DETERMINISTIC_TRANSITION);
                         if (answer == Answer::NO) {
                             return {Answer::NO, subinv};
                         } else {
