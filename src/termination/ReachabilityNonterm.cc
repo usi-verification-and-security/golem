@@ -146,6 +146,7 @@ void lequalize(PTRef conjunct, vec<PTRef> & leqs, vec<PTRef> & bools, ArithLogic
     } else if (logic.isBoolAtom(conjunct)) {
         bools.push(conjunct);
     } else {
+        std::cout<<"Error: " << logic.pp(conjunct) << std::endl;
         assert(false);
     }
 }
@@ -404,7 +405,8 @@ vec<PTRef> extractWellFoundedCandidates(PTRef itp, PTRef sink, ArithLogic & logi
         if (smt_solver.check() == SMTSolver::Answer::UNSAT) { continue; }
 
         PTRef simpl_cand = utils.simplifyMax(cand);
-        if (checkWellFounded(cand, logic, vars)) {
+        if (simpl_cand == logic.getTerm_true()) { continue; }
+        if (checkWellFounded(simpl_cand, logic, vars)) {
             strictCandidates.push(simpl_cand);
         } else {
             for (auto sink_cand : sink_disjuncts) {
@@ -470,6 +472,7 @@ PTRef constructTransitionInvariantCandidates(PTRef init, PTRef transition, PTRef
     }
     std::vector<PTRef> checked_states;
     // This if calculates the states reachable in 1 <= n <= num-1 transitions
+    PTRef checked = init;
     if (depth > 1) {
         vec<PTRef> temp_vars;
         for (auto var : vars) {
@@ -477,8 +480,6 @@ PTRef constructTransitionInvariantCandidates(PTRef init, PTRef transition, PTRef
         }
         checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(
             QuantifierElimination(logic).keepOnly(logic.mkAnd(init, logic.mkAnd(deterministic_trace)), temp_vars), 1));
-        std::cout << "sink: " << logic.pp(logic.mkAnd(init, logic.mkAnd(deterministic_trace))) << std::endl;
-        std::cout << "sink: " << logic.pp(checked_states[0]) << std::endl;
     }
     checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(sink, depth));
     // sink is updated, representing states that are guaranteed to reach termination
@@ -518,12 +519,6 @@ PTRef constructTransitionInvariantCandidates(PTRef init, PTRef transition, PTRef
 std::tuple<ReachabilityNonterm::Answer, PTRef>
 ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options const & witnesses, ArithLogic & logic,
                                std::vector<PTRef> const & vars, bool DETERMINISTIC_TRANSITION) {
-
-    std::cout << "Analyzing TS" << std::endl;
-    std::cout << "Init: " << logic.pp(init) << std::endl;
-    std::cout << "Transition: " << logic.pp(transition) << std::endl;
-    std::cout << "Sink: " << logic.pp(sink) << std::endl;
-
     vec<PTRef> strictCandidates;
     while (true) {
         // TODO: Do smth with exponential transition growth in some cases via blocks...
@@ -534,7 +529,6 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
         // Check if sink states are reachable within TS
         auto res = engine->solve(*graph);
         if (res.getAnswer() == VerificationAnswer::UNSAFE) {
-            std::cout << "UNSAFE" << std::endl;
             // When sink states are reachable, extract the number of transitions needed to reach the sink states
             uint num = res.getInvalidityWitness().getDerivation().size() - 3;
             // Construct the logical formula representing the trace:
@@ -591,6 +585,7 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                 }
             }
 
+            PTRef temp_init = init;
             PTRef temp_tr = transition;
             if (j == 0) {
                 // If transitions were deterministic, initial states are blocked
@@ -607,7 +602,7 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
             // When it is the case, TS is terminating
             if (SMTsolver.check() == SMTSolver::Answer::UNSAT) {
                 std::cout << "Init and Transition" << std::endl;
-                PTRef itp = constructTransitionInvariantCandidates(init, temp_tr, sink, num, logic, vars);
+                PTRef itp = constructTransitionInvariantCandidates(temp_init, temp_tr, sink, num, logic, vars);
                 auto cands = extractWellFoundedCandidates(itp, sink, logic, vars);
                 return {Answer::YES, cands.size() > 0 ? logic.mkOr(cands) : logic.getTerm_false()};
             }
