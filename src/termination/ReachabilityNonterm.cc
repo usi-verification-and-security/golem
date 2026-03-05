@@ -599,9 +599,7 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
             // When it is the case, TS is terminating
             if (SMTsolver.check() == SMTSolver::Answer::UNSAT) {
                 std::cout << "Init and Transition" << std::endl;
-                PTRef itp = constructTransitionInvariantCandidates(init, temp_tr, sink, num, logic, vars);
-                auto cands = extractWellFoundedCandidates(itp, sink, logic, vars);
-                return {Answer::YES, cands.size() > 0 ? logic.mkOr(cands) : logic.getTerm_false()};
+                return {Answer::YES, logic.getTerm_false()};
             }
 
             // This is an extension of the approach, constructing TrInv and attempting to prove termination
