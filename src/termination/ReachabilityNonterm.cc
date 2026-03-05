@@ -740,7 +740,7 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                     if (answer == Answer::YES) {
                         smt_checker.resetSolver();
                         // TODO: Need to change TrInv, adding found subinv in a better way
-                        strictCandidates.push(subinv);
+                        // strictCandidates.push(subinv);
                         // TODO: It should work for  subinv \/ TrInv, but for some reason it does not
                         //    particularly, weaker TrInv seems to failing more often then stronger TrInv :(
                         smt_checker.assertProp(logic.mkAnd({noncoveredStates, logic.mkOr(subinv, id),
