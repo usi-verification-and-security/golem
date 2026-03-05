@@ -603,7 +603,7 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                 if ( j==0 ) {
                     PTRef itp = constructTransitionInvariantCandidates(terminatingStates, transition, sink, num, logic, vars);
                     auto cands = extractWellFoundedCandidates(itp, sink, logic, vars);
-                    std::cout << "CANDIDATES: " << logic.pp(logic.mkOr(cands)) << std::endl;
+                    // std::cout << "CANDIDATES: " << logic.pp(logic.mkOr(cands)) << std::endl;
                     return {Answer::YES, cands.size() == 0 ? logic.getTerm_false() : logic.mkOr(cands)};
                 } else {
                     PTRef block = TimeMachine(logic).sendFlaThroughTime(Result, -j);
