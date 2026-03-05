@@ -599,18 +599,20 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
             // We check if init state is blocked (it's impossible to make a transition from initial state)
             // When it is the case, TS is terminating
             if (SMTsolver.check() == SMTSolver::Answer::UNSAT) {
-                std::cout << "Init and Transition" << std::endl;
-                if ( j==0 ) {
-                    PTRef itp = constructTransitionInvariantCandidates(terminatingStates, transition, sink, num, logic, vars);
-                    auto cands = extractWellFoundedCandidates(itp, sink, logic, vars);
-                    // std::cout << "CANDIDATES: " << logic.pp(logic.mkOr(cands)) << std::endl;
-                    return {Answer::YES, cands.size() == 0 ? logic.getTerm_false() : logic.mkOr(cands)};
-                } else {
-                    PTRef block = TimeMachine(logic).sendFlaThroughTime(Result, -j);
-                    PTRef itp = constructTransitionInvariantCandidates(block, temp_tr, sink, num, logic, vars);
-                    auto cands = extractWellFoundedCandidates(itp, sink, logic, vars);
-                    return {Answer::YES, cands.size() == 0 ? logic.getTerm_false() : logic.mkOr(cands)};
-                }
+                std::cout << "Init and Transition " << num << std::endl;
+                // if ( j==0 ) {
+                //     std::cout << "Init"  << std::endl;
+                //     std::cout << "TermSt: " << logic.pp(terminatingStates)  << std::endl;
+                //     PTRef itp = constructTransitionInvariantCandidates(terminatingStates, transition, sink, num, logic, vars);
+                //     auto cands = extractWellFoundedCandidates(itp, sink, logic, vars);
+                //     return {Answer::YES, cands.size() == 0 ? logic.getTerm_false() : logic.mkOr(cands)};
+                // } else {
+                //     std::cout << "Tr"  << std::endl;
+                //     PTRef block = TimeMachine(logic).sendFlaThroughTime(Result, -j);
+                //     PTRef itp = constructTransitionInvariantCandidates(block, temp_tr, sink, num-j, logic, vars);
+                //     auto cands = extractWellFoundedCandidates(itp, sink, logic, vars);
+                //     return {Answer::YES, cands.size() == 0 ? logic.getTerm_false() : logic.mkOr(cands)};
+                // }
                 return {Answer::YES, logic.getTerm_false()};
             }
 
