@@ -895,7 +895,7 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                            logic.mkAnd({logic.mkOr(new_inv, id), TimeMachine(logic).sendFlaThroughTime(temp_tr, 1),
                                logic.mkNot(shiftOnlyNextVars(new_inv, vars, logic))}),
                        vars);
-                        sink = TermUtils(logic).simplifyMax(logic.mkOr(sink, logic.mkNot(reached)));
+                        sink = TermUtils(logic).simplifyMax(logic.mkOr(sink, reached));
                         // std::cout << "New sink: " << logic.pp(sink) << std::endl;
                         smt_checker.assertProp(logic.mkAnd(logic.mkNot(sub), reached));
                         assert(smt_checker.check() == SMTSolver::Answer::UNSAT);
