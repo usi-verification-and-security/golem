@@ -746,13 +746,15 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                     vars);
                 // States that can not reach non-terminating state in less then or n transitions:
                 PTRef T = logic.mkNot(F);
+                // std::cout << "F: " << logic.pp(F) << std::endl;
+                // std::cout << "T: " << logic.pp(T) << std::endl;
 
                 SMTsolver.resetSolver();
                 SMTsolver.assertProp(logic.mkAnd({T, temp_tr, TimeMachine(logic).sendFlaThroughTime(sink, num)}));
                 // This check guarantees the states T (states that cannot reach nonterminating states in n transition)
                 // contain the states that terminate in at least one transition (otherwise system is nonterminating)
                 // because there doesn't exist state that can reach sink states.
-                if (SMTsolver.check() == SMTSolver::Answer::UNSAT) { return {Answer::NO, init}; }
+                if (SMTsolver.check() == SMTSolver::Answer::UNSAT) { continue; }
                 // The procedure to construct transition invariants is executed
                 PTRef itp = constructTransitionInvariantCandidates(T, temp_tr, sink, num, logic, vars);
 
