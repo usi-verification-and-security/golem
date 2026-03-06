@@ -17,6 +17,117 @@
 
 namespace golem::termination {
 
+// Function to convert UFLIA formula into the DNF
+PTRef dnfize(PTRef input, ArithLogic & logic) {
+    int MAX_SIZE = 1000;
+    TermUtils utils{logic};
+    int n = 1;
+    if (logic.isAnd(input)) {
+        // x /\ (y \/ v) <=> (x /\ y) \/ (x /\ v)
+        auto juncts = utils.getTopLevelConjuncts(input);
+
+        std::vector<vec<PTRef>> subjuncts;
+        for (int i = 0; i < juncts.size(); i++) {
+            // every conjunct is being dnfized
+            PTRef after_junct = dnfize(juncts[i], logic);
+            // if any of the conjuncts is a disjunction, then the whole formula is converted into disjunction of conjs
+            if (logic.isOr(after_junct)) {
+                if (n>MAX_SIZE) {subjuncts.push_back({utils.getTopLevelDisjuncts(after_junct)[0]});}
+                else { subjuncts.push_back(utils.getTopLevelDisjuncts(after_junct)); }
+            } else {
+                subjuncts.push_back({after_junct});
+            }
+            n*=subjuncts.back().size();
+        }
+        std::vector<std::vector<PTRef>> output{{logic.getTerm_true()}};
+        // Iterate over all subjuncts, composing a resulting formula
+        for (uint i = 0; i < subjuncts.size(); i++) {
+            // if subjuncts size is 1, it is added to every conjunct
+            if (subjuncts[i].size() == 1) {
+                for (uint j = 0; j < output.size(); j++) {
+                    output[j].push_back(subjuncts[i][0]);
+                }
+                // else, if some subjunct is a disjunction composed of n disjuncts, then conjunctions should be split
+                // into n disjunctions (corresponding to each disjunct)
+            } else if (subjuncts[i].size() > 1) {
+                uint size = output.size();
+                for (int j = 0; j < subjuncts[i].size() - 1; j++) {
+                    // first we extend number of disjuncts (initially m) into m*n
+                    for (uint k = 0; k < size; k++) {
+                        output.push_back(output[k]);
+                    }
+                }
+
+                // then every disjunct is conjoined with corresponding disjunct
+                for (int j = 0; j < subjuncts[i].size(); j++) {
+                    for (uint k = 0; k < size; k++) {
+                        output[j * size + k].push_back(subjuncts[i][j]);
+                    }
+                }
+            } else {
+                assert(false);
+            }
+        }
+        vec<PTRef> disjuncts;
+        for (auto sub : output) {
+            disjuncts.push(logic.mkAnd(sub));
+        }
+        return logic.mkOr(disjuncts);
+        // if formula is a disjunction, every disjunct should be checked to move all disjunctions to top level
+    } else if (logic.isOr(input)) {
+        // x \/ (y /\ (z \/ v)) <=> x \/ (y /\ z) \/ (y /\ v)
+        auto juncts = utils.getTopLevelDisjuncts(input);
+        vec<PTRef> postprocessJuncts;
+        for (int i = 0; i < (int)juncts.size(); i++) {
+            PTRef after_junct = dnfize(juncts[i], logic);
+            if (logic.isOr(after_junct)) {
+                auto subjuncts = utils.getTopLevelDisjuncts(after_junct);
+                for (auto subjunct : subjuncts) {
+                    postprocessJuncts.push(subjunct);
+                }
+                n+=subjuncts.size();
+                if (n>MAX_SIZE) break;
+
+            } else {
+                postprocessJuncts.push(after_junct);
+                n+=1;
+                if (n>MAX_SIZE) break;
+            }
+        }
+        return logic.mkOr(postprocessJuncts);
+        // if formula is a negation, then the results of negation is calculated for conjunction, disjunction and
+        // EQUALITY.
+    } else if (logic.isNot(input)) {
+        PTRef rev = utils.simplifyMax(logic.mkNot(input));
+        if (logic.isAnd(rev)) {
+            // !(x /\ y) <=> !x \/ !y
+            auto subjuncts = utils.getTopLevelConjuncts(rev);
+            vec<PTRef> postprocessJuncts;
+            for (int i = 0; i < (int)subjuncts.size(); i++) {
+                postprocessJuncts.push(logic.mkNot(subjuncts[i]));
+            }
+            return dnfize(logic.mkOr(postprocessJuncts), logic);
+        } else if (logic.isOr(rev)) {
+            // !(x \/ y) <=> !x /\ !y
+            auto subjuncts = utils.getTopLevelDisjuncts(rev);
+            vec<PTRef> postprocessJuncts;
+            for (int i = 0; i < (int)subjuncts.size(); i++) {
+                postprocessJuncts.push(logic.mkNot(subjuncts[i]));
+            }
+            return dnfize(logic.mkAnd(postprocessJuncts), logic);
+        } else if (logic.isNumEq(rev)) {
+            auto it = logic.getPterm(rev).begin();
+            vec<PTRef> subjuncts;
+            // x != y <=> x <= y-1 \/ x >= y+1
+            subjuncts.push(logic.mkGeq(it[0], logic.mkPlus(it[1], logic.getTerm_IntOne())));
+            subjuncts.push(logic.mkLeq(it[0], logic.mkPlus(it[1], logic.getTerm_IntMinusOne())));
+            return logic.mkOr(subjuncts);
+        }
+    }
+    // checkW
+    return input;
+}
+
 // Function to convert != into disjunction of leq
 PTRef unwrapEqs(PTRef input, ArithLogic & logic) {
     TermUtils utils{logic};
@@ -394,7 +505,8 @@ vec<PTRef> extractWellFoundedCandidates(PTRef itp, PTRef sink, ArithLogic & logi
     SMTSolver smt_solver(logic, SMTSolver::WitnessProduction::NONE);
 
     auto sink_disjuncts = utils.getTopLevelDisjuncts(utils.toDNF(unwrapEqs(logic.mkNot(sink), logic)));
-    PTRef dnfized_interpolant = unwrapEqs(itp, logic);
+    PTRef dnfized_interpolant = utils.simplifyMax(unwrapEqs(itp, logic));
+    // std::cout<< "Itp: " <<logic.pp(dnfized_interpolant) << std::endl;
     dnfized_interpolant = utils.toDNF(dnfized_interpolant);
 
     vec<PTRef> candidates = utils.getTopLevelDisjuncts(dnfized_interpolant);
@@ -518,6 +630,10 @@ PTRef constructTransitionInvariantCandidates(PTRef init, PTRef transition, PTRef
 std::tuple<ReachabilityNonterm::Answer, PTRef>
 ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options const & witnesses, ArithLogic & logic,
                                std::vector<PTRef> const & vars, bool DETERMINISTIC_TRANSITION) {
+    // std::cout << "Analyzing TS" << std::endl;
+    // std::cout << "Init: " << logic.pp(init) << std::endl;
+    // std::cout << "Transition: " << logic.pp(transition) << std::endl;
+    // std::cout << "Sink: " << logic.pp(sink) << std::endl;
     vec<PTRef> strictCandidates;
     while (true) {
         // TODO: Do smth with exponential transition growth in some cases via blocks...
@@ -599,15 +715,16 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
             // We check if init state is blocked (it's impossible to make a transition from initial state)
             // When it is the case, TS is terminating
             if (SMTsolver.check() == SMTSolver::Answer::UNSAT) {
-                std::cout << "Init and Transition " << num << std::endl;
+                // std::cout << "Init and Transition " << num << std::endl;
                 // if ( j==0 ) {
-                //     std::cout << "Init"  << std::endl;
-                //     std::cout << "TermSt: " << logic.pp(terminatingStates)  << std::endl;
+                //     // std::cout << "Init"  << std::endl;
+                //     // std::cout << "TermSt: " << logic.pp(terminatingStates)  << std::endl;
                 //     PTRef itp = constructTransitionInvariantCandidates(terminatingStates, transition, sink, num, logic, vars);
                 //     auto cands = extractWellFoundedCandidates(itp, sink, logic, vars);
+                //     // std::cout << "Cands: " << logic.pp(logic.mkOr(cands)) << std::endl;
                 //     return {Answer::YES, cands.size() == 0 ? logic.getTerm_false() : logic.mkOr(cands)};
                 // } else {
-                //     std::cout << "Tr"  << std::endl;
+                //     // std::cout << "Tr"  << std::endl;
                 //     PTRef block = TimeMachine(logic).sendFlaThroughTime(Result, -j);
                 //     PTRef itp = constructTransitionInvariantCandidates(block, temp_tr, sink, num-j, logic, vars);
                 //     auto cands = extractWellFoundedCandidates(itp, sink, logic, vars);
@@ -641,11 +758,23 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
 
                 // Extract well-founded disjuncts from the transition invariant
                 auto newCands = extractWellFoundedCandidates(itp, sink, logic, vars);
-                if (newCands.size() == 0) continue;
-
+                // if (newCands.size() == 0) continue;
+                SMTsolver.resetSolver();
+                int change = 0;
+                int pre = newCands.size() ;
+                PTRef oldInv = logic.mkOr(strictCandidates);
+                //TODO: Think how to minimize cands in a logical way
                 for (auto cand : newCands) {
-                    strictCandidates.push(cand);
+                    SMTsolver.resetSolver();
+                    SMTsolver.assertProp(logic.mkAnd(cand, logic.mkNot(oldInv)));
+                    if (SMTsolver.check() == SMTSolver::Answer::SAT) {
+                        strictCandidates.push(cand);
+                        change++;
+                    }
+                    // strictCandidates.push(cand);
                 }
+                if (change == 0) continue;
+                // std::cout << "Change: " << change << " Pre: " << pre << std::endl;
                 PTRef trInv = logic.mkOr(strictCandidates);
                 PTRef id = getId(vars, logic);
 
@@ -692,6 +821,7 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                     logic.mkAnd({logic.mkOr(trInv, id), TimeMachine(logic).sendFlaThroughTime(temp_tr, 1),
                                  logic.mkNot(shiftOnlyNextVars(trInv, vars, logic))}),
                     vars);
+                std::cout << "Noncovered states: " << logic.pp(noncoveredStates) << std::endl;
 
                 // We check if the states that are not covered by TrInv are reachable
                 auto graph = constructHyperGraph(init, transition, logic.mkAnd(noncoveredStates, logic.mkNot(sink)),
@@ -755,6 +885,13 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                         smt_checker.resetSolver();
                         // TODO: Need to change TrInv, adding found subinv in a better way
                         strictCandidates.push(subinv);
+                        //  PTRef sub = QuantifierElimination(logic).keepOnly(
+                        //     logic.mkAnd({logic.mkOr(subinv, id), TimeMachine(logic).sendFlaThroughTime(temp_tr, 1),
+                        //         logic.mkNot(shiftOnlyNextVars(subinv, vars, logic))}),
+                        // vars);
+                        // smt_checker.assertProp(logic.mkAnd(logic.mkNot(sub), reached));
+                        // assert(smt_checker.check() == SMTSolver::Answer::UNSAT);
+                        // smt_checker.resetSolver();
                         // TODO: It should work for  subinv \/ TrInv, but for some reason it does not
                         //    particularly, weaker TrInv seems to failing more often then stronger TrInv :(
                         smt_checker.assertProp(logic.mkAnd({noncoveredStates, logic.mkOr(subinv, id),
