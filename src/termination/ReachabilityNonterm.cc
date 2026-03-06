@@ -821,7 +821,7 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                     logic.mkAnd({logic.mkOr(trInv, id), TimeMachine(logic).sendFlaThroughTime(temp_tr, 1),
                                  logic.mkNot(shiftOnlyNextVars(trInv, vars, logic))}),
                     vars);
-                std::cout << "Noncovered states: " << logic.pp(noncoveredStates) << std::endl;
+                // std::cout << "Noncovered states: " << logic.pp(noncoveredStates) << std::endl;
 
                 // We check if the states that are not covered by TrInv are reachable
                 auto graph = constructHyperGraph(init, transition, logic.mkAnd(noncoveredStates, logic.mkNot(sink)),
@@ -884,14 +884,23 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                     if (answer == Answer::YES) {
                         smt_checker.resetSolver();
                         // TODO: Need to change TrInv, adding found subinv in a better way
+                        // strictCandidates.clear();
+                        // strictCandidates.push(logic.mkAnd(logic.mkNot(noncoveredStates), trInv));
                         strictCandidates.push(subinv);
-                        //  PTRef sub = QuantifierElimination(logic).keepOnly(
-                        //     logic.mkAnd({logic.mkOr(subinv, id), TimeMachine(logic).sendFlaThroughTime(temp_tr, 1),
-                        //         logic.mkNot(shiftOnlyNextVars(subinv, vars, logic))}),
-                        // vars);
-                        // smt_checker.assertProp(logic.mkAnd(logic.mkNot(sub), reached));
-                        // assert(smt_checker.check() == SMTSolver::Answer::UNSAT);
-                        // smt_checker.resetSolver();
+
+                        // strictCandidates.push(logic.mkAnd(logic.mkNot(sub), subinv));
+                        smt_checker.resetSolver();
+                        PTRef new_inv = logic.mkOr(strictCandidates);
+                        PTRef sub = QuantifierElimination(logic).keepOnly(
+                           logic.mkAnd({logic.mkOr(new_inv, id), TimeMachine(logic).sendFlaThroughTime(temp_tr, 1),
+                               logic.mkNot(shiftOnlyNextVars(new_inv, vars, logic))}),
+                       vars);
+                        sink = TermUtils(logic).simplifyMax(logic.mkOr(sink, logic.mkNot(reached)));
+                        // std::cout << "New sink: " << logic.pp(sink) << std::endl;
+                        smt_checker.assertProp(logic.mkAnd(logic.mkNot(sub), reached));
+                        assert(smt_checker.check() == SMTSolver::Answer::UNSAT);
+                        smt_checker.resetSolver();
+
                         // TODO: It should work for  subinv \/ TrInv, but for some reason it does not
                         //    particularly, weaker TrInv seems to failing more often then stronger TrInv :(
                         smt_checker.assertProp(logic.mkAnd({noncoveredStates, logic.mkOr(subinv, id),
