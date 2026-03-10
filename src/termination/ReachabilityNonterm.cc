@@ -760,10 +760,8 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
 
                 // Extract well-founded disjuncts from the transition invariant
                 auto newCands = extractWellFoundedCandidates(itp, sink, logic, vars);
-                // if (newCands.size() == 0) continue;
                 SMTsolver.resetSolver();
                 int change = 0;
-                //TODO: Think how to minimize cands in a logical way
                 for (auto cand : newCands) {
                     SMTsolver.resetSolver();
                     SMTsolver.assertProp(logic.mkAnd(cand, logic.mkNot(logic.mkOr(strictCandidates))));
@@ -771,7 +769,6 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                         strictCandidates.push(cand);
                         change++;
                     }
-                    // strictCandidates.push(cand);
                 }
                 if (change == 0) continue;
                 // std::cout << "Change: " << change << " Pre: " << pre << std::endl;
@@ -885,8 +882,8 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                     if (answer == Answer::YES) {
                         smt_checker.resetSolver();
                         // TODO: Need to change TrInv, adding found subinv in a better way
-                        // strictCandidates.clear();
-                        // strictCandidates.push(logic.mkAnd(logic.mkNot(noncoveredStates), trInv));
+                        strictCandidates.clear();
+                        strictCandidates.push(logic.mkAnd(logic.mkNot(noncoveredStates), trInv));
                         strictCandidates.push(subinv);
 
                         // strictCandidates.push(logic.mkAnd(logic.mkNot(sub), subinv));
