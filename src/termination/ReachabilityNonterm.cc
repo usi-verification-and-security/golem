@@ -763,12 +763,10 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                 // if (newCands.size() == 0) continue;
                 SMTsolver.resetSolver();
                 int change = 0;
-                PTRef oldInv = logic.mkOr(strictCandidates);
                 //TODO: Think how to minimize cands in a logical way
                 for (auto cand : newCands) {
                     SMTsolver.resetSolver();
-                    SMTsolver.assertProp(logic.mkAnd(cand, logic.mkNot(oldInv)));
-                    // SMTsolver.assertProp(logic.mkAnd(cand, logic.mkNot(logic.mkOr(strictCandidates))));
+                    SMTsolver.assertProp(logic.mkAnd(cand, logic.mkNot(logic.mkOr(strictCandidates))));
                     if (SMTsolver.check() == SMTSolver::Answer::SAT) {
                         strictCandidates.push(cand);
                         change++;
