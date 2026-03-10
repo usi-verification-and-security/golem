@@ -506,7 +506,7 @@ vec<PTRef> extractWellFoundedCandidates(PTRef itp, PTRef sink, ArithLogic & logi
 
     auto sink_disjuncts = utils.getTopLevelDisjuncts(utils.toDNF(unwrapEqs(logic.mkNot(sink), logic)));
     PTRef dnfized_interpolant = utils.simplifyMax(unwrapEqs(itp, logic));
-    // std::cout<< "Itp: " <<logic.pp(dnfized_interpolant) << std::endl;
+    std::cout<< "Itp: " <<logic.pp(dnfized_interpolant) << std::endl;
     dnfized_interpolant = utils.toDNF(dnfized_interpolant);
 
     vec<PTRef> candidates = utils.getTopLevelDisjuncts(dnfized_interpolant);
@@ -715,7 +715,7 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
             // We check if init state is blocked (it's impossible to make a transition from initial state)
             // When it is the case, TS is terminating
             if (SMTsolver.check() == SMTSolver::Answer::UNSAT) {
-                // std::cout << "Init and Transition " << num << std::endl;
+                std::cout << "Init and Transition " << num << std::endl;
                 // if ( j==0 ) {
                 //     // std::cout << "Init"  << std::endl;
                 //     // std::cout << "TermSt: " << logic.pp(terminatingStates)  << std::endl;
@@ -730,7 +730,7 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                 //     auto cands = extractWellFoundedCandidates(itp, sink, logic, vars);
                 //     return {Answer::YES, cands.size() == 0 ? logic.getTerm_false() : logic.mkOr(cands)};
                 // }
-                return {Answer::YES, logic.getTerm_false()};
+                return {Answer::YES, logic.mkOr(strictCandidates)};
             }
 
             // This is an extension of the approach, constructing TrInv and attempting to prove termination
@@ -763,12 +763,11 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                 // if (newCands.size() == 0) continue;
                 SMTsolver.resetSolver();
                 int change = 0;
-                int pre = newCands.size() ;
                 PTRef oldInv = logic.mkOr(strictCandidates);
                 //TODO: Think how to minimize cands in a logical way
                 for (auto cand : newCands) {
                     SMTsolver.resetSolver();
-                    SMTsolver.assertProp(logic.mkAnd(cand, logic.mkNot(oldInv)));
+                    SMTsolver.assertProp(logic.mkAnd(cand, logic.mkNot(logic.mkOr(strictCandidates))));
                     if (SMTsolver.check() == SMTSolver::Answer::SAT) {
                         strictCandidates.push(cand);
                         change++;
@@ -836,6 +835,7 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                 auto res = engine->solve(*graph);
                 if (res.getAnswer() == VerificationAnswer::SAFE) {
                     std::cout << "States are unreachable\n";
+                    std::cout << "TrInv: " << logic.pp(trInv) << std::endl;
                     return {Answer::YES, trInv};
                 } else {
                     // Otherwise, if states not covered by TrInv are reachable, then the following procedure should
@@ -899,8 +899,8 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                        vars);
                         sink = TermUtils(logic).simplifyMax(logic.mkOr(sink, reached));
                         // std::cout << "New sink: " << logic.pp(sink) << std::endl;
-                        smt_checker.assertProp(logic.mkAnd(logic.mkNot(sub), reached));
-                        assert(smt_checker.check() == SMTSolver::Answer::UNSAT);
+                        // smt_checker.assertProp(logic.mkAnd(logic.mkNot(sub), reached));
+                        // assert(smt_checker.check() == SMTSolver::Answer::UNSAT);
                         smt_checker.resetSolver();
 
                         // TODO: It should work for  subinv \/ TrInv, but for some reason it does not
