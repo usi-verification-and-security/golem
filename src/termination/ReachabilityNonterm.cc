@@ -62,7 +62,6 @@ void unrollAtom(ArithLogic & logic, std::vector<PTRef> & coefs, PTRef atom, bool
     } else if (logic.isVar(atom)) {
         reverse ? coefs.push_back(logic.mkTimes(logic.getTerm_IntMinusOne(), atom)) : coefs.push_back(atom);
     } else if (logic.isTimes(atom)) {
-        auto it = logic.getPterm(atom).begin();
         auto size = coefs.size();
         assert(logic.getPterm(atom).size() == 2);
         auto [subatom, constant] = logic.splitTermToVarAndConst(atom);
@@ -431,9 +430,7 @@ bool determinismCheck(const PTRef & transition, Logic & logic, const std::vector
     // Tr(x,x') /\ Tr(x, x'') /\ ! x' = x''
     detChecker.assertProp(logic.mkAnd({transition, newTransition, logic.mkOr(neq)}));
 
-    if (detChecker.check() == SMTSolver::Answer::UNSAT) {
-        return true;
-    }
+    if (detChecker.check() == SMTSolver::Answer::UNSAT) { return true; }
     return false;
 }
 
