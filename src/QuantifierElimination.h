@@ -19,9 +19,9 @@ class QuantifierElimination {
 public:
     explicit QuantifierElimination(Logic & logic) : logic(logic) {}
 
-    PTRef eliminate(PTRef fla, PTRef var);
-    PTRef eliminate(PTRef fla, vec<PTRef> const & vars);
-    PTRef keepOnly(PTRef, vec<PTRef> const & vars);
+    PTRef eliminate(PTRef fla, PTRef var, PTRef* overapprox = nullptr);
+    PTRef eliminate(PTRef fla, vec<PTRef> const & vars, PTRef* overapprox = nullptr);
+    PTRef keepOnly(PTRef fla, vec<PTRef> const & vars, PTRef* overapprox = nullptr);
 
 private:
     Logic & logic;
