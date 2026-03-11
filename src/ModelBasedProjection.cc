@@ -7,6 +7,7 @@
 #include "ModelBasedProjection.h"
 
 #include "TermUtils.h"
+#include "utils/SmtSolver.h"
 
 #include <memory>
 
@@ -112,6 +113,63 @@ template<typename TIt> void normalizeEqualities(TIt begin, TIt end, ArithLogic &
 } // namespace
 
 namespace golem {
+
+// Build And(l | l in implicant U background)
+// If overapprox is not a nullptr, also build And(l | l in implicant U background, if nnf => l)
+PTRef ModelBasedProjection::get_mbp(
+    implicant_t implicant,
+    implicant_t const & background,
+    PTRef original_fla,
+    PTRef* overapprox) {
+    // Helpers
+    auto ptasgn_to_ptref = [&](PtAsgn literal) { return literal.sgn == l_True ? literal.tr : logic.mkNot(literal.tr); };
+    auto ptasgn_to_neg_ptref = [&](PtAsgn literal) { return literal.sgn == l_True ? logic.mkNot(literal.tr) : literal.tr; };
+
+    // Add the background
+    implicant.insert(implicant.end(), background.begin(), background.end());
+    postprocess(implicant, dynamic_cast<ArithLogic &>(logic));
+
+    // Build the underapproximation as a conjunction of all literals in the implicant + background.
+    vec<PTRef> under_conjuncts;
+    under_conjuncts.capacity(implicant.size());
+    for (PtAsgn const & lit : implicant) { under_conjuncts.push(ptasgn_to_ptref(lit)); }
+    auto under = logic.mkAnd(std::move(under_conjuncts));
+
+    if (overapprox == nullptr) {
+        return under;
+    }
+
+    // Here, we also need to build the over-approximation.
+
+    // Start with over = under,
+    // then, try progressively remove literals until (original_fla & !over) is unsatisfiable
+    SMTSolver solver(logic);
+    solver.assertProp(original_fla);
+    while (true) {
+        solver.push();
+        // Build a lemma Or (!l | l in implicant)
+        vec<PTRef> not_over;
+        not_over.capacity(implicant.size());
+        for (PtAsgn const & lit : implicant) { not_over.push(ptasgn_to_neg_ptref(lit)); }
+        solver.assertProp(logic.mkOr(std::move(not_over)));
+        if (solver.check() == SMTSolver::Answer::UNSAT) {
+            break;
+        }
+        // fetch the literals violated by the model
+        Model model = *(solver.getModel());
+        std::erase_if(implicant, [&](PtAsgn literal) {
+            return model.evaluate(ptasgn_to_ptref(literal)) == logic.getTerm_false();
+        });
+        solver.pop();
+    }
+
+    vec<PTRef> over_conjuncts;
+    postprocess(implicant, dynamic_cast<ArithLogic &>(logic));
+    for (PtAsgn const & lit : implicant) { over_conjuncts.push(ptasgn_to_ptref(lit)); }
+    *overapprox = logic.mkAnd(std::move(over_conjuncts));
+    return under;
+}
+
 void ModelBasedProjection::postprocess(implicant_t & literals, ArithLogic & lalogic) {
     LATermUtils(lalogic).simplifyConjunction(literals);
 }
@@ -263,6 +321,7 @@ ModelBasedProjection::implicant_t ModelBasedProjection::projectSingleVar(PTRef v
             return lalogic->isNot(lit) ? PtAsgn(lalogic->getPterm(lit)[0], l_False) : PtAsgn(lit, l_True);
         });
     } else {
+        // BMBP: TODO: here lower-bounds are always picked. we could heuristically pick the smallest side instead
         // pick the correct literal based on the model
         assert(lalogic->isConstant(model.evaluate(var)));
         // pick substitution from lower bounds
@@ -426,22 +485,24 @@ void checkImplicant(ModelBasedProjection::implicant_t const & implicant, Logic &
 }
 } // namespace
 
-PTRef ModelBasedProjection::keepOnly(PTRef fla, const vec<PTRef> & varsToKeep, Model & model) {
+PTRef ModelBasedProjection::keepOnly(PTRef fla, const vec<PTRef> & varsToKeep, Model & model, PTRef* overapprox) {
     auto allVars = TermUtils(logic).getVars(fla);
     vec<PTRef> toEliminate;
     for (PTRef var : allVars) {
         if (std::find(varsToKeep.begin(), varsToKeep.end(), var) == varsToKeep.end()) { toEliminate.push(var); }
     }
-    return project(fla, toEliminate, model);
+    return project(fla, toEliminate, model, overapprox);
 }
 
-PTRef ModelBasedProjection::project(PTRef fla, const vec<PTRef> & varsToEliminate, Model & model) {
+PTRef ModelBasedProjection::project(PTRef fla, const vec<PTRef> & varsToEliminate, Model & model, PTRef* overapprox) {
     vec<PTRef> tmp;
     varsToEliminate.copyTo(tmp);
     auto boolEndIt = std::stable_partition(tmp.begin(), tmp.end(), [&](PTRef var) {
         assert(logic.isVar(var));
         return logic.hasSortBool(var);
     });
+
+    auto original_fla = fla;
 
     if (boolEndIt != tmp.begin()) { // there are some booleans
         MapWithKeys<PTRef, PTRef, PTRefHash> subst;
@@ -472,28 +533,17 @@ PTRef ModelBasedProjection::project(PTRef fla, const vec<PTRef> & varsToEliminat
     checkImplicant(implicant, logic, model);
     if (logic.hasIntegers()) {
         implicant = projectIntegerVars(boolEndIt, tmp.end(), std::move(implicant), model);
-        implicant.insert(implicant.end(), withoutVarsToEliminate.begin(), withoutVarsToEliminate.end());
-        postprocess(implicant, dynamic_cast<ArithLogic &>(logic));
-        tmp.clear();
-        for (PtAsgn literal : implicant) {
-            tmp.push(literal.sgn == l_True ? literal.tr : logic.mkNot(literal.tr));
-        }
-        return logic.mkAnd(std::move(tmp));
+    } else {
+        for (auto it = boolEndIt; it != tmp.end(); ++it) {
+            PTRef var = *it;
+            // std::cout << "Eliminating " << logic.printTerm(var) << std::endl;
+            implicant = projectSingleVar(var, std::move(implicant), model);
+            // dumpImplicant(std::cout, implicant);
+            checkImplicant(implicant, logic, model);
     }
-    for (auto it = boolEndIt; it != tmp.end(); ++it) {
-        PTRef var = *it;
-        // std::cout << "Eliminating " << logic.printTerm(var) << std::endl;
-        implicant = projectSingleVar(var, std::move(implicant), model);
-        // dumpImplicant(std::cout, implicant);
-        checkImplicant(implicant, logic, model);
     }
-    implicant.insert(implicant.end(), withoutVarsToEliminate.begin(), withoutVarsToEliminate.end());
-    postprocess(implicant, dynamic_cast<ArithLogic &>(logic));
-    tmp.clear();
-    for (PtAsgn literal : implicant) {
-        tmp.push(literal.sgn == l_True ? literal.tr : logic.mkNot(literal.tr));
-    }
-    return logic.mkAnd(std::move(tmp));
+    // Add background literals and build the formula. If requested, set *overapprox.
+    return get_mbp(std::move(implicant), withoutVarsToEliminate, original_fla, overapprox);
 }
 
 void ModelBasedProjection::dumpImplicant(std::ostream & out, implicant_t const & implicant) {
