@@ -42,12 +42,12 @@ PTRef unwrapEqs(PTRef input, ArithLogic & logic) {
         if (logic.isOr(rev)) return logic.mkOr(subjuncts);
         assert(false);
     } else if (logic.isNumEq(rev) && reverse) {
-        auto it = logic.getPterm(rev).begin();
-        vec<PTRef> subjuncts;
+        PTRef lhs = logic.getPterm(rev)[0];
+        PTRef rhs = logic.getPterm(rev)[1];
         // x != y <=> x <= y-1 \/ x >= y+1
-        subjuncts.push(logic.mkGeq(it[0], logic.mkPlus(it[1], logic.getTerm_IntOne())));
-        subjuncts.push(logic.mkLeq(it[0], logic.mkPlus(it[1], logic.getTerm_IntMinusOne())));
-        return logic.mkOr(subjuncts);
+        PTRef geq = logic.mkGeq(lhs, logic.mkPlus(rhs, logic.getTerm_IntOne()));
+        PTRef leq = logic.mkLeq(lhs, logic.mkPlus(rhs, logic.getTerm_IntMinusOne()));
+        return logic.mkOr(geq, leq);
     }
 
     return input;
@@ -65,14 +65,7 @@ void unrollAtom(ArithLogic & logic, std::vector<PTRef> & coefs, PTRef atom, bool
         auto it = logic.getPterm(atom).begin();
         auto size = coefs.size();
         assert(logic.getPterm(atom).size() == 2);
-        PTRef constant, subatom;
-        if (logic.isConstant(it[0])) {
-            constant = it[0];
-            subatom = it[1];
-        } else {
-            constant = it[1];
-            subatom = it[0];
-        }
+        auto [subatom, constant] = logic.splitTermToVarAndConst(atom);
         assert(logic.isConstant(constant));
         unrollAtom(logic, coefs, subatom, reverse);
         for (auto i = size; i < coefs.size(); i++) {
@@ -151,7 +144,6 @@ void lequalize(PTRef conjunct, vec<PTRef> & leqs, vec<PTRef> & bools, ArithLogic
 }
 
 bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const & vars) {
-    SMTSolver solver(logic, SMTSolver::WitnessProduction::NONE);
 
     assert(!logic.isOr(formula));
 
@@ -175,6 +167,7 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
         lequalize(conjunct, leq_conjuncts, bools, logic);
     }
 
+    SMTSolver solver(logic, SMTSolver::WitnessProduction::NONE);
     if (bools.size() > 0 || leq_conjuncts.size() == 0) {
         solver.assertProp(
             logic.mkAnd(logic.mkAnd(bools), TimeMachine(logic).sendFlaThroughTime(logic.mkAnd(bools), 1)));
@@ -439,7 +432,6 @@ bool determinismCheck(const PTRef & transition, Logic & logic, const std::vector
     detChecker.assertProp(logic.mkAnd({transition, newTransition, logic.mkOr(neq)}));
 
     if (detChecker.check() == SMTSolver::Answer::UNSAT) {
-        std::cout << "DETERMINISTIC;" << std::endl;
         return true;
     }
     return false;
@@ -449,7 +441,6 @@ bool determinismCheck(const PTRef & transition, Logic & logic, const std::vector
 PTRef getId(const std::vector<PTRef> & vars, Logic & logic) {
     // Start buiding the trace that reaches sink states
     vec<PTRef> eq_vars;
-    // Constructing vectors of equations x^(j-1) = x^(j)
     for (auto var : vars) {
         PTRef curr = TimeMachine(logic).sendVarThroughTime(var, 0);
         PTRef next = TimeMachine(logic).sendVarThroughTime(var, 1);
