@@ -654,8 +654,6 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                 formulas.push_back(TimeMachine(logic).sendFlaThroughTime(transition, j));
             }
 
-            PTRef terminatingStates = QuantifierElimination(logic).keepOnly(
-                logic.mkAnd({logic.mkAnd(formulas), TimeMachine(logic).sendFlaThroughTime(sink, num)}), vars);
 
             PTRef transitions =
                 logic.mkAnd({init, logic.mkAnd(formulas), TimeMachine(logic).sendFlaThroughTime(sink, num)});
@@ -666,14 +664,15 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
             assert(SMTsolver.check() == SMTSolver::Answer::SAT);
 
             SMTsolver.resetSolver();
-            SMTsolver.assertProp(logic.mkAnd({logic.mkAnd(terminatingStates, init), logic.mkAnd(formulas),
+            SMTsolver.assertProp(logic.mkAnd({ init, logic.mkAnd(formulas),
                                               logic.mkNot(TimeMachine(logic).sendFlaThroughTime(sink, num))}));
             PTRef Result = TimeMachine(logic).sendFlaThroughTime(sink, num);
 
             uint j = 0;
+            bool nondet_check = !DETERMINISTIC_TRANSITION && SMTsolver.check() == SMTSolver::Answer::SAT;
             // Traversing trace from the Bad to Init, detecting the last transition where some variables
             // were assigned nondetermenistically (Only if it is possible to reach some states other then sink in n trs)
-            if (!DETERMINISTIC_TRANSITION && SMTsolver.check() == SMTSolver::Answer::SAT) {
+            if (nondet_check) {
                 for (j = num; j > 0; j--) {
                     vec<PTRef> prev_vars;
                     // Constructing vectors of variables x^(j-1) and x^(j)
@@ -707,6 +706,8 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
             if (j == 0) {
                 // TODO: Try faster QE
                 // If transitions were deterministic, initial states are blocked
+                PTRef terminatingStates = nondet_check ? Result : QuantifierElimination(logic).keepOnly(
+                    logic.mkAnd({logic.mkAnd(formulas), TimeMachine(logic).sendFlaThroughTime(sink, num)}), vars);
                 init = logic.mkAnd(init, logic.mkNot(terminatingStates));
             } else {
                 // Otherwise, states leading to termination are blocked from transition
