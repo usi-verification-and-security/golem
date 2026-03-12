@@ -721,20 +721,6 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
             // When it is the case, TS is terminating
             if (SMTsolver.check() == SMTSolver::Answer::UNSAT) {
                 std::cout << "Init and Transition " << num << std::endl;
-                // if ( j==0 ) {
-                //     // std::cout << "Init"  << std::endl;
-                //     // std::cout << "TermSt: " << logic.pp(terminatingStates)  << std::endl;
-                //     PTRef itp = constructTransitionInvariantCandidates(terminatingStates, transition, sink, num, logic, vars);
-                //     auto cands = extractWellFoundedCandidates(itp, sink, logic, vars);
-                //     // std::cout << "Cands: " << logic.pp(logic.mkOr(cands)) << std::endl;
-                //     return {Answer::YES, cands.size() == 0 ? logic.getTerm_false() : logic.mkOr(cands)};
-                // } else {
-                //     // std::cout << "Tr"  << std::endl;
-                //     PTRef block = TimeMachine(logic).sendFlaThroughTime(Result, -j);
-                //     PTRef itp = constructTransitionInvariantCandidates(block, temp_tr, sink, num-j, logic, vars);
-                //     auto cands = extractWellFoundedCandidates(itp, sink, logic, vars);
-                //     return {Answer::YES, cands.size() == 0 ? logic.getTerm_false() : logic.mkOr(cands)};
-                // }
                 return {Answer::YES, logic.mkOr(strictCandidates)};
             }
 
@@ -744,7 +730,7 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                 // Calculate the states that are guaranteed to terminate within num transitions:
                 // Tr^n(x,x') /\ not Sink(x') - is a formula, which can be satisfied by any x which can not terminate
                 // in less or equal then n
-
+                // TODO: USE PROJECT INSTEAD OF KEEP ONLY, TO SET UP THE ORDER OF VARIABLE ELIMINATION!!!
                 // States that can reach non-terminating state in n transitions:
                 PTRef F = QuantifierElimination(logic).keepOnly(
                     logic.mkAnd(logic.mkAnd(formulas), logic.mkNot(TimeMachine(logic).sendFlaThroughTime(sink, num))),
@@ -887,11 +873,6 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
 
                         // strictCandidates.push(logic.mkAnd(logic.mkNot(sub), subinv));
                         smt_checker.resetSolver();
-                        PTRef new_inv = logic.mkOr(strictCandidates);
-                        PTRef sub = QuantifierElimination(logic).keepOnly(
-                           logic.mkAnd({logic.mkOr(new_inv, id), TimeMachine(logic).sendFlaThroughTime(temp_tr, 1),
-                               logic.mkNot(shiftOnlyNextVars(new_inv, vars, logic))}),
-                       vars);
                         // TODO: Think if maybe sink can be even more restricted...
                         sink = TermUtils(logic).simplifyMax(logic.mkOr(sink, reached));
                         smt_checker.resetSolver();
