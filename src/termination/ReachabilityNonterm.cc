@@ -463,8 +463,14 @@ PTRef constructTransitionInvariantCandidates(PTRef init, PTRef transition, PTRef
         for (auto var : vars) {
             temp_vars.push(TimeMachine(logic).sendVarThroughTime(var, depth - 1));
         }
-        checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(
-            QuantifierElimination(logic).keepOnly(logic.mkAnd(init, logic.mkAnd(deterministic_trace)), temp_vars), 1));
+        // ** Over-approximating QE **
+        // Add an over-approximation of the qe_result
+        PTRef overapprox = PTRef_Undef;
+        PTRef qe_result = QuantifierElimination(logic).keepOnly(
+            logic.mkAnd(init, logic.mkAnd(deterministic_trace)), temp_vars, &overapprox);
+        // auto& new_checked_state = (overapprox == logic.getTerm_true()) ? qe_result : overapprox;
+        auto& new_checked_state = overapprox;
+        checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(new_checked_state, 1));
     }
     checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(sink, depth));
     // sink is updated, representing states that are guaranteed to reach termination
