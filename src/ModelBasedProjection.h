@@ -23,9 +23,9 @@ public:
 
     explicit ModelBasedProjection(Logic & logic) : logic(logic) {}
 
-    PTRef project(PTRef fla, vec<PTRef> const & varsToEliminate, Model & model);
+    PTRef project(PTRef fla, vec<PTRef> const & varsToEliminate, Model & model, PTRef* overapprox = nullptr);
 
-    PTRef keepOnly(PTRef fla, vec<PTRef> const & varsToKeep, Model & model);
+    PTRef keepOnly(PTRef fla, vec<PTRef> const & varsToKeep, Model & model, PTRef* overapprox = nullptr);
 
     using implicant_t = std::vector<PtAsgn>;
 
@@ -37,6 +37,8 @@ private:
     void dumpImplicant(std::ostream & out, implicant_t const & implicant);
 
     void postprocess(implicant_t & literals, ArithLogic & logic);
+
+    PTRef get_mbp(implicant_t implicant, implicant_t const & background, PTRef original_fla, PTRef* overapprox);
 
     // LIA version
 
