@@ -511,7 +511,14 @@ PTRef ModelBasedProjection::project(PTRef fla, const vec<PTRef> & varsToEliminat
         }
         fla = Substitutor(logic, subst).rewrite(fla);
     }
-    if (boolEndIt == tmp.end()) { return fla; }
+    if (boolEndIt == tmp.end()) {
+        if (overapprox != nullptr) {
+            // AB: This could be improved by scanning the `fla` for literals
+            // that are entailed by the original formula.
+            *overapprox = logic.getTerm_true();
+        }
+        return fla;
+    }
 
     PTRef nnf = TermUtils(logic).toNNF(fla);
 

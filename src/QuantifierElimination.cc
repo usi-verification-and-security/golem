@@ -10,12 +10,20 @@
 #include "TermUtils.h"
 #include "utils/SmtSolver.h"
 
+#define CHECK_BMBP 1
+
 namespace {
 using namespace golem;
 PTRef eliminate(Logic & logic, PTRef fla, vec<PTRef> const & vars, PTRef* overapprox) {
     vec<PTRef> projections;
 
     bool overapprox_requested = (overapprox != nullptr);
+#if CHECK_BMBP
+    overapprox_requested = true;
+    PTRef dummy_overapprox = PTRef_Undef;
+    overapprox = &dummy_overapprox;
+#endif
+
     vec<PTRef> over_conjuncts;
 
     fla = TermUtils(logic).toNNF(fla);
@@ -67,8 +75,7 @@ PTRef eliminate(Logic & logic, PTRef fla, vec<PTRef> const & vars, PTRef* overap
         }
     }
 
-#define CHECK_VALIDITY_OF_OVERAPPROXIMATION 1
-#if CHECK_VALIDITY_OF_OVERAPPROXIMATION
+#if CHECK_BMBP
     // CHECK VALIDITY OF OVERAPPROXIMATION
     // FreeVars(*overapprox) should be subset of FreeVars(fla) and should not contain any of vars
     auto overVars = TermUtils(logic).getVars(*overapprox);
