@@ -10,7 +10,9 @@
 #include "TermUtils.h"
 #include "utils/SmtSolver.h"
 
-#define CHECK_BMBP 1
+#define CHECK_BMBP 0
+#define QE_SOFT_CAP 100
+#define QE_HARD_CAP 200
 
 namespace {
 using namespace golem;
@@ -30,6 +32,8 @@ PTRef eliminate(Logic & logic, PTRef fla, vec<PTRef> const & vars, PTRef* overap
     vec<PTRef> over_conjuncts;
 
     fla = TermUtils(logic).toNNF(fla);
+    auto iter = 0;
+    bool valid_under = true;
 
     SMTSolver solver(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
     solver.assertProp(fla);
@@ -50,19 +54,31 @@ PTRef eliminate(Logic & logic, PTRef fla, vec<PTRef> const & vars, PTRef* overap
         } else {
             throw std::logic_error("Error in solver during quantifier elimination");
         }
-    }
-    PTRef result = logic.mkOr(projections);
-    if (logic.isBooleanOperator(result) and not logic.isNot(result)) {
-        result = ::rewriteMaxArityAggresive(logic, result);
-        if (logic.isAnd(result) or logic.isOr(result)) {
-            result = ::simplifyUnderAssignment_Aggressive(result, logic);
+        ++ iter;
+        // if (iter % 10 == 0) { std::cerr << "MBP nr " << iter << std::endl; }
+        if (overapprox_requested and (iter > QE_HARD_CAP or (iter > QE_SOFT_CAP and over_conjuncts.size() > 0))) {
+            std::cerr << "Warning: quantifier elimination is taking too long, returning the overapproximation" << std::endl;
+            valid_under = false;
+            break;
         }
-        // TODO: more simplifications?
     }
 
-    if (!overapprox_requested) {
-        return result;
+    PTRef result = PTRef_Undef;
+    if (valid_under) {
+        result = logic.mkOr(projections);
+        if (logic.isBooleanOperator(result) and not logic.isNot(result)) {
+            result = ::rewriteMaxArityAggresive(logic, result);
+            if (logic.isAnd(result) or logic.isOr(result)) {
+                result = ::simplifyUnderAssignment_Aggressive(result, logic);
+            }
+            // TODO: more simplifications?
+        }
+        if (!overapprox_requested) {
+            return result;
+        }
     }
+
+    assert(overapprox_requested);
 
     *overapprox = logic.getTerm_true();
     if (projections.size() == 0) {
