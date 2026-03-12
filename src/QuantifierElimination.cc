@@ -18,10 +18,13 @@ PTRef eliminate(Logic & logic, PTRef fla, vec<PTRef> const & vars, PTRef* overap
     vec<PTRef> projections;
 
     bool overapprox_requested = (overapprox != nullptr);
+
 #if CHECK_BMBP
-    overapprox_requested = true;
-    PTRef dummy_overapprox = PTRef_Undef;
-    overapprox = &dummy_overapprox;
+    if (not overapprox_requested) {
+        overapprox_requested = true;
+        PTRef dummy_overapprox = PTRef_Undef;
+        overapprox = &dummy_overapprox;
+    }
 #endif
 
     vec<PTRef> over_conjuncts;
