@@ -166,6 +166,7 @@ PTRef unwrapEqs(PTRef input, ArithLogic & logic) {
 
 // This function is needed to extract specific atoms from the arithmetic formula
 void unrollAtom(ArithLogic & logic, std::vector<PTRef> & coefs, PTRef atom, bool reverse) {
+
     assert(logic.isVar(atom) || logic.isConstant(atom) || logic.isTimes(atom) || logic.isIntMinus(atom) ||
            logic.isPlus(atom) || logic.isIntDiv(atom));
     if (logic.isConstant(atom)) {
@@ -652,8 +653,7 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
             for (uint j = 0; j < num; j++) {
                 formulas.push_back(TimeMachine(logic).sendFlaThroughTime(transition, j));
             }
-            PTRef terminatingStates = QuantifierElimination(logic).keepOnly(
-                logic.mkAnd({logic.mkAnd(formulas), TimeMachine(logic).sendFlaThroughTime(sink, num)}), vars);
+
             PTRef transitions =
                 logic.mkAnd({init, logic.mkAnd(formulas), TimeMachine(logic).sendFlaThroughTime(sink, num)});
 
@@ -663,7 +663,7 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
             assert(SMTsolver.check() == SMTSolver::Answer::SAT);
 
             SMTsolver.resetSolver();
-            SMTsolver.assertProp(logic.mkAnd({logic.mkAnd(init, terminatingStates), logic.mkAnd(formulas),
+            SMTsolver.assertProp(logic.mkAnd({init, logic.mkAnd(formulas),
                                               logic.mkNot(TimeMachine(logic).sendFlaThroughTime(sink, num))}));
             PTRef Result = TimeMachine(logic).sendFlaThroughTime(sink, num);
 
@@ -702,6 +702,9 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
             PTRef temp_init = init;
             PTRef temp_tr = transition;
             if (j == 0) {
+                // TODO: Try faster QE
+                PTRef terminatingStates = QuantifierElimination(logic).keepOnly(
+                    logic.mkAnd({logic.mkAnd(formulas), TimeMachine(logic).sendFlaThroughTime(sink, num)}), vars);
                 // If transitions were deterministic, initial states are blocked
                 init = logic.mkAnd(init, logic.mkNot(terminatingStates));
             } else {
@@ -746,8 +749,6 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                     vars);
                 // States that can not reach non-terminating state in less then or n transitions:
                 PTRef T = logic.mkNot(F);
-                // std::cout << "F: " << logic.pp(F) << std::endl;
-                // std::cout << "T: " << logic.pp(T) << std::endl;
 
                 SMTsolver.resetSolver();
                 SMTsolver.assertProp(logic.mkAnd({T, temp_tr, TimeMachine(logic).sendFlaThroughTime(sink, num)}));
@@ -875,10 +876,6 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                     auto [answer, subinv] = analyzeTS(reached, transition,  TermUtils(logic).simplifyMax(logic.mkNot(noncoveredStates)), witnesses,
                                                       logic, vars, DETERMINISTIC_TRANSITION);
                     std::cout << "Higher\n";
-                    // TODO: It is possible to do check differently, analyzing <noncoveredStates, tr,
-                    //   not(noncoveredStates)>
-                    //   If this terminates, then the whole TS terminates, but if it nonterinates we need to prove
-                    //   reachability
                     if (answer == Answer::YES) {
                         smt_checker.resetSolver();
                         // TODO: Need to change TrInv, adding found subinv in a better way
@@ -893,10 +890,8 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                            logic.mkAnd({logic.mkOr(new_inv, id), TimeMachine(logic).sendFlaThroughTime(temp_tr, 1),
                                logic.mkNot(shiftOnlyNextVars(new_inv, vars, logic))}),
                        vars);
+                        // TODO: Think if maybe sink can be even more restricted...
                         sink = TermUtils(logic).simplifyMax(logic.mkOr(sink, reached));
-                        // std::cout << "New sink: " << logic.pp(sink) << std::endl;
-                        // smt_checker.assertProp(logic.mkAnd(logic.mkNot(sub), reached));
-                        // assert(smt_checker.check() == SMTSolver::Answer::UNSAT);
                         smt_checker.resetSolver();
 
                         // TODO: It should work for  subinv \/ TrInv, but for some reason it does not
@@ -910,18 +905,13 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                             std::cout << "Center" << std::endl;
                             return {Answer::YES, subinv};
                         }
+                    } else if (answer == Answer::NO) {
+                            auto [answer, subinv] =
+                                analyzeTS(reached, transition, TermUtils(logic).simplifyMax(logic.mkOr(sink, logic.mkNot(noncoveredStates))), witnesses, logic, vars, DETERMINISTIC_TRANSITION);
+                            if (answer == Answer::NO) {
+                                return {Answer::NO, subinv};
+                            }
                     }
-                    // TODO: If doesn't terminate, check the reachability of recurrent set
-                    // TODO: If reachable from init, then it does not terminate
-                    else if (answer == Answer::NO) {
-                        auto [answer, subinv] =
-                            analyzeTS(reached, transition, TermUtils(logic).simplifyMax(logic.mkOr(sink, logic.mkNot(noncoveredStates))), witnesses, logic, vars, DETERMINISTIC_TRANSITION);
-                        if (answer == Answer::NO) {
-                            return {Answer::NO, subinv};
-                        } else {
-                            return {Answer::YES, subinv};
-                        }
-                    };
                 }
             }
         } else if (res.getAnswer() == VerificationAnswer::SAFE) {
