@@ -654,6 +654,9 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                 formulas.push_back(TimeMachine(logic).sendFlaThroughTime(transition, j));
             }
 
+            PTRef terminatingStates = QuantifierElimination(logic).keepOnly(
+                logic.mkAnd({logic.mkAnd(formulas), TimeMachine(logic).sendFlaThroughTime(sink, num)}), vars);
+
             PTRef transitions =
                 logic.mkAnd({init, logic.mkAnd(formulas), TimeMachine(logic).sendFlaThroughTime(sink, num)});
 
@@ -663,7 +666,7 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
             assert(SMTsolver.check() == SMTSolver::Answer::SAT);
 
             SMTsolver.resetSolver();
-            SMTsolver.assertProp(logic.mkAnd({init, logic.mkAnd(formulas),
+            SMTsolver.assertProp(logic.mkAnd({logic.mkAnd(terminatingStates, init), logic.mkAnd(formulas),
                                               logic.mkNot(TimeMachine(logic).sendFlaThroughTime(sink, num))}));
             PTRef Result = TimeMachine(logic).sendFlaThroughTime(sink, num);
 
@@ -703,8 +706,6 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
             PTRef temp_tr = transition;
             if (j == 0) {
                 // TODO: Try faster QE
-                PTRef terminatingStates = QuantifierElimination(logic).keepOnly(
-                    logic.mkAnd({logic.mkAnd(formulas), TimeMachine(logic).sendFlaThroughTime(sink, num)}), vars);
                 // If transitions were deterministic, initial states are blocked
                 init = logic.mkAnd(init, logic.mkNot(terminatingStates));
             } else {
