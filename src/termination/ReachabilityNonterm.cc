@@ -910,6 +910,8 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                                 analyzeTS(reached, transition, TermUtils(logic).simplifyMax(logic.mkOr(sink, logic.mkNot(noncoveredStates))), witnesses, logic, vars, DETERMINISTIC_TRANSITION);
                             if (answer == Answer::NO) {
                                 return {Answer::NO, subinv};
+                            } else {
+                                return {Answer::YES, subinv};
                             }
                     }
                 }
