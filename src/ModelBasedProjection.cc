@@ -127,12 +127,13 @@ PTRef ModelBasedProjection::get_mbp(
 
     // Add the background
     implicant.insert(implicant.end(), background.begin(), background.end());
-    postprocess(implicant, dynamic_cast<ArithLogic &>(logic));
+    auto simplified_implicant = implicant;
+    postprocess(simplified_implicant, dynamic_cast<ArithLogic &>(logic));
 
     // Build the underapproximation as a conjunction of all literals in the implicant + background.
     vec<PTRef> under_conjuncts;
-    under_conjuncts.capacity(implicant.size());
-    for (PtAsgn const & lit : implicant) { under_conjuncts.push(ptasgn_to_ptref(lit)); }
+    under_conjuncts.capacity(simplified_implicant.size());
+    for (PtAsgn const & lit : simplified_implicant) { under_conjuncts.push(ptasgn_to_ptref(lit)); }
     auto under = logic.mkAnd(std::move(under_conjuncts));
 
     if (overapprox == nullptr) {
@@ -141,9 +142,13 @@ PTRef ModelBasedProjection::get_mbp(
 
     // Here, we also need to build the over-approximation.
 
+    // Use the not-simplified `implicant` to increase the chances of finding good lemmas.
+    // AB: we need to experimentally check if this is a good idea.
+
     // Start with over = under,
     // then, try progressively remove literals until (original_fla & !over) is unsatisfiable
-    SMTSolver solver(logic);
+    SMTSolver solver(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
+    original_fla = TermUtils(logic).toNNF(original_fla);
     solver.assertProp(original_fla);
     while (true) {
         solver.push();
