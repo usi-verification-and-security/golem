@@ -574,7 +574,7 @@ PTRef getId(const std::vector<PTRef> & vars, Logic & logic) {
 }
 
 PTRef constructTransitionInvariantCandidates(PTRef init, PTRef transition, PTRef sink, int depth, Logic & logic,
-                                             const std::vector<PTRef> & vars) {
+                                             const std::vector<PTRef> & vars,  const std::vector<PTRef> & aux_vars) {
     PTRef id = getId(vars, logic);
     std::vector deterministic_trace{transition};
     // Building Identity relation formula
@@ -592,15 +592,18 @@ PTRef constructTransitionInvariantCandidates(PTRef init, PTRef transition, PTRef
             for (auto var : vars) {
                 vars_to_eliminate.push(TimeMachine(logic).sendVarThroughTime(var, i));
             }
+            for (auto var : aux_vars) {
+                vars_to_eliminate.push(TimeMachine(logic).sendVarThroughTime(var, i));
+            }
         }
         for (auto var : vars) {
             vars_to_eliminate.push(TimeMachine(logic).sendVarThroughTime(var, depth));
-            term_vars.push(TimeMachine(logic).sendVarThroughTime(var, depth-1));
+        }
+        for (auto var : aux_vars) {
+            vars_to_eliminate.push(TimeMachine(logic).sendVarThroughTime(var, depth));
         }
         checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(
-            QuantifierElimination(logic).keepOnly(
-                QuantifierElimination(logic).eliminate(logic.mkAnd(init, logic.mkAnd(deterministic_trace)), vars_to_eliminate),
-                term_vars), 1));
+                QuantifierElimination(logic).eliminate(logic.mkAnd(init, logic.mkAnd(deterministic_trace)), vars_to_eliminate), 1));
 
     }
     checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(sink, depth));
@@ -640,7 +643,7 @@ PTRef constructTransitionInvariantCandidates(PTRef init, PTRef transition, PTRef
 
 std::tuple<ReachabilityNonterm::Answer, PTRef>
 ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options const & witnesses, ArithLogic & logic,
-                               std::vector<PTRef> const & vars, bool DETERMINISTIC_TRANSITION) {
+                               std::vector<PTRef> const & vars, std::vector<PTRef> const & aux_vars, bool DETERMINISTIC_TRANSITION) {
     // std::cout << "Analyzing TS" << std::endl;
     // std::cout << "Init: " << logic.pp(init) << std::endl;
     // std::cout << "Transition: " << logic.pp(transition) << std::endl;
@@ -673,9 +676,12 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                 for (auto var : vars) {
                     vars_to_elim.push(TimeMachine(logic).sendVarThroughTime(var, i));
                 }
+                for (auto var : aux_vars) {
+                    vars_to_elim.push(TimeMachine(logic).sendVarThroughTime(var, i));
+                }
             }
-            PTRef terminatingStates = QuantifierElimination(logic).keepOnly(
-                    QuantifierElimination(logic).eliminate(logic.mkAnd({logic.mkAnd(formulas), TimeMachine(logic).sendFlaThroughTime(sink, num)}), vars_to_elim), vars);
+            PTRef terminatingStates =
+                    QuantifierElimination(logic).eliminate(logic.mkAnd({logic.mkAnd(formulas), TimeMachine(logic).sendFlaThroughTime(sink, num)}), vars_to_elim);
 
             SMTSolver SMTsolver(logic, SMTSolver::WitnessProduction::NONE);
             SMTsolver.assertProp(transitions);
@@ -757,11 +763,13 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                     for (auto var : vars) {
                         vars_to_eliminate.push(TimeMachine(logic).sendVarThroughTime(var, i));
                     }
+                    for (auto var : aux_vars) {
+                        vars_to_eliminate.push(TimeMachine(logic).sendVarThroughTime(var, i));
+                    }
                 }
                 PTRef F = QuantifierElimination(logic).eliminate(
                     logic.mkAnd(logic.mkAnd(formulas), logic.mkNot(TimeMachine(logic).sendFlaThroughTime(sink, num))),
                     vars_to_eliminate);
-                F = QuantifierElimination(logic).keepOnly(F, vars);
                 // States that can not reach non-terminating state in less then or n transitions:
                 PTRef T = logic.mkNot(F);
 
@@ -772,7 +780,7 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                 // because there doesn't exist state that can reach sink states.
                 if (SMTsolver.check() == SMTSolver::Answer::UNSAT) { continue; }
                 // The procedure to construct transition invariants is executed
-                PTRef itp = constructTransitionInvariantCandidates(T, temp_tr, sink, num, logic, vars);
+                PTRef itp = constructTransitionInvariantCandidates(T, temp_tr, sink, num, logic, vars, aux_vars);
 
                 // Extract well-founded disjuncts from the transition invariant
                 auto newCands = extractWellFoundedCandidates(itp, sink, logic, vars);
@@ -889,7 +897,7 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                     // Algorithm checks if reachable states are terminating
                     std::cout << "Deeper\n";
                     auto [answer, subinv] = analyzeTS(reached, transition,  TermUtils(logic).simplifyMax(logic.mkNot(noncoveredStates)), witnesses,
-                                                      logic, vars, DETERMINISTIC_TRANSITION);
+                                                      logic, vars, aux_vars, DETERMINISTIC_TRANSITION);
                     std::cout << "Higher\n";
                     if (answer == Answer::YES) {
                         smt_checker.resetSolver();
@@ -917,7 +925,7 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                         }
                     } else if (answer == Answer::NO) {
                             auto [answer, subinv] =
-                                analyzeTS(reached, transition, TermUtils(logic).simplifyMax(logic.mkOr(sink, logic.mkNot(noncoveredStates))), witnesses, logic, vars, DETERMINISTIC_TRANSITION);
+                                analyzeTS(reached, transition, TermUtils(logic).simplifyMax(logic.mkOr(sink, logic.mkNot(noncoveredStates))), witnesses, logic, vars, aux_vars, DETERMINISTIC_TRANSITION);
                             if (answer == Answer::NO) {
                                 return {Answer::NO, subinv};
                             } else {
@@ -1018,7 +1026,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
     // Safety-Based Termination Analysis
     // TODO: Figure out why passing in transition is problematic
     auto [answer, trInvOrRecurringSet] =
-        analyzeTS(init, transition, sink, witnesses, logic, vars, DETERMINISTIC_TRANSITION);
+        analyzeTS(init, transition, sink, witnesses, logic, vars, aux_vars, DETERMINISTIC_TRANSITION);
     return answer;
 }
 
