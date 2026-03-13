@@ -156,6 +156,10 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
         }
     }
 
+    if (logic.isTrue(formula)) {
+        return false;
+    }
+
     vec<PTRef> conjuncts = TermUtils(logic).getTopLevelConjuncts(formula);
 
     vec<PTRef> leq_conjuncts;
@@ -466,9 +470,9 @@ PTRef constructTransitionInvariantCandidates(PTRef init, PTRef transition, PTRef
         // ** Over-approximating QE **
         // Add an over-approximation of the qe_result
         PTRef overapprox = PTRef_Undef;
-        PTRef qe_result = QuantifierElimination(logic).keepOnly(
-            logic.mkAnd(init, logic.mkAnd(deterministic_trace)), temp_vars, &overapprox);
-        // auto& new_checked_state = (overapprox == logic.getTerm_true()) ? qe_result : overapprox;
+        auto qe_result = QuantifierElimination(logic).keepOnly(
+            logic.mkAnd(init, logic.mkAnd(deterministic_trace)), temp_vars, 100, &overapprox);
+        // auto& new_checked_state = qe_result.second ? qe_result.first : overapprox;
         auto& new_checked_state = overapprox;
         checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(new_checked_state, 1));
     }

@@ -23,6 +23,10 @@ public:
     PTRef eliminate(PTRef fla, vec<PTRef> const & vars, PTRef* overapprox = nullptr);
     PTRef keepOnly(PTRef fla, vec<PTRef> const & vars, PTRef* overapprox = nullptr);
 
+    std::pair<PTRef, bool> eliminate(PTRef fla, PTRef var, size_t iterations_limit, PTRef* overapprox = nullptr);
+    std::pair<PTRef, bool> eliminate(PTRef fla, vec<PTRef> const & vars, size_t iterations_limit, PTRef* overapprox = nullptr);
+    std::pair<PTRef, bool> keepOnly(PTRef fla, vec<PTRef> const & vars, size_t iterations_limit, PTRef* overapprox = nullptr);
+
 private:
     Logic & logic;
 };

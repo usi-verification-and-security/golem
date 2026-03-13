@@ -11,12 +11,10 @@
 #include "utils/SmtSolver.h"
 
 #define CHECK_BMBP 0
-#define QE_SOFT_CAP 100
-#define QE_HARD_CAP 200
 
 namespace {
 using namespace golem;
-PTRef eliminate(Logic & logic, PTRef fla, vec<PTRef> const & vars, PTRef* overapprox) {
+PTRef eliminate(Logic & logic, PTRef fla, vec<PTRef> const & vars, PTRef* overapprox, size_t& iterations_limit) {
     vec<PTRef> projections;
 
     bool overapprox_requested = (overapprox != nullptr);
@@ -56,12 +54,18 @@ PTRef eliminate(Logic & logic, PTRef fla, vec<PTRef> const & vars, PTRef* overap
         }
         ++ iter;
         // if (iter % 10 == 0) { std::cerr << "MBP nr " << iter << std::endl; }
-        if (overapprox_requested and (iter > QE_HARD_CAP or (iter > QE_SOFT_CAP and over_conjuncts.size() > 0))) {
+        if (iterations_limit and iter >= iterations_limit) {
             std::cerr << "Warning: quantifier elimination is taking too long, returning the overapproximation" << std::endl;
             valid_under = false;
             break;
         }
     }
+
+    // If iterations_limit parameter was 0, then the returned under is precise.
+    assert(iterations_limit != 0 or valid_under);
+
+    // Iterations limit is changed to represent the the validity of the underapproximation.
+    iterations_limit = valid_under;
 
     PTRef result = PTRef_Undef;
     if (valid_under) {
@@ -122,26 +126,44 @@ PTRef eliminate(Logic & logic, PTRef fla, vec<PTRef> const & vars, PTRef* overap
 } // namespace
 
 namespace golem {
+
 PTRef QuantifierElimination::keepOnly(PTRef fla, const vec<PTRef> & varsToKeep, PTRef* overapprox) {
+    return keepOnly(fla, varsToKeep, 0, overapprox).first;
+}
+
+PTRef QuantifierElimination::eliminate(PTRef fla, PTRef var, PTRef* overapprox) {
+    return eliminate(fla, vec<PTRef>{var}, 0, overapprox).first;
+}
+
+PTRef QuantifierElimination::eliminate(PTRef fla, vec<PTRef> const & vars, PTRef* overapprox) {
+    return eliminate(fla, vars, 0, overapprox).first;
+}
+
+std::pair<PTRef, bool>
+QuantifierElimination::keepOnly(PTRef fla, const vec<PTRef> & varsToKeep, size_t iterations_limit, PTRef* overapprox) {
     auto allVars = TermUtils(logic).getVars(fla);
     vec<PTRef> toEliminate;
     for (PTRef var : allVars) {
         if (std::find(varsToKeep.begin(), varsToKeep.end(), var) == varsToKeep.end()) { toEliminate.push(var); }
     }
-    return eliminate(fla, toEliminate, overapprox);
+    return eliminate(fla, toEliminate, iterations_limit, overapprox);
 }
 
-PTRef QuantifierElimination::eliminate(PTRef fla, PTRef var, PTRef* overapprox) {
-    return eliminate(fla, vec<PTRef>{var}, overapprox);
+std::pair<PTRef, bool>
+QuantifierElimination::eliminate(PTRef fla, PTRef var, size_t iterations_limit, PTRef* overapprox) {
+    return eliminate(fla, vec<PTRef>{var}, iterations_limit, overapprox);
 }
 
-PTRef QuantifierElimination::eliminate(PTRef fla, vec<PTRef> const & vars, PTRef* overapprox) {
+std::pair<PTRef, bool>
+QuantifierElimination::eliminate(PTRef fla, vec<PTRef> const & vars, size_t iterations_limit, PTRef* overapprox) {
     if (not std::all_of(vars.begin(), vars.end(), [this](PTRef var) { return logic.isVar(var); }) or
         not logic.hasSortBool(fla)) {
         throw std::invalid_argument("Invalid arguments to quantifier elimination");
     }
 
     fla = TermUtils(logic).toNNF(fla);
-    return ::eliminate(logic, fla, vars, overapprox);
+    auto under = ::eliminate(logic, fla, vars, overapprox, iterations_limit);
+    return {under, static_cast<bool>(iterations_limit)};
 }
+
 } // namespace golem
