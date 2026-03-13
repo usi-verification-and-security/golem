@@ -586,12 +586,17 @@ PTRef constructTransitionInvariantCandidates(PTRef init, PTRef transition, PTRef
     std::vector<PTRef> checked_states;
     // This if calculates the states reachable in 1 <= n <= num-1 transitions
     if (depth > 1) {
-        vec<PTRef> temp_vars;
+        vec<PTRef> vars_to_eliminate;
+        for (int i = 0; i < depth - 1; i++) {
+            for (auto var : vars) {
+                vars_to_eliminate.push(TimeMachine(logic).sendVarThroughTime(var, i));
+            }
+        }
         for (auto var : vars) {
-            temp_vars.push(TimeMachine(logic).sendVarThroughTime(var, depth - 1));
+            vars_to_eliminate.push(TimeMachine(logic).sendVarThroughTime(var, depth));
         }
         checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(
-            QuantifierElimination(logic).keepOnly(logic.mkAnd(init, logic.mkAnd(deterministic_trace)), temp_vars), 1));
+            QuantifierElimination(logic).eliminate(logic.mkAnd(init, logic.mkAnd(deterministic_trace)), vars_to_eliminate), 1));
     }
     checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(sink, depth));
     // sink is updated, representing states that are guaranteed to reach termination
@@ -732,9 +737,16 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                 // in less or equal then n
                 // TODO: USE PROJECT INSTEAD OF KEEP ONLY, TO SET UP THE ORDER OF VARIABLE ELIMINATION!!!
                 // States that can reach non-terminating state in n transitions:
-                PTRef F = QuantifierElimination(logic).keepOnly(
+
+                vec<PTRef> vars_to_eliminate;
+                for (int i = num; i >= 1; i--) {
+                    for (auto var : vars) {
+                        vars_to_eliminate.push(TimeMachine(logic).sendVarThroughTime(var, i));
+                    }
+                }
+                PTRef F = QuantifierElimination(logic).eliminate(
                     logic.mkAnd(logic.mkAnd(formulas), logic.mkNot(TimeMachine(logic).sendFlaThroughTime(sink, num))),
-                    vars);
+                    vars_to_eliminate);
                 // States that can not reach non-terminating state in less then or n transitions:
                 PTRef T = logic.mkNot(F);
 
