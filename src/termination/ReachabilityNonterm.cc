@@ -586,6 +586,7 @@ PTRef constructTransitionInvariantCandidates(PTRef init, PTRef transition, PTRef
     std::vector<PTRef> checked_states;
     // This if calculates the states reachable in 1 <= n <= num-1 transitions
     if (depth > 1) {
+        vec<PTRef> term_vars;
         vec<PTRef> vars_to_eliminate;
         for (int i = 0; i < depth - 1; i++) {
             for (auto var : vars) {
@@ -594,9 +595,13 @@ PTRef constructTransitionInvariantCandidates(PTRef init, PTRef transition, PTRef
         }
         for (auto var : vars) {
             vars_to_eliminate.push(TimeMachine(logic).sendVarThroughTime(var, depth));
+            term_vars.push(TimeMachine(logic).sendVarThroughTime(var, depth-1));
         }
         checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(
-            QuantifierElimination(logic).eliminate(logic.mkAnd(init, logic.mkAnd(deterministic_trace)), vars_to_eliminate), 1));
+            QuantifierElimination(logic).keepOnly(
+                QuantifierElimination(logic).eliminate(logic.mkAnd(init, logic.mkAnd(deterministic_trace)), vars_to_eliminate),
+                term_vars), 1));
+
     }
     checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(sink, depth));
     // sink is updated, representing states that are guaranteed to reach termination
@@ -747,6 +752,7 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                 PTRef F = QuantifierElimination(logic).eliminate(
                     logic.mkAnd(logic.mkAnd(formulas), logic.mkNot(TimeMachine(logic).sendFlaThroughTime(sink, num))),
                     vars_to_eliminate);
+                F = QuantifierElimination(logic).keepOnly(F, vars);
                 // States that can not reach non-terminating state in less then or n transitions:
                 PTRef T = logic.mkNot(F);
 
