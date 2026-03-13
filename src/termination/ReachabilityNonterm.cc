@@ -668,6 +668,15 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
             PTRef transitions =
                 logic.mkAnd({init, logic.mkAnd(formulas), TimeMachine(logic).sendFlaThroughTime(sink, num)});
 
+            vec<PTRef> vars_to_elim;
+            for (int i = 1; i <= num; i++) {
+                for (auto var : vars) {
+                    vars_to_elim.push(TimeMachine(logic).sendVarThroughTime(var, i));
+                }
+            }
+            PTRef terminatingStates = QuantifierElimination(logic).keepOnly(
+                    QuantifierElimination(logic).eliminate(logic.mkAnd({logic.mkAnd(formulas), TimeMachine(logic).sendFlaThroughTime(sink, num)}), vars_to_elim), vars);
+
             SMTSolver SMTsolver(logic, SMTSolver::WitnessProduction::NONE);
             SMTsolver.assertProp(transitions);
             // Check that sink is reachable in num transitions
@@ -716,8 +725,8 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
             if (j == 0) {
                 // TODO: Try faster QE
                 // If transitions were deterministic, initial states are blocked
-                PTRef terminatingStates = nondet_check ? Result : QuantifierElimination(logic).keepOnly(
-                    logic.mkAnd({logic.mkAnd(formulas), TimeMachine(logic).sendFlaThroughTime(sink, num)}), vars);
+                // PTRef terminatingStates = nondet_check ? Result : QuantifierElimination(logic).keepOnly(
+                //     logic.mkAnd({logic.mkAnd(formulas), TimeMachine(logic).sendFlaThroughTime(sink, num)}), vars);
                 init = logic.mkAnd(init, logic.mkNot(terminatingStates));
             } else {
                 // Otherwise, states leading to termination are blocked from transition
