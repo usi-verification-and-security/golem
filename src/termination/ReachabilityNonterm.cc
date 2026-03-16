@@ -508,7 +508,7 @@ vec<PTRef> extractWellFoundedCandidates(PTRef itp, PTRef sink, ArithLogic & logi
     auto sink_disjuncts = utils.getTopLevelDisjuncts(utils.toDNF(unwrapEqs(logic.mkNot(sink), logic)));
     PTRef dnfized_interpolant = utils.simplifyMax(unwrapEqs(itp, logic));
     dnfized_interpolant = utils.toDNF(dnfized_interpolant);
-    std::cout<< "Itp: " <<logic.pp(dnfized_interpolant) << std::endl;
+    // std::cout<< "Itp: " <<logic.pp(dnfized_interpolant) << std::endl;
 
     vec<PTRef> candidates = utils.getTopLevelDisjuncts(dnfized_interpolant);
     vec<PTRef> strictCandidates;
@@ -650,7 +650,7 @@ PTRef constructTransitionInvariantCandidates(PTRef init, PTRef transition, PTRef
 std::tuple<ReachabilityNonterm::Answer, PTRef>
 ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options const & witnesses, ArithLogic & logic,
                                std::vector<PTRef> const & vars, std::vector<PTRef> const & aux_vars, bool DETERMINISTIC_TRANSITION) {
-    std::cout << "Analyzing TS" << std::endl;
+    // std::cout << "Analyzing TS" << std::endl;
     // std::cout << "Init: " << logic.pp(init) << std::endl;
     // std::cout << "Transition: " << logic.pp(transition) << std::endl;
     // std::cout << "Sink: " << logic.pp(sink) << std::endl;
