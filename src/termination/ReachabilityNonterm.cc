@@ -818,7 +818,7 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                 if (change == 0) continue;
                 // std::cout << "Change: " << change << " Pre: " << pre << std::endl;
                 PTRef trInv = logic.mkOr(strictCandidates);
-                std::cout << "Attempted transition invariant: " << logic.pp(trInv) << std::endl;
+                // std::cout << "Attempted transition invariant: " << logic.pp(trInv) << std::endl;
                 PTRef id = getId(vars, logic);
 
                 SMTSolver smt_checker(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
@@ -916,7 +916,7 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                     }
 
                     assert(reached != logic.getTerm_false());
-                    std::cout << "Noncovered states: " << logic.pp(noncoveredStates) << std::endl;
+                    // std::cout << "Noncovered states: " << logic.pp(noncoveredStates) << std::endl;
                     // Algorithm checks if reachable states are terminating
                     std::cout << "Deeper\n";
                     auto [answer, subinv] = analyzeTS(reached, transition,  sink, witnesses,
