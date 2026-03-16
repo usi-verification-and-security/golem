@@ -678,7 +678,7 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                 logic.mkAnd({init, logic.mkAnd(formulas), TimeMachine(logic).sendFlaThroughTime(sink, num)});
 
             vec<PTRef> vars_to_elim;
-            for (int i = 1; i <= num; i++) {
+            for (int i = num; i >= 1; i--) {
                 for (auto var : vars) {
                     vars_to_elim.push(TimeMachine(logic).sendVarThroughTime(var, i));
                 }
@@ -745,9 +745,12 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                 // PTRef terminatingStates = nondet_check ? Result : QuantifierElimination(logic).keepOnly(
                 //     logic.mkAnd({logic.mkAnd(formulas), TimeMachine(logic).sendFlaThroughTime(sink, num)}), vars);
                 init = logic.mkAnd(init, logic.mkNot(terminatingStates));
+                // std::cout << "Init block: " << logic.pp(terminatingStates) << std::endl;
+                // std::cout << "Result: " << logic.pp(Result) << std::endl;
             } else {
                 // Otherwise, states leading to termination are blocked from transition
                 PTRef block = TimeMachine(logic).sendFlaThroughTime(Result, -j + 1);
+                // std::cout << "Block: " << logic.pp(block) << std::endl;
                 assert(block != logic.getTerm_true());
                 transition = logic.mkAnd(transition, logic.mkNot(block));
             }
@@ -757,6 +760,7 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
             // When it is the case, TS is terminating
             if (SMTsolver.check() == SMTSolver::Answer::UNSAT) {
                 std::cout << "Init and Transition " << num << std::endl;
+                // std::cout << "Inv: " << logic.pp(logic.mkOr(strictCandidates)) << std::endl;
                 return {Answer::YES, logic.mkOr(strictCandidates)};
             }
 
@@ -784,6 +788,7 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                 PTRef F = QuantifierElimination(logic).eliminate(
                     logic.mkAnd(logic.mkAnd(formulas), logic.mkNot(TimeMachine(logic).sendFlaThroughTime(sink, num))),
                     vars_to_eliminate);
+                std::cout << "F: " << logic.pp(F) << std::endl;
 
                 // std::cout<<"F post elimination: " << logic.pp(F) << std::endl;
                 // States that can not reach non-terminating state in less then or n transitions:
@@ -813,6 +818,7 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                 if (change == 0) continue;
                 // std::cout << "Change: " << change << " Pre: " << pre << std::endl;
                 PTRef trInv = logic.mkOr(strictCandidates);
+                std::cout << "Attempted transition invariant: " << logic.pp(trInv) << std::endl;
                 PTRef id = getId(vars, logic);
 
                 SMTSolver smt_checker(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
@@ -910,9 +916,10 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                     }
 
                     assert(reached != logic.getTerm_false());
+                    std::cout << "Noncovered states: " << logic.pp(noncoveredStates) << std::endl;
                     // Algorithm checks if reachable states are terminating
                     std::cout << "Deeper\n";
-                    auto [answer, subinv] = analyzeTS(reached, transition,  TermUtils(logic).simplifyMax(logic.mkNot(noncoveredStates)), witnesses,
+                    auto [answer, subinv] = analyzeTS(reached, transition,  sink, witnesses,
                                                       logic, vars, aux_vars, DETERMINISTIC_TRANSITION);
                     std::cout << "Higher\n";
                     if (answer == Answer::YES) {
@@ -926,6 +933,7 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                         smt_checker.resetSolver();
                         // TODO: Think if maybe sink can be even more restricted...
                         sink = TermUtils(logic).simplifyMax(logic.mkOr(sink, reached));
+                        std::cout << "Reached: " << logic.pp(reached) << std::endl;
                         smt_checker.resetSolver();
 
                         // TODO: It should work for  subinv \/ TrInv, but for some reason it does not
@@ -940,13 +948,13 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                             return {Answer::YES, subinv};
                         }
                     } else if (answer == Answer::NO) {
-                            auto [answer, subinv] =
-                                analyzeTS(reached, transition, TermUtils(logic).simplifyMax(logic.mkOr(sink, logic.mkNot(noncoveredStates))), witnesses, logic, vars, aux_vars, DETERMINISTIC_TRANSITION);
-                            if (answer == Answer::NO) {
+                            // auto [answer, subinv] =
+                            //     analyzeTS(reached, transition, TermUtils(logic).simplifyMax(logic.mkOr(sink, logic.mkNot(noncoveredStates))), witnesses, logic, vars, aux_vars, DETERMINISTIC_TRANSITION);
+                            // if (answer == Answer::NO) {
                                 return {Answer::NO, subinv};
-                            } else {
-                                return {Answer::YES, subinv};
-                            }
+                            // } else {
+                            //     return {Answer::YES, subinv};
+                            // }
                     }
                 }
             }
