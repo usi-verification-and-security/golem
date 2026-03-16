@@ -788,7 +788,7 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                 PTRef F = QuantifierElimination(logic).eliminate(
                     logic.mkAnd(logic.mkAnd(formulas), logic.mkNot(TimeMachine(logic).sendFlaThroughTime(sink, num))),
                     vars_to_eliminate);
-                std::cout << "F: " << logic.pp(F) << std::endl;
+                // std::cout << "F: " << logic.pp(F) << std::endl;
 
                 // std::cout<<"F post elimination: " << logic.pp(F) << std::endl;
                 // States that can not reach non-terminating state in less then or n transitions:
