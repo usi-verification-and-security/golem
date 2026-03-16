@@ -919,7 +919,7 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                     // std::cout << "Noncovered states: " << logic.pp(noncoveredStates) << std::endl;
                     // Algorithm checks if reachable states are terminating
                     std::cout << "Deeper\n";
-                    auto [answer, subinv] = analyzeTS(reached, transition,  sink, witnesses,
+                    auto [answer, subinv] = analyzeTS(reached, transition,  logic.mkNot(noncoveredStates), witnesses,
                                                       logic, vars, aux_vars, DETERMINISTIC_TRANSITION);
                     std::cout << "Higher\n";
                     if (answer == Answer::YES) {
@@ -932,7 +932,7 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                         // strictCandidates.push(logic.mkAnd(logic.mkNot(sub), subinv));
                         smt_checker.resetSolver();
                         // TODO: Think if maybe sink can be even more restricted...
-                        sink = TermUtils(logic).simplifyMax(logic.mkOr(sink, reached));
+                        // sink = TermUtils(logic).simplifyMax(logic.mkOr(sink, reached));
                         std::cout << "Reached: " << logic.pp(reached) << std::endl;
                         smt_checker.resetSolver();
 
@@ -948,13 +948,13 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                             return {Answer::YES, subinv};
                         }
                     } else if (answer == Answer::NO) {
-                            // auto [answer, subinv] =
-                            //     analyzeTS(reached, transition, TermUtils(logic).simplifyMax(logic.mkOr(sink, logic.mkNot(noncoveredStates))), witnesses, logic, vars, aux_vars, DETERMINISTIC_TRANSITION);
-                            // if (answer == Answer::NO) {
+                            auto [answer, subinv] =
+                                analyzeTS(reached, transition, TermUtils(logic).simplifyMax(logic.mkOr(sink, logic.mkNot(noncoveredStates))), witnesses, logic, vars, aux_vars, DETERMINISTIC_TRANSITION);
+                            if (answer == Answer::NO) {
                                 return {Answer::NO, subinv};
-                            // } else {
-                            //     return {Answer::YES, subinv};
-                            // }
+                            } else {
+                                return {Answer::YES, subinv};
+                            }
                     }
                 }
             }
