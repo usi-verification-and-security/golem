@@ -396,7 +396,8 @@ vec<PTRef> extractWellFoundedCandidates(PTRef itp, PTRef sink, ArithLogic & logi
         if (smt_solver.check() == SMTSolver::Answer::UNSAT) { continue; }
 
         PTRef simpl_cand = utils.simplifyMax(cand);
-        if (checkWellFounded(cand, logic, vars)) {
+        if (simpl_cand == logic.getTerm_true()) { continue; }
+        if (checkWellFounded(simpl_cand, logic, vars)) {
             strictCandidates.push(simpl_cand);
         } else {
             for (auto sink_cand : sink_disjuncts) {
@@ -523,8 +524,6 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
             for (uint j = 0; j < num; j++) {
                 formulas.push_back(TimeMachine(logic).sendFlaThroughTime(transition, j));
             }
-            PTRef terminatingStates = QuantifierElimination(logic).keepOnly(
-                logic.mkAnd({logic.mkAnd(formulas), TimeMachine(logic).sendFlaThroughTime(sink, num)}), vars);
             PTRef transitions =
                 logic.mkAnd({init, logic.mkAnd(formulas), TimeMachine(logic).sendFlaThroughTime(sink, num)});
 
@@ -534,14 +533,15 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
             assert(SMTsolver.check() == SMTSolver::Answer::SAT);
 
             SMTsolver.resetSolver();
-            SMTsolver.assertProp(logic.mkAnd({logic.mkAnd(init, terminatingStates), logic.mkAnd(formulas),
+            SMTsolver.assertProp(logic.mkAnd({init, logic.mkAnd(formulas),
                                               logic.mkNot(TimeMachine(logic).sendFlaThroughTime(sink, num))}));
             PTRef Result = TimeMachine(logic).sendFlaThroughTime(sink, num);
 
             uint j = 0;
+            bool nondet_trace = !DETERMINISTIC_TRANSITION && SMTsolver.check() == SMTSolver::Answer::SAT;
             // Traversing trace from the Bad to Init, detecting the last transition where some variables
             // were assigned nondetermenistically (Only if it is possible to reach some states other then sink in n trs)
-            if (!DETERMINISTIC_TRANSITION && SMTsolver.check() == SMTSolver::Answer::SAT) {
+            if (nondet_trace) {
                 for (j = num; j > 0; j--) {
                     vec<PTRef> prev_vars;
                     // Constructing vectors of variables x^(j-1) and x^(j)
@@ -573,8 +573,11 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
 
             PTRef temp_tr = transition;
             if (j == 0) {
+
                 // If transitions were deterministic, initial states are blocked
-                init = logic.mkAnd(init, logic.mkNot(terminatingStates));
+                init = nondet_trace ? logic.mkAnd(init, logic.mkNot(Result)) :
+                logic.mkAnd(init, logic.mkNot(QuantifierElimination(logic).keepOnly(
+                logic.mkAnd({logic.mkAnd(formulas), TimeMachine(logic).sendFlaThroughTime(sink, num)}), vars)));
             } else {
                 // Otherwise, states leading to termination are blocked from transition
                 PTRef block = TimeMachine(logic).sendFlaThroughTime(Result, -j + 1);
@@ -587,7 +590,7 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
             // When it is the case, TS is terminating
             if (SMTsolver.check() == SMTSolver::Answer::UNSAT) {
                 std::cout << "Init and Transition" << std::endl;
-                return {Answer::YES, logic.getTerm_false()};
+                return {Answer::YES, logic.mkOr(strictCandidates)};
             }
 
             // This is an extension of the approach, constructing TrInv and attempting to prove termination
@@ -616,11 +619,17 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
 
                 // Extract well-founded disjuncts from the transition invariant
                 auto newCands = extractWellFoundedCandidates(itp, sink, logic, vars);
-                if (newCands.size() == 0) continue;
 
+                int change = 0;
                 for (auto cand : newCands) {
-                    strictCandidates.push(cand);
+                    SMTsolver.resetSolver();
+                    SMTsolver.assertProp(logic.mkAnd(cand, logic.mkNot(logic.mkOr(strictCandidates))));
+                    if (SMTsolver.check() == SMTSolver::Answer::SAT) {
+                        strictCandidates.push(cand);
+                        change++;
+                    }
                 }
+                if (change == 0) continue;
                 PTRef trInv = logic.mkOr(strictCandidates);
                 PTRef id = getId(vars, logic);
 
@@ -728,7 +737,13 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                     if (answer == Answer::YES) {
                         smt_checker.resetSolver();
                         // TODO: Need to change TrInv, adding found subinv in a better way
-                        // strictCandidates.push(subinv);
+                        strictCandidates.clear();
+                        strictCandidates.push(trInv);
+                        strictCandidates.push(subinv);
+
+                        // TODO: Think if maybe sink can be even more restricted...
+                        sink = TermUtils(logic).simplifyMax(logic.mkOr(sink, reached));
+                        smt_checker.resetSolver();
                         // TODO: It should work for  subinv \/ TrInv, but for some reason it does not
                         //    particularly, weaker TrInv seems to failing more often then stronger TrInv :(
                         smt_checker.assertProp(logic.mkAnd({noncoveredStates, logic.mkOr(subinv, id),
