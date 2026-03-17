@@ -649,30 +649,6 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                     return {Answer::YES, trInv};
                 }
 
-                // Right-restricted
-                // This is a check if TrInv is right-restricted invariant
-                // Tr /\ TrInv /\ Sink => TrInv
-                // smt_checker.resetSolver();
-                // smt_checker.assertProp(
-                //     logic.mkAnd({temp_tr, TimeMachine(logic).sendFlaThroughTime(logic.mkOr(trInv, id), 1),
-                //                  TimeMachine(logic).sendFlaThroughTime(sink, 2),
-                //                  logic.mkNot(shiftOnlyNextVars(trInv, vars, logic))}));
-                // if (smt_checker.check() == SMTSolver::Answer::UNSAT) {
-                //     // If TrInv is right restricted, then we can compute a set of states
-                //     // which can potentially terminate, reaching sink states
-                //     PTRef preTransition = QuantifierElimination(logic).keepOnly(
-                //         logic.mkAnd(logic.mkOr(trInv, id), TimeMachine(logic).sendFlaThroughTime(sink, 1)), vars);
-                //     auto graph = constructHyperGraph(init, transition, logic.mkNot(preTransition), logic, vars);
-                //     auto engine =
-                //         EngineFactory(logic, witnesses).getEngine(witnesses.getOrDefault(Options::ENGINE, "spacer"));
-                //     // If it is possible to reach states that can not potentially terminate from initial states,
-                //     // Then TS is nonterminating
-                //     if (engine->solve(*graph).getAnswer() == VerificationAnswer::UNSAFE) {
-                //         std::cout << "Right" << std::endl;
-                //         return {Answer::NO, init};
-                //     }
-                // }
-
                 // If trInv is not complete Transition invariant, then we can compute the states which are not covered
                 //    by trInv - those are the states that potentially do not terminate
                 PTRef noncoveredStates = QuantifierElimination(logic).keepOnly(
@@ -762,14 +738,14 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                     // TODO: If doesn't terminate, check the reachability of recurrent set
                     // TODO: If reachable from init, then it does not terminate
                     else if (answer == Answer::NO) {
-                        auto [answer, subinv] =
-                            analyzeTS(reached, transition, TermUtils(logic).simplifyMax(logic.mkOr(sink, logic.mkNot(noncoveredStates))), witnesses,
-                                      logic, vars, DETERMINISTIC_TRANSITION);
-                        if (answer == Answer::NO) {
+                        // auto [answer, subinv] =
+                        //     analyzeTS(reached, transition, TermUtils(logic).simplifyMax(logic.mkOr(sink, logic.mkNot(noncoveredStates))), witnesses,
+                        //               logic, vars, DETERMINISTIC_TRANSITION);
+                        // if (answer == Answer::NO) {
                             return {Answer::NO, subinv};
-                        } else {
-                            return {Answer::YES, subinv};
-                        }
+                        // } else {
+                        //     return {Answer::YES, subinv};
+                        // }
                     };
                 }
             }
