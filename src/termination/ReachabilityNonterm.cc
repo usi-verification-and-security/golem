@@ -612,7 +612,7 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                 // This check guarantees the states T (states that cannot reach nonterminating states in n transition)
                 // contain the states that terminate in at least one transition (otherwise system is nonterminating)
                 // because there doesn't exist state that can reach sink states.
-                if (SMTsolver.check() == SMTSolver::Answer::UNSAT) { return {Answer::NO, init}; }
+                if (SMTsolver.check() == SMTSolver::Answer::UNSAT) { continue; }
 
                 // The procedure to construct transition invariants is executed
                 PTRef itp = constructTransitionInvariantCandidates(T, temp_tr, sink, num, logic, vars);
@@ -851,7 +851,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
     PTRef sink = logic.mkNot(QuantifierElimination(logic).keepOnly(transition, vars));
 
     // if sink is false, there are no sink states in the TS, therefore it is nonterminating
-    if (sink == logic.getTerm_false()) { continue; }
+    if (sink == logic.getTerm_false()) { return Answer::NO; }
 
     // Witness computation is required, as we need to use both counterexample traces to limit terminating states
     // and inductive invariants to prove nontermination
