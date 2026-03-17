@@ -851,7 +851,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
     PTRef sink = logic.mkNot(QuantifierElimination(logic).keepOnly(transition, vars));
 
     // if sink is false, there are no sink states in the TS, therefore it is nonterminating
-    if (sink == logic.getTerm_false()) { return Answer::NO; }
+    if (sink == logic.getTerm_false()) { continue; }
 
     // Witness computation is required, as we need to use both counterexample traces to limit terminating states
     // and inductive invariants to prove nontermination
