@@ -385,7 +385,7 @@ vec<PTRef> extractWellFoundedCandidates(PTRef itp, PTRef sink, ArithLogic & logi
     SMTSolver smt_solver(logic, SMTSolver::WitnessProduction::NONE);
 
     auto sink_disjuncts = utils.getTopLevelDisjuncts(utils.toDNF(unwrapEqs(logic.mkNot(sink), logic)));
-    PTRef dnfized_interpolant = unwrapEqs(itp, logic);
+    PTRef dnfized_interpolant = utils.simplifyMax(unwrapEqs(itp, logic));
     dnfized_interpolant = utils.toDNF(dnfized_interpolant);
 
     vec<PTRef> candidates = utils.getTopLevelDisjuncts(dnfized_interpolant);
