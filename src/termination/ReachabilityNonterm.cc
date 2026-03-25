@@ -502,6 +502,18 @@ PTRef constructTransitionInvariantCandidates(PTRef init, PTRef transition, PTRef
     }
 }
 
+PTRef simplifyReached(PTRef reached, Logic& logic) {
+    if (logic.isAnd(reached)) {
+            // Check every conjunct
+            auto conjuncts = TermUtils(logic).getTopLevelConjuncts(reached);
+            vec<PTRef> subjuncts;
+            for (auto junct : conjuncts) {
+                    if (!logic.isOr(junct)) subjuncts.push(junct);
+                }
+            return logic.mkAnd(subjuncts);
+        }
+}
+
 std::tuple<ReachabilityNonterm::Answer, PTRef>
 ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options const & witnesses, ArithLogic & logic,
                                std::vector<PTRef> const & vars, bool DETERMINISTIC_TRANSITION) {
