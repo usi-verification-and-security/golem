@@ -460,14 +460,27 @@ PTRef constructTransitionInvariantCandidates(PTRef init, PTRef transition, PTRef
     std::vector<PTRef> checked_states;
     // This if calculates the states reachable in 1 <= n <= num-1 transitions
     if (depth > 1) {
-        vec<PTRef> temp_vars;
-        for (auto var : vars) {
-            temp_vars.push(TimeMachine(logic).sendVarThroughTime(var, depth - 1));
+        vec<PTRef> vars_to_remove;
+        for (int i = 0; i < depth - 1; i++) {
+            for (auto var : vars)
+                vars_to_remove.push(TimeMachine(logic).sendVarThroughTime(var, i));
         }
+        for (auto var : vars)
+            vars_to_remove.push(TimeMachine(logic).sendVarThroughTime(var, depth));
+
         checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(
-            QuantifierElimination(logic).keepOnly(logic.mkAnd(init, logic.mkAnd(deterministic_trace)), temp_vars), 1));
+            QuantifierElimination(logic).eliminate(logic.mkAnd(init, logic.mkAnd(deterministic_trace)), vars_to_remove), 1));
+
+        // vec<PTRef> temp_vars;
+        // for (auto var : vars) {
+        //     temp_vars.push(TimeMachine(logic).sendVarThroughTime(var, depth - 1));
+        // }
+        // checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(
+        //     QuantifierElimination(logic).keepOnly(logic.mkAnd(init, logic.mkAnd(deterministic_trace)), temp_vars), 1));
     }
     checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(sink, depth));
+    // std::cout<<"Checked_states[0]: " << logic.pp(checked_states[0]) << std::endl;
+    // std::cout<<"Checked_states[1]: " << logic.pp(checked_states[1]) << std::endl;
     // sink is updated, representing states that are guaranteed to reach termination
     PTRef temp_sink = logic.mkOr(checked_states);
     SMTSolver smt_solver(logic, SMTSolver::WitnessProduction::ONLY_INTERPOLANTS);
@@ -475,6 +488,8 @@ PTRef constructTransitionInvariantCandidates(PTRef init, PTRef transition, PTRef
     smt_solver.assertProp(logic.mkAnd(deterministic_trace));
     smt_solver.push();
     smt_solver.assertProp(logic.mkAnd(init, logic.mkNot(temp_sink)));
+    // std::cout << "Left: " << logic.pp(TermUtils(logic).simplifyMax(logic.mkAnd(deterministic_trace))) << std::endl;
+    // std::cout << "Right: " << logic.pp(TermUtils(logic).simplifyMax(logic.mkAnd(init, logic.mkNot(temp_sink)))) << std::endl;
     // Formula should be unsat, because \lnot(sink) are the states which can't be reached after n
     // transitions
     if (smt_solver.check() == SMTSolver::Answer::UNSAT) {
@@ -517,9 +532,11 @@ PTRef simplifyReached(PTRef reached, Logic& logic) {
 std::tuple<ReachabilityNonterm::Answer, PTRef>
 ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options const & witnesses, ArithLogic & logic,
                                std::vector<PTRef> const & vars, bool DETERMINISTIC_TRANSITION) {
-
     vec<PTRef> strictCandidates;
     while (true) {
+        // std::cout<<"Init: " << logic.pp(init) << std::endl;
+        // std::cout<<"Transition: " << logic.pp(transition) << std::endl;
+        // std::cout<<"Sink: " << logic.pp(sink) << std::endl;
         // TODO: Do smth with exponential transition growth in some cases via blocks...
         // Constructing a graph based on the currently considered TS
         auto graph = constructHyperGraph(init, transition, sink, logic, vars);
@@ -530,6 +547,7 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
         if (res.getAnswer() == VerificationAnswer::UNSAFE) {
             // When sink states are reachable, extract the number of transitions needed to reach the sink states
             uint num = res.getInvalidityWitness().getDerivation().size() - 3;
+            // std::cout << "Num: " << num << std::endl;
             // Construct the logical formula representing the trace:
             // Init(x) /\ Tr(x,x') /\ ... /\ Bad(x^(num))
             std::vector<PTRef> formulas;
@@ -613,9 +631,20 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                 // in less or equal then n
 
                 // States that can reach non-terminating state in n transitions:
-                PTRef F = QuantifierElimination(logic).keepOnly(
+                vec<PTRef> vars_to_remove;
+                for (int i = num; i > 0; i--) {
+                    for (auto var : vars)
+                        vars_to_remove.push(TimeMachine(logic).sendVarThroughTime(var, i));
+                }
+
+                PTRef F = QuantifierElimination(logic).eliminate(
                     logic.mkAnd(logic.mkAnd(formulas), logic.mkNot(TimeMachine(logic).sendFlaThroughTime(sink, num))),
-                    vars);
+                    vars_to_remove);
+                // std::cout << "F: " << logic.pp(F) << std::endl;
+
+                // PTRef F = QuantifierElimination(logic).keepOnly(
+                //     logic.mkAnd(logic.mkAnd(formulas), logic.mkNot(TimeMachine(logic).sendFlaThroughTime(sink, num))),
+                //     vars);
                 // States that can not reach non-terminating state in less then or n transitions:
                 PTRef T = logic.mkNot(F);
 
@@ -851,6 +880,9 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
     bool DETERMINISTIC_TRANSITION = determinismCheck(transition, logic, vars);
     // Safety-Based Termination Analysis
     // TODO: Figure out why passing in transition is problematic
+    init = QuantifierElimination(logic).eliminate(init, aux_vars);
+    transition = QuantifierElimination(logic).eliminate(transition, aux_vars);
+    sink = QuantifierElimination(logic).eliminate(sink, aux_vars);
     auto [answer, trInvOrRecurringSet] =
         analyzeTS(init, transition, sink, witnesses, logic, vars, DETERMINISTIC_TRANSITION);
     return answer;
