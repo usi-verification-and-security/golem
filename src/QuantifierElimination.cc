@@ -123,6 +123,104 @@ PTRef eliminate(Logic & logic, PTRef fla, vec<PTRef> const & vars, PTRef* overap
 
     return result;
 }
+
+PTRef eliminateDNF(Logic & logic, PTRef fla, vec<PTRef> const & vars, PTRef& over_result, size_t& iterations_limit) {
+    vec<PTRef> under_projections;
+    vec<PTRef> over_projections;
+
+    fla = TermUtils(logic).toNNF(fla);
+    auto iter = 0;
+    bool valid_under = true;
+
+    SMTSolver outer_solver(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
+    SMTSolver inner_solver(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
+    outer_solver.assertProp(fla);
+    while (true) {
+        auto res = outer_solver.check();
+        if (res == SMTSolver::Answer::UNSAT) { break; }
+        if (res != SMTSolver::Answer::SAT) {
+            throw std::logic_error("Error in solver during quantifier elimination");
+        }
+        // std::cout << "FOUND NEW IMPLICANT " << std::endl;
+        auto model = outer_solver.getModel();
+        ModelBasedProjection mbp(logic);
+        PTRef implicant = mbp.get_model_based_implicant(fla, vars, *model);
+        // now perform QE on the implicant only.
+        iter = 0;
+        inner_solver.push();
+        inner_solver.assertProp(implicant);
+        vec<PTRef> implicant_over_conjuncts;
+        vec<PTRef> implicant_under_disjuncts;
+        while (true) {
+            auto inner_res = inner_solver.check();
+            if (inner_res == SMTSolver::Answer::UNSAT) { break; }
+            if (inner_res != SMTSolver::Answer::SAT) {
+                throw std::logic_error("Error in solver during inner quantifier elimination");
+            }
+            auto inner_model = inner_solver.getModel();
+            // std::cout << " .... PROJECTING IMPLICANT iter " << iter << std::endl;
+
+            PTRef over_projection = PTRef_Undef;
+            PTRef under_projection = mbp.project(implicant, vars, *model, &over_projection);
+            
+            implicant_over_conjuncts.push(over_projection);
+            implicant_under_disjuncts.push(under_projection);
+            under_projections.push(under_projection);
+            
+            inner_solver.assertProp(logic.mkNot(under_projection));
+            
+            ++ iter;
+            if (iterations_limit and iter >= iterations_limit) {
+                valid_under = false;
+                break;
+            }
+        }
+        inner_solver.pop();
+
+        // These two formulae are supposed to be equivalent
+        PTRef implicant_projection_with_over = logic.mkAnd(implicant_over_conjuncts);
+#if CHECK_BMBP
+        if (not iterations_limit or iter < iterations_limit) {
+            PTRef implicant_projection_with_under = logic.mkOr(implicant_under_disjuncts);
+            SMTSolver check_under_solver(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
+            check_under_solver.assertProp(implicant_projection_with_over);
+            check_under_solver.assertProp(logic.mkNot(implicant_projection_with_under));
+            auto check_under_res = check_under_solver.check();
+            if (check_under_res == SMTSolver::Answer::SAT) {
+                throw std::logic_error("Wrong convex projection!?");
+            }
+        }
+#endif
+
+        // Here QE of implicant is done. Block the over approx when looking for next implicant.
+        
+        over_projections.push(implicant_projection_with_over);
+
+        outer_solver.push(); // to avoid processing the same formula over and over again
+        outer_solver.assertProp(logic.mkNot(implicant_projection_with_over));
+    }
+
+    PTRef under_result = PTRef_Undef;
+    under_result = logic.mkOr(under_projections);
+    if (logic.isBooleanOperator(under_result) and not logic.isNot(under_result)) {
+        under_result = ::rewriteMaxArityAggresive(logic, under_result);
+        if (logic.isAnd(under_result) or logic.isOr(under_result)) {
+            under_result = ::simplifyUnderAssignment_Aggressive(under_result, logic);
+        }
+        // TODO: more simplifications?
+    }
+
+    over_result = logic.mkOr(over_projections);
+    if (logic.isBooleanOperator(over_result) and not logic.isNot(over_result)) {
+        over_result = ::rewriteMaxArityAggresive(logic, over_result);
+        if (logic.isAnd(over_result) or logic.isOr(over_result)) {
+            over_result = ::simplifyUnderAssignment_Aggressive(over_result, logic);
+        }
+    }
+
+    iterations_limit = valid_under;
+    return under_result;
+}
 } // namespace
 
 namespace golem {
@@ -164,6 +262,31 @@ QuantifierElimination::eliminate(PTRef fla, vec<PTRef> const & vars, size_t iter
     fla = TermUtils(logic).toNNF(fla);
     auto under = ::eliminate(logic, fla, vars, overapprox, iterations_limit);
     return {under, static_cast<bool>(iterations_limit)};
+}
+
+std::pair<PTRef, bool> QuantifierElimination::eliminateDNF(PTRef fla, vec<PTRef> const & vars, size_t iterations_limit, PTRef& overapprox) {
+    if (not std::all_of(vars.begin(), vars.end(), [this](PTRef var) { return logic.isVar(var); }) or
+        not logic.hasSortBool(fla)) {
+        throw std::invalid_argument("Invalid arguments to quantifier elimination");
+    } 
+    fla = TermUtils(logic).toNNF(fla);
+    auto under = ::eliminateDNF(logic, fla, vars, overapprox, iterations_limit);
+    return {under, static_cast<bool>(iterations_limit)};
+}
+
+std::pair<PTRef, bool> QuantifierElimination::keepOnlyDNF(PTRef fla, vec<PTRef> const & vars, size_t iterations_limit, PTRef& overapprox) {
+    auto allVars = TermUtils(logic).getVars(fla);
+    vec<PTRef> toEliminate;
+    for (PTRef var : allVars) {
+        if (std::find(vars.begin(), vars.end(), var) == vars.end()) { toEliminate.push(var); }
+    }
+    return eliminateDNF(fla, toEliminate, iterations_limit, overapprox);
+}
+
+PTRef QuantifierElimination::eliminateDNF(PTRef fla, vec<PTRef> const & vars) {
+    PTRef over_result = PTRef_Undef;
+    eliminateDNF(fla, vars, 0, over_result);
+    return over_result;
 }
 
 } // namespace golem

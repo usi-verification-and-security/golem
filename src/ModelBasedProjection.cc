@@ -490,6 +490,42 @@ void checkImplicant(ModelBasedProjection::implicant_t const & implicant, Logic &
 }
 } // namespace
 
+PTRef ModelBasedProjection::get_model_based_implicant(PTRef fla, const vec<PTRef> & varsToEliminate, Model & model) {
+    vec<PTRef> tmp;
+    varsToEliminate.copyTo(tmp);
+    auto boolEndIt = std::stable_partition(tmp.begin(), tmp.end(), [&](PTRef var) {
+        assert(logic.isVar(var));
+        return logic.hasSortBool(var);
+    });
+
+    auto original_fla = fla;
+
+    if (boolEndIt != tmp.begin()) { // there are some booleans
+        MapWithKeys<PTRef, PTRef, PTRefHash> subst;
+        for (auto it = tmp.begin(); it != boolEndIt; ++it) {
+            subst.insert(*it, model.evaluate(*it));
+        }
+        fla = Substitutor(logic, subst).rewrite(fla);
+    }
+    if (boolEndIt == tmp.end()) {
+        return fla;
+    }
+
+    PTRef nnf = TermUtils(logic).toNNF(fla);
+
+    // compute map to know if given term contains any variable to eliminate
+    auto varsInfo = computeVarsInfo(nnf, logic, boolEndIt, tmp.end());
+
+    auto implicant = getImplicant(nnf, model, varsInfo);
+    postprocess(implicant, dynamic_cast<ArithLogic &>(logic));
+
+    auto ptasgn_to_ptref = [&](PtAsgn literal) { return literal.sgn == l_True ? literal.tr : logic.mkNot(literal.tr); };
+    vec<PTRef> implicant_conjuncts;
+    implicant_conjuncts.capacity(implicant.size());
+    for (PtAsgn const & lit : implicant) { implicant_conjuncts.push(ptasgn_to_ptref(lit)); }
+    return logic.mkAnd(std::move(implicant_conjuncts));
+}
+
 PTRef ModelBasedProjection::keepOnly(PTRef fla, const vec<PTRef> & varsToKeep, Model & model, PTRef* overapprox) {
     auto allVars = TermUtils(logic).getVars(fla);
     vec<PTRef> toEliminate;
@@ -813,6 +849,27 @@ void ModelBasedProjection::processClassicLiterals(PTRef var, div_constraints_t &
             implicant.erase(implicant.begin(), interestingEnd);
             return;
         }
+
+        if (lower.size() <= 3 or upper.size() <= 3) {
+            // do full elimination with all bounds; this yields more precise result, but can produce more literals
+            implicant_t newLiterals;
+            for (auto const & lowerBound : lower) {
+                for (auto const & upperBound : upper) {
+                    auto res = resolve(lowerBound, upperBound, model, lialogic);
+                    assert(res.bounds.size() <= 2);
+                    for (PTRef nBound : res.bounds) {
+                        assert(nBound != lialogic.getTerm_true());
+                        newLiterals.emplace_back(nBound, l_True);
+                    }
+                    if (res.hasDivConstraint) { divConstraints.push_back(res.constraint); }
+                }
+            }
+            // add literals not containing the variable
+            newLiterals.insert(newLiterals.end(), interestingEnd, implicant.end());
+            implicant = std::move(newLiterals);
+            return;
+        }
+
         // pick greatest lower bound in the model
         auto greatestLowerBoundIt =
             maxElementWithProjection(lower.begin(), lower.end(), [&](LIABoundLower const & bound) {

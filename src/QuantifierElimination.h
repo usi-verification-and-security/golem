@@ -27,6 +27,10 @@ public:
     std::pair<PTRef, bool> eliminate(PTRef fla, vec<PTRef> const & vars, size_t iterations_limit, PTRef* overapprox = nullptr);
     std::pair<PTRef, bool> keepOnly(PTRef fla, vec<PTRef> const & vars, size_t iterations_limit, PTRef* overapprox = nullptr);
 
+    PTRef eliminateDNF(PTRef fla, vec<PTRef> const & vars);
+    std::pair<PTRef, bool> eliminateDNF(PTRef fla, vec<PTRef> const & vars, size_t iterations_limit, PTRef& overapprox);
+    std::pair<PTRef, bool> keepOnlyDNF(PTRef fla, vec<PTRef> const & vars, size_t iterations_limit, PTRef& overapprox);
+
 private:
     Logic & logic;
 };

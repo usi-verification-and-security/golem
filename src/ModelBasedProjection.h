@@ -23,6 +23,8 @@ public:
 
     explicit ModelBasedProjection(Logic & logic) : logic(logic) {}
 
+    PTRef get_model_based_implicant(PTRef fla, vec<PTRef> const & varsToEliminate, Model & model);
+
     PTRef project(PTRef fla, vec<PTRef> const & varsToEliminate, Model & model, PTRef* overapprox = nullptr);
 
     PTRef keepOnly(PTRef fla, vec<PTRef> const & varsToKeep, Model & model, PTRef* overapprox = nullptr);
