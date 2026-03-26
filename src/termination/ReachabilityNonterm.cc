@@ -637,9 +637,11 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                         vars_to_remove.push(TimeMachine(logic).sendVarThroughTime(var, i));
                 }
 
-                PTRef F = QuantifierElimination(logic).eliminate(
+                PTRef* overapprox = logic.getTerm_true();
+                auto [F, complete] = QuantifierElimination(logic).eliminate(
                     logic.mkAnd(logic.mkAnd(formulas), logic.mkNot(TimeMachine(logic).sendFlaThroughTime(sink, num))),
-                    vars_to_remove);
+                    vars_to_remove, 50, overapprox);
+                F = *overapprox;
                 // std::cout << "F: " << logic.pp(F) << std::endl;
 
                 // PTRef F = QuantifierElimination(logic).keepOnly(
@@ -747,7 +749,7 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                     assert(reached != logic.getTerm_false());
                     // Algorithm checks if reachable states are terminating
                     std::cout << "Deeper\n";
-                    auto [answer, subinv] = analyzeTS(reached, transition, TermUtils(logic).simplifyMax(sink), witnesses,
+                    auto [answer, subinv] = analyzeTS(reached, transition, TermUtils(logic).simplifyMax(logic.mkNot(noncoveredStates)), witnesses,
                                                       logic, vars, DETERMINISTIC_TRANSITION);
                     std::cout << "Higher\n";
                     // TODO: It is possible to do check differently, analyzing <noncoveredStates, tr,
