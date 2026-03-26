@@ -637,11 +637,14 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                         vars_to_remove.push(TimeMachine(logic).sendVarThroughTime(var, i));
                 }
 
-                PTRef* overapprox = logic.getTerm_true();
+                PTRef overapprox = PTRef_Undef;
+                std::cout << "Formula: " << logic.pp(logic.mkAnd(logic.mkAnd(formulas), logic.mkNot(TimeMachine(logic).sendFlaThroughTime(sink, num)))) << std::endl;
                 auto [F, complete] = QuantifierElimination(logic).eliminate(
                     logic.mkAnd(logic.mkAnd(formulas), logic.mkNot(TimeMachine(logic).sendFlaThroughTime(sink, num))),
-                    vars_to_remove, 50, overapprox);
-                F = *overapprox;
+                    vars_to_remove, 100, &overapprox);
+                std::cout << "F: " << logic.pp(F) << std::endl;
+                std::cout << "complete: " << complete << std::endl;
+                F = overapprox;
                 // std::cout << "F: " << logic.pp(F) << std::endl;
 
                 // PTRef F = QuantifierElimination(logic).keepOnly(
@@ -655,7 +658,11 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                 // This check guarantees the states T (states that cannot reach nonterminating states in n transition)
                 // contain the states that terminate in at least one transition (otherwise system is nonterminating)
                 // because there doesn't exist state that can reach sink states.
-                if (SMTsolver.check() == SMTSolver::Answer::UNSAT) { continue; }
+                if (SMTsolver.check() == SMTSolver::Answer::UNSAT) {
+                    std::cout << "T cannot reach termination in one transition num: " << num << std::endl;
+                    std::cout << "F: " << logic.pp(F) << std::endl;
+                    continue;
+                }
 
                 // The procedure to construct transition invariants is executed
                 PTRef itp = constructTransitionInvariantCandidates(T, temp_tr, sink, num, logic, vars);
