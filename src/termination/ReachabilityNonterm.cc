@@ -647,17 +647,34 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                 }
                 for (auto var : aux_vars)
                     vars_to_remove.push(TimeMachine(logic).sendVarThroughTime(var, 0));
+                std::vector deterministic_trace{transition};
+                PTRef id = getId(vars, logic);
+                // Building Identity relation formula
+                for (int k = 1; k < num; k++) {
+                    // For every transition deterministic trace is updated, adding an Id or Tr
+                    // This is needed so that Interpolant overapproximates 1 <= n <= num transitions
+                    deterministic_trace.push_back(TimeMachine(logic).sendFlaThroughTime(logic.mkOr(transition, id), k));
+                }
 
-                PTRef F = QuantifierElimination(logic).eliminate(
-                    logic.mkAnd(logic.mkAnd(formulas), logic.mkNot(TimeMachine(logic).sendFlaThroughTime(sink, num))),
-                    vars_to_remove);
+
+                PTRef F =  logic.mkAnd({logic.mkAnd(deterministic_trace), TimeMachine(logic).sendFlaThroughTime(sink, num),
+                    logic.mkNot(logic.mkAnd(logic.mkAnd(deterministic_trace), logic.mkNot(TimeMachine(logic).sendFlaThroughTime(sink, num))))});
+                SMTSolver FChecker(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
+                FChecker.assertProp(F);
+                FChecker.check();
+                auto model = FChecker.getModel();
+                PTRef T = ModelBasedProjection(logic).project(F, vars, *model);
+                // PTRef F = QuantifierElimination(logic).eliminate(
+                //     logic.mkAnd({logic.mkAnd(formulas), TimeMachine(logic).sendFlaThroughTime(sink, num),
+                //     logic.mkNot(logic.mkAnd(logic.mkAnd(formulas), logic.mkNot(TimeMachine(logic).sendFlaThroughTime(sink, num))))}),
+                //     vars_to_remove);
                 // std::cout << "F: " << logic.pp(F) << std::endl;
 
                 // PTRef F = QuantifierElimination(logic).keepOnly(
                 //     logic.mkAnd(logic.mkAnd(formulas), logic.mkNot(TimeMachine(logic).sendFlaThroughTime(sink, num))),
                 //     vars);
                 // States that can not reach non-terminating state in less then or n transitions:
-                PTRef T = logic.mkNot(F);
+                // PTRef T = logic.mkNot(F);
 
                 SMTsolver.resetSolver();
                 SMTsolver.assertProp(logic.mkAnd({T, temp_tr, TimeMachine(logic).sendFlaThroughTime(sink, num)}));
