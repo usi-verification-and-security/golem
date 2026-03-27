@@ -538,6 +538,7 @@ PTRef simplifyReached(PTRef reached, Logic& logic) {
 std::tuple<ReachabilityNonterm::Answer, PTRef>
 ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options const & witnesses, ArithLogic & logic,
                                std::vector<PTRef> const & vars, std::vector<PTRef> const & aux_vars, bool DETERMINISTIC_TRANSITION) {
+    PTRef coveredStates = logic.getTerm_false();
     vec<PTRef> strictCandidates;
     while (true) {
         // std::cout<<"Init: " << logic.pp(init) << std::endl;
@@ -708,7 +709,7 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                     vars);
 
                 // We check if the states that are not covered by TrInv are reachable
-                auto graph = constructHyperGraph(init, transition, logic.mkAnd(noncoveredStates, logic.mkNot(sink)),
+                auto graph = constructHyperGraph(init, transition, logic.mkAnd({noncoveredStates, logic.mkNot(sink), logic.mkNot(coveredStates)}),
                                                  logic, vars);
                 auto engine =
                     EngineFactory(logic, witnesses).getEngine(witnesses.getOrDefault(Options::ENGINE, "spacer"));
@@ -770,6 +771,7 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                         strictCandidates.clear();
                         strictCandidates.push(trInv);
                         strictCandidates.push(subinv);
+                        coveredStates = TermUtils(logic).simplifyMax(logic.mkOr(reached, coveredStates));
 
                         // TODO: I need to think how to update sink legally.
                         //  On one hand, I proved that states from "reached" will eventually reach
