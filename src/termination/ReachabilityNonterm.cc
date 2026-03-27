@@ -661,9 +661,14 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                     logic.mkNot(logic.mkAnd(logic.mkAnd(deterministic_trace), logic.mkNot(TimeMachine(logic).sendFlaThroughTime(sink, num))))});
                 SMTSolver FChecker(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
                 FChecker.assertProp(F);
-                FChecker.check();
+                auto sres = FChecker.check();
+                if (sres == SMTSolver::Answer::UNSAT) {
+                    //TODO: we can terminate
+                    continue;
+                }
                 auto model = FChecker.getModel();
-                PTRef T = ModelBasedProjection(logic).project(F, vars, *model);
+                PTRef T = ModelBasedProjection(logic).project(F, vars_to_remove, *model);
+                std::cout << "T: " << logic.pp(T) << std::endl;
                 // PTRef F = QuantifierElimination(logic).eliminate(
                 //     logic.mkAnd({logic.mkAnd(formulas), TimeMachine(logic).sendFlaThroughTime(sink, num),
                 //     logic.mkNot(logic.mkAnd(logic.mkAnd(formulas), logic.mkNot(TimeMachine(logic).sendFlaThroughTime(sink, num))))}),
@@ -700,7 +705,7 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                 }
                 if (change == 0) continue;
                 PTRef trInv = logic.mkOr(strictCandidates);
-                PTRef id = getId(vars, logic);
+                // PTRef id = getId(vars, logic);
 
                 SMTSolver smt_checker(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
                 smt_checker.resetSolver();
