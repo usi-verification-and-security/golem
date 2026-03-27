@@ -448,7 +448,7 @@ PTRef getId(const std::vector<PTRef> & vars, Logic & logic) {
 }
 
 PTRef constructTransitionInvariantCandidates(PTRef init, PTRef transition, PTRef sink, int depth, Logic & logic,
-                                             const std::vector<PTRef> & vars) {
+                                             const std::vector<PTRef> & vars, const std::vector<PTRef> & aux_vars) {
     PTRef id = getId(vars, logic);
     std::vector deterministic_trace{transition};
     // Building Identity relation formula
@@ -462,11 +462,17 @@ PTRef constructTransitionInvariantCandidates(PTRef init, PTRef transition, PTRef
     if (depth > 1) {
         vec<PTRef> vars_to_remove;
         for (int i = 0; i < depth - 1; i++) {
+            for (auto var : aux_vars)
+                vars_to_remove.push(TimeMachine(logic).sendVarThroughTime(var, i));
             for (auto var : vars)
                 vars_to_remove.push(TimeMachine(logic).sendVarThroughTime(var, i));
         }
+        for (auto var : aux_vars)
+            vars_to_remove.push(TimeMachine(logic).sendVarThroughTime(var, depth));
         for (auto var : vars)
             vars_to_remove.push(TimeMachine(logic).sendVarThroughTime(var, depth));
+        for (auto var : aux_vars)
+            vars_to_remove.push(TimeMachine(logic).sendVarThroughTime(var, depth-1));
 
         checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(
             QuantifierElimination(logic).eliminate(logic.mkAnd(init, logic.mkAnd(deterministic_trace)), vars_to_remove), 1));
@@ -531,7 +537,7 @@ PTRef simplifyReached(PTRef reached, Logic& logic) {
 
 std::tuple<ReachabilityNonterm::Answer, PTRef>
 ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options const & witnesses, ArithLogic & logic,
-                               std::vector<PTRef> const & vars, bool DETERMINISTIC_TRANSITION) {
+                               std::vector<PTRef> const & vars, std::vector<PTRef> const & aux_vars, bool DETERMINISTIC_TRANSITION) {
     vec<PTRef> strictCandidates;
     while (true) {
         // std::cout<<"Init: " << logic.pp(init) << std::endl;
@@ -633,9 +639,13 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                 // States that can reach non-terminating state in n transitions:
                 vec<PTRef> vars_to_remove;
                 for (int i = num; i > 0; i--) {
+                    for (auto var : aux_vars)
+                        vars_to_remove.push(TimeMachine(logic).sendVarThroughTime(var, i));
                     for (auto var : vars)
                         vars_to_remove.push(TimeMachine(logic).sendVarThroughTime(var, i));
                 }
+                for (auto var : aux_vars)
+                    vars_to_remove.push(TimeMachine(logic).sendVarThroughTime(var, 0));
 
                 PTRef F = QuantifierElimination(logic).eliminate(
                     logic.mkAnd(logic.mkAnd(formulas), logic.mkNot(TimeMachine(logic).sendFlaThroughTime(sink, num))),
@@ -656,7 +666,7 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                 if (SMTsolver.check() == SMTSolver::Answer::UNSAT) { continue; }
 
                 // The procedure to construct transition invariants is executed
-                PTRef itp = constructTransitionInvariantCandidates(T, temp_tr, sink, num, logic, vars);
+                PTRef itp = constructTransitionInvariantCandidates(T, temp_tr, sink, num, logic, vars, aux_vars);
 
                 // Extract well-founded disjuncts from the transition invariant
                 auto newCands = extractWellFoundedCandidates(itp, sink, logic, vars);
@@ -748,7 +758,7 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                     // Algorithm checks if reachable states are terminating
                     std::cout << "Deeper\n";
                     auto [answer, subinv] = analyzeTS(reached, transition, TermUtils(logic).simplifyMax(logic.mkNot(noncoveredStates)), witnesses,
-                                                      logic, vars, DETERMINISTIC_TRANSITION);
+                                                      logic, vars, aux_vars, DETERMINISTIC_TRANSITION);
                     std::cout << "Higher\n";
                     // TODO: It is possible to do check differently, analyzing <noncoveredStates, tr,
                     // not(noncoveredStates)>
@@ -884,7 +894,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
     // transition = QuantifierElimination(logic).eliminate(transition, aux_vars);
     // sink = QuantifierElimination(logic).eliminate(sink, aux_vars);
     auto [answer, trInvOrRecurringSet] =
-        analyzeTS(init, transition, sink, witnesses, logic, vars, DETERMINISTIC_TRANSITION);
+        analyzeTS(init, transition, sink, witnesses, logic, vars, aux_vars, DETERMINISTIC_TRANSITION);
     return answer;
 }
 
