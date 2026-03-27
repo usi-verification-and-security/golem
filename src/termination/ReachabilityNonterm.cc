@@ -880,9 +880,9 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
     bool DETERMINISTIC_TRANSITION = determinismCheck(transition, logic, vars);
     // Safety-Based Termination Analysis
     // TODO: Figure out why passing in transition is problematic
-    init = QuantifierElimination(logic).eliminate(init, aux_vars);
-    transition = QuantifierElimination(logic).eliminate(transition, aux_vars);
-    sink = QuantifierElimination(logic).eliminate(sink, aux_vars);
+    // init = QuantifierElimination(logic).eliminate(init, aux_vars);
+    // transition = QuantifierElimination(logic).eliminate(transition, aux_vars);
+    // sink = QuantifierElimination(logic).eliminate(sink, aux_vars);
     auto [answer, trInvOrRecurringSet] =
         analyzeTS(init, transition, sink, witnesses, logic, vars, DETERMINISTIC_TRANSITION);
     return answer;
