@@ -771,8 +771,13 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                         strictCandidates.push(trInv);
                         strictCandidates.push(subinv);
 
-                        // TODO: Think if maybe sink can be even more restricted...
-                        sink = TermUtils(logic).simplifyMax(logic.mkOr(sink, reached));
+                        // TODO: I need to think how to update sink legally.
+                        //  On one hand, I proved that states from "reached" will eventually reach
+                        //  states covered by Transition invariant
+                        //  On other hand, if I block it, we can block initial states => blocking the route
+                        //  to recurrent set
+                        // std::cout << "Reached: " << logic.pp(reached) << std::endl;
+                        // sink = TermUtils(logic).simplifyMax(logic.mkOr(sink, reached));
                         smt_checker.resetSolver();
                         // TODO: It should work for  subinv \/ TrInv, but for some reason it does not
                         //    particularly, weaker TrInv seems to failing more often then stronger TrInv :(
