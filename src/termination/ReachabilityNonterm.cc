@@ -648,11 +648,12 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                 for (auto var : aux_vars)
                     vars_to_remove.push(TimeMachine(logic).sendVarThroughTime(var, 0));
 
-                PTRef F = QuantifierElimination(logic).eliminate(
+                PTRef overapprox = PTRef_Undef;
+                auto [F,complete] = QuantifierElimination(logic).eliminateDNF(
                     logic.mkAnd(logic.mkAnd(formulas), logic.mkNot(TimeMachine(logic).sendFlaThroughTime(sink, num))),
-                    vars_to_remove);
+                    vars_to_remove, 10, overapprox);
                 // std::cout << "F: " << logic.pp(F) << std::endl;
-
+                F = overapprox;
                 // PTRef F = QuantifierElimination(logic).keepOnly(
                 //     logic.mkAnd(logic.mkAnd(formulas), logic.mkNot(TimeMachine(logic).sendFlaThroughTime(sink, num))),
                 //     vars);
