@@ -67,9 +67,8 @@ PTRef eliminate(Logic & logic, PTRef fla, vec<PTRef> const & vars, PTRef* overap
     // Iterations limit is changed to represent the the validity of the underapproximation.
     iterations_limit = valid_under;
 
-    PTRef result = PTRef_Undef;
+    PTRef result = logic.mkOr(projections);
     if (valid_under) {
-        result = logic.mkOr(projections);
         if (logic.isBooleanOperator(result) and not logic.isNot(result)) {
             result = ::rewriteMaxArityAggresive(logic, result);
             if (logic.isAnd(result) or logic.isOr(result)) {
