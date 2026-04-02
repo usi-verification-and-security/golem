@@ -130,10 +130,14 @@ PTRef eliminateDNF(Logic & logic, PTRef fla, vec<PTRef> const & vars, PTRef& ove
     fla = TermUtils(logic).toNNF(fla);
     auto iter = 0;
     bool valid_under = true;
+    bool valid_over = true;
+    PTRef done = logic.getTerm_true();
 
     SMTSolver outer_solver(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
     SMTSolver inner_solver(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
     outer_solver.assertProp(fla);
+    auto outer_iter = 0;
+    auto max_inner_iter = 0;
     while (true) {
         auto res = outer_solver.check();
         if (res == SMTSolver::Answer::UNSAT) { break; }
@@ -143,7 +147,18 @@ PTRef eliminateDNF(Logic & logic, PTRef fla, vec<PTRef> const & vars, PTRef& ove
         // std::cout << "FOUND NEW IMPLICANT " << std::endl;
         auto model = outer_solver.getModel();
         ModelBasedProjection mbp(logic);
-        PTRef implicant = mbp.get_model_based_implicant(fla, vars, *model);
+
+        PTRef implicant;
+
+        if (iterations_limit and outer_iter >= iterations_limit) {
+          valid_over = false;
+          // std::cout << "Overapproximating with CHULL the remaining implicants"
+          //           << std::endl;
+          implicant = logic.mkAnd(done, fla);
+        } else {
+          implicant = mbp.get_model_based_implicant(fla, vars, *model);
+        }
+
         // now perform QE on the implicant only.
         iter = 0;
         inner_solver.push();
@@ -161,25 +176,27 @@ PTRef eliminateDNF(Logic & logic, PTRef fla, vec<PTRef> const & vars, PTRef& ove
 
             PTRef over_projection = PTRef_Undef;
             PTRef under_projection = mbp.project(implicant, vars, *model, &over_projection);
-            
+
             implicant_over_conjuncts.push(over_projection);
             implicant_under_disjuncts.push(under_projection);
             under_projections.push(under_projection);
-            
+
             inner_solver.assertProp(logic.mkNot(under_projection));
-            
+
             ++ iter;
             if (iterations_limit and iter >= iterations_limit) {
                 valid_under = false;
+                // std::cout << " overapproximating implicant" << std::endl;
                 break;
             }
         }
         inner_solver.pop();
+        max_inner_iter = std::max(max_inner_iter, iter);
 
         // These two formulae are supposed to be equivalent
         PTRef implicant_projection_with_over = logic.mkAnd(implicant_over_conjuncts);
 #if CHECK_BMBP
-        if (not iterations_limit or iter < iterations_limit) {
+        if (valid_over and not iterations_limit or iter < iterations_limit) {
             PTRef implicant_projection_with_under = logic.mkOr(implicant_under_disjuncts);
             SMTSolver check_under_solver(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
             check_under_solver.assertProp(implicant_projection_with_over);
@@ -194,9 +211,9 @@ PTRef eliminateDNF(Logic & logic, PTRef fla, vec<PTRef> const & vars, PTRef& ove
         // Here QE of implicant is done. Block the over approx when looking for next implicant.
         
         over_projections.push(implicant_projection_with_over);
-
-        outer_solver.push(); // to avoid processing the same formula over and over again
+        ++ outer_iter;
         outer_solver.assertProp(logic.mkNot(implicant_projection_with_over));
+        done = logic.mkAnd(done, logic.mkNot(implicant_projection_with_over));
     }
 
     PTRef under_result = PTRef_Undef;
@@ -216,8 +233,16 @@ PTRef eliminateDNF(Logic & logic, PTRef fla, vec<PTRef> const & vars, PTRef& ove
             over_result = ::simplifyUnderAssignment_Aggressive(over_result, logic);
         }
     }
+    
+    // if (not valid_under) {
+    //   std::cout << "Warning: NOT valid_under" << std::endl;
+    // }
+    // if (not valid_over) {
+    //   std::cout << "Warning: NOT valid_over" << std::endl;
+    // }
 
-    iterations_limit = valid_under;
+    std::cout << "QE done: outer iterations: " << outer_iter << "; max inner iterations: " << max_inner_iter << std::endl;
+    iterations_limit = valid_under and valid_over;
     return under_result;
 }
 } // namespace
