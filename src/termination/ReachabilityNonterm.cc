@@ -540,10 +540,10 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                                std::vector<PTRef> const & vars, std::vector<PTRef> const & aux_vars, bool DETERMINISTIC_TRANSITION) {
     PTRef coveredStates = logic.getTerm_false();
     vec<PTRef> strictCandidates;
+        std::cout<<"Init: " << logic.pp(init) << std::endl;
+        std::cout<<"Transition: " << logic.pp(transition) << std::endl;
+        std::cout<<"Sink: " << logic.pp(sink) << std::endl;
     while (true) {
-        // std::cout<<"Init: " << logic.pp(init) << std::endl;
-        // std::cout<<"Transition: " << logic.pp(transition) << std::endl;
-        // std::cout<<"Sink: " << logic.pp(sink) << std::endl;
         // TODO: Do smth with exponential transition growth in some cases via blocks...
         // Constructing a graph based on the currently considered TS
         auto graph = constructHyperGraph(init, transition, sink, logic, vars);
@@ -672,6 +672,7 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
 
                 // The procedure to construct transition invariants is executed
                 PTRef itp = constructTransitionInvariantCandidates(T, temp_tr, sink, num, logic, vars, aux_vars);
+                // std::cout << " num: " << num << " itp: " << logic.pp(itp) << std::endl;
 
                 // Extract well-founded disjuncts from the transition invariant
                 auto newCands = extractWellFoundedCandidates(itp, sink, logic, vars);
