@@ -564,7 +564,7 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
             PTRef transitions =
                 logic.mkAnd({init, logic.mkAnd(formulas), TimeMachine(logic).sendFlaThroughTime(sink, num)});
 
-            SMTSolver SMTsolver(logic, SMTSolver::WitnessProduction::NONE);
+            SMTSolver SMTsolver(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
             SMTsolver.assertProp(transitions);
             // Check that sink is reachable in num transitions
             assert(SMTsolver.check() == SMTSolver::Answer::SAT);
@@ -579,6 +579,10 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
             // Traversing trace from the Bad to Init, detecting the last transition where some variables
             // were assigned nondetermenistically (Only if it is possible to reach some states other then sink in n trs)
             if (nondet_trace) {
+                SMTsolver.resetSolver();
+                SMTsolver.assertProp(transitions);
+                SMTsolver.check();
+                auto model = SMTsolver.getModel();
                 for (j = num; j > 0; j--) {
                     vec<PTRef> prev_vars;
                     // Constructing vectors of variables x^(j-1) and x^(j)
@@ -588,7 +592,7 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                     }
                     // Base is a formula, depicting all states reachable in j-1 transitions, which can reach
                     // termination in n-j+1 transitions
-                    PTRef Base = QuantifierElimination(logic).keepOnly(transitions, prev_vars);
+                    PTRef Base = ModelBasedProjection(logic).keepOnly(transitions, prev_vars, *model);
                     SMTsolver.resetSolver();
                     // Checking if it is possible to reach states which would not lead to termination in n-j states
                     // (if j = n) it checks if it is possible to reach nontermination states from trace
