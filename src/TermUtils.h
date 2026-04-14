@@ -153,7 +153,7 @@ public:
 
     PTRef toNNF(PTRef fla);
 
-    PTRef toDNF(PTRef fla);
+    PTRef toDNF(PTRef fla, uint disjuncts_limit = 0);
 
     struct SimplificationResult {
         Logic::SubstMap substitutionsUsed;
