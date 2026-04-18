@@ -54,57 +54,48 @@ PTRef unwrapEqs(PTRef input, ArithLogic & logic) {
 }
 
 // This function is needed to extract specific atoms from the arithmetic formula
-void unrollAtom(ArithLogic & logic, std::vector<PTRef> & coefs, PTRef atom, bool reverse) {
-    assert(logic.isVar(atom) || logic.isConstant(atom) || logic.isTimes(atom) || logic.isIntMinus(atom) ||
-           logic.isPlus(atom) || logic.isIntDiv(atom));
-    if (logic.isConstant(atom)) {
-        reverse ? coefs.push_back(atom) : coefs.push_back(logic.mkTimes(logic.getTerm_IntMinusOne(), atom));
-    } else if (logic.isVar(atom)) {
-        reverse ? coefs.push_back(logic.mkTimes(logic.getTerm_IntMinusOne(), atom)) : coefs.push_back(atom);
+void unrollAtom(ArithLogic & logic, std::vector<PTRef> & coefs, PTRef atom) {
+    assert(logic.isVar(atom) || logic.isTimes(atom) ||
+           logic.isPlus(atom));
+    auto size = coefs.size();
+    if (logic.isVar(atom)) {
+        coefs.push_back(logic.mkTimes(logic.getTerm_IntMinusOne(), atom));
     } else if (logic.isTimes(atom)) {
-        auto size = coefs.size();
-        assert(logic.getPterm(atom).size() == 2);
         auto [subatom, constant] = logic.splitTermToVarAndConst(atom);
         assert(logic.isConstant(constant));
-        unrollAtom(logic, coefs, subatom, reverse);
+        unrollAtom(logic, coefs, subatom);
         for (auto i = size; i < coefs.size(); i++) {
             coefs[i] = logic.mkTimes(constant, coefs[i]);
         }
-    } else if (logic.isIntMinus(atom)) {
-        auto it = logic.getPterm(atom).begin();
-        assert(logic.getPterm(atom).size() == 2);
-        PTRef subatom1 = it[0];
-        PTRef subatom2 = it[1];
-        unrollAtom(logic, coefs, subatom1, reverse);
-        unrollAtom(logic, coefs, subatom2, !reverse);
     } else if (logic.isPlus(atom)) {
         auto it = logic.getPterm(atom).begin();
         while (it != logic.getPterm(atom).end()) {
-            unrollAtom(logic, coefs, *it, reverse);
+            unrollAtom(logic, coefs, *it);
             it++;
         }
-    } else if (logic.isIntDiv(atom)) {
-        auto it = logic.getPterm(atom).begin();
-        auto size = coefs.size();
-        assert(logic.getPterm(atom).size() == 2);
-        PTRef constant = it[1];
-        assert(logic.isConstant(constant));
-        PTRef subatom = it[0];
-        unrollAtom(logic, coefs, subatom, reverse);
-        for (auto i = size; i < coefs.size(); i++) {
-            coefs[i] = logic.mkTimes(logic.mkIntDiv(logic.getPterm(coefs[i]).begin()[0], constant),
-                                     logic.getPterm(coefs[i]).begin()[1]);
-        }
     }
+    // else if (logic.isIntDiv(atom)) {
+    //     auto it = logic.getPterm(atom).begin();
+    //     PTRef constant = it[1];
+    //     assert(logic.isConstant(constant));
+    //     PTRef subatom = it[0];
+    //     unrollAtom(logic, coefs, subatom);
+    //     for (auto i = size; i < coefs.size(); i++) {
+    //         coefs[i] = logic.mkTimes(logic.mkIntDiv(logic.getPterm(coefs[i]).begin()[0], constant),
+    //                                  logic.getPterm(coefs[i]).begin()[1]);
+    //     }
+    // }
 }
 
 // Function to get all of the atoms from the inequalities
 void getCoeffs(ArithLogic & logic, std::vector<PTRef> & coefs, PTRef formula) {
     assert(logic.isLeq(formula));
+    std::cout << "Formula: " << logic.pp(formula) << std::endl;
     auto it = logic.getPterm(formula).begin();
     assert(logic.getPterm(formula).size() == 2);
-    unrollAtom(logic, coefs, it[0], false);
-    unrollAtom(logic, coefs, it[1], true);
+    assert(logic.isConstant(it[0]));
+    coefs.push_back(logic.mkNeg(it[0]));
+    unrollAtom(logic, coefs, it[1]);
 }
 
 // Function to turn everything in <= formulas
