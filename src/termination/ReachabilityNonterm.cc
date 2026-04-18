@@ -55,8 +55,7 @@ PTRef unwrapEqs(PTRef input, ArithLogic & logic) {
 
 // This function is needed to extract specific atoms from the arithmetic formula
 void unrollAtom(ArithLogic & logic, std::vector<PTRef> & coefs, PTRef atom) {
-    assert(logic.isVar(atom) || logic.isTimes(atom) ||
-           logic.isPlus(atom));
+    assert(logic.isVar(atom) || logic.isTimes(atom) || logic.isPlus(atom));
     auto size = coefs.size();
     if (logic.isVar(atom)) {
         coefs.push_back(logic.mkTimes(logic.getTerm_IntMinusOne(), atom));
@@ -74,17 +73,6 @@ void unrollAtom(ArithLogic & logic, std::vector<PTRef> & coefs, PTRef atom) {
             it++;
         }
     }
-    // else if (logic.isIntDiv(atom)) {
-    //     auto it = logic.getPterm(atom).begin();
-    //     PTRef constant = it[1];
-    //     assert(logic.isConstant(constant));
-    //     PTRef subatom = it[0];
-    //     unrollAtom(logic, coefs, subatom);
-    //     for (auto i = size; i < coefs.size(); i++) {
-    //         coefs[i] = logic.mkTimes(logic.mkIntDiv(logic.getPterm(coefs[i]).begin()[0], constant),
-    //                                  logic.getPterm(coefs[i]).begin()[1]);
-    //     }
-    // }
 }
 
 // Function to get all of the atoms from the inequalities
@@ -99,27 +87,17 @@ void getCoeffs(ArithLogic & logic, std::vector<PTRef> & coefs, PTRef formula) {
 
 // Function to turn everything in <= formulas
 void lequalize(PTRef conjunct, vec<PTRef> & leqs, vec<PTRef> & bools, ArithLogic & logic) {
+    assert(logic.isLeq(conjunct) || logic.isNot(conjunct) || logic.isBoolAtom(conjunct));
     auto it = logic.getPterm(conjunct).begin();
-    // x = y <=> x <= y /\ y <= x
-    if (logic.isEquality(conjunct)) {
-        leqs.push(logic.mkLeq(it[0], it[1]));
-        leqs.push(logic.mkLeq(it[1], it[0]));
-    } else if (logic.isLeq(conjunct)) {
+    if (logic.isLeq(conjunct)) {
         // x<=y
         leqs.push(conjunct);
-    } else if (logic.isGeq(conjunct)) {
-        // x >= y <=> y <= x
-        leqs.push(logic.mkLeq(it[1], it[0]));
     } else if (logic.isNot(conjunct)) {
         PTRef inner_formula = it[0];
         it = logic.getPterm(inner_formula).begin();
-        assert(!logic.isEquality(inner_formula));
         if (logic.isLeq(inner_formula)) {
             // !(x <= y) <=> y <= x-1
             leqs.push(logic.mkLeq(it[1], logic.mkPlus(it[0], logic.getTerm_IntMinusOne())));
-        } else if (logic.isGeq(inner_formula)) {
-            // !(x >= y) <=> x <= y-1
-            leqs.push(logic.mkLeq(it[0], logic.mkPlus(it[1], logic.getTerm_IntMinusOne())));
         } else if (logic.isBoolAtom(inner_formula)) {
             bools.push(conjunct);
         } else {
