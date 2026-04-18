@@ -90,7 +90,6 @@ void unrollAtom(ArithLogic & logic, std::vector<PTRef> & coefs, PTRef atom) {
 // Function to get all of the atoms from the inequalities
 void getCoeffs(ArithLogic & logic, std::vector<PTRef> & coefs, PTRef formula) {
     assert(logic.isLeq(formula));
-    std::cout << "Formula: " << logic.pp(formula) << std::endl;
     auto it = logic.getPterm(formula).begin();
     assert(logic.getPterm(formula).size() == 2);
     assert(logic.isConstant(it[0]));
