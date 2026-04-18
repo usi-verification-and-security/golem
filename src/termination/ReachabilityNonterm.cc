@@ -87,13 +87,17 @@ void getCoeffs(ArithLogic & logic, std::vector<PTRef> & coefs, PTRef formula) {
 
 // Function to turn everything in <= formulas
 void lequalize(PTRef conjunct, vec<PTRef> & leqs, vec<PTRef> & bools, ArithLogic & logic) {
-    assert(logic.isLeq(conjunct) || logic.isNot(conjunct) || logic.isBoolAtom(conjunct));
+    assert(logic.isLeq(conjunct) || logic.isNot(conjunct) || logic.isBoolAtom(conjunct) || logic.isEquality(conjunct));
     auto it = logic.getPterm(conjunct).begin();
-    if (logic.isLeq(conjunct)) {
+    if (logic.isEquality(conjunct)) {
+        leqs.push(logic.mkLeq(it[0], it[1]));
+        leqs.push(logic.mkLeq(it[1], it[0]));
+    } else if (logic.isLeq(conjunct)) {
         // x<=y
         leqs.push(conjunct);
     } else if (logic.isNot(conjunct)) {
         PTRef inner_formula = it[0];
+        assert(!logic.isEquality(inner_formula));
         it = logic.getPterm(inner_formula).begin();
         if (logic.isLeq(inner_formula)) {
             // !(x <= y) <=> y <= x-1
