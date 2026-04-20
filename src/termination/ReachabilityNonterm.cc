@@ -577,6 +577,7 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                     logic.mkAnd(logic.mkAnd(formulas), logic.mkNot(TimeMachine(logic).sendFlaThroughTime(sink, num))),
                     vars);
                 // States that can not reach non-terminating state in less then or n transitions:
+                // TODO: Try doing MBP
                 PTRef T = logic.mkNot(F);
 
                 SMTsolver.resetSolver();
@@ -627,6 +628,10 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                     logic.mkAnd({logic.mkOr(trInv, id), TimeMachine(logic).sendFlaThroughTime(temp_tr, 1),
                                  logic.mkNot(shiftOnlyNextVars(trInv, vars, logic))}),
                     vars);
+
+                SMTsolver.resetSolver();
+                SMTsolver.assertProp(logic.mkAnd(init, logic.mkNot(noncoveredStates)));
+                if (SMTsolver.check() == SMTSolver::Answer::UNSAT) continue;
 
                 // We check if the states that are not covered by TrInv are reachable
                 auto graph = constructHyperGraph(init, transition, logic.mkAnd(noncoveredStates, logic.mkNot(sink)),
