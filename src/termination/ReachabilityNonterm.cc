@@ -479,6 +479,18 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                                std::vector<PTRef> const & vars, bool DETERMINISTIC_TRANSITION) {
 
     vec<PTRef> strictCandidates;
+    // {
+    //     SMTSolver SMTsolver(logic, SMTSolver::WitnessProduction::NONE);
+    //     TermUtils::substitutions_map varSubstitutions;
+    //     for (uint32_t i = 0u; i < vars.size(); ++i) {
+    //         varSubstitutions.insert({TimeMachine(logic).sendVarThroughTime(vars[i], 1),
+    //                                  TimeMachine(logic).sendVarThroughTime(vars[i], 0)});
+    //     }
+    //     SMTsolver.assertProp(TermUtils(logic).varSubstitute(transition, varSubstitutions));
+    //     if (SMTsolver.check() == SMTSolver::Answer::SAT) {
+    //         return {Answer::NO, logic.getTerm_true()};
+    //     }
+    // }
     while (true) {
         // TODO: Do smth with exponential transition growth in some cases via blocks...
         // Constructing a graph based on the currently considered TS
@@ -662,7 +674,7 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                         // Init(x) /\ Tr(x,x') /\ ... /\ Bad(x^(num))
                         std::vector<PTRef> formulas(num_non);
                         for (int k = 0; k < num_non; k++) {
-                            formulas[k] = TimeMachine(logic).sendFlaThroughTime(transition, k);
+                            formulas[k] = TimeMachine(logic).sendFlaThroughTime(temp_tr, k);
                         }
                         smt_checker.resetSolver();
                         PTRef transitions =
@@ -677,13 +689,17 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                             -num_non));
                     }
 
-                    SMTsolver.resetSolver();
-                    SMTsolver.assertProp(logic.mkAnd(init, logic.mkNot(reached)));
-                    if (SMTsolver.check() == SMTSolver::Answer::UNSAT) {
-                        std::cout<< "Break" << std::endl;
-                        sink = logic.mkNot(noncoveredStates);
-                        continue;
-                    }
+                    // SMTsolver.resetSolver();
+                    // SMTsolver.assertProp(logic.mkOr(logic.mkAnd(init, logic.mkNot(reached)),logic.mkAnd(logic.mkNot(init), reached) ));
+                    // if (SMTsolver.check() == SMTSolver::Answer::UNSAT) {
+                    //     std::cout<< "Break" << std::endl;
+                    //     init = reached;
+                    //     sink = TermUtils(logic).simplifyMax(logic.mkNot(noncoveredStates));
+                    //     std::cout<<"INIT:" << logic.pp(init)<<std::endl;
+                    //     std::cout<<"REACHED:" << logic.pp(reached)<<std::endl;
+                    //     std::cout<<"SINK:" << logic.pp(sink)<<std::endl;
+                    //     continue;
+                    // }
 
                     assert(reached != logic.getTerm_false());
                     // Algorithm checks if reachable states are terminating
@@ -699,8 +715,11 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                         smt_checker.resetSolver();
                         // TODO: Need to change TrInv, adding found subinv in a better way
                         strictCandidates.clear();
-                        strictCandidates.push(trInv);
-                        strictCandidates.push(subinv);
+                        if (subinv != logic.getTerm_false()) {
+                            strictCandidates.push(subinv);
+                        } else {
+                            strictCandidates.push(trInv);
+                        }
 
                         // TODO: Think if maybe sink can be even more restricted...
                         sink = TermUtils(logic).simplifyMax(logic.mkOr(sink, reached));
