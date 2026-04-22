@@ -629,12 +629,6 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                                  logic.mkNot(shiftOnlyNextVars(trInv, vars, logic))}),
                     vars);
 
-                SMTsolver.resetSolver();
-                SMTsolver.assertProp(logic.mkAnd(init, logic.mkNot(noncoveredStates)));
-                if (SMTsolver.check() == SMTSolver::Answer::UNSAT) {
-                    sink = logic.mkNot(noncoveredStates);
-                    continue;
-                }
 
                 // We check if the states that are not covered by TrInv are reachable
                 auto graph = constructHyperGraph(init, transition, logic.mkAnd(noncoveredStates, logic.mkNot(sink)),
@@ -681,6 +675,14 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                         reached = TermUtils(logic).simplifyMax(TimeMachine(logic).sendFlaThroughTime(
                             ModelBasedProjection(logic).keepOnly(transitions, last_vars, *smt_checker.getModel()),
                             -num_non));
+                    }
+
+                    SMTsolver.resetSolver();
+                    SMTsolver.assertProp(logic.mkAnd(init, logic.mkNot(reached)));
+                    if (SMTsolver.check() == SMTSolver::Answer::UNSAT) {
+                        std::cout<< "Break" << std::endl;
+                        sink = logic.mkNot(noncoveredStates);
+                        continue;
                     }
 
                     assert(reached != logic.getTerm_false());
