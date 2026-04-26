@@ -674,7 +674,7 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                         // Init(x) /\ Tr(x,x') /\ ... /\ Bad(x^(num))
                         std::vector<PTRef> formulas(num_non);
                         for (int k = 0; k < num_non; k++) {
-                            formulas[k] = TimeMachine(logic).sendFlaThroughTime(temp_tr, k);
+                            formulas[k] = TimeMachine(logic).sendFlaThroughTime(transition, k);
                         }
                         smt_checker.resetSolver();
                         PTRef transitions =
