@@ -476,7 +476,7 @@ PTRef constructTransitionInvariantCandidates(PTRef init, PTRef transition, PTRef
 
 std::tuple<ReachabilityNonterm::Answer, PTRef>
 ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options const & witnesses, ArithLogic & logic,
-                               std::vector<PTRef> const & vars, bool DETERMINISTIC_TRANSITION) {
+                               std::vector<PTRef> const & vars, bool DETERMINISTIC_TRANSITION, PTRef& covered) {
 
     vec<PTRef> strictCandidates;
     // {
@@ -565,6 +565,8 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
             } else {
                 // Otherwise, states leading to termination are blocked from transition
                 PTRef block = TimeMachine(logic).sendFlaThroughTime(Result, -j + 1);
+                covered = TermUtils(logic).simplifyMax(logic.mkOr(covered,
+                    TimeMachine(logic).sendFlaThroughTime(block, -1)));
                 assert(block != logic.getTerm_true());
                 transition = logic.mkAnd(transition, logic.mkNot(block));
             }
@@ -640,10 +642,11 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                     logic.mkAnd({logic.mkOr(trInv, id), TimeMachine(logic).sendFlaThroughTime(temp_tr, 1),
                                  logic.mkNot(shiftOnlyNextVars(trInv, vars, logic))}),
                     vars);
+                covered = TermUtils(logic).simplifyMax(logic.mkOr(covered, logic.mkNot(noncoveredStates)));
 
 
                 // We check if the states that are not covered by TrInv are reachable
-                auto graph = constructHyperGraph(init, transition, logic.mkAnd(noncoveredStates, logic.mkNot(sink)),
+                auto graph = constructHyperGraph(init, transition, logic.mkAnd({noncoveredStates, logic.mkNot(sink), logic.mkNot(covered)}),
                                                  logic, vars);
                 auto engine =
                     EngineFactory(logic, witnesses).getEngine(witnesses.getOrDefault(Options::ENGINE, "spacer"));
@@ -689,23 +692,23 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                             -num_non));
                     }
 
-                    // SMTsolver.resetSolver();
-                    // SMTsolver.assertProp(logic.mkOr(logic.mkAnd(init, logic.mkNot(reached)),logic.mkAnd(logic.mkNot(init), reached) ));
-                    // if (SMTsolver.check() == SMTSolver::Answer::UNSAT) {
-                    //     std::cout<< "Break" << std::endl;
+                    SMTsolver.resetSolver();
+                    SMTsolver.assertProp(logic.mkAnd(logic.mkNot(init), reached));
+                    if (SMTsolver.check() == SMTSolver::Answer::UNSAT) {
+                        std::cout<< "Break" << std::endl;
+                        std::cout<<"INIT: " << logic.pp(init)<<std::endl;
+                        std::cout<<"REACHED: " << logic.pp(reached)<<std::endl;
+                        std::cout<<"SINK: " << logic.pp(sink)<<std::endl;
                     //     init = reached;
                     //     sink = TermUtils(logic).simplifyMax(logic.mkNot(noncoveredStates));
-                    //     std::cout<<"INIT:" << logic.pp(init)<<std::endl;
-                    //     std::cout<<"REACHED:" << logic.pp(reached)<<std::endl;
-                    //     std::cout<<"SINK:" << logic.pp(sink)<<std::endl;
                     //     continue;
-                    // }
+                    }
 
                     assert(reached != logic.getTerm_false());
                     // Algorithm checks if reachable states are terminating
                     std::cout << "Deeper\n";
                     auto [answer, subinv] = analyzeTS(reached, transition, TermUtils(logic).simplifyMax(logic.mkNot(noncoveredStates)), witnesses,
-                                                      logic, vars, DETERMINISTIC_TRANSITION);
+                                                      logic, vars, DETERMINISTIC_TRANSITION, covered);
                     std::cout << "Higher\n";
                     // TODO: It is possible to do check differently, analyzing <noncoveredStates, tr,
                     // not(noncoveredStates)>
@@ -715,11 +718,8 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                         smt_checker.resetSolver();
                         // TODO: Need to change TrInv, adding found subinv in a better way
                         strictCandidates.clear();
-                        if (subinv != logic.getTerm_false()) {
-                            strictCandidates.push(subinv);
-                        } else {
-                            strictCandidates.push(trInv);
-                        }
+                        strictCandidates.push(subinv);
+                        strictCandidates.push(trInv);
 
                         // TODO: Think if maybe sink can be even more restricted...
                         sink = TermUtils(logic).simplifyMax(logic.mkOr(sink, reached));
@@ -738,16 +738,7 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                     }
                     // TODO: If doesn't terminate, check the reachability of recurrent set
                     // TODO: If reachable from init, then it does not terminate
-                    else if (answer == Answer::NO) {
-                        // auto [answer, subinv] =
-                        //     analyzeTS(reached, transition, TermUtils(logic).simplifyMax(logic.mkOr(sink, logic.mkNot(noncoveredStates))), witnesses,
-                        //               logic, vars, DETERMINISTIC_TRANSITION);
-                        // if (answer == Answer::NO) {
-                            return {Answer::NO, subinv};
-                        // } else {
-                        //     return {Answer::YES, subinv};
-                        // }
-                    };
+                    else if (answer == Answer::NO) return {Answer::NO, subinv};
                 }
             }
         } else if (res.getAnswer() == VerificationAnswer::SAFE) {
@@ -838,10 +829,11 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
     Options witnesses = options;
     witnesses.addOption(options.COMPUTE_WITNESS, "true");
     bool DETERMINISTIC_TRANSITION = determinismCheck(transition, logic, vars);
+    PTRef covered = logic.getTerm_false();
     // Safety-Based Termination Analysis
     // TODO: Figure out why passing in transition is problematic
     auto [answer, trInvOrRecurringSet] =
-        analyzeTS(init, transition, sink, witnesses, logic, vars, DETERMINISTIC_TRANSITION);
+        analyzeTS(init, transition, sink, witnesses, logic, vars, DETERMINISTIC_TRANSITION, covered);
     return answer;
 }
 
