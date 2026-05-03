@@ -819,10 +819,10 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
     transition = TermUtils(logic).toDNF(transition);
     std::vector<PTRef> tmp_vars = vars;
     tmp_vars.insert(tmp_vars.end(), aux_vars.begin(), aux_vars.end());
-    if (!logic.isOr(transition) && checkWellFounded(transition, logic, tmp_vars)) {
-        std::cout << "Transitions are well-founded" << std::endl;
-        return Answer::YES;
-    }
+    // if (!logic.isOr(transition) && checkWellFounded(transition, logic, tmp_vars)) {
+    //     std::cout << "Transitions are well-founded" << std::endl;
+    //     return Answer::YES;
+    // }
 
     // In this case query is a set of sink states - states from which transition is not possible.
     // sink /\ transition is UNSAT
