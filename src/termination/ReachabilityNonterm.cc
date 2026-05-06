@@ -6,8 +6,6 @@
 
 #include "ReachabilityNonterm.h"
 
-#include <__ranges/reverse_view.h>
-
 #include "ChcSystem.h"
 #include "ModelBasedProjection.h"
 #include "QuantifierElimination.h"
