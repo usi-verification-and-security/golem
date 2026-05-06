@@ -6,6 +6,8 @@
 
 #include "ReachabilityNonterm.h"
 
+#include <__ranges/reverse_view.h>
+
 #include "ChcSystem.h"
 #include "ModelBasedProjection.h"
 #include "QuantifierElimination.h"
@@ -351,6 +353,52 @@ PTRef shiftOnlyNextVars(PTRef formula, const std::vector<PTRef> & vars, Logic & 
     return TermUtils(logic).varSubstitute(formula, varSubstitutions);
 }
 
+
+
+    void extractActiveLiterals(PTRef formula, Logic & logic, Model& model, vec<PTRef> & activeLiterals, SMTSolver& solver, bool reverse = false) {
+    TermUtils utils(logic);
+    // std::cout << "Formula: " << logic.pp(formula) << std::endl;
+    if ( (model.evaluate(formula) == logic.getTerm_false() && reverse == false) || (model.evaluate(formula) == logic.getTerm_true() && reverse == true)) {
+        return;
+    }
+
+    if (logic.isAnd(formula) || logic.isOr(formula)) {
+        // Check every conjunct
+        auto juncts = logic.isAnd(formula) ? utils.getTopLevelConjuncts(formula) : utils.getTopLevelDisjuncts(formula);
+        for (auto junct : juncts) {
+            extractActiveLiterals(junct, logic, model, activeLiterals, solver);
+        }
+    }
+    else if (logic.isNot(formula)) {
+        extractActiveLiterals(utils.simplifyMax(logic.mkNot(formula)), logic, model, activeLiterals, solver, true);
+    } else {
+        // std::cout << "Formula: " << logic.pp(formula) << std::endl;
+        if (reverse) activeLiterals.push(logic.mkNot(formula));
+        else activeLiterals.push(formula);
+        // activeLiterals.push(formula);
+    }
+}
+
+PTRef toDNF(PTRef formula, Logic &logic, int bound = 0) {
+    PTRef DNF = logic.getTerm_false();
+    bool unlimited = false;
+    if (bound == 0) unlimited = true;
+    PTRef phi = formula;
+    SMTSolver smt_solver(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
+    smt_solver.assertProp(phi);
+    while (smt_solver.check() == SMTSolver::Answer::SAT && (bound > 0 || unlimited)) {
+        auto model = smt_solver.getModel();
+        vec<PTRef> activeLiterals;
+        extractActiveLiterals(formula, logic, *model, activeLiterals, smt_solver);
+        PTRef cube = logic.mkAnd(activeLiterals);
+        // std::cout << "Size: " << activeLiterals.size() << " Cube: " << logic.pp(cube) << std::endl;
+        DNF = TermUtils(logic).simplifyMax(logic.mkOr({DNF, cube}));
+        smt_solver.push();
+        smt_solver.assertProp(logic.mkNot(cube));
+    }
+    return DNF;
+}
+
 // This function extracts well-founded disjuncts from the interpolant
 vec<PTRef> extractWellFoundedCandidates(PTRef itp, PTRef sink, ArithLogic & logic, const std::vector<PTRef> & vars) {
     TermUtils utils(logic);
@@ -358,7 +406,7 @@ vec<PTRef> extractWellFoundedCandidates(PTRef itp, PTRef sink, ArithLogic & logi
 
     auto sink_disjuncts = utils.getTopLevelDisjuncts(utils.toDNF(unwrapEqs(logic.mkNot(sink), logic)));
     PTRef dnfized_interpolant = utils.simplifyMax(unwrapEqs(itp, logic));
-    dnfized_interpolant = utils.toDNF(dnfized_interpolant, 1000);
+    dnfized_interpolant = toDNF(dnfized_interpolant, logic, 1000);
 
     vec<PTRef> candidates = utils.getTopLevelDisjuncts(dnfized_interpolant);
     vec<PTRef> strictCandidates;
@@ -473,6 +521,7 @@ PTRef constructTransitionInvariantCandidates(PTRef init, PTRef transition, PTRef
         return logic.getTerm_false();
     }
 }
+
 
 std::tuple<ReachabilityNonterm::Answer, PTRef>
 ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options const & witnesses, ArithLogic & logic,
@@ -809,7 +858,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
     PTRef init = ts.getInit();
     // PTRef transition = ts.getTransition();
     PTRef transition = unwrapEqs(ts.getTransition(), logic);
-    transition = TermUtils(logic).toDNF(transition);
+    transition = toDNF(transition, logic);
     std::vector<PTRef> tmp_vars = vars;
     tmp_vars.insert(tmp_vars.end(), aux_vars.begin(), aux_vars.end());
     if (!logic.isOr(transition) && checkWellFounded(transition, logic, tmp_vars)) {
