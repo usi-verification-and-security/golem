@@ -379,12 +379,11 @@ PTRef shiftOnlyNextVars(PTRef formula, const std::vector<PTRef> & vars, Logic & 
 
 PTRef toDNF(PTRef formula, Logic &logic, int bound = 0) {
     PTRef DNF = logic.getTerm_false();
-    bool unlimited = false;
-    if (bound == 0) unlimited = true;
+    bool unlimited = bound == 0;
     PTRef phi = formula;
     SMTSolver smt_solver(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
     smt_solver.assertProp(phi);
-    std::cout << "Pre DNF: "  << logic.pp(formula) << std::endl;
+    // std::cout << "Pre DNF: "  << logic.pp(formula) << std::endl;
     while (smt_solver.check() == SMTSolver::Answer::SAT && (bound > 0 || unlimited)) {
         auto model = smt_solver.getModel();
         vec<PTRef> activeLiterals;
@@ -394,8 +393,9 @@ PTRef toDNF(PTRef formula, Logic &logic, int bound = 0) {
         DNF = TermUtils(logic).simplifyMax(logic.mkOr({DNF, cube}));
         smt_solver.push();
         smt_solver.assertProp(logic.mkNot(cube));
+        bound--;
     }
-    std::cout << "Post DNF: "  << logic.pp(DNF) << std::endl;
+    // std::cout << "Post DNF: "  << logic.pp(DNF) << std::endl;
     return DNF;
 }
 
@@ -406,7 +406,7 @@ vec<PTRef> extractWellFoundedCandidates(PTRef itp, PTRef sink, ArithLogic & logi
 
     auto sink_disjuncts = utils.getTopLevelDisjuncts(utils.toDNF(unwrapEqs(logic.mkNot(sink), logic)));
     PTRef dnfized_interpolant = utils.simplifyMax(unwrapEqs(itp, logic));
-    dnfized_interpolant = toDNF(dnfized_interpolant, logic, 1000);
+    dnfized_interpolant = toDNF(dnfized_interpolant, logic, 100);
 
     vec<PTRef> candidates = utils.getTopLevelDisjuncts(dnfized_interpolant);
     vec<PTRef> strictCandidates;
@@ -631,7 +631,7 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
             // This is an extension of the approach, constructing TrInv and attempting to prove termination
             // and non-termination using invariants
             if (num > 0) {
-                // Calculate the states that are guaranteed to terminate within num transitions:
+                // Calculate the states that are guaranteed to terminate within pnum transitions:
                 // Tr^n(x,x') /\ not Sink(x') - is a formula, which can be satisfied by any x which can not terminate
                 // in less or equal then n
 
