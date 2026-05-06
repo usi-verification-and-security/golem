@@ -368,7 +368,7 @@ PTRef shiftOnlyNextVars(PTRef formula, const std::vector<PTRef> & vars, Logic & 
         }
     }
     else if (logic.isNot(formula)) {
-        extractActiveLiterals(utils.simplifyMax(logic.mkNot(formula)), logic, model, activeLiterals, solver, true);
+        extractActiveLiterals(utils.simplifyMax(logic.mkNot(formula)), logic, model, activeLiterals, solver, !reverse);
     } else {
         // std::cout << "Formula: " << logic.pp(formula) << std::endl;
         if (reverse) activeLiterals.push(logic.mkNot(formula));
@@ -384,12 +384,13 @@ PTRef toDNF(PTRef formula, Logic &logic, int bound = 0) {
     PTRef phi = formula;
     SMTSolver smt_solver(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
     smt_solver.assertProp(phi);
+    std::cout << "Formula: "  << logic.pp(formula) << std::endl;
     while (smt_solver.check() == SMTSolver::Answer::SAT && (bound > 0 || unlimited)) {
         auto model = smt_solver.getModel();
         vec<PTRef> activeLiterals;
         extractActiveLiterals(formula, logic, *model, activeLiterals, smt_solver);
         PTRef cube = logic.mkAnd(activeLiterals);
-        // std::cout << "Size: " << activeLiterals.size() << " Cube: " << logic.pp(cube) << std::endl;
+        std::cout << "Size: " << activeLiterals.size() << " Cube: " << logic.pp(cube) << std::endl;
         DNF = TermUtils(logic).simplifyMax(logic.mkOr({DNF, cube}));
         smt_solver.push();
         smt_solver.assertProp(logic.mkNot(cube));
