@@ -406,7 +406,7 @@ vec<PTRef> extractWellFoundedCandidates(PTRef itp, PTRef sink, ArithLogic & logi
 
     auto sink_disjuncts = utils.getTopLevelDisjuncts(utils.toDNF(unwrapEqs(logic.mkNot(sink), logic)));
     PTRef dnfized_interpolant = utils.simplifyMax(unwrapEqs(itp, logic));
-    dnfized_interpolant = toDNF(dnfized_interpolant, logic, 1000);
+    dnfized_interpolant = toDNF(dnfized_interpolant, logic, 500);
 
     vec<PTRef> candidates = utils.getTopLevelDisjuncts(dnfized_interpolant);
     vec<PTRef> strictCandidates;
