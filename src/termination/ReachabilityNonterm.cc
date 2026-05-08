@@ -404,7 +404,7 @@ vec<PTRef> extractWellFoundedCandidates(PTRef itp, PTRef sink, ArithLogic & logi
     TermUtils utils(logic);
     SMTSolver smt_solver(logic, SMTSolver::WitnessProduction::NONE);
 
-    auto sink_disjuncts = utils.getTopLevelDisjuncts(utils.toDNF(unwrapEqs(logic.mkNot(sink), logic)));
+    auto sink_disjuncts = utils.getTopLevelDisjuncts(toDNF(unwrapEqs(logic.mkNot(sink), logic), logic));
     PTRef dnfized_interpolant = utils.simplifyMax(unwrapEqs(itp, logic));
     dnfized_interpolant = toDNF(dnfized_interpolant, logic, 500);
 
@@ -541,6 +541,9 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
     //     }
     // }
     while (true) {
+        std::cout<< "Init: " << logic.pp(init) << "\n";
+        std::cout<< "Tr: " << logic.pp(transition) << "\n";
+        std::cout<< "Sink: " << logic.pp(sink) << "\n";
         // TODO: Do smth with exponential transition growth in some cases via blocks...
         // Constructing a graph based on the currently considered TS
         auto graph = constructHyperGraph(init, transition, sink, logic, vars);
