@@ -541,9 +541,9 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
     //     }
     // }
     while (true) {
-        std::cout<< "Init: " << logic.pp(init) << "\n";
-        std::cout<< "Tr: " << logic.pp(transition) << "\n";
-        std::cout<< "Sink: " << logic.pp(sink) << "\n";
+        // std::cout<< "Init: " << logic.pp(init) << "\n";
+        // std::cout<< "Tr: " << logic.pp(transition) << "\n";
+        // std::cout<< "Sink: " << logic.pp(sink) << "\n";
         // TODO: Do smth with exponential transition growth in some cases via blocks...
         // Constructing a graph based on the currently considered TS
         auto graph = constructHyperGraph(init, transition, sink, logic, vars);
