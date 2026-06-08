@@ -375,7 +375,7 @@ PTRef TermUtils::toNNF(PTRef fla) {
 
 class DNFTransformer {
 public:
-    explicit DNFTransformer(Logic & logic, uint disjuncts_limit) : logic(logic), disjuncts_limit(disjuncts_limit) {}
+    explicit DNFTransformer(Logic & logic) : logic(logic) {}
     PTRef toDNF(PTRef fla) {
         run(fla);
         auto it = cubes.find(fla);
@@ -400,7 +400,6 @@ private:
     using Cubes = std::vector<Cube>;
     Logic & logic;
     std::unordered_map<PTRef, Cubes, PTRefHash> cubes;
-    uint disjuncts_limit;
 
     void run(PTRef);
     static Cube makeSingletonCube(PtAsgn lit) { return {{lit}}; }
@@ -416,13 +415,12 @@ private:
         return final;
     }
 
-    static Cubes conjunctionAsCubes(std::vector<Cubes> && toConjoin, uint disjuncts_limit) {
+    static Cubes conjunctionAsCubes(std::vector<Cubes> && toConjoin) {
         Cubes result;
         std::vector<Cube> currentCombination;
         currentCombination.reserve(toConjoin.size());
         auto dfs = [&](auto && self, std::size_t depth) -> void {
             if (depth == toConjoin.size()) {
-                if (disjuncts_limit != 0 && result.size() >= disjuncts_limit) return;
                 assert(currentCombination.size() == depth);
                 // process current combination
                 // Create a combined cube
@@ -453,10 +451,10 @@ private:
     }
 };
 
-PTRef TermUtils::toDNF(PTRef fla, uint disjuncts_limit) {
+PTRef TermUtils::toDNF(PTRef fla) {
     if (not logic.hasSortBool(fla)) { throw std::invalid_argument("toDNF called with non-boolean formula!"); }
     PTRef const nnf = toNNF(fla);
-    DNFTransformer dnfTransformer(logic, disjuncts_limit);
+    DNFTransformer dnfTransformer(logic);
     return dnfTransformer.toDNF(nnf);
 }
 
@@ -494,7 +492,7 @@ void DNFTransformer::run(PTRef fla) {
         for (PTRef const child : logic.getPterm(fla)) {
             childrenCubes.push_back(cubes.at(child));
         }
-        cubes.insert({fla, conjunctionAsCubes(std::move(childrenCubes), disjuncts_limit)});
+        cubes.insert({fla, conjunctionAsCubes(std::move(childrenCubes))});
         return;
     }
     assert(false);
