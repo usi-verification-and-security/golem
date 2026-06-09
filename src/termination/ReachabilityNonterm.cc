@@ -49,10 +49,6 @@ PTRef normalize(PTRef input, ArithLogic & logic, bool reverse = false) {
         // ! x <= y <=> y+1 <= x
         return logic.mkLeq(logic.mkPlus(it[1], logic.getTerm_IntOne()), it[0]);
     }
-    if (!reverse && logic.isEquality(input)) {
-        // x == y <=> y <= x /\ y <= x
-        return logic.mkAnd(logic.mkLeq(it[0], it[1]), logic.mkLeq(it[1], it[0]));
-    }
 
     return reverse ? logic.mkNot(input) : input;
 }
@@ -107,7 +103,13 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
     vec<PTRef> leq_conjuncts;
     vec<PTRef> bools;
     for (auto conj: conjuncts) {
+        auto it = logic.getPterm(conj).begin();
         if (logic.isLeq(conj)) leq_conjuncts.push(conj);
+        else if (logic.isEquality(conj)) {
+            // x == y <=> y <= x /\ y <= x
+            leq_conjuncts.push(logic.mkLeq(it[0], it[1]));
+            leq_conjuncts.push(logic.mkLeq(it[1], it[0]));
+        }
         else if (logic.isBoolAtom(conj) || logic.isNot(conj)) bools.push(conj);
         assert(false);
     }
