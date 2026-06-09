@@ -17,40 +17,44 @@
 
 namespace golem::termination {
 
-// Function to convert != into disjunction of leq
-PTRef unwrapEqs(PTRef input, ArithLogic & logic) {
+// Function to eliminate negations
+PTRef normalize(PTRef input, ArithLogic & logic, bool reverse = false) {
+    assert(!logic.isGeq(input));
     TermUtils utils{logic};
-    bool reverse = false;
-    PTRef rev = input;
+    auto it = logic.getPterm(input).begin();
     if (logic.isNot(input)) {
-        // propagate negation
-        rev = utils.simplifyMax(logic.mkNot(input));
-        if (logic.isNot(rev)) assert(false);
-        reverse = true;
+        return normalize(it[0], logic, !reverse);
     }
 
-    if (logic.isAnd(rev) || logic.isOr(rev)) {
+    if (logic.isAnd(input) || logic.isOr(input)) {
         // Check every conjunct
-        auto juncts = logic.isAnd(rev) ? utils.getTopLevelConjuncts(rev) : utils.getTopLevelDisjuncts(rev);
+        auto juncts = logic.isAnd(input) ? utils.getTopLevelConjuncts(input) : utils.getTopLevelDisjuncts(input);
         vec<PTRef> subjuncts;
         for (auto junct : juncts) {
-            subjuncts.push(unwrapEqs(junct, logic));
+            subjuncts.push(normalize(junct, logic, reverse));
         }
-        if (reverse && logic.isAnd(rev)) return logic.mkOr(subjuncts);
-        if (reverse && logic.isOr(rev)) return logic.mkAnd(subjuncts);
-        if (logic.isAnd(rev)) return logic.mkAnd(subjuncts);
-        if (logic.isOr(rev)) return logic.mkOr(subjuncts);
+        if (reverse && logic.isAnd(input)) return logic.mkOr(subjuncts);
+        if (reverse && logic.isOr(input)) return logic.mkAnd(subjuncts);
+        if (logic.isAnd(input)) return logic.mkAnd(subjuncts);
+        if (logic.isOr(input)) return logic.mkOr(subjuncts);
         assert(false);
-    } else if (logic.isNumEq(rev) && reverse) {
-        PTRef lhs = logic.getPterm(rev)[0];
-        PTRef rhs = logic.getPterm(rev)[1];
-        // x != y <=> x <= y-1 \/ x >= y+1
-        PTRef geq = logic.mkGeq(lhs, logic.mkPlus(rhs, logic.getTerm_IntOne()));
-        PTRef leq = logic.mkLeq(lhs, logic.mkPlus(rhs, logic.getTerm_IntMinusOne()));
+    }
+    if (reverse && logic.isNumEq(input)) {
+        // x != y <=> x <= y-1 \/  y+1 <= x
+        PTRef geq = logic.mkLeq(logic.mkPlus(it[1], logic.getTerm_IntOne()), it[0]);
+        PTRef leq = logic.mkLeq(it[0], logic.mkPlus(it[1], logic.getTerm_IntMinusOne()));
         return logic.mkOr(geq, leq);
     }
+    if (reverse && logic.isLeq(input)) {
+        // ! x <= y <=> y+1 <= x
+        return logic.mkLeq(logic.mkPlus(it[1], logic.getTerm_IntOne()), it[0]);
+    }
+    if (!reverse && logic.isEquality(input)) {
+        // x == y <=> y <= x /\ y <= x
+        return logic.mkAnd(logic.mkLeq(it[0], it[1]), logic.mkLeq(it[1], it[0]));
+    }
 
-    return input;
+    return reverse ? logic.mkNot(input) : input;
 }
 
 // This function is needed to extract specific atoms from the arithmetic formula
@@ -85,37 +89,7 @@ void getCoeffs(ArithLogic & logic, std::vector<PTRef> & coefs, PTRef formula) {
     unrollAtom(logic, coefs, it[1]);
 }
 
-// Function to turn everything in <= formulas
-void lequalize(PTRef conjunct, vec<PTRef> & leqs, vec<PTRef> & bools, ArithLogic & logic) {
-    assert(logic.isLeq(conjunct) || logic.isNot(conjunct) || logic.isBoolAtom(conjunct) || logic.isEquality(conjunct));
-    auto it = logic.getPterm(conjunct).begin();
-    if (logic.isEquality(conjunct)) {
-        leqs.push(logic.mkLeq(it[0], it[1]));
-        leqs.push(logic.mkLeq(it[1], it[0]));
-    } else if (logic.isLeq(conjunct)) {
-        // x<=y
-        leqs.push(conjunct);
-    } else if (logic.isNot(conjunct)) {
-        PTRef inner_formula = it[0];
-        assert(!logic.isEquality(inner_formula));
-        it = logic.getPterm(inner_formula).begin();
-        if (logic.isLeq(inner_formula)) {
-            // !(x <= y) <=> y <= x-1
-            leqs.push(logic.mkLeq(it[1], logic.mkPlus(it[0], logic.getTerm_IntMinusOne())));
-        } else if (logic.isBoolAtom(inner_formula)) {
-            bools.push(conjunct);
-        } else {
-            assert(false);
-        }
-    } else if (logic.isBoolAtom(conjunct)) {
-        bools.push(conjunct);
-    } else {
-        assert(false);
-    }
-}
-
 bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const & vars) {
-
     assert(!logic.isOr(formula));
 
     vec<PTRef> int_vars;
@@ -132,10 +106,10 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
 
     vec<PTRef> leq_conjuncts;
     vec<PTRef> bools;
-    // Preprocessing, conjuncts should be a set of formulas f(x) <= c, where c is some constant, and f(x)
-    // is a linear combination of variables
-    for (auto conjunct : conjuncts) {
-        lequalize(conjunct, leq_conjuncts, bools, logic);
+    for (auto conj: conjuncts) {
+        if (logic.isLeq(conj)) leq_conjuncts.push(conj);
+        else if (logic.isBoolAtom(conj) || logic.isNot(conj)) bools.push(conj);
+        assert(false);
     }
 
     SMTSolver solver(logic, SMTSolver::WitnessProduction::NONE);
@@ -404,8 +378,8 @@ vec<PTRef> extractWellFoundedCandidates(PTRef itp, PTRef sink, ArithLogic & logi
     TermUtils utils(logic);
     SMTSolver smt_solver(logic, SMTSolver::WitnessProduction::NONE);
 
-    auto sink_disjuncts = utils.getTopLevelDisjuncts(toDNF(unwrapEqs(logic.mkNot(sink), logic), logic));
-    PTRef dnfized_interpolant = utils.simplifyMax(unwrapEqs(itp, logic));
+    auto sink_disjuncts = utils.getTopLevelDisjuncts(toDNF(normalize(logic.mkNot(sink), logic), logic));
+    PTRef dnfized_interpolant = utils.simplifyMax(normalize(itp, logic));
     dnfized_interpolant = toDNF(dnfized_interpolant, logic, 100);
 
     vec<PTRef> candidates = utils.getTopLevelDisjuncts(dnfized_interpolant);
@@ -541,9 +515,9 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
     //     }
     // }
     while (true) {
-        // std::cout<< "Init: " << logic.pp(init) << "\n";
-        // std::cout<< "Tr: " << logic.pp(transition) << "\n";
-        // std::cout<< "Sink: " << logic.pp(sink) << "\n";
+        std::cout<< "Init: " << logic.pp(init) << "\n";
+        std::cout<< "Tr: " << logic.pp(transition) << "\n";
+        std::cout<< "Sink: " << logic.pp(sink) << "\n";
         // TODO: Do smth with exponential transition growth in some cases via blocks...
         // Constructing a graph based on the currently considered TS
         auto graph = constructHyperGraph(init, transition, sink, logic, vars);
@@ -655,7 +629,7 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
 
                 // The procedure to construct transition invariants is executed
                 PTRef itp = constructTransitionInvariantCandidates(T, temp_tr, sink, num, logic, vars);
-
+                std::cout << "Itp: " << logic.pp(itp) << std::endl;
                 // Extract well-founded disjuncts from the transition invariant
                 auto newCands = extractWellFoundedCandidates(itp, sink, logic, vars);
 
@@ -687,6 +661,7 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                     std::cout << "Center" << std::endl;
                     return {Answer::YES, trInv};
                 }
+                std::cout<< "Cand " << logic.pp(trInv) << std::endl;
 
                 // If trInv is not complete Transition invariant, then we can compute the states which are not covered
                 //    by trInv - those are the states that potentially do not terminate
@@ -860,7 +835,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
     ArithLogic & logic = dynamic_cast<ArithLogic &>(ts.getLogic());
     PTRef init = ts.getInit();
     // PTRef transition = ts.getTransition();
-    PTRef transition = unwrapEqs(ts.getTransition(), logic);
+    PTRef transition = normalize(ts.getTransition(), logic);
     transition = toDNF(transition, logic);
     std::vector<PTRef> tmp_vars = vars;
     tmp_vars.insert(tmp_vars.end(), aux_vars.begin(), aux_vars.end());
