@@ -665,7 +665,7 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                     std::cout << "Center" << std::endl;
                     return {Answer::YES, trInv};
                 }
-                std::cout<< "Cand " << logic.pp(trInv) << std::endl;
+                // std::cout<< "Cand " << logic.pp(trInv) << std::endl;
 
                 // If trInv is not complete Transition invariant, then we can compute the states which are not covered
                 //    by trInv - those are the states that potentially do not terminate
