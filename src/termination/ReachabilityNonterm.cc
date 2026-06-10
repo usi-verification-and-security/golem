@@ -17,10 +17,9 @@
 
 namespace golem::termination {
 
-// Function to eliminate negations
+// Function to eliminate negations, normalizing formula to
 PTRef normalize(PTRef input, ArithLogic & logic, bool negated = false) {
     assert(!logic.isGeq(input));
-    TermUtils utils{logic};
     auto it = logic.getPterm(input).begin();
     if (logic.isNot(input)) {
         return normalize(it[0], logic, !negated);
@@ -28,15 +27,13 @@ PTRef normalize(PTRef input, ArithLogic & logic, bool negated = false) {
 
     if (logic.isAnd(input) || logic.isOr(input)) {
         // Check every conjunct
-        auto juncts = logic.isAnd(input) ? utils.getTopLevelConjuncts(input) : utils.getTopLevelDisjuncts(input);
+        auto juncts = logic.isAnd(input) ? TermUtils(logic).getTopLevelConjuncts(input) : TermUtils(logic).getTopLevelDisjuncts(input);
         vec<PTRef> subjuncts;
         for (auto junct : juncts) {
             subjuncts.push(normalize(junct, logic, negated));
         }
-        if (negated && logic.isAnd(input)) return logic.mkOr(subjuncts);
-        if (negated && logic.isOr(input)) return logic.mkAnd(subjuncts);
-        if (logic.isAnd(input)) return logic.mkAnd(subjuncts);
-        if (logic.isOr(input)) return logic.mkOr(subjuncts);
+        if (logic.isAnd(input)) return  negated ? logic.mkOr(subjuncts) : logic.mkAnd(subjuncts);
+        if (logic.isOr(input)) return negated ? logic.mkAnd(subjuncts) : logic.mkOr(subjuncts);
         assert(false);
     }
     if (negated && logic.isNumEq(input)) {
@@ -45,10 +42,10 @@ PTRef normalize(PTRef input, ArithLogic & logic, bool negated = false) {
         PTRef leq = logic.mkLeq(it[0], logic.mkPlus(it[1], logic.getTerm_IntMinusOne()));
         return logic.mkOr(geq, leq);
     }
-    if (negated && logic.isLeq(input)) {
-        // ! x <= y <=> y+1 <= x
-        return logic.mkLeq(logic.mkPlus(it[1], logic.getTerm_IntOne()), it[0]);
-    }
+    // if (negated && logic.isLeq(input)) {
+    //     // !(x <= y) <=> y+1 <= x
+    //     return logic.mkLeq(logic.mkPlus(it[1], logic.getTerm_IntOne()), it[0]);
+    // }
 
     return negated ? logic.mkNot(input) : input;
 }
@@ -110,8 +107,16 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
             leq_conjuncts.push(logic.mkLeq(it[0], it[1]));
             leq_conjuncts.push(logic.mkLeq(it[1], it[0]));
         }
-        else if (logic.isBoolAtom(conj) || logic.isNot(conj)) bools.push(conj);
-        assert(false);
+        else if (logic.isBoolAtom(conj)) bools.push(conj);
+        else if (logic.isNot(conj)) {
+            if (logic.isBoolAtom(it[0])) bools.push(conj);
+            else if (logic.isLeq(it[0])) {
+                it = logic.getPterm(it[0]).begin();
+                leq_conjuncts.push(logic.mkLeq(logic.mkPlus(it[1],logic.getTerm_IntOne()), it[0]));
+            }
+            else { assert(false); }
+        }
+        else { assert(false); }
     }
 
     SMTSolver solver(logic, SMTSolver::WitnessProduction::NONE);
@@ -517,9 +522,6 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
     //     }
     // }
     while (true) {
-        // std::cout<< "Init: " << logic.pp(init) << "\n";
-        // std::cout<< "Tr: " << logic.pp(transition) << "\n";
-        // std::cout<< "Sink: " << logic.pp(sink) << "\n";
         // TODO: Do smth with exponential transition growth in some cases via blocks...
         // Constructing a graph based on the currently considered TS
         auto graph = constructHyperGraph(init, transition, sink, logic, vars);
