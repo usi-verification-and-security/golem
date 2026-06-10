@@ -722,9 +722,9 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                     SMTsolver.assertProp(logic.mkAnd(logic.mkNot(init), reached));
                     if (SMTsolver.check() == SMTSolver::Answer::UNSAT) {
                         std::cout<< "Break" << std::endl;
-                        std::cout<<"INIT: " << logic.pp(init)<<std::endl;
-                        std::cout<<"REACHED: " << logic.pp(reached)<<std::endl;
-                        std::cout<<"SINK: " << logic.pp(sink)<<std::endl;
+                        // std::cout<<"INIT: " << logic.pp(init)<<std::endl;
+                        // std::cout<<"REACHED: " << logic.pp(reached)<<std::endl;
+                        // std::cout<<"SINK: " << logic.pp(sink)<<std::endl;
                     //     init = reached;
                     //     sink = TermUtils(logic).simplifyMax(logic.mkNot(noncoveredStates));
                     //     continue;
