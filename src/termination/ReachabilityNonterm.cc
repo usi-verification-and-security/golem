@@ -27,7 +27,8 @@ PTRef normalize(PTRef input, ArithLogic & logic, bool negated = false) {
 
     if (logic.isAnd(input) || logic.isOr(input)) {
         // Check every conjunct
-        auto juncts = logic.isAnd(input) ? TermUtils(logic).getTopLevelConjuncts(input) : TermUtils(logic).getTopLevelDisjuncts(input);
+        auto juncts = logic.isAnd(input) ? TermUtils(logic).getTopLevelConjuncts(input) :
+                                    TermUtils(logic).getTopLevelDisjuncts(input);
         vec<PTRef> subjuncts;
         for (auto junct : juncts) {
             subjuncts.push(normalize(junct, logic, negated));
@@ -42,10 +43,10 @@ PTRef normalize(PTRef input, ArithLogic & logic, bool negated = false) {
         PTRef leq = logic.mkLeq(it[0], logic.mkPlus(it[1], logic.getTerm_IntMinusOne()));
         return logic.mkOr(geq, leq);
     }
-    // if (negated && logic.isLeq(input)) {
-    //     // !(x <= y) <=> y+1 <= x
-    //     return logic.mkLeq(logic.mkPlus(it[1], logic.getTerm_IntOne()), it[0]);
-    // }
+    if (negated && logic.isLeq(input)) {
+        // !(x <= y) <=> y+1 <= x
+        return logic.mkLeq(logic.mkPlus(it[1], logic.getTerm_IntOne()), it[0]);
+    }
 
     return negated ? logic.mkNot(input) : input;
 }
@@ -53,16 +54,18 @@ PTRef normalize(PTRef input, ArithLogic & logic, bool negated = false) {
 // This function is needed to extract specific atoms from the arithmetic formula
 void unrollAtom(ArithLogic & logic, std::vector<PTRef> & coefs, PTRef atom) {
     assert(logic.isVar(atom) || logic.isTimes(atom) || logic.isPlus(atom));
+    if (!(logic.isVar(atom) || logic.isTimes(atom) || logic.isPlus(atom)))
+        std::cout << "ERROR" << std::endl;
     auto size = coefs.size();
-    if (logic.isVar(atom)) {
-        coefs.push_back(logic.mkTimes(logic.getTerm_IntMinusOne(), atom));
-    } else if (logic.isTimes(atom)) {
-        auto [subatom, constant] = logic.splitTermToVarAndConst(atom);
-        assert(logic.isConstant(constant));
-        unrollAtom(logic, coefs, subatom);
-        for (auto i = size; i < coefs.size(); i++) {
-            coefs[i] = logic.mkTimes(constant, coefs[i]);
-        }
+    if (logic.isVar(atom) || logic.isTimes(atom)) {
+        coefs.push_back(atom);
+    // } else if (logic.isTimes(atom)) {
+    //     auto [subatom, constant] = logic.splitTermToVarAndConst(atom);
+    //     assert(logic.isConstant(constant));
+    //     unrollAtom(logic, coefs, subatom);
+    //     for (auto i = size; i < coefs.size(); i++) {
+    //         coefs[i] = logic.mkTimes(constant, coefs[i]);
+    //     }
     } else if (logic.isPlus(atom)) {
         auto it = logic.getPterm(atom).begin();
         while (it != logic.getPterm(atom).end()) {
@@ -107,15 +110,7 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
             leq_conjuncts.push(logic.mkLeq(it[0], it[1]));
             leq_conjuncts.push(logic.mkLeq(it[1], it[0]));
         }
-        else if (logic.isBoolAtom(conj)) bools.push(conj);
-        else if (logic.isNot(conj)) {
-            if (logic.isBoolAtom(it[0])) bools.push(conj);
-            else if (logic.isLeq(it[0])) {
-                it = logic.getPterm(it[0]).begin();
-                leq_conjuncts.push(logic.mkLeq(logic.mkPlus(it[1],logic.getTerm_IntOne()), it[0]));
-            }
-            else { assert(false); }
-        }
+        else if (logic.isBoolAtom(conj) || logic.isNot(conj)) bools.push(conj);
         else { assert(false); }
     }
 
