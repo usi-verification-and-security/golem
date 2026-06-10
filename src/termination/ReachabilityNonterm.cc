@@ -18,12 +18,12 @@
 namespace golem::termination {
 
 // Function to eliminate negations
-PTRef normalize(PTRef input, ArithLogic & logic, bool reverse = false) {
+PTRef normalize(PTRef input, ArithLogic & logic, bool negated = false) {
     assert(!logic.isGeq(input));
     TermUtils utils{logic};
     auto it = logic.getPterm(input).begin();
     if (logic.isNot(input)) {
-        return normalize(it[0], logic, !reverse);
+        return normalize(it[0], logic, !negated);
     }
 
     if (logic.isAnd(input) || logic.isOr(input)) {
@@ -31,26 +31,26 @@ PTRef normalize(PTRef input, ArithLogic & logic, bool reverse = false) {
         auto juncts = logic.isAnd(input) ? utils.getTopLevelConjuncts(input) : utils.getTopLevelDisjuncts(input);
         vec<PTRef> subjuncts;
         for (auto junct : juncts) {
-            subjuncts.push(normalize(junct, logic, reverse));
+            subjuncts.push(normalize(junct, logic, negated));
         }
-        if (reverse && logic.isAnd(input)) return logic.mkOr(subjuncts);
-        if (reverse && logic.isOr(input)) return logic.mkAnd(subjuncts);
+        if (negated && logic.isAnd(input)) return logic.mkOr(subjuncts);
+        if (negated && logic.isOr(input)) return logic.mkAnd(subjuncts);
         if (logic.isAnd(input)) return logic.mkAnd(subjuncts);
         if (logic.isOr(input)) return logic.mkOr(subjuncts);
         assert(false);
     }
-    if (reverse && logic.isNumEq(input)) {
+    if (negated && logic.isNumEq(input)) {
         // x != y <=> x <= y-1 \/  y+1 <= x
         PTRef geq = logic.mkLeq(logic.mkPlus(it[1], logic.getTerm_IntOne()), it[0]);
         PTRef leq = logic.mkLeq(it[0], logic.mkPlus(it[1], logic.getTerm_IntMinusOne()));
         return logic.mkOr(geq, leq);
     }
-    if (reverse && logic.isLeq(input)) {
+    if (negated && logic.isLeq(input)) {
         // ! x <= y <=> y+1 <= x
         return logic.mkLeq(logic.mkPlus(it[1], logic.getTerm_IntOne()), it[0]);
     }
 
-    return reverse ? logic.mkNot(input) : input;
+    return negated ? logic.mkNot(input) : input;
 }
 
 // This function is needed to extract specific atoms from the arithmetic formula
@@ -517,9 +517,9 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
     //     }
     // }
     while (true) {
-        std::cout<< "Init: " << logic.pp(init) << "\n";
-        std::cout<< "Tr: " << logic.pp(transition) << "\n";
-        std::cout<< "Sink: " << logic.pp(sink) << "\n";
+        // std::cout<< "Init: " << logic.pp(init) << "\n";
+        // std::cout<< "Tr: " << logic.pp(transition) << "\n";
+        // std::cout<< "Sink: " << logic.pp(sink) << "\n";
         // TODO: Do smth with exponential transition growth in some cases via blocks...
         // Constructing a graph based on the currently considered TS
         auto graph = constructHyperGraph(init, transition, sink, logic, vars);
@@ -631,7 +631,7 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
 
                 // The procedure to construct transition invariants is executed
                 PTRef itp = constructTransitionInvariantCandidates(T, temp_tr, sink, num, logic, vars);
-                std::cout << "Itp: " << logic.pp(itp) << std::endl;
+                // std::cout << "Itp: " << logic.pp(itp) << std::endl;
                 // Extract well-founded disjuncts from the transition invariant
                 auto newCands = extractWellFoundedCandidates(itp, sink, logic, vars);
 
