@@ -9,6 +9,7 @@
 #include "TermUtils.h"
 #include "utils/SmtSolver.h"
 
+#include <iterator>
 #include <memory>
 
 namespace {
@@ -22,7 +23,11 @@ struct Bound {
 
 PTRef substituteBound(Bound const & what, Bound const & where, ArithLogic & logic) {
     if (what.type == BoundType::UPPER and where.type == BoundType::UPPER) {
-        throw std::invalid_argument("Not implemented yet for two upper bounds");
+        if (where.strict and not what.strict) {
+            return logic.mkLt(what.val, where.val);
+        } else {
+            return logic.mkLeq(what.val, where.val);
+        }
     }
     if (where.type == BoundType::LOWER and what.type == BoundType::LOWER) {
         if (where.strict and not what.strict) {
@@ -134,44 +139,15 @@ PTRef ModelBasedProjection::get_mbp(
     vec<PTRef> under_conjuncts;
     under_conjuncts.capacity(simplified_implicant.size());
     for (PtAsgn const & lit : simplified_implicant) { under_conjuncts.push(ptasgn_to_ptref(lit)); }
-    auto under = logic.mkAnd(std::move(under_conjuncts));
 
-    if (overapprox == nullptr) {
-        return under;
+    auto under = logic.mkAnd(under_conjuncts);
+
+    if (overapprox != nullptr) {
+        // Here we need to select the literals that are entailed by the original formula
+        // TODO: moving this before simplification would let us find more literals.
+        *overapprox = logic.mkAnd(impliedBy(std::move(under_conjuncts), original_fla, logic));
     }
 
-    // Here, we also need to build the over-approximation.
-
-    // Use the not-simplified `implicant` to increase the chances of finding good lemmas.
-    // AB: we need to experimentally check if this is a good idea.
-
-    // Start with over = under,
-    // then, try progressively remove literals until (original_fla & !over) is unsatisfiable
-    SMTSolver solver(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
-    original_fla = TermUtils(logic).toNNF(original_fla);
-    solver.assertProp(original_fla);
-    while (true) {
-        solver.push();
-        // Build a lemma Or (!l | l in implicant)
-        vec<PTRef> not_over;
-        not_over.capacity(implicant.size());
-        for (PtAsgn const & lit : implicant) { not_over.push(ptasgn_to_neg_ptref(lit)); }
-        solver.assertProp(logic.mkOr(std::move(not_over)));
-        if (solver.check() == SMTSolver::Answer::UNSAT) {
-            break;
-        }
-        // fetch the literals violated by the model
-        Model model = *(solver.getModel());
-        std::erase_if(implicant, [&](PtAsgn literal) {
-            return model.evaluate(ptasgn_to_ptref(literal)) == logic.getTerm_false();
-        });
-        solver.pop();
-    }
-
-    vec<PTRef> over_conjuncts;
-    postprocess(implicant, dynamic_cast<ArithLogic &>(logic));
-    for (PtAsgn const & lit : implicant) { over_conjuncts.push(ptasgn_to_ptref(lit)); }
-    *overapprox = logic.mkAnd(std::move(over_conjuncts));
     return under;
 }
 
@@ -315,48 +291,64 @@ ModelBasedProjection::implicant_t ModelBasedProjection::projectSingleVar(PTRef v
     }
 
     implicant_t newLiterals;
-    if (uBounds.size() == 1 or lBounds.size() == 1) {
-        // Do full elimination with single bound; This yields more general result
-        auto subRes = uBounds.size() == 1 ? substituteBound(uBounds[0], lBounds, *lalogic)
-                                          : substituteBound(lBounds[0], uBounds, *lalogic);
-        assert(std::all_of(subRes.begin(), subRes.end(),
-                           [&](PTRef lit) { return model.evaluate(lit) == logic.getTerm_true(); }));
-        newLiterals.resize(subRes.size());
-        std::transform(subRes.begin(), subRes.end(), newLiterals.begin(), [&](PTRef lit) {
-            return lalogic->isNot(lit) ? PtAsgn(lalogic->getPterm(lit)[0], l_False) : PtAsgn(lit, l_True);
-        });
+    // if not PICK_BEST_SIDE, always use lowerBounds as the smallSide.
+    bool lBoundsIsSmallSide = not options.pick_best_side or lBounds.size() < uBounds.size();
+    auto& smallSide = lBoundsIsSmallSide ? lBounds : uBounds;
+    auto& largeSide = lBoundsIsSmallSide ? uBounds : lBounds;
+
+    // If there are few bounds, use complete FM.
+    if (smallSide.size() <= options.fm_bound_threshold
+        or largeSide.size() <= options.fm_bound_threshold) {
+        newLiterals.reserve(smallSide.size() * largeSide.size());
+        for (auto& bound : smallSide) {
+            // Do full elimination with single bound; This yields more general result
+            auto subRes = substituteBound(bound, largeSide, *lalogic);
+            assert(std::all_of(subRes.begin(), subRes.end(),
+                               [&](PTRef lit) { return model.evaluate(lit) == logic.getTerm_true(); }));
+            // Extend newLiterals with subRes
+            std::transform(subRes.begin(), subRes.end(), std::back_inserter(newLiterals), [&](PTRef lit) {
+                return lalogic->isNot(lit) ? PtAsgn(lalogic->getPterm(lit)[0], l_False) : PtAsgn(lit, l_True);
+            });
+        }
     } else {
-        // BMBP: TODO: here lower-bounds are always picked. we could heuristically pick the smallest side instead
-        // pick the correct literal based on the model
         assert(lalogic->isConstant(model.evaluate(var)));
-        // pick substitution from lower bounds
-        // pick highest lower bound according to the model
-        Bound const * highestLowerBound = nullptr;
-        for (auto const & bound : lBounds) {
-            assert(bound.type == BoundType::LOWER);
-            if (highestLowerBound == nullptr) {
-                highestLowerBound = &bound;
-                continue;
-            }
-            PTRef currentValRef = model.evaluate(highestLowerBound->val);
-            PTRef otherValRef = model.evaluate(bound.val);
-            assert(lalogic->isConstant(currentValRef) && lalogic->isConstant(otherValRef));
-            auto const & currentVal = lalogic->getNumConst(currentValRef);
-            auto const & otherVal = lalogic->getNumConst(otherValRef);
-            if (otherVal > currentVal or (otherVal == currentVal and bound.strict)) {
-                highestLowerBound = &bound;
-            } else if (otherVal == currentVal) {
-                // check if this bound should not be preferred because it is also upper bound
-                auto it = std::find_if(uBounds.begin(), uBounds.end(),
-                                       [&bound](Bound const & ubound) { return ubound.val == bound.val; });
-                if (it != uBounds.end()) {
-                    highestLowerBound = &bound;
-                    break;
-                }
+
+        // Scan the smallSide looking for the best bound.
+        // If smallSide == lBounds, find the greatest lower bound
+        // otherwise, find the least upper bound.
+
+        // Helper
+        auto get_value = [&lalogic, &model](const Bound& x) {
+            PTRef value = model.evaluate(x.val);
+            assert(lalogic->isConstant(value));
+            return lalogic->getNumConst(value);
+        };
+
+        auto best_bound_it = smallSide.begin();
+        auto best_val = get_value(*best_bound_it);
+
+        // Helper
+        auto is_better = [&](const Bound& other, const auto& other_val) {
+            if (best_val < other_val) { return lBoundsIsSmallSide; }
+            if (other_val < best_val) { return not lBoundsIsSmallSide; }
+            // Here the two bounds have the same value.
+            if (other.strict and not best_bound_it->strict) { return true; }
+            // Other is better if it is both an upper and a lower bound
+            return largeSide.end() !=
+                std::ranges::find_if(largeSide, [&other](const Bound& x) {
+                    return other.val == x.val; });
+        };
+
+        for (auto it = std::next(best_bound_it); it != smallSide.end(); ++it) {
+            const auto& other_val = get_value(*it);
+            if (is_better(*it, other_val)) {
+                best_bound_it = it;
+                best_val = other_val;
             }
         }
+
         // perform substitution
-        auto subRes = substituteBound(*highestLowerBound, bounds, *lalogic);
+        auto subRes = substituteBound(*best_bound_it, bounds, *lalogic);
         assert(std::all_of(subRes.begin(), subRes.end(),
                            [&](PTRef lit) { return model.evaluate(lit) == logic.getTerm_true(); }));
         newLiterals.resize(subRes.size());
@@ -377,6 +369,7 @@ void collectImplicant(Logic & logic, PTRef fla, Model & model, std::vector<char>
     if (id >= processed.size()) { throw std::logic_error("Should not happen!"); }
     if (processed[id]) { return; }
     processed[id] = 1;
+    
     PTRef trueTerm = logic.getTerm_true();
     assert(model.evaluate(fla) == trueTerm);
     if (logic.isAtom(fla)) {
@@ -465,6 +458,7 @@ ModelBasedProjection::VarsInfo computeVarsInfo(PTRef fla, Logic & logic, PTRef c
     }
     return res;
 }
+
 } // namespace
 
 ModelBasedProjection::implicant_t ModelBasedProjection::getImplicant(PTRef fla, Model & model,
@@ -490,16 +484,7 @@ void checkImplicant(ModelBasedProjection::implicant_t const & implicant, Logic &
 }
 } // namespace
 
-PTRef ModelBasedProjection::keepOnly(PTRef fla, const vec<PTRef> & varsToKeep, Model & model, PTRef* overapprox) {
-    auto allVars = TermUtils(logic).getVars(fla);
-    vec<PTRef> toEliminate;
-    for (PTRef var : allVars) {
-        if (std::find(varsToKeep.begin(), varsToKeep.end(), var) == varsToKeep.end()) { toEliminate.push(var); }
-    }
-    return project(fla, toEliminate, model, overapprox);
-}
-
-PTRef ModelBasedProjection::project(PTRef fla, const vec<PTRef> & varsToEliminate, Model & model, PTRef* overapprox) {
+PTRef ModelBasedProjection::getModelBasedImplicant(PTRef fla, const vec<PTRef> & varsToEliminate, Model & model) {
     vec<PTRef> tmp;
     varsToEliminate.copyTo(tmp);
     auto boolEndIt = std::stable_partition(tmp.begin(), tmp.end(), [&](PTRef var) {
@@ -517,10 +502,57 @@ PTRef ModelBasedProjection::project(PTRef fla, const vec<PTRef> & varsToEliminat
         fla = Substitutor(logic, subst).rewrite(fla);
     }
     if (boolEndIt == tmp.end()) {
+        return fla;
+    }
+
+    PTRef nnf = TermUtils(logic).toNNF(fla);
+
+    // compute map to know if given term contains any variable to eliminate
+    auto varsInfo = computeVarsInfo(nnf, logic, boolEndIt, tmp.end());
+
+    auto implicant = getImplicant(nnf, model, varsInfo);
+    postprocess(implicant, dynamic_cast<ArithLogic &>(logic));
+
+    auto ptasgn_to_ptref = [&](PtAsgn literal) { return literal.sgn == l_True ? literal.tr : logic.mkNot(literal.tr); };
+    vec<PTRef> implicant_conjuncts;
+    implicant_conjuncts.capacity(implicant.size());
+    for (PtAsgn const & lit : implicant) { implicant_conjuncts.push(ptasgn_to_ptref(lit)); }
+    return logic.mkAnd(std::move(implicant_conjuncts));
+}
+
+PTRef ModelBasedProjection::keepOnly_aux(PTRef fla, const vec<PTRef> & varsToKeep, Model & model, PTRef* overapprox) {
+    auto allVars = TermUtils(logic).getVars(fla);
+    vec<PTRef> toEliminate;
+    for (PTRef var : allVars) {
+        if (std::find(varsToKeep.begin(), varsToKeep.end(), var) == varsToKeep.end()) { toEliminate.push(var); }
+    }
+    return project_aux(fla, toEliminate, model, overapprox);
+}
+
+PTRef ModelBasedProjection::project_aux(PTRef fla,
+                                        const vec<PTRef> & varsToEliminate,
+                                        Model & model,
+                                        PTRef* overapprox) {
+    vec<PTRef> tmp;
+    varsToEliminate.copyTo(tmp);
+    auto boolEndIt = std::stable_partition(tmp.begin(), tmp.end(), [&](PTRef var) {
+        assert(logic.isVar(var));
+        return logic.hasSortBool(var);
+    });
+
+    auto original_fla = fla;
+
+    if (boolEndIt != tmp.begin()) { // there are some booleans
+        MapWithKeys<PTRef, PTRef, PTRefHash> subst;
+        for (auto it = tmp.begin(); it != boolEndIt; ++it) {
+            subst.insert(*it, model.evaluate(*it));
+        }
+        fla = Substitutor(logic, subst).rewrite(fla);
+    }
+    if (boolEndIt == tmp.end()) {
+        // no more variables to eliminate
         if (overapprox != nullptr) {
-            // AB: This could be improved by scanning the `fla` for literals
-            // that are entailed by the original formula.
-            *overapprox = logic.getTerm_true();
+            *overapprox = fla;
         }
         return fla;
     }
@@ -546,6 +578,7 @@ PTRef ModelBasedProjection::project(PTRef fla, const vec<PTRef> & varsToEliminat
     if (logic.hasIntegers()) {
         implicant = projectIntegerVars(boolEndIt, tmp.end(), std::move(implicant), model);
     } else {
+        // TODO: sort variables here
         for (auto it = boolEndIt; it != tmp.end(); ++it) {
             PTRef var = *it;
             // std::cout << "Eliminating " << logic.printTerm(var) << std::endl;
@@ -601,6 +634,7 @@ ModelBasedProjection::implicant_t ModelBasedProjection::projectIntegerVars(PTRef
         divConstraints.push_back(toDivConstraint(*it));
     }
     implicant.erase(divConstraintsBeg, implicant.end());
+    // TODO: sort variables
     for (PTRef * it = beg; it != end; ++it) {
         PTRef var = *it;
         if (not(lialogic.isNumVar(lialogic.getSymRef(var)) and lialogic.getSortRef(var) == lialogic.getSort_int())) {
@@ -733,8 +767,8 @@ void ModelBasedProjection::processClassicLiterals(PTRef var, div_constraints_t &
     auto interestingEnd = std::partition(implicant.begin(), implicant.end(), containsVar);
 
     // search for equality, replace disequalities and strict inequalities
-    std::vector<LIABoundLower> lower;
-    std::vector<LIABoundUpper> upper;
+    std::vector<LIABound> lower;
+    std::vector<LIABound> upper;
     std::vector<LIABound> equal;
     for (auto it = implicant.begin(); it != interestingEnd; ++it) {
         PtAsgn literal = *it;
@@ -765,23 +799,32 @@ void ModelBasedProjection::processClassicLiterals(PTRef var, div_constraints_t &
                 FastRational const & coeff = lialogic.getNumConst(factor.coeff);
                 if (val.sign() > 0) {
                     if (coeff.sign() > 0) {
-                        lower.push_back(LIABoundLower{
+                        lower.push_back(LIABound{
                             .term = lialogic.mkPlus(lialogic.getTerm_IntOne(), lialogic.mkNeg(res.second)),
-                            .coeff = factor.coeff});
+                            .coeff = factor.coeff,
+                            .isLower = true});
                     } else {
                         upper.push_back(
-                            LIABoundUpper{.term = lialogic.mkPlus(lialogic.getTerm_IntMinusOne(), res.second),
-                                          .coeff = lialogic.mkIntConst(-coeff)});
+                            LIABound{
+                                .term = lialogic.mkPlus(lialogic.getTerm_IntMinusOne(), res.second),
+                                .coeff = lialogic.mkIntConst(-coeff),
+                                .isLower = false
+                            });
                     }
                 } else {
                     assert(val.sign() < 0);
                     if (coeff.sign() > 0) {
-                        upper.push_back(LIABoundUpper{
+                        upper.push_back(LIABound{
                             .term = lialogic.mkPlus(lialogic.getTerm_IntMinusOne(), lialogic.mkNeg(res.second)),
-                            .coeff = factor.coeff});
+                            .coeff = factor.coeff,
+                            .isLower = true
+                            });
                     } else {
-                        lower.push_back(LIABoundLower{.term = lialogic.mkPlus(lialogic.getTerm_IntOne(), res.second),
-                                                      .coeff = lialogic.mkIntConst(-coeff)});
+                        lower.push_back(LIABound{
+                                .term = lialogic.mkPlus(lialogic.getTerm_IntOne(), res.second),
+                                .coeff = lialogic.mkIntConst(-coeff),
+                                .isLower = false
+                            });
                     }
                 }
             }
@@ -800,12 +843,20 @@ void ModelBasedProjection::processClassicLiterals(PTRef var, div_constraints_t &
             LinearFactor factor = res.first;
             FastRational const & coeff = lialogic.getNumConst(factor.coeff);
             if (coeff.sign() > 0) {
-                lower.push_back(LIABoundLower{.term = lialogic.mkNeg(res.second), .coeff = factor.coeff});
+                lower.push_back(LIABound{
+                        .term = lialogic.mkNeg(res.second),
+                        .coeff = factor.coeff,
+                        .isLower = true,
+                    });
             } else {
-                upper.push_back(LIABoundUpper{.term = res.second, .coeff = lialogic.mkIntConst(-coeff)});
+                upper.push_back(LIABound{
+                        .term = res.second,
+                        .coeff = lialogic.mkIntConst(-coeff),
+                        .isLower = false
+                    });
             }
         }
-    }
+    } // end classification in equal, lower and upper
 
     if (equal.empty()) {
         // only upper and lower bounds
@@ -813,31 +864,82 @@ void ModelBasedProjection::processClassicLiterals(PTRef var, div_constraints_t &
             implicant.erase(implicant.begin(), interestingEnd);
             return;
         }
-        // pick greatest lower bound in the model
-        auto greatestLowerBoundIt =
-            maxElementWithProjection(lower.begin(), lower.end(), [&](LIABoundLower const & bound) {
-                assert(lialogic.getNumConst(bound.coeff) >= 1);
-                return lialogic.getNumConst(model.evaluate(bound.term)) / lialogic.getNumConst(bound.coeff);
-            });
+
+        // if not PICK_BEST_SIDE, always use lowerBounds as the smallSide.
+        bool lBoundsIsSmallSide = not options.pick_best_side or lower.size() < upper.size();
+        auto& smallSide = lBoundsIsSmallSide ? lower : upper;
+        auto& largeSide = lBoundsIsSmallSide ? upper : lower;
+
+        // if there are few bounds, resolve all lower vs all upper.
+        // Note: unlike with reals, this might not be the complete QE because
+        // resolve depends on the model
+        if (lower.size() <= options.fm_bound_threshold
+            or upper.size() <= options.fm_bound_threshold) {
+            implicant_t newLiterals;
+            for (auto const & lowerBound : lower) {
+                for (auto const & upperBound : upper) {
+                    auto res = resolve(lowerBound, upperBound, model, lialogic);
+                    assert(res.bounds.size() <= 2);
+                    for (PTRef nBound : res.bounds) {
+                        assert(nBound != lialogic.getTerm_true());
+                        newLiterals.emplace_back(nBound, l_True);
+                    }
+                    if (res.hasDivConstraint) { divConstraints.push_back(res.constraint); }
+                }
+            }
+            // add literals not containing the variable
+            newLiterals.insert(newLiterals.end(), interestingEnd, implicant.end());
+            implicant = std::move(newLiterals);
+            return;
+        }
+
+        // Find best value to substitute.
+        auto get_value = [&lialogic, &model](const LIABound& bound) {
+            assert(lialogic.getNumConst(bound.coeff) >= 1);
+            return lialogic.getNumConst(model.evaluate(bound.term)) / lialogic.getNumConst(bound.coeff);
+        };
+
+        auto best_bound_it = smallSide.begin();
+        auto best_val = get_value(*best_bound_it);
+
+        auto is_better = [&](const LIABound& other, const auto& other_val) {
+            if (best_val < other_val) { return lBoundsIsSmallSide; }
+            if (other_val < best_val) { return not lBoundsIsSmallSide; }
+            // Other is better if it is both an upper and a lower bound
+            return largeSide.end() !=
+                std::ranges::find_if(largeSide, [&other](const LIABound& x) {
+                    return other.term == x.term and other.coeff == x.term; });
+        };
+
+        for (auto it = std::next(best_bound_it); it != smallSide.end(); ++it) {
+            const auto& other_val = get_value(*it);
+            if (is_better(*it, other_val)) {
+                best_bound_it = it;
+                best_val = other_val;
+            }
+        }
+
         implicant_t newLiterals;
-        FastRational const & glbCoeff = lialogic.getNumConst(greatestLowerBoundIt->coeff);
-        // handle lower bounds
-        for (auto it = lower.begin(); it != lower.end(); ++it) {
-            if (it == greatestLowerBoundIt) { continue; }
+        FastRational const & glbCoeff = lialogic.getNumConst(best_bound_it->coeff);
+        // handle bounds on the sime side
+        for (auto it = smallSide.begin(); it != smallSide.end(); ++it) {
+            if (it == best_bound_it) { continue; }
             auto const & bound = *it;
-            PTRef lhs = glbCoeff.isOne() ? bound.term : lialogic.mkTimes(bound.term, greatestLowerBoundIt->coeff);
+            PTRef lhs = glbCoeff.isOne() ? bound.term : lialogic.mkTimes(bound.term, best_bound_it->coeff);
             PTRef rhs = lialogic.getNumConst(bound.coeff).isOne()
-                            ? greatestLowerBoundIt->term
-                            : lialogic.mkTimes(greatestLowerBoundIt->term, bound.coeff);
-            PTRef nBound = lialogic.mkLeq(lhs, rhs);
+                            ? best_bound_it->term
+                            : lialogic.mkTimes(best_bound_it->term, bound.coeff);
+            PTRef nBound = lBoundsIsSmallSide ? lialogic.mkLeq(lhs, rhs) : lialogic.mkLeq(rhs, lhs);
             if (nBound != lialogic.getTerm_true()) {
                 // This can happen when we have a stronger and weaker bound on the same term
                 newLiterals.emplace_back(nBound, l_True);
             }
         }
-        // handle upper bounds
-        for (auto const & bound : upper) {
-            auto res = resolve(*greatestLowerBoundIt, bound, model, lialogic);
+        // resolve with bounds on the other side
+        for (auto const & bound : largeSide) {
+            auto res = lBoundsIsSmallSide ?
+                resolve(*best_bound_it, bound, model, lialogic) :
+                resolve(bound, *best_bound_it, model, lialogic);
             assert(res.bounds.size() <= 2);
             for (PTRef nBound : res.bounds) {
                 assert(nBound != lialogic.getTerm_true());
@@ -906,9 +1008,10 @@ void ModelBasedProjection::processClassicLiterals(PTRef var, div_constraints_t &
  * 2. as <= bt and a(s+d) <= bt and b|(s+d)             elif a>=b and d:=M(-s) mod b
  * 3. as <= bt and as <= b(t-d) and a|(t-d)             else b>a and d:=M(t) mod a
  * */
-ModelBasedProjection::ResolveResult ModelBasedProjection::resolve(LIABoundLower const & lower,
-                                                                  LIABoundUpper const & upper, Model & model,
+ModelBasedProjection::ResolveResult ModelBasedProjection::resolve(LIABound const & lower,
+                                                                  LIABound const & upper, Model & model,
                                                                   ArithLogic & lialogic) {
+    assert(lower.isLower and not upper.isLower);
     assert(logic.hasIntegers());
     ResolveResult result;
     PTRef a_term = upper.coeff;

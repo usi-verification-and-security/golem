@@ -14,6 +14,15 @@
 #include <unordered_set>
 
 namespace golem {
+
+struct MBPOptions {
+    MBPOptions() : fm_bound_threshold(1), pick_best_side(true) {}
+    MBPOptions(short fm_bound, bool best_side) :
+        fm_bound_threshold(fm_bound), pick_best_side(best_side) {}
+    short fm_bound_threshold;
+    bool pick_best_side;
+};
+
 class ModelBasedProjection {
 private:
     Logic & logic;
@@ -21,11 +30,27 @@ private:
 public:
     using VarsInfo = Map<PTRef, bool, PTRefHash>;
 
+    MBPOptions options;
+
     explicit ModelBasedProjection(Logic & logic) : logic(logic) {}
+    explicit ModelBasedProjection(Logic & logic, MBPOptions mbp_options)
+        : logic(logic), options(mbp_options) {}
 
-    PTRef project(PTRef fla, vec<PTRef> const & varsToEliminate, Model & model, PTRef* overapprox = nullptr);
+    PTRef getModelBasedImplicant(PTRef fla, vec<PTRef> const & varsToEliminate, Model & model);
 
-    PTRef keepOnly(PTRef fla, vec<PTRef> const & varsToKeep, Model & model, PTRef* overapprox = nullptr);
+    PTRef project(PTRef fla, vec<PTRef> const & varsToEliminate, Model & model, PTRef & overapprox) {
+        return project_aux(fla, varsToEliminate, model, &overapprox);
+    }
+    PTRef project(PTRef fla, vec<PTRef> const &varsToEliminate, Model &model) {
+        return project_aux(fla, varsToEliminate, model, nullptr);
+    }
+
+    PTRef keepOnly(PTRef fla, vec<PTRef> const &varsToKeep, Model & model, PTRef & overapprox) {
+        return keepOnly_aux(fla, varsToKeep, model, &overapprox);
+    }
+    PTRef keepOnly(PTRef fla, vec<PTRef> const &varsToKeep, Model & model) {
+        return keepOnly_aux(fla, varsToKeep, model, nullptr);
+    }
 
     using implicant_t = std::vector<PtAsgn>;
 
@@ -40,6 +65,9 @@ private:
 
     PTRef get_mbp(implicant_t implicant, implicant_t const & background, PTRef original_fla, PTRef* overapprox);
 
+    PTRef project_aux(PTRef fla, vec<PTRef> const & varsToEliminate, Model & model, PTRef* overapprox);
+    PTRef keepOnly_aux(PTRef fla, vec<PTRef> const & varsToKeep, Model & model, PTRef* overapprox);
+ 
     // LIA version
 
     struct DivisibilityConstraint {
@@ -58,15 +86,7 @@ private:
     struct LIABound {
         PTRef term;
         PTRef coeff;
-    };
-
-    struct LIABoundLower {
-        PTRef term;
-        PTRef coeff;
-    };
-    struct LIABoundUpper {
-        PTRef term;
-        PTRef coeff;
+        bool isLower;
     };
 
     struct ResolveResult {
@@ -75,7 +95,7 @@ private:
         bool hasDivConstraint;
     };
 
-    ResolveResult resolve(LIABoundLower const & lower, LIABoundUpper const & upper, Model & model,
+    ResolveResult resolve(LIABound const & lower, LIABound const & upper, Model & model,
                           ArithLogic & lialogic);
 };
 } // namespace golem

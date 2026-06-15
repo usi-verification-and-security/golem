@@ -8,6 +8,7 @@
 
 #include "ModelBasedProjection.h"
 
+#include "pterms/PTRef.h"
 #include "utils/SmtSolver.h"
 
 using namespace golem;
@@ -40,7 +41,7 @@ protected:
     PTRef one;
     PTRef trueTerm;
     ModelBasedProjection mbp;
-    MBP_RealTest() : mbp(logic) {
+    MBP_RealTest() : mbp(logic, MBPOptions(1, false)) {
         x = logic.mkRealVar("x");
         y = logic.mkRealVar("y");
         z = logic.mkRealVar("z");
@@ -324,7 +325,7 @@ TEST_F(MBP_RealTest, test_EqualityNotNormalized) {
 TEST_F(MBP_RealTest, test_singleUpperBound) {
     // y <= x and z <= x and 0 <= x and x <= 1
     // Using the single upper bound for elimination is strictly more general than using any of the lower bounds
-    PTRef lit1 = logic.mkLeq(y,x);
+    PTRef lit1 = logic.mkLeq(y, x);
     PTRef lit2 = logic.mkLeq(z, x);
     PTRef lit3 = logic.mkLeq(zero, x);
     PTRef lit4 = logic.mkLeq(x, one);
@@ -374,6 +375,228 @@ TEST_F(MBP_RealTest, test_hiddenEquality) {
     EXPECT_EQ(res, logic.mkAnd({logic.mkLeq(z, y), logic.mkLeq(y, one)}));
 }
 
+TEST_F(MBP_RealTest, test_heuristic_1) {
+    /*
+      y + x < 2 and y - x <= 2
+      y + x >= -2 and y - x >= -2
+      y > -2
+
+      3 lower bounds, 2 upper bounds
+     */
+    PTRef two = logic.mkRealConst(FastRational(2));
+    PTRef minustwo = logic.mkRealConst(FastRational(-2));
+    PTRef four = logic.mkRealConst(FastRational(4));
+    PTRef minusfour = logic.mkRealConst(FastRational(-4));
+    PTRef yplusx = logic.mkPlus(y, x);
+    PTRef yminusx = logic.mkMinus(y, x);
+    PTRef lit1 = logic.mkLt(yplusx, two);
+    PTRef lit2 = logic.mkLeq(yminusx, two);
+    PTRef lit3 = logic.mkGeq(yplusx, minustwo);
+    PTRef lit4 = logic.mkGeq(yminusx, minustwo);
+    PTRef lit5 = logic.mkGt(y, minustwo);
+    PTRef fla = logic.mkAnd({lit1, lit2, lit3, lit4, lit5});
+
+    // Model: (x := 0, y := 0)
+    auto model = getModel({{x, zero}, {y, zero}});
+    ASSERT_EQ(model->evaluate(fla), logic.getTerm_true());
+
+    // Old configuration: FM_th = 1, always lb:
+    // greatest lower bound: -2
+    // result: x = 0 (and -4 < x < 4 redundant)
+    PTRef res = mbp.project(fla, {y}, *model);
+    std::cout << "Obtained: " << logic.printTerm(res) << std::endl;
+    PTRef expected_res = logic.mkAnd({
+            logic.mkLeq(zero, x), logic.mkLeq(x, zero),
+            logic.mkLt(minusfour, x), logic.mkLt(x, four),
+        });
+    std::cout << "Expected: " << logic.printTerm(expected_res) << std::endl;
+    EXPECT_EQ(res, expected_res);
+
+    // Pick_best_side heuristic + FM_th = 1
+    // Looking for the smallest upper bound. 2 - x is picked because strict.
+    // Result is more general: 0 <= x < 2
+    ModelBasedProjection mbp_side(logic, MBPOptions(1, true));
+    res = mbp_side.project(fla, {y}, *model);
+    std::cout << "Obtained: " << logic.printTerm(res) << std::endl;
+    expected_res = logic.mkAnd({
+                logic.mkLeq(zero, x), logic.mkLt(x, two)
+        });
+    std::cout << "Expected: " << logic.printTerm(expected_res) << std::endl;
+    EXPECT_EQ(res, expected_res);
+
+    // FM_th = 2: complete result
+    // -2 <= x < 2 (and redundant -4 < x)
+    ModelBasedProjection mbp_fm(logic, MBPOptions(2, false));
+    res = mbp_fm.project(fla, {y}, *model);
+    std::cout << "Obtained: " << logic.printTerm(res) << std::endl;
+    expected_res = logic.mkAnd({
+            logic.mkGt(x, minusfour),
+            logic.mkLeq(minustwo, x), logic.mkLt(x, two)
+        });
+    std::cout << "Expected: " << logic.printTerm(expected_res) << std::endl;
+    EXPECT_EQ(res, expected_res);
+}
+
+TEST_F(MBP_RealTest, test_heuristic_1_overapprox) {
+    /*
+      y + x < 2 and y - x <= 2
+      y + x >= -2 and y - x >= -2
+      y > -2
+
+      3 lower bounds, 2 upper bounds
+     */
+    PTRef two = logic.mkRealConst(FastRational(2));
+    PTRef minustwo = logic.mkRealConst(FastRational(-2));
+    PTRef four = logic.mkRealConst(FastRational(4));
+    PTRef minusfour = logic.mkRealConst(FastRational(-4));
+    PTRef yplusx = logic.mkPlus(y, x);
+    PTRef yminusx = logic.mkMinus(y, x);
+    PTRef lit1 = logic.mkLt(yplusx, two);
+    PTRef lit2 = logic.mkLeq(yminusx, two);
+    PTRef lit3 = logic.mkGeq(yplusx, minustwo);
+    PTRef lit4 = logic.mkGeq(yminusx, minustwo);
+    PTRef lit5 = logic.mkGt(y, minustwo);
+    PTRef fla = logic.mkAnd({lit1, lit2, lit3, lit4, lit5});
+
+    // Model: (x := 0, y := 0)
+    auto model = getModel({{x, zero}, {y, zero}});
+    ASSERT_EQ(model->evaluate(fla), logic.getTerm_true());
+
+    // Old configuration: FM_th = 1, always lb:
+    // greatest lower bound: -2
+    // result: x = 0 (and -4 < x < 4 redundant)
+    // Expected over: -4 < x < 4
+    PTRef res_over = PTRef_Undef;
+    PTRef res = mbp.project(fla, {y}, *model, res_over);
+    std::cout << "Obtained: " << logic.printTerm(res) << std::endl;
+    std::cout << "Obtained over: " << logic.printTerm(res_over) << std::endl;
+    PTRef expected_res = logic.mkAnd({
+            logic.mkLeq(zero, x), logic.mkLeq(x, zero),
+            logic.mkLt(minusfour, x), logic.mkLt(x, four),
+        });
+    PTRef expected_over = logic.mkAnd({
+            logic.mkLt(minusfour, x), logic.mkLt(x, four),
+        });
+    std::cout << "Expected: " << logic.printTerm(expected_res) << std::endl;
+    EXPECT_EQ(res, expected_res);
+    std::cout << "Expected over: " << logic.printTerm(expected_over) << std::endl;
+    EXPECT_EQ(res_over, expected_over);
+
+    // Pick_best_side heuristic + FM_th = 1
+    // Looking for the smallest upper bound. 2 - x is picked because strict.
+    // Result is more general: 0 <= x < 2
+    // Expected over: x < 2
+    ModelBasedProjection mbp_side(logic, MBPOptions(1, true));
+    res = mbp_side.project(fla, {y}, *model, res_over);
+    std::cout << "Obtained: " << logic.printTerm(res) << std::endl;
+    std::cout << "Obtained over: " << logic.printTerm(res_over) << std::endl;
+    expected_res = logic.mkAnd({
+                logic.mkLeq(zero, x), logic.mkLt(x, two)
+        });
+    expected_over = logic.mkLt(x, two);
+    std::cout << "Expected: " << logic.printTerm(expected_res) << std::endl;
+    EXPECT_EQ(res, expected_res);
+    std::cout << "Expected over: " << logic.printTerm(expected_over) << std::endl;
+    EXPECT_EQ(res_over, expected_over);
+
+    // FM_th = 2: complete result
+    // -2 <= x < 2 (and redundant -4 < x)
+    // Expected over: -2 <= x < 2 (and redundant -4 < x)
+    ModelBasedProjection mbp_fm(logic, MBPOptions(2, false));
+    res = mbp_fm.project(fla, {y}, *model, res_over);
+    std::cout << "Obtained: " << logic.printTerm(res) << std::endl;
+    std::cout << "Obtained over: " << logic.printTerm(res_over) << std::endl;
+    expected_res = logic.mkAnd({
+            logic.mkGt(x, minusfour),
+            logic.mkLeq(minustwo, x), logic.mkLt(x, two)
+        });
+    expected_over = expected_res;
+    std::cout << "Expected: " << logic.printTerm(expected_res) << std::endl;
+    EXPECT_EQ(res, expected_res);
+    std::cout << "Expected over: " << logic.printTerm(expected_over) << std::endl;
+    EXPECT_EQ(res_over, expected_over);
+}
+
+TEST_F(MBP_RealTest, test_heuristic_2_overapprox) {
+    /*
+      a -> (y + x < 2 and y + x >= -2)
+      b -> (y - x <= 2 and y - x >= -2)
+
+      3 lower bounds, 2 upper bounds
+     */
+    PTRef two = logic.mkRealConst(FastRational(2));
+    PTRef minustwo = logic.mkRealConst(FastRational(-2));
+    PTRef four = logic.mkRealConst(FastRational(4));
+    PTRef minusfour = logic.mkRealConst(FastRational(-4));
+    PTRef yplusx = logic.mkPlus(y, x);
+    PTRef yminusx = logic.mkMinus(y, x);
+    PTRef lit1 = logic.mkLt(yplusx, two);
+    PTRef lit2 = logic.mkLeq(yminusx, two);
+    PTRef lit3 = logic.mkGeq(yplusx, minustwo);
+    PTRef lit4 = logic.mkGeq(yminusx, minustwo);
+    PTRef lit5 = logic.mkGt(y, minustwo);
+    PTRef fla = logic.mkAnd({lit1, lit2, lit3, lit4, lit5});
+    PTRef falseterm = logic.getTerm_false();
+
+    // Model: (a:= false, x := 0, y := 0)
+    auto model = getModel({{a, falseterm}, {b, falseterm}, {x, zero}, {y, zero}});
+    ASSERT_EQ(model->evaluate(fla), logic.getTerm_true());
+
+    // Old configuration: FM_th = 1, always lb:
+    // greatest lower bound: -2
+    // result: x = 0 (and -4 < x < 4 redundant)
+    // Expected over: -4 < x < 4
+    PTRef res_over = PTRef_Undef;
+    PTRef res = mbp.project(fla, {y}, *model, res_over);
+    std::cout << "Obtained: " << logic.printTerm(res) << std::endl;
+    std::cout << "Obtained over: " << logic.printTerm(res_over) << std::endl;
+    PTRef expected_res = logic.mkAnd({
+            logic.mkLeq(zero, x), logic.mkLeq(x, zero),
+            logic.mkLt(minusfour, x), logic.mkLt(x, four),
+        });
+    PTRef expected_over = logic.mkAnd({
+            logic.mkLt(minusfour, x), logic.mkLt(x, four),
+        });
+    std::cout << "Expected: " << logic.printTerm(expected_res) << std::endl;
+    EXPECT_EQ(res, expected_res);
+    std::cout << "Expected over: " << logic.printTerm(expected_over) << std::endl;
+    EXPECT_EQ(res_over, expected_over);
+
+    // Pick_best_side heuristic + FM_th = 1
+    // Looking for the smallest upper bound. 2 - x is picked because strict.
+    // Result is more general: 0 <= x < 2
+    // Expected over: x < 2
+    ModelBasedProjection mbp_side(logic, MBPOptions(1, true));
+    res = mbp_side.project(fla, {y}, *model, res_over);
+    std::cout << "Obtained: " << logic.printTerm(res) << std::endl;
+    std::cout << "Obtained over: " << logic.printTerm(res_over) << std::endl;
+    expected_res = logic.mkAnd({
+                logic.mkLeq(zero, x), logic.mkLt(x, two)
+        });
+    expected_over = logic.mkLt(x, two);
+    std::cout << "Expected: " << logic.printTerm(expected_res) << std::endl;
+    EXPECT_EQ(res, expected_res);
+    std::cout << "Expected over: " << logic.printTerm(expected_over) << std::endl;
+    EXPECT_EQ(res_over, expected_over);
+
+    // FM_th = 2: complete result
+    // -2 <= x < 2 (and redundant -4 < x)
+    // Expected over: -2 <= x < 2 (and redundant -4 < x)
+    ModelBasedProjection mbp_fm(logic, MBPOptions(2, false));
+    res = mbp_fm.project(fla, {y}, *model, res_over);
+    std::cout << "Obtained: " << logic.printTerm(res) << std::endl;
+    std::cout << "Obtained over: " << logic.printTerm(res_over) << std::endl;
+    expected_res = logic.mkAnd({
+            logic.mkGt(x, minusfour),
+            logic.mkLeq(minustwo, x), logic.mkLt(x, two)
+        });
+    expected_over = expected_res;
+    std::cout << "Expected: " << logic.printTerm(expected_res) << std::endl;
+    EXPECT_EQ(res, expected_res);
+    std::cout << "Expected over: " << logic.printTerm(expected_over) << std::endl;
+    EXPECT_EQ(res_over, expected_over);
+}
+
 
 class MBP_IntTest : public ::testing::Test {
 protected:
@@ -388,7 +611,7 @@ protected:
     PTRef one;
     PTRef minusOne;
     ModelBasedProjection mbp;
-    MBP_IntTest() : mbp(logic) {
+    MBP_IntTest() : mbp(logic, MBPOptions(0, false)) {
         x = logic.mkIntVar("x");
         y = logic.mkIntVar("y");
         z = logic.mkIntVar("z");
@@ -569,3 +792,140 @@ TEST_F(MBP_IntTest, test_ExtendedModelForDivisibilityInThePresenceOfDisequality)
     ASSERT_EQ(res, logic.getTerm_true());
 }
 
+TEST_F(MBP_IntTest, test_heuristic_1) {
+    /*
+      y + x < 2 and y - x <= 2
+      y + x >= -2 and y - x >= -2
+      y > -2
+
+      3 lower bounds, 2 upper bounds
+     */
+    PTRef minusone = logic.mkIntConst(FastRational(-1));
+    PTRef two = logic.mkIntConst(FastRational(2));
+    PTRef minustwo = logic.mkIntConst(FastRational(-2));
+    PTRef four = logic.mkIntConst(FastRational(4));
+    PTRef minusfour = logic.mkIntConst(FastRational(-4));
+    PTRef yplusx = logic.mkPlus(y, x);
+    PTRef yminusx = logic.mkMinus(y, x);
+    PTRef lit1 = logic.mkLt(yplusx, two);
+    PTRef lit2 = logic.mkLeq(yminusx, two);
+    PTRef lit3 = logic.mkGeq(yplusx, minustwo);
+    PTRef lit4 = logic.mkGeq(yminusx, minustwo);
+    PTRef lit5 = logic.mkGt(y, minustwo);
+    PTRef fla = logic.mkAnd({lit1, lit2, lit3, lit4, lit5});
+
+    // Model: (x := 0, y := 0)
+    auto model = getModel({{x, zero}, {y, zero}});
+    ASSERT_EQ(model->evaluate(fla), logic.getTerm_true());
+
+    // Old configuration: FM_th = 1, always lb:
+    // greatest lower bound: -2, transformed into a non-strict -1
+    // result: -1 <= x = 1
+    PTRef res = mbp.project(fla, {y}, *model);
+    std::cout << "Obtained: " << logic.printTerm(res) << std::endl;
+    PTRef expected_res = logic.mkAnd({
+            logic.mkLeq(minusone, x), logic.mkLeq(x, one),
+        });
+    std::cout << "Expected: " << logic.printTerm(expected_res) << std::endl;
+    EXPECT_EQ(res, expected_res);
+
+    // Pick_best_side heuristic + FM_th = 1
+    // Looking for the smallest upper bound. 2 - x is picked because strict.
+    // Result is more general: 0 <= x <= 1
+    ModelBasedProjection mbp_side(logic, MBPOptions(1, true));
+    res = mbp_side.project(fla, {y}, *model);
+    std::cout << "Obtained: " << logic.printTerm(res) << std::endl;
+    expected_res = logic.mkAnd({
+                logic.mkLeq(zero, x), logic.mkLeq(x, one)
+        });
+    std::cout << "Expected: " << logic.printTerm(expected_res) << std::endl;
+    EXPECT_EQ(res, expected_res);
+
+    // FM_th = 2: complete result
+    // -2 <= x <= 1
+    ModelBasedProjection mbp_fm(logic, MBPOptions(2, false));
+    res = mbp_fm.project(fla, {y}, *model);
+    std::cout << "Obtained: " << logic.printTerm(res) << std::endl;
+    expected_res = logic.mkAnd({
+            logic.mkLeq(minustwo, x), logic.mkLeq(x, one)
+        });
+    std::cout << "Expected: " << logic.printTerm(expected_res) << std::endl;
+    EXPECT_EQ(res, expected_res);
+}
+
+TEST_F(MBP_IntTest, test_heuristic_1_overapprox) {
+    /*
+      y + x < 2 and y - x <= 2
+      y + x >= -2 and y - x >= -2
+      y > -2
+
+      3 lower bounds, 2 upper bounds
+     */
+    PTRef minusone = logic.mkIntConst(FastRational(-1));
+    PTRef two = logic.mkIntConst(FastRational(2));
+    PTRef minustwo = logic.mkIntConst(FastRational(-2));
+    PTRef four = logic.mkIntConst(FastRational(4));
+    PTRef minusthree = logic.mkIntConst(FastRational(-3));
+    PTRef yplusx = logic.mkPlus(y, x);
+    PTRef yminusx = logic.mkMinus(y, x);
+    PTRef lit1 = logic.mkLt(yplusx, two);
+    PTRef lit2 = logic.mkLeq(yminusx, two);
+    PTRef lit3 = logic.mkGeq(yplusx, minustwo);
+    PTRef lit4 = logic.mkGeq(yminusx, minustwo);
+    PTRef lit5 = logic.mkGt(y, minustwo);
+    PTRef fla = logic.mkAnd({lit1, lit2, lit3, lit4, lit5});
+
+    // Model: (x := 0, y := 0)
+    auto model = getModel({{x, zero}, {y, zero}});
+    ASSERT_EQ(model->evaluate(fla), logic.getTerm_true());
+
+    // Old configuration: FM_th = 1, always lb:
+    // greatest lower bound: -2, transformed into a non-strict -1
+    // result: -1 <= x <= 1
+    // over: x <= 1
+    PTRef res_over = PTRef_Undef;
+    PTRef res = mbp.project(fla, {y}, *model, res_over);
+    std::cout << "Obtained: " << logic.printTerm(res) << std::endl;
+    std::cout << "Obtained over: " << logic.printTerm(res_over) << std::endl;
+    PTRef expected_res = logic.mkAnd({
+            logic.mkLeq(minusone, x), logic.mkLeq(x, one),
+        });
+    PTRef expected_over = logic.mkLeq(x, one);
+    std::cout << "Expected: " << logic.printTerm(expected_res) << std::endl;
+    EXPECT_EQ(res, expected_res);
+    std::cout << "Expected over: " << logic.printTerm(expected_over) << std::endl;
+    EXPECT_EQ(res_over, expected_over);
+
+    // Pick_best_side heuristic + FM_th = 1
+    // Looking for the smallest upper bound. 2 - x is picked because strict.
+    // Result is different: 0 <= x <= 1
+    // over: x <= 1
+    ModelBasedProjection mbp_side(logic, MBPOptions(1, true));
+    res = mbp_side.project(fla, {y}, *model, res_over);
+    std::cout << "Obtained: " << logic.printTerm(res) << std::endl;
+    std::cout << "Obtained over: " << logic.printTerm(res_over) << std::endl;
+    expected_res = logic.mkAnd({
+            logic.mkLeq(zero, x), logic.mkLeq(x, one)
+        });
+    expected_over = logic.mkLeq(x, one);
+    std::cout << "Expected: " << logic.printTerm(expected_res) << std::endl;
+    EXPECT_EQ(res, expected_res);
+    std::cout << "Expected over: " << logic.printTerm(expected_over) << std::endl;
+    EXPECT_EQ(res_over, expected_over);
+
+    // FM_th = 2: complete result
+    // -2 <= x <= 1
+    // over = complete result
+    ModelBasedProjection mbp_fm(logic, MBPOptions(2, false));
+    res = mbp_fm.project(fla, {y}, *model, res_over);
+    std::cout << "Obtained: " << logic.printTerm(res) << std::endl;
+    std::cout << "Obtained over: " << logic.printTerm(res_over) << std::endl;
+    expected_res = logic.mkAnd({
+            logic.mkLeq(minustwo, x), logic.mkLeq(x, one)
+        });
+    expected_over = expected_res;
+    std::cout << "Expected: " << logic.printTerm(expected_res) << std::endl;
+    EXPECT_EQ(res, expected_res);
+    std::cout << "Expected over: " << logic.printTerm(expected_over) << std::endl;
+    EXPECT_EQ(res_over, expected_over);
+}
