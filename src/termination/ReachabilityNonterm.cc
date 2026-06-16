@@ -54,18 +54,8 @@ PTRef normalize(PTRef input, ArithLogic & logic, bool negated = false) {
 // This function is needed to extract specific atoms from the arithmetic formula
 void unrollAtom(ArithLogic & logic, std::vector<PTRef> & coefs, PTRef atom) {
     assert(logic.isVar(atom) || logic.isTimes(atom) || logic.isPlus(atom));
-    if (!(logic.isVar(atom) || logic.isTimes(atom) || logic.isPlus(atom)))
-        std::cout << "ERROR" << std::endl;
-    auto size = coefs.size();
     if (logic.isVar(atom) || logic.isTimes(atom)) {
         coefs.push_back(atom);
-    // } else if (logic.isTimes(atom)) {
-    //     auto [subatom, constant] = logic.splitTermToVarAndConst(atom);
-    //     assert(logic.isConstant(constant));
-    //     unrollAtom(logic, coefs, subatom);
-    //     for (auto i = size; i < coefs.size(); i++) {
-    //         coefs[i] = logic.mkTimes(constant, coefs[i]);
-    //     }
     } else if (logic.isPlus(atom)) {
         auto it = logic.getPterm(atom).begin();
         while (it != logic.getPterm(atom).end()) {
@@ -86,7 +76,9 @@ void getCoeffs(ArithLogic & logic, std::vector<PTRef> & coefs, PTRef formula) {
 }
 
 bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const & vars) {
-    assert(!logic.isOr(formula));
+    assert(logic.isAnd(formula) || logic.isLeq(formula) || logic.isEquality(formula));
+    vec<PTRef> conjuncts = TermUtils(logic).getTopLevelConjuncts(formula);
+
 
     vec<PTRef> int_vars;
     vec<PTRef> next_vars;
@@ -98,15 +90,13 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
         }
     }
 
-    vec<PTRef> conjuncts = TermUtils(logic).getTopLevelConjuncts(formula);
-
     vec<PTRef> leq_conjuncts;
     vec<PTRef> bools;
     for (auto conj: conjuncts) {
         auto it = logic.getPterm(conj).begin();
         if (logic.isLeq(conj)) leq_conjuncts.push(conj);
         else if (logic.isEquality(conj)) {
-            // x == y <=> y <= x /\ y <= x
+            // x == y <=> y <= x /\ x <= y
             leq_conjuncts.push(logic.mkLeq(it[0], it[1]));
             leq_conjuncts.push(logic.mkLeq(it[1], it[0]));
         }
@@ -115,22 +105,27 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
     }
 
     SMTSolver solver(logic, SMTSolver::WitnessProduction::NONE);
+    vec<PTRef> eq_vars;
+    for (auto var : vars) {
+        PTRef curr = TimeMachine(logic).sendVarThroughTime(var, 0);
+        PTRef next = TimeMachine(logic).sendVarThroughTime(var, 1);
+        eq_vars.push(logic.mkEq(curr, next));
+    }
+    solver.assertProp(logic.mkAnd(formula, logic.mkAnd(eq_vars)));
+    if (solver.check() == SMTSolver::Answer::SAT) return false;
+
     if (bools.size() > 0 || leq_conjuncts.size() == 0) {
-        solver.assertProp(
-            logic.mkAnd(logic.mkAnd(bools), TimeMachine(logic).sendFlaThroughTime(logic.mkAnd(bools), 1)));
         // This is a check to see if it is possible to take transition twice
         // (Otherwise it is trivially well-founded, this check is specifically for bools)
-        if (solver.check() == SMTSolver::Answer::UNSAT)
-            return true;
-        else if (leq_conjuncts.size() == 0)
+        if (leq_conjuncts.size() == 0)
             return false;
         solver.resetSolver();
     }
 
+
     std::vector<std::vector<PTRef>> A;
     std::vector<std::vector<PTRef>> A_p;
     std::vector<PTRef> b = std::vector<PTRef>(leq_conjuncts.size(), logic.getTerm_IntZero());
-
     // Computation of matrices A, A_p, and vector b based on the coefficients of vars and constants
     for (auto conjunct : leq_conjuncts) {
         A.push_back(std::vector(int_vars.size(), logic.getTerm_IntZero()));
@@ -628,7 +623,6 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
 
                 // The procedure to construct transition invariants is executed
                 PTRef itp = constructTransitionInvariantCandidates(T, temp_tr, sink, num, logic, vars);
-                // std::cout << "Itp: " << logic.pp(itp) << std::endl;
                 // Extract well-founded disjuncts from the transition invariant
                 auto newCands = extractWellFoundedCandidates(itp, sink, logic, vars);
 
@@ -660,7 +654,6 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                     std::cout << "Center" << std::endl;
                     return {Answer::YES, trInv};
                 }
-                // std::cout<< "Cand " << logic.pp(trInv) << std::endl;
 
                 // If trInv is not complete Transition invariant, then we can compute the states which are not covered
                 //    by trInv - those are the states that potentially do not terminate
