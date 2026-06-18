@@ -109,6 +109,7 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
     solver.resetSolver();
     solver.assertProp(logic.mkAnd(formula, TimeMachine(logic).sendFlaThroughTime(formula, 1)));
     if (solver.check() == SMTSolver::Answer::UNSAT) return true;
+    // if (leq_conjuncts.size() == 0) return false;
 
     std::vector<std::vector<PTRef>> A;
     std::vector<std::vector<PTRef>> A_p;
@@ -347,7 +348,8 @@ PTRef toDNF(PTRef formula, Logic &logic, int bound = 0) {
     // std::cout << "Pre DNF: "  << logic.pp(formula) << std::endl;
     while (smt_solver.check() == SMTSolver::Answer::SAT && (bound > 0 || unlimited)) {
         vec<PTRef> activeLiterals;
-        extractActiveLiterals(formula, logic, *smt_solver.getModel(), activeLiterals, smt_solver);
+        auto model = smt_solver.getModel();
+        extractActiveLiterals(formula, logic, *model, activeLiterals, smt_solver);
         PTRef cube = logic.mkAnd(activeLiterals);
         DNF.push(cube);
         smt_solver.push();
@@ -378,7 +380,7 @@ vec<PTRef> extractWellFoundedCandidates(PTRef itp, PTRef sink, ArithLogic & logi
                 if (smt_solver.check() == SMTSolver::Answer::SAT &&
                     checkWellFounded(utils.simplifyMax(logic.mkAnd(sink_cand, cand)), logic, vars)) {
                     strictCandidates.push(utils.simplifyMax(logic.mkAnd(sink_cand, cand)));
-                    break;
+                    // break;
                 }
             }
         }
