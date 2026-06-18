@@ -41,7 +41,7 @@ protected:
     PTRef one;
     PTRef trueTerm;
     ModelBasedProjection mbp;
-    MBP_RealTest() : mbp(logic, MBPOptions(1, false)) {
+    MBP_RealTest() : mbp(logic, MBPOptions(1, false, true)) {
         x = logic.mkRealVar("x");
         y = logic.mkRealVar("y");
         z = logic.mkRealVar("z");
@@ -415,7 +415,7 @@ TEST_F(MBP_RealTest, test_heuristic_1) {
     // Pick_best_side heuristic + FM_th = 1
     // Looking for the smallest upper bound. 2 - x is picked because strict.
     // Result is more general: 0 <= x < 2
-    ModelBasedProjection mbp_side(logic, MBPOptions(1, true));
+    ModelBasedProjection mbp_side(logic, MBPOptions(1, true, true));
     res = mbp_side.project(fla, {y}, *model);
     std::cout << "Obtained: " << logic.printTerm(res) << std::endl;
     expected_res = logic.mkAnd({
@@ -426,7 +426,7 @@ TEST_F(MBP_RealTest, test_heuristic_1) {
 
     // FM_th = 2: complete result
     // -2 <= x < 2 (and redundant -4 < x)
-    ModelBasedProjection mbp_fm(logic, MBPOptions(2, false));
+    ModelBasedProjection mbp_fm(logic, MBPOptions(2, false, true));
     res = mbp_fm.project(fla, {y}, *model);
     std::cout << "Obtained: " << logic.printTerm(res) << std::endl;
     expected_res = logic.mkAnd({
@@ -486,7 +486,7 @@ TEST_F(MBP_RealTest, test_heuristic_1_overapprox) {
     // Looking for the smallest upper bound. 2 - x is picked because strict.
     // Result is more general: 0 <= x < 2
     // Expected over: x < 2
-    ModelBasedProjection mbp_side(logic, MBPOptions(1, true));
+    ModelBasedProjection mbp_side(logic, MBPOptions(1, true, true));
     res = mbp_side.project(fla, {y}, *model, res_over);
     std::cout << "Obtained: " << logic.printTerm(res) << std::endl;
     std::cout << "Obtained over: " << logic.printTerm(res_over) << std::endl;
@@ -502,7 +502,7 @@ TEST_F(MBP_RealTest, test_heuristic_1_overapprox) {
     // FM_th = 2: complete result
     // -2 <= x < 2 (and redundant -4 < x)
     // Expected over: -2 <= x < 2 (and redundant -4 < x)
-    ModelBasedProjection mbp_fm(logic, MBPOptions(2, false));
+    ModelBasedProjection mbp_fm(logic, MBPOptions(2, false, true));
     res = mbp_fm.project(fla, {y}, *model, res_over);
     std::cout << "Obtained: " << logic.printTerm(res) << std::endl;
     std::cout << "Obtained over: " << logic.printTerm(res_over) << std::endl;
@@ -566,7 +566,7 @@ TEST_F(MBP_RealTest, test_heuristic_2_overapprox) {
     // Looking for the smallest upper bound. 2 - x is picked because strict.
     // Result is more general: 0 <= x < 2
     // Expected over: x < 2
-    ModelBasedProjection mbp_side(logic, MBPOptions(1, true));
+    ModelBasedProjection mbp_side(logic, MBPOptions(1, true, true));
     res = mbp_side.project(fla, {y}, *model, res_over);
     std::cout << "Obtained: " << logic.printTerm(res) << std::endl;
     std::cout << "Obtained over: " << logic.printTerm(res_over) << std::endl;
@@ -582,7 +582,7 @@ TEST_F(MBP_RealTest, test_heuristic_2_overapprox) {
     // FM_th = 2: complete result
     // -2 <= x < 2 (and redundant -4 < x)
     // Expected over: -2 <= x < 2 (and redundant -4 < x)
-    ModelBasedProjection mbp_fm(logic, MBPOptions(2, false));
+    ModelBasedProjection mbp_fm(logic, MBPOptions(2, false, true));
     res = mbp_fm.project(fla, {y}, *model, res_over);
     std::cout << "Obtained: " << logic.printTerm(res) << std::endl;
     std::cout << "Obtained over: " << logic.printTerm(res_over) << std::endl;
@@ -611,7 +611,7 @@ protected:
     PTRef one;
     PTRef minusOne;
     ModelBasedProjection mbp;
-    MBP_IntTest() : mbp(logic, MBPOptions(0, false)) {
+    MBP_IntTest() : mbp(logic, MBPOptions(0, false, true)) {
         x = logic.mkIntVar("x");
         y = logic.mkIntVar("y");
         z = logic.mkIntVar("z");
@@ -832,7 +832,7 @@ TEST_F(MBP_IntTest, test_heuristic_1) {
     // Pick_best_side heuristic + FM_th = 1
     // Looking for the smallest upper bound. 2 - x is picked because strict.
     // Result is more general: 0 <= x <= 1
-    ModelBasedProjection mbp_side(logic, MBPOptions(1, true));
+    ModelBasedProjection mbp_side(logic, MBPOptions(1, true, true));
     res = mbp_side.project(fla, {y}, *model);
     std::cout << "Obtained: " << logic.printTerm(res) << std::endl;
     expected_res = logic.mkAnd({
@@ -843,7 +843,7 @@ TEST_F(MBP_IntTest, test_heuristic_1) {
 
     // FM_th = 2: complete result
     // -2 <= x <= 1
-    ModelBasedProjection mbp_fm(logic, MBPOptions(2, false));
+    ModelBasedProjection mbp_fm(logic, MBPOptions(2, false, true));
     res = mbp_fm.project(fla, {y}, *model);
     std::cout << "Obtained: " << logic.printTerm(res) << std::endl;
     expected_res = logic.mkAnd({
@@ -900,7 +900,7 @@ TEST_F(MBP_IntTest, test_heuristic_1_overapprox) {
     // Looking for the smallest upper bound. 2 - x is picked because strict.
     // Result is different: 0 <= x <= 1
     // over: x <= 1
-    ModelBasedProjection mbp_side(logic, MBPOptions(1, true));
+    ModelBasedProjection mbp_side(logic, MBPOptions(1, true, true));
     res = mbp_side.project(fla, {y}, *model, res_over);
     std::cout << "Obtained: " << logic.printTerm(res) << std::endl;
     std::cout << "Obtained over: " << logic.printTerm(res_over) << std::endl;
@@ -916,7 +916,7 @@ TEST_F(MBP_IntTest, test_heuristic_1_overapprox) {
     // FM_th = 2: complete result
     // -2 <= x <= 1
     // over = complete result
-    ModelBasedProjection mbp_fm(logic, MBPOptions(2, false));
+    ModelBasedProjection mbp_fm(logic, MBPOptions(2, false, true));
     res = mbp_fm.project(fla, {y}, *model, res_over);
     std::cout << "Obtained: " << logic.printTerm(res) << std::endl;
     std::cout << "Obtained over: " << logic.printTerm(res_over) << std::endl;

@@ -16,6 +16,7 @@ SMTSolver::SMTSolver(Logic & logic, WitnessProduction setup) {
     this->config.setOption(SMTConfig::o_produce_models, SMTOption(produceModel), msg);
     this->config.setOption(SMTConfig::o_produce_inter, SMTOption(produceInterpolants), msg);
     this->config.setOption(SMTConfig::o_produce_unsat_cores, SMTOption(produceUnsatCores), msg);
+    this->config.setOption(SMTConfig::o_minimal_unsat_cores, SMTOption(produceUnsatCores), msg);
     solver = std::make_unique<MainSolver>(logic, config, "");
 }
 
@@ -25,6 +26,10 @@ void SMTSolver::resetSolver() {
 
 void SMTSolver::assertProp(PTRef prop) {
     solver->insertFormula(prop);
+}
+
+bool SMTSolver::tryAssertNamedProp(PTRef prop, std::string const & name) {
+    return solver->tryAddNamedAssertion(prop, name);
 }
 
 SMTSolver::Answer SMTSolver::check() {

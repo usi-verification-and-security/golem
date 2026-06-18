@@ -27,6 +27,8 @@ public:
 
     void assertProp(PTRef prop);
 
+    bool tryAssertNamedProp(PTRef prop, std::string const & name);
+
     void resetSolver();
 
     Answer check();
@@ -37,6 +39,8 @@ public:
     auto getModel() { return solver->getModel(); }
 
     auto getInterpolationContext() { return solver->getInterpolationContext(); }
+
+    auto getUnsatCore() { return solver->getUnsatCore(); }
 
     MainSolver & getCoreSolver() { return *solver; }
 

@@ -11,6 +11,7 @@
 
 #include <iterator>
 #include <memory>
+#include <queue>
 
 namespace {
 enum class BoundType { LOWER, UPPER };
@@ -459,11 +460,58 @@ ModelBasedProjection::VarsInfo computeVarsInfo(PTRef fla, Logic & logic, PTRef c
     return res;
 }
 
+std::vector<PtAsgn>
+collectImplicantWithUnsatCore(Logic & logic,
+                              PTRef fla,
+                              Model & model,
+                              ModelBasedProjection::VarsInfo const & varsInfo) {
+    std::vector<PTRef> literals;
+    std::queue<PTRef> todos({fla});
+    while (!todos.empty()) {
+        PTRef x = todos.front();
+        todos.pop();
+        if (logic.isAtom(x)) {
+            bool sat = model.evaluate(x) == logic.getTerm_true();
+            literals.push_back(sat ? x : logic.mkNot(x));
+            continue;
+        }
+        for (int i = 0; i < logic.getPterm(x).size(); i++) {
+            todos.push(logic.getPterm(x)[i]);
+        }
+    }
+    // here all literals have been collected
+
+    SMTSolver solver(logic, SMTSolver::WitnessProduction::ONLY_UNSAT_CORE);
+    solver.assertProp(logic.mkNot(fla));
+    auto nr = 0;
+    for (const auto& x : literals) {
+        bool ok = solver.tryAssertNamedProp(x, std::to_string(++nr));
+        assert(ok);
+    }
+    auto res = solver.check();
+    if (res != SMTSolver::Answer::UNSAT) {
+        throw std::logic_error("Error in unsat core extraction. Expected unsat.");
+    }
+    auto unsatCore = solver.getUnsatCore();
+    auto& coreTerms = unsatCore->getTerms();
+    std::vector<PtAsgn> implicant;
+    implicant.reserve(coreTerms.size());
+    // Extend newLiterals with subRes
+    std::transform(coreTerms.begin(), coreTerms.end(), std::back_inserter(implicant), [&](PTRef lit) {
+        return logic.isNot(lit) ? PtAsgn(logic.getPterm(lit)[0], l_False) : PtAsgn(lit, l_True);
+    });
+
+    return implicant;
+}
+
 } // namespace
 
 ModelBasedProjection::implicant_t ModelBasedProjection::getImplicant(PTRef fla, Model & model,
                                                                      VarsInfo const & varsInfo) {
     assert(model.evaluate(fla) == logic.getTerm_true());
+    if (options.use_unsat_core) {
+        return collectImplicantWithUnsatCore(logic, fla, model, varsInfo);
+    }
     std::vector<PtAsgn> literals;
     std::vector<char> processed;
     processed.resize(Idx(logic.getPterm(fla).getId()) + 1, 0);

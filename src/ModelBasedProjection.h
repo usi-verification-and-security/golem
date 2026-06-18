@@ -16,11 +16,17 @@
 namespace golem {
 
 struct MBPOptions {
-    MBPOptions() : fm_bound_threshold(1), pick_best_side(true) {}
-    MBPOptions(short fm_bound, bool best_side) :
-        fm_bound_threshold(fm_bound), pick_best_side(best_side) {}
+    MBPOptions() :
+        fm_bound_threshold(3),
+        pick_best_side(true),
+        use_unsat_core(true) {}
+    MBPOptions(short fm_bound, bool best_side, bool unsat_core) :
+        fm_bound_threshold(fm_bound),
+        pick_best_side(best_side),
+        use_unsat_core(unsat_core) {}
     short fm_bound_threshold;
     bool pick_best_side;
+    bool use_unsat_core;
 };
 
 class ModelBasedProjection {
