@@ -35,6 +35,7 @@ target_sources(golem_lib
     PRIVATE engine/Bmc.cc
     PRIVATE engine/Common.cc
     PRIVATE engine/DAR.cc
+    PRIVATE engine/IC3IA.cc
     PRIVATE engine/EngineFactory.cc
     PRIVATE engine/IMC.cc
     PRIVATE engine/Kind.cc

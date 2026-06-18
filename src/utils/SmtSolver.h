@@ -20,7 +20,7 @@ class SMTSolver {
 public:
     enum class Answer { SAT, UNSAT, UNKNOWN, ERROR };
 
-    enum class WitnessProduction { NONE, ONLY_MODEL, ONLY_INTERPOLANTS, MODEL_AND_INTERPOLANTS };
+    enum class WitnessProduction { NONE, ONLY_MODEL, ONLY_INTERPOLANTS, MODEL_AND_INTERPOLANTS, ONLY_UNSAT_CORE };
 
     // Default setup in OpenSMT is currently to produce models, but not interpolants
     explicit SMTSolver(Logic & logic, WitnessProduction setup = WitnessProduction::ONLY_MODEL);

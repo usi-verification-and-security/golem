@@ -27,6 +27,7 @@ target_sources(GolemTest
     PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/test_TRL.cc"
     PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/test_TransformationUtils.cc"
     PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/test_Transformers.cc"
+    PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/test_IC3.cc"
     PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/test_IMC.cc"
     PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/test_PDKIND.cc"
     PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/test_PredicateAbstraction.cc"

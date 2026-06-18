@@ -82,6 +82,16 @@ Transitions that do not fall into this category are handled by transformation in
 
 [split-TPA](https://ieeexplore.ieee.org/document/10026590) is a different instantiation of the TPA paradigm and is typically more powerful than basic TPA on satisfiable (safe) CHC systems.
 
+### IC3 with Implicit Predicate Abstraction (IC3IA)
+
+IC3IA engine implements a version of the algorithm described in [this paper](https://link.springer.com/article/10.1007/s10703-016-0257-4).
+It combines IC3/PDR with a CEGAR loop over an implicit predicate abstraction: IC3 runs directly on the original transition formula extended with Boolean labels for the current predicates, rather than building a separate abstract system. When a spurious counterexample is found, new predicates are extracted via interpolation and the abstraction is refined.
+Works only for linear systems of Horn clauses (via transformation to a transition system).
+
+The following are available:
+
+- `--ic3ia.unsat-core-generalization` (default: `true`): when dropping literals from a bad cube, use an unsat core query to identify a minimal subset to keep, rather than dropping them one by one with separate queries.
+- `--ic3ia.initial-reset` (default: `true`): add a reset state and encodes the concrete init as the first transition step, to avoid starting with the initial predicates.
 
 #### Running multiple engines in parallel
 
