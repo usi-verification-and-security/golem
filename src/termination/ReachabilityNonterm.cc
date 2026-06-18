@@ -19,7 +19,7 @@ namespace golem::termination {
 
 // Function to eliminate negations, normalizing formula to
 PTRef normalize(PTRef input, ArithLogic & logic, bool negated = false) {
-    assert(!logic.isGeq(input));
+    assert(logic.isNot(input) || logic.isAnd(input) || logic.isOr(input) || logic.isNumEq(input) || logic.isLeq(input));
     auto it = logic.getPterm(input).begin();
     if (logic.isNot(input)) {
         return normalize(it[0], logic, !negated);
@@ -52,27 +52,17 @@ PTRef normalize(PTRef input, ArithLogic & logic, bool negated = false) {
 }
 
 // This function is needed to extract specific atoms from the arithmetic formula
-void unrollAtom(ArithLogic & logic, std::vector<PTRef> & coefs, PTRef atom) {
-    assert(logic.isVar(atom) || logic.isTimes(atom) || logic.isPlus(atom));
-    if (logic.isVar(atom) || logic.isTimes(atom)) {
-        coefs.push_back(atom);
-    } else if (logic.isPlus(atom)) {
-        auto it = logic.getPterm(atom).begin();
-        while (it != logic.getPterm(atom).end()) {
-            unrollAtom(logic, coefs, *it);
+void extractTerms(ArithLogic & logic, std::vector<PTRef> & terms, PTRef formula) {
+    assert(logic.isVar(formula) || logic.isTimes(formula) || logic.isPlus(formula));
+    if (logic.isVar(formula) || logic.isTimes(formula)) {
+        terms.push_back(formula);
+    } else if (logic.isPlus(formula)) {
+        auto it = logic.getPterm(formula).begin();
+        while (it != logic.getPterm(formula).end()) {
+            terms.push_back(*it);
             it++;
         }
     }
-}
-
-// Function to get all of the atoms from the inequalities
-void getCoeffs(ArithLogic & logic, std::vector<PTRef> & coefs, PTRef formula) {
-    assert(logic.isLeq(formula));
-    auto it = logic.getPterm(formula).begin();
-    assert(logic.getPterm(formula).size() == 2);
-    assert(logic.isConstant(it[0]));
-    coefs.push_back(logic.mkNeg(it[0]));
-    unrollAtom(logic, coefs, it[1]);
 }
 
 bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const & vars) {
@@ -115,21 +105,10 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
     }
     solver.assertProp(logic.mkAnd(formula, logic.mkAnd(eq_vars)));
     if (solver.check() == SMTSolver::Answer::SAT) return false;
-    solver.resetSolver();
 
+    solver.resetSolver();
     solver.assertProp(logic.mkAnd(formula, TimeMachine(logic).sendFlaThroughTime(formula, 1)));
     if (solver.check() == SMTSolver::Answer::UNSAT) return true;
-    // solver.resetSolver();
-
-
-    if (bools.size() > 0 || leq_conjuncts.size() == 0) {
-        // This is a check to see if it is possible to take transition twice
-        // (Otherwise it is trivially well-founded, this check is specifically for bools)
-        if (leq_conjuncts.size() == 0)
-            return false;
-        solver.resetSolver();
-    }
-
 
     std::vector<std::vector<PTRef>> A;
     std::vector<std::vector<PTRef>> A_p;
@@ -138,40 +117,42 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
     for (auto conjunct : leq_conjuncts) {
         A.push_back(std::vector(int_vars.size(), logic.getTerm_IntZero()));
         A_p.push_back(std::vector(int_vars.size(), logic.getTerm_IntZero()));
-        std::vector<PTRef> coefs;
-        getCoeffs(logic, coefs, conjunct);
-        for (size_t i = 0; i < coefs.size(); i++) {
-            if (logic.isConstant(coefs[i])) {
-                assert(b[A.size() - 1] == logic.getTerm_IntZero());
-                b[A.size() - 1] = coefs[i];
-            } else {
-                PTRef constant, subatom;
-                if (logic.isVar(coefs[i])) {
-                    constant = logic.getTerm_IntOne();
-                    subatom = coefs[i];
-                } else {
-                    auto it = logic.getPterm(coefs[i]).begin();
-                    assert(logic.isTimes(coefs[i]) && logic.getPterm(coefs[i]).size() == 2);
-                    if (logic.isConstant(it[0])) {
-                        constant = it[0];
-                        subatom = it[1];
-                    } else {
-                        constant = it[1];
-                        subatom = it[0];
-                    }
-                }
+        std::vector<PTRef> terms;
+        // Extracting coefficients of the variables from the inequality
+        assert(logic.isLeq(conjunct));
+        auto it = logic.getPterm(conjunct).begin();
+        assert(logic.getPterm(conjunct).size() == 2);
+        assert(logic.isConstant(it[0]));
+        b[A.size() - 1] = logic.mkNeg(it[0]);
+        extractTerms(logic, terms, it[1]);
 
-                assert(logic.isConstant(constant));
-                for (int j = 0; j < int_vars.size(); j++) {
-                    if (subatom == int_vars[j]) {
-                        if (A_p[A.size() - 1][j] != logic.getTerm_IntZero()) { exit(1); }
-                        A[A.size() - 1][j] = constant;
-                        break;
-                    } else if (subatom == next_vars[j]) {
-                        if (A_p[A_p.size() - 1][j] != logic.getTerm_IntZero()) { exit(1); }
-                        A_p[A_p.size() - 1][j] = constant;
-                        break;
-                    }
+        // Connecting coefficients to specific variables
+        for (size_t i = 0; i < terms.size(); i++) {
+            assert(logic.isVar(terms[i]) || logic.isTimes(terms[i]));
+            PTRef constant, subatom;
+            if (logic.isVar(terms[i])) {
+                constant = logic.getTerm_IntOne();
+                subatom = terms[i];
+            } else {
+                auto it = logic.getPterm(terms[i]).begin();
+                assert(logic.isTimes(terms[i]));
+                if (logic.isConstant(it[0])) {
+                    constant = it[0];
+                    subatom = it[1];
+                } else {
+                    constant = it[1];
+                    subatom = it[0];
+                }
+            }
+
+            assert(logic.isConstant(constant));
+            for (int j = 0; j < int_vars.size(); j++) {
+                if (subatom == int_vars[j]) {
+                    A[A.size() - 1][j] = constant;
+                    break;
+                } else if (subatom == next_vars[j]) {
+                    A_p[A_p.size() - 1][j] = constant;
+                    break;
                 }
             }
         }
@@ -332,50 +313,48 @@ PTRef shiftOnlyNextVars(PTRef formula, const std::vector<PTRef> & vars, Logic & 
 
 
 
-    void extractActiveLiterals(PTRef formula, Logic & logic, Model& model, vec<PTRef> & activeLiterals, SMTSolver& solver, bool reverse = false) {
+    void extractActiveLiterals(PTRef formula, Logic & logic, Model& model, vec<PTRef> & activeLiterals,
+        SMTSolver& solver, bool reverse = false) {
     TermUtils utils(logic);
     // std::cout << "Formula: " << logic.pp(formula) << std::endl;
-    if ( (model.evaluate(formula) == logic.getTerm_false() && reverse == false) || (model.evaluate(formula) == logic.getTerm_true() && reverse == true)) {
+    if ( (model.evaluate(formula) == logic.getTerm_false() && reverse == false) ||
+        (model.evaluate(formula) == logic.getTerm_true() && reverse == true)) {
         return;
     }
 
     if (logic.isAnd(formula) || logic.isOr(formula)) {
         // Check every conjunct
-        auto juncts = logic.isAnd(formula) ? utils.getTopLevelConjuncts(formula) : utils.getTopLevelDisjuncts(formula);
+        auto juncts = logic.isAnd(formula) ? utils.getTopLevelConjuncts(formula) :
+                                    utils.getTopLevelDisjuncts(formula);
         for (auto junct : juncts) {
             extractActiveLiterals(junct, logic, model, activeLiterals, solver);
         }
-    }
-    else if (logic.isNot(formula)) {
-        extractActiveLiterals(utils.simplifyMax(logic.mkNot(formula)), logic, model, activeLiterals, solver, !reverse);
+    } else if (logic.isNot(formula)) {
+        extractActiveLiterals(utils.simplifyMax(logic.mkNot(formula)), logic, model,
+            activeLiterals, solver, !reverse);
     } else {
-        // std::cout << "Formula: " << logic.pp(formula) << std::endl;
         if (reverse) activeLiterals.push(logic.mkNot(formula));
         else activeLiterals.push(formula);
-        // activeLiterals.push(formula);
     }
 }
 
 PTRef toDNF(PTRef formula, Logic &logic, int bound = 0) {
-    PTRef DNF = logic.getTerm_false();
+    vec<PTRef> DNF = {logic.getTerm_false()};
     bool unlimited = bound == 0;
     PTRef phi = formula;
     SMTSolver smt_solver(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
     smt_solver.assertProp(phi);
     // std::cout << "Pre DNF: "  << logic.pp(formula) << std::endl;
     while (smt_solver.check() == SMTSolver::Answer::SAT && (bound > 0 || unlimited)) {
-        auto model = smt_solver.getModel();
         vec<PTRef> activeLiterals;
-        extractActiveLiterals(formula, logic, *model, activeLiterals, smt_solver);
+        extractActiveLiterals(formula, logic, *smt_solver.getModel(), activeLiterals, smt_solver);
         PTRef cube = logic.mkAnd(activeLiterals);
-        // std::cout << "Size: " << activeLiterals.size() << " Cube: " << logic.pp(cube) << std::endl;
-        DNF = TermUtils(logic).simplifyMax(logic.mkOr({DNF, cube}));
+        DNF.push(cube);
         smt_solver.push();
         smt_solver.assertProp(logic.mkNot(cube));
         bound--;
     }
-    // std::cout << "Post DNF: "  << logic.pp(DNF) << std::endl;
-    return DNF;
+    return logic.mkOr(DNF);
 }
 
 // This function extracts well-founded disjuncts from the interpolant
@@ -383,30 +362,23 @@ vec<PTRef> extractWellFoundedCandidates(PTRef itp, PTRef sink, ArithLogic & logi
     TermUtils utils(logic);
     SMTSolver smt_solver(logic, SMTSolver::WitnessProduction::NONE);
 
-    auto sink_disjuncts = utils.getTopLevelDisjuncts(toDNF(normalize(logic.mkNot(sink), logic), logic));
-    PTRef dnfized_interpolant = utils.simplifyMax(normalize(itp, logic));
-    dnfized_interpolant = toDNF(dnfized_interpolant, logic, 100);
-
-    vec<PTRef> candidates = utils.getTopLevelDisjuncts(dnfized_interpolant);
+    auto sink_disjuncts = utils.getTopLevelDisjuncts(
+        toDNF(utils.simplifyMax(normalize(logic.mkNot(sink), logic)), logic, 500));
+    auto candidates = utils.getTopLevelDisjuncts(
+        toDNF(utils.simplifyMax(normalize(itp, logic)),logic,500));
     vec<PTRef> strictCandidates;
     for (auto cand : candidates) {
-        smt_solver.resetSolver();
-        smt_solver.assertProp(cand);
-        if (smt_solver.check() == SMTSolver::Answer::UNSAT) { continue; }
-
-        PTRef simpl_cand = utils.simplifyMax(cand);
-        if (simpl_cand == logic.getTerm_true()) { continue; }
-        if (checkWellFounded(simpl_cand, logic, vars)) {
-            strictCandidates.push(simpl_cand);
+        assert (cand != logic.getTerm_true());
+        if (checkWellFounded(cand, logic, vars)) {
+            strictCandidates.push(cand);
         } else {
             for (auto sink_cand : sink_disjuncts) {
                 smt_solver.resetSolver();
-                smt_solver.assertProp(logic.mkAnd(sink_cand, simpl_cand));
+                smt_solver.assertProp(logic.mkAnd(sink_cand, cand));
                 if (smt_solver.check() == SMTSolver::Answer::SAT &&
-                    checkWellFounded(utils.simplifyMax(logic.mkAnd(sink_cand, simpl_cand)), logic, vars)) {
-                    // TODO: Maybe I can weaken recieved candidate using some kind of houdini, dropping not needed
-                    //  conjuncts. Particularly, I can remove all equalities (also ones that are done via <= && >=)
-                    strictCandidates.push(utils.simplifyMax(logic.mkAnd(sink_cand, simpl_cand)));
+                    checkWellFounded(utils.simplifyMax(logic.mkAnd(sink_cand, cand)), logic, vars)) {
+                    strictCandidates.push(utils.simplifyMax(logic.mkAnd(sink_cand, cand)));
+                    break;
                 }
             }
         }
