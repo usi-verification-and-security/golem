@@ -109,22 +109,22 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
     if (solver.check() == SMTSolver::Answer::UNSAT) return true;
     solver.resetSolver();
 
-    // vec<PTRef> eq_vars;
-    // for (auto var : vars) {
-    //     PTRef curr = TimeMachine(logic).sendVarThroughTime(var, 0);
-    //     PTRef next = TimeMachine(logic).sendVarThroughTime(var, 1);
-    //     eq_vars.push(logic.mkEq(curr, next));
-    // }
-    // solver.assertProp(logic.mkAnd(formula, logic.mkAnd(eq_vars)));
-    // if (solver.check() == SMTSolver::Answer::SAT) return false;
+    vec<PTRef> eq_vars;
+    for (auto var : vars) {
+        PTRef curr = TimeMachine(logic).sendVarThroughTime(var, 0);
+        PTRef next = TimeMachine(logic).sendVarThroughTime(var, 1);
+        eq_vars.push(logic.mkEq(curr, next));
+    }
+    solver.assertProp(logic.mkAnd(formula, logic.mkAnd(eq_vars)));
+    if (solver.check() == SMTSolver::Answer::SAT) return false;
 
     if (bools.size() > 0 || leq_conjuncts.size() == 0) {
         // This is a check to see if it is possible to take transition twice
         // (Otherwise it is trivially well-founded, this check is specifically for bools)
 
-        solver.assertProp(logic.mkAnd(logic.mkAnd(bools),
-            TimeMachine(logic).sendFlaThroughTime(logic.mkAnd(bools), 1)));
-        if (solver.check() == SMTSolver::Answer::UNSAT) return true;
+        // solver.assertProp(logic.mkAnd(logic.mkAnd(bools),
+        //     TimeMachine(logic).sendFlaThroughTime(logic.mkAnd(bools), 1)));
+        // if (solver.check() == SMTSolver::Answer::UNSAT) return true;
         if (leq_conjuncts.size() == 0)
             return false;
         solver.resetSolver();
