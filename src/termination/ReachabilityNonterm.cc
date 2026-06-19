@@ -21,19 +21,17 @@ namespace golem::termination {
 PTRef normalize(PTRef input, ArithLogic & logic, bool negated = false) {
     assert(logic.isNot(input) || logic.isAnd(input) || logic.isOr(input) || logic.isNumEq(input) || logic.isLeq(input));
     auto it = logic.getPterm(input).begin();
-    if (logic.isNot(input)) {
-        return normalize(it[0], logic, !negated);
-    }
+    if (logic.isNot(input)) { return normalize(it[0], logic, !negated); }
 
     if (logic.isAnd(input) || logic.isOr(input)) {
         // Check every conjunct
-        auto juncts = logic.isAnd(input) ? TermUtils(logic).getTopLevelConjuncts(input) :
-                                    TermUtils(logic).getTopLevelDisjuncts(input);
+        auto juncts = logic.isAnd(input) ? TermUtils(logic).getTopLevelConjuncts(input)
+                                         : TermUtils(logic).getTopLevelDisjuncts(input);
         vec<PTRef> subjuncts;
         for (auto junct : juncts) {
             subjuncts.push(normalize(junct, logic, negated));
         }
-        if (logic.isAnd(input)) return  negated ? logic.mkOr(subjuncts) : logic.mkAnd(subjuncts);
+        if (logic.isAnd(input)) return negated ? logic.mkOr(subjuncts) : logic.mkAnd(subjuncts);
         if (logic.isOr(input)) return negated ? logic.mkAnd(subjuncts) : logic.mkOr(subjuncts);
         assert(false);
     }
@@ -69,7 +67,6 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
     assert(logic.isAnd(formula) || logic.isLeq(formula) || logic.isEquality(formula));
     vec<PTRef> conjuncts = TermUtils(logic).getTopLevelConjuncts(formula);
 
-
     vec<PTRef> int_vars;
     vec<PTRef> next_vars;
     // Extract integer variables from the inequalities
@@ -82,20 +79,20 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
 
     vec<PTRef> leq_conjuncts;
     vec<PTRef> bools;
-    for (auto conj: conjuncts) {
+    for (auto conj : conjuncts) {
         auto it = logic.getPterm(conj).begin();
-        if (logic.isLeq(conj)) leq_conjuncts.push(conj);
+        if (logic.isLeq(conj))
+            leq_conjuncts.push(conj);
         else if (logic.isEquality(conj)) {
             // x == y <=> y <= x /\ x <= y
             leq_conjuncts.push(logic.mkLeq(it[0], it[1]));
             leq_conjuncts.push(logic.mkLeq(it[1], it[0]));
-        }
-        else if (logic.isBoolAtom(conj) || logic.isNot(conj)) bools.push(conj);
+        } else if (logic.isBoolAtom(conj) || logic.isNot(conj))
+            bools.push(conj);
         else { assert(false); }
     }
 
     SMTSolver solver(logic, SMTSolver::WitnessProduction::NONE);
-
 
     vec<PTRef> eq_vars;
     for (auto var : vars) {
@@ -312,34 +309,32 @@ PTRef shiftOnlyNextVars(PTRef formula, const std::vector<PTRef> & vars, Logic & 
     return TermUtils(logic).varSubstitute(formula, varSubstitutions);
 }
 
-
-
-    void extractActiveLiterals(PTRef formula, Logic & logic, Model& model, vec<PTRef> & activeLiterals,
-        SMTSolver& solver, bool reverse = false) {
+void extractActiveLiterals(PTRef formula, Logic & logic, Model & model, vec<PTRef> & activeLiterals, SMTSolver & solver,
+                           bool reverse = false) {
     TermUtils utils(logic);
     // std::cout << "Formula: " << logic.pp(formula) << std::endl;
-    if ( (model.evaluate(formula) == logic.getTerm_false() && reverse == false) ||
+    if ((model.evaluate(formula) == logic.getTerm_false() && reverse == false) ||
         (model.evaluate(formula) == logic.getTerm_true() && reverse == true)) {
         return;
     }
 
     if (logic.isAnd(formula) || logic.isOr(formula)) {
         // Check every conjunct
-        auto juncts = logic.isAnd(formula) ? utils.getTopLevelConjuncts(formula) :
-                                    utils.getTopLevelDisjuncts(formula);
+        auto juncts = logic.isAnd(formula) ? utils.getTopLevelConjuncts(formula) : utils.getTopLevelDisjuncts(formula);
         for (auto junct : juncts) {
             extractActiveLiterals(junct, logic, model, activeLiterals, solver);
         }
     } else if (logic.isNot(formula)) {
-        extractActiveLiterals(utils.simplifyMax(logic.mkNot(formula)), logic, model,
-            activeLiterals, solver, !reverse);
+        extractActiveLiterals(utils.simplifyMax(logic.mkNot(formula)), logic, model, activeLiterals, solver, !reverse);
     } else {
-        if (reverse) activeLiterals.push(logic.mkNot(formula));
-        else activeLiterals.push(formula);
+        if (reverse)
+            activeLiterals.push(logic.mkNot(formula));
+        else
+            activeLiterals.push(formula);
     }
 }
 
-PTRef toDNF(PTRef formula, Logic &logic, int bound = 0) {
+PTRef toDNF(PTRef formula, Logic & logic, int bound = 0) {
     vec<PTRef> DNF = {logic.getTerm_false()};
     bool unlimited = bound == 0;
     PTRef phi = formula;
@@ -364,13 +359,12 @@ vec<PTRef> extractWellFoundedCandidates(PTRef itp, PTRef sink, ArithLogic & logi
     TermUtils utils(logic);
     SMTSolver smt_solver(logic, SMTSolver::WitnessProduction::NONE);
 
-    auto sink_disjuncts = utils.getTopLevelDisjuncts(
-        toDNF(utils.simplifyMax(normalize(logic.mkNot(sink), logic)), logic, 500));
-    auto candidates = utils.getTopLevelDisjuncts(
-        toDNF(utils.simplifyMax(normalize(itp, logic)),logic,500));
+    auto sink_disjuncts =
+        utils.getTopLevelDisjuncts(toDNF(utils.simplifyMax(normalize(logic.mkNot(sink), logic)), logic, 500));
+    auto candidates = utils.getTopLevelDisjuncts(toDNF(utils.simplifyMax(normalize(itp, logic)), logic, 500));
     vec<PTRef> strictCandidates;
     for (auto cand : candidates) {
-        assert (cand != logic.getTerm_true());
+        assert(cand != logic.getTerm_true());
         if (checkWellFounded(cand, logic, vars)) {
             strictCandidates.push(cand);
         } else {
@@ -475,10 +469,9 @@ PTRef constructTransitionInvariantCandidates(PTRef init, PTRef transition, PTRef
     }
 }
 
-
 std::tuple<ReachabilityNonterm::Answer, PTRef>
 ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options const & witnesses, ArithLogic & logic,
-                               std::vector<PTRef> const & vars, bool DETERMINISTIC_TRANSITION, PTRef& covered) {
+                               std::vector<PTRef> const & vars, bool DETERMINISTIC_TRANSITION, PTRef & covered) {
 
     vec<PTRef> strictCandidates;
     // {
@@ -519,8 +512,8 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
             assert(SMTsolver.check() == SMTSolver::Answer::SAT);
 
             SMTsolver.resetSolver();
-            SMTsolver.assertProp(logic.mkAnd({init, logic.mkAnd(formulas),
-                                              logic.mkNot(TimeMachine(logic).sendFlaThroughTime(sink, num))}));
+            SMTsolver.assertProp(logic.mkAnd(
+                {init, logic.mkAnd(formulas), logic.mkNot(TimeMachine(logic).sendFlaThroughTime(sink, num))}));
             PTRef Result = TimeMachine(logic).sendFlaThroughTime(sink, num);
 
             uint j = 0;
@@ -561,14 +554,17 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
             if (j == 0) {
 
                 // If transitions were deterministic, initial states are blocked
-                init = nondet_trace ? logic.mkAnd(init, logic.mkNot(Result)) :
-                logic.mkAnd(init, logic.mkNot(QuantifierElimination(logic).keepOnly(
-                logic.mkAnd({logic.mkAnd(formulas), TimeMachine(logic).sendFlaThroughTime(sink, num)}), vars)));
+                init = nondet_trace
+                           ? logic.mkAnd(init, logic.mkNot(Result))
+                           : logic.mkAnd(init, logic.mkNot(QuantifierElimination(logic).keepOnly(
+                                                   logic.mkAnd({logic.mkAnd(formulas),
+                                                                TimeMachine(logic).sendFlaThroughTime(sink, num)}),
+                                                   vars)));
             } else {
                 // Otherwise, states leading to termination are blocked from transition
                 PTRef block = TimeMachine(logic).sendFlaThroughTime(Result, -j + 1);
-                covered = TermUtils(logic).simplifyMax(logic.mkOr(covered,
-                    TimeMachine(logic).sendFlaThroughTime(block, -1)));
+                covered =
+                    TermUtils(logic).simplifyMax(logic.mkOr(covered, TimeMachine(logic).sendFlaThroughTime(block, -1)));
                 assert(block != logic.getTerm_true());
                 transition = logic.mkAnd(transition, logic.mkNot(block));
             }
@@ -645,10 +641,10 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                     vars);
                 covered = TermUtils(logic).simplifyMax(logic.mkOr(covered, logic.mkNot(noncoveredStates)));
 
-
                 // We check if the states that are not covered by TrInv are reachable
-                auto graph = constructHyperGraph(init, transition, logic.mkAnd({noncoveredStates, logic.mkNot(sink), logic.mkNot(covered)}),
-                                                 logic, vars);
+                auto graph = constructHyperGraph(
+                    init, transition, logic.mkAnd({noncoveredStates, logic.mkNot(sink), logic.mkNot(covered)}), logic,
+                    vars);
                 auto engine =
                     EngineFactory(logic, witnesses).getEngine(witnesses.getOrDefault(Options::ENGINE, "spacer"));
 
@@ -696,20 +692,21 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                     SMTsolver.resetSolver();
                     SMTsolver.assertProp(logic.mkAnd(logic.mkNot(init), reached));
                     if (SMTsolver.check() == SMTSolver::Answer::UNSAT) {
-                        std::cout<< "Break" << std::endl;
+                        std::cout << "Break" << std::endl;
                         // std::cout<<"INIT: " << logic.pp(init)<<std::endl;
                         // std::cout<<"REACHED: " << logic.pp(reached)<<std::endl;
                         // std::cout<<"SINK: " << logic.pp(sink)<<std::endl;
-                    //     init = reached;
-                    //     sink = TermUtils(logic).simplifyMax(logic.mkNot(noncoveredStates));
-                    //     continue;
+                        //     init = reached;
+                        //     sink = TermUtils(logic).simplifyMax(logic.mkNot(noncoveredStates));
+                        //     continue;
                     }
 
                     assert(reached != logic.getTerm_false());
                     // Algorithm checks if reachable states are terminating
                     std::cout << "Deeper\n";
-                    auto [answer, subinv] = analyzeTS(reached, transition, TermUtils(logic).simplifyMax(logic.mkNot(noncoveredStates)), witnesses,
-                                                      logic, vars, DETERMINISTIC_TRANSITION, covered);
+                    auto [answer, subinv] =
+                        analyzeTS(reached, transition, TermUtils(logic).simplifyMax(logic.mkNot(noncoveredStates)),
+                                  witnesses, logic, vars, DETERMINISTIC_TRANSITION, covered);
                     std::cout << "Higher\n";
                     // TODO: It is possible to do check differently, analyzing <noncoveredStates, tr,
                     // not(noncoveredStates)>
@@ -739,7 +736,8 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                     }
                     // TODO: If doesn't terminate, check the reachability of recurrent set
                     // TODO: If reachable from init, then it does not terminate
-                    else if (answer == Answer::NO) return {Answer::NO, subinv};
+                    else if (answer == Answer::NO)
+                        return {Answer::NO, subinv};
                 }
             }
         } else if (res.getAnswer() == VerificationAnswer::SAFE) {
