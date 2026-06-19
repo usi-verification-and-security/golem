@@ -26,7 +26,7 @@ private:
     Options const & options;
     std::tuple<Answer, PTRef> analyzeTS(PTRef init, PTRef transition, PTRef sink, Options const & witnesses,
                                         ArithLogic & logic, std::vector<PTRef> const & vars,
-                                        bool DETERMENISTIC_TRANSITION, PTRef& covered);
+                                        bool DETERMENISTIC_TRANSITION, PTRef & covered);
 };
 } // namespace golem::termination
 
