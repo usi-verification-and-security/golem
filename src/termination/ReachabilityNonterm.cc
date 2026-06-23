@@ -58,7 +58,9 @@ void extractTerms(ArithLogic & logic, std::vector<PTRef> & terms, PTRef formula)
             terms.push_back(*it);
             it++;
         }
-    } else { terms.push_back(formula); }
+    } else {
+        terms.push_back(formula);
+    }
 }
 
 bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const & vars) {
@@ -525,25 +527,28 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                     // It means that this transition was nondetermenistic, since
                     // using transition from the states that guaranteed to reach termination in n-j+1 transitions
                     // it is possible to reach states which are not guaranteed to reach termination in n-j transitions
-                    if (SMTsolver.check() == SMTSolver::Answer::SAT) { break; }
-                    else { Result = Base; }
+                    if (SMTsolver.check() == SMTSolver::Answer::SAT) {
+                        break;
+                    } else {
+                        Result = Base;
+                    }
                 }
             }
 
             PTRef temp_tr = transition;
             if (j == 0) {
                 // If transitions were deterministic, initial states are blocked
-                init = nondet_trace
-                           ? TermUtils(logic).simplifyMax(logic.mkAnd(init, logic.mkNot(Result)))
-                           : TermUtils(logic).simplifyMax(logic.mkAnd(init, logic.mkNot(QuantifierElimination(logic).keepOnly(
-                                                   logic.mkAnd({logic.mkAnd(formulas),
-                                                                TimeMachine(logic).sendFlaThroughTime(sink, num)}),
-                                                   vars))));
+                init = nondet_trace ? TermUtils(logic).simplifyMax(logic.mkAnd(init, logic.mkNot(Result)))
+                                    : TermUtils(logic).simplifyMax(logic.mkAnd(
+                                          init, logic.mkNot(QuantifierElimination(logic).keepOnly(
+                                                    logic.mkAnd({logic.mkAnd(formulas),
+                                                                 TimeMachine(logic).sendFlaThroughTime(sink, num)}),
+                                                    vars))));
             } else {
                 // Otherwise, states leading to termination are blocked from transition
                 PTRef block = TimeMachine(logic).sendFlaThroughTime(Result, -j + 1);
-                covered = TermUtils(logic).simplifyMax(logic.mkOr(covered,
-                    TimeMachine(logic).sendFlaThroughTime(block, -1)));
+                covered =
+                    TermUtils(logic).simplifyMax(logic.mkOr(covered, TimeMachine(logic).sendFlaThroughTime(block, -1)));
                 assert(block != logic.getTerm_true());
                 transition = logic.mkAnd(transition, logic.mkNot(block));
             }
@@ -551,9 +556,7 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
             SMTsolver.assertProp(logic.mkAnd(init, transition));
             // We check if init states are blocked (it's impossible to make a transition from initial state)
             // When it is the case, TS is terminating
-            if (SMTsolver.check() == SMTSolver::Answer::UNSAT) {
-                return {Answer::YES, logic.mkOr(strictCandidates)};
-            }
+            if (SMTsolver.check() == SMTSolver::Answer::UNSAT) { return {Answer::YES, logic.mkOr(strictCandidates)}; }
 
             // This is an extension of the approach, constructing TrInv and attempting to prove termination
             // and non-termination using invariants
@@ -611,9 +614,9 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
 
                 // We check if the states that are not covered by TrInv are reachable
                 auto graph = constructHyperGraph(init, transition,
-                    logic.mkAnd({logic.mkNot(sink), logic.mkNot(covered)}), logic, vars);
-                auto engine = EngineFactory(logic, witnesses).getEngine(
-                    witnesses.getOrDefault(Options::ENGINE, "spacer"));
+                                                 logic.mkAnd({logic.mkNot(sink), logic.mkNot(covered)}), logic, vars);
+                auto engine =
+                    EngineFactory(logic, witnesses).getEngine(witnesses.getOrDefault(Options::ENGINE, "spacer"));
 
                 // If states not covered by TrInv are not reachable - then TrInv is transition invariant on all
                 // reachable states, therefore it is well-founded transition invariant
@@ -649,7 +652,7 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                                          TimeMachine(logic).sendFlaThroughTime(noncoveredStates, num_non)});
                         smt_checker.assertProp(transitions);
                         auto res = smt_checker.check();
-                        assert (res == SMTSolver::Answer::SAT);
+                        assert(res == SMTSolver::Answer::SAT);
                         // We get some of the reachable states
                         reached = TermUtils(logic).simplifyMax(TimeMachine(logic).sendFlaThroughTime(
                             ModelBasedProjection(logic).keepOnly(transitions, last_vars, *smt_checker.getModel()),
@@ -673,7 +676,7 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                         // TODO: Need to change TrInv, adding found subinv in a better way
                         strictCandidates.clear();
                         strictCandidates.push(subinv);
-                        // strictCandidates.push(trInv);
+                        strictCandidates.push(trInv);
 
                         // TODO: Think if maybe sink can be even more restricted...
                         sink = TermUtils(logic).simplifyMax(logic.mkOr(sink, reached));
@@ -689,11 +692,16 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                             std::cout << "Center" << std::endl;
                             return {Answer::YES, subinv};
                         }
-                    }
-                    else if (answer == Answer::NO) return {Answer::NO, subinv};
+                    } else if (answer == Answer::NO)
+                        return {Answer::NO, subinv};
                 }
             }
         } else if (res.getAnswer() == VerificationAnswer::SAFE) {
+            SMTSolver SMTsolver(logic, SMTSolver::WitnessProduction::NONE);
+            SMTsolver.assertProp(logic.mkAnd(init, transition));
+            // We check if init state is blocked (it's impossible to make a transition from initial state)
+            // When it is the case, TS is terminating
+            if (SMTsolver.check() == SMTSolver::Answer::UNSAT) { return {Answer::YES, logic.getTerm_false()}; }
             // In case if sink states are not reachable, we need to construct the inductive invariant and demonstrate
             // that it doesn't contain any sink states itself.
             // It is possible since we add constraints to the transition relation, which were not accounted for
@@ -717,34 +725,27 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
             // pre-normalization
             inv = TermUtils(logic).varSubstitute(inv, varSubstitutions);
 
-            SMTSolver SMTsolver(logic, SMTSolver::WitnessProduction::NONE);
-            SMTsolver.assertProp(logic.mkAnd(init, transition));
-            // We check if init state is blocked (it's impossible to make a transition from initial state)
-            // When it is the case, TS is terminating
+            SMTsolver.resetSolver();
+            SMTsolver.assertProp(
+                logic.mkAnd({inv, transition, logic.mkNot(TimeMachine(logic).sendFlaThroughTime(inv, 1))}));
+            assert(SMTsolver.check() == SMTSolver::Answer::UNSAT);
+            PTRef constr = logic.mkNot(QuantifierElimination(logic).keepOnly(transition, vars));
+            SMTsolver.resetSolver();
+            SMTsolver.assertProp(logic.mkAnd({inv, constr}));
+            // We check if from any state satisfying the invariant it is possible to take a transition.
+            // For this we check the reverse, if there exists a state satisfying Inv, from which it is impossible
+            // to take a transition:
+            // Exists x. Inv(x) /\ Does not (Exist x'.  Tr(x,x')) - right conjunct is QE-ed
+            // Meaning there exists a state satisfying an invariant, such that there does not exist a SAT transition
+            // from this state If it is the case, there exist a sink state in the invariant - otherwise, invariant
+            // is a recurrent set
             if (SMTsolver.check() == SMTSolver::Answer::UNSAT) {
-                return {Answer::YES, logic.getTerm_false()};
+                return {Answer::NO, inv};
             } else {
-                SMTsolver.resetSolver();
-                SMTsolver.assertProp(
-                    logic.mkAnd({inv, transition, logic.mkNot(TimeMachine(logic).sendFlaThroughTime(inv, 1))}));
-                assert(SMTsolver.check() == SMTSolver::Answer::UNSAT);
-                PTRef constr = logic.mkNot(QuantifierElimination(logic).keepOnly(transition, vars));
-                SMTsolver.resetSolver();
-                SMTsolver.assertProp(logic.mkAnd({inv, constr}));
-                // We check if from any state satisfying the invariant it is possible to take a transition.
-                // For this we check the reverse, if there exists a state satisfying Inv, from which it is impossible
-                // to take a transition:
-                // Exists x. Inv(x) /\ Does not (Exist x'.  Tr(x,x')) - right conjunct is QE-ed
-                // Meaning there exists a state satisfying an invariant, such that there does not exist a SAT transition
-                // from this state If it is the case, there exist a sink state in the invariant - otherwise, invariant
-                // is a recurrent set
-                if (SMTsolver.check() == SMTSolver::Answer::UNSAT) {
-                    return {Answer::NO, inv};
-                } else {
-                    // We update the sink states by the detected sink states and rerun the verification
-                    sink = constr;
-                }
+                // We update the sink states by the detected sink states and rerun the verification
+                sink = constr;
             }
+
         } else {
             assert(false && "Unreachable!");
             return {Answer::ERROR, logic.getTerm_false()};
@@ -764,9 +765,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
     std::vector<PTRef> tmp_vars = vars;
     tmp_vars.insert(tmp_vars.end(), aux_vars.begin(), aux_vars.end());
     // Transition relation is well-founded
-    if (!logic.isOr(transition) && checkWellFounded(transition, logic, tmp_vars)) {
-        return Answer::YES;
-    }
+    if (!logic.isOr(transition) && checkWellFounded(transition, logic, tmp_vars)) { return Answer::YES; }
 
     // In this case query is a set of sink states - states from which transition is not possible.
     // sink /\ transition is UNSAT
