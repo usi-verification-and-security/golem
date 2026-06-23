@@ -626,13 +626,10 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                     // 1. Detect the states outside of TrInv that are reachable
                     // 2. Check if those states are terminating or not
                     PTRef reached = logic.getTerm_false();
-                    int num_non = res.getInvalidityWitness().getDerivation().size() - 3;
-                    if (num_non == 0) {
-                        init = TermUtils(logic).simplifyMax(logic.mkAnd(init, noncoveredStates));
-                    }
 
                     // Construction of reached states
                     {
+                        int num_non = res.getInvalidityWitness().getDerivation().size() - 3;
                         assert(res.getAnswer() == VerificationAnswer::UNSAFE);
                         assert(num_non >= 0);
                         vec<PTRef> last_vars;
@@ -664,13 +661,11 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
 
                     assert(reached != logic.getTerm_false());
                     // Algorithm checks if reachable states are terminating
-                    std::cout << "Deeper\n";
                     auto [answer, subinv] =
                         analyzeTS(reached, transition, TermUtils(logic).simplifyMax(logic.mkNot(noncoveredStates)),
                                   witnesses, logic, vars, DETERMINISTIC_TRANSITION, covered);
-                    std::cout << "Higher\n";
                     // TODO: It is possible to do check differently, analyzing <noncoveredStates, tr,
-                    // not(noncoveredStates)>
+                    //   not(noncoveredStates)>
                     //   If this terminates, then the whole TS terminates, but if it nonterinates we need to prove
                     //   reachability
                     if (answer == Answer::YES) {
@@ -678,7 +673,7 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                         // TODO: Need to change TrInv, adding found subinv in a better way
                         strictCandidates.clear();
                         strictCandidates.push(subinv);
-                        strictCandidates.push(trInv);
+                        // strictCandidates.push(trInv);
 
                         // TODO: Think if maybe sink can be even more restricted...
                         sink = TermUtils(logic).simplifyMax(logic.mkOr(sink, reached));
