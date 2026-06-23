@@ -24,7 +24,7 @@ PTRef normalize(PTRef input, ArithLogic & logic, bool negated = false) {
     if (logic.isNot(input)) { return normalize(it[0], logic, !negated); }
 
     if (logic.isAnd(input) || logic.isOr(input)) {
-        // Check every conjunct
+        // Check every junct
         auto juncts = logic.isAnd(input) ? TermUtils(logic).getTopLevelConjuncts(input)
                                          : TermUtils(logic).getTopLevelDisjuncts(input);
         vec<PTRef> subjuncts;
@@ -52,15 +52,13 @@ PTRef normalize(PTRef input, ArithLogic & logic, bool negated = false) {
 // This function is needed to extract specific atoms from the arithmetic formula
 void extractTerms(ArithLogic & logic, std::vector<PTRef> & terms, PTRef formula) {
     assert(logic.isVar(formula) || logic.isTimes(formula) || logic.isPlus(formula));
-    if (logic.isVar(formula) || logic.isTimes(formula)) {
-        terms.push_back(formula);
-    } else if (logic.isPlus(formula)) {
+    if (logic.isPlus(formula)) {
         auto it = logic.getPterm(formula).begin();
         while (it != logic.getPterm(formula).end()) {
             terms.push_back(*it);
             it++;
         }
-    }
+    } else { terms.push_back(formula); }
 }
 
 bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const & vars) {
@@ -806,13 +804,12 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
     auto aux_vars = ts.getAuxiliaryVars();
     ArithLogic & logic = dynamic_cast<ArithLogic &>(ts.getLogic());
     PTRef init = ts.getInit();
-    // PTRef transition = ts.getTransition();
     PTRef transition = normalize(ts.getTransition(), logic);
     transition = toDNF(transition, logic);
     std::vector<PTRef> tmp_vars = vars;
     tmp_vars.insert(tmp_vars.end(), aux_vars.begin(), aux_vars.end());
+    // Transition relation is well-founded
     if (!logic.isOr(transition) && checkWellFounded(transition, logic, tmp_vars)) {
-        std::cout << "Transitions are well-founded" << std::endl;
         return Answer::YES;
     }
 
@@ -832,7 +829,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
     // Safety-Based Termination Analysis
     // TODO: Figure out why passing in transition is problematic
     auto [answer, trInvOrRecurringSet] =
-        analyzeTS(init, transition, sink, witnesses, logic, vars, DETERMINISTIC_TRANSITION, covered);
+        analyzeTS(init, transition, sink, witnesses, logic, tmp_vars, DETERMINISTIC_TRANSITION, covered);
     return answer;
 }
 
