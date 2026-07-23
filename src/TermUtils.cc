@@ -785,4 +785,8 @@ PTRef VersionManager::targetFormulaToBase(PTRef fla) const {
 PTRef VersionManager::sourceFormulaToTarget(PTRef fla) const {
     return rewrite(fla, [this](PTRef var) { return toTarget(toBase(var)); });
 }
+
+PTRef VersionManager::targetFormulaToSource(PTRef fla) const {
+    return rewrite(fla, [this](PTRef var) { return toSource(toBase(var)); });
+}
 } // namespace golem

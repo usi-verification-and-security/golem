@@ -7,6 +7,7 @@
 #ifndef GOLEM_SMTSOLVER_H
 #define GOLEM_SMTSOLVER_H
 
+#include "TermUtils.h"
 #include "include/osmt_solver.h"
 
 namespace golem {

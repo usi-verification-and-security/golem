@@ -7,18 +7,44 @@
 #include "Spacer.h"
 
 #include "ModelBasedProjection.h"
+#include "TermUtils.h"
+#include "api/MainSolver.h"
+#include "graph/ChcGraph.h"
+#include "logics/Theory.h"
+#include "proof/PG.h"
+#include "pterms/PTRef.h"
+#include "symbols/SymRef.h"
 #include "utils/SmtSolver.h"
+#include "utils/InductiveInterpolants.h"
 
+#include <cstddef>
+#include <iostream>
 #include <queue>
 #include <unordered_map>
 #include <unordered_set>
+#include <vector>
 
-#define TRACE_LEVEL 0
+#define TRACE_LEVEL 1
+#define DEBUG 0
+#define GENERALIZE 1
+#define BOTH 1
+#define INDITP 1
+#define MAYPO 1
 
 #define TRACE(l, m)                                                                                                    \
     if (TRACE_LEVEL >= l) { std::cout << m << std::endl; }
 
 namespace golem {
+
+struct SpacerStats {
+    std::size_t nr_push = 0;
+    std::size_t currentBound = 0;
+    void increse_push(std::size_t nr) { nr_push += nr; }
+    void setBound(std::size_t nr) { currentBound = nr; }
+    void print() { std::cerr << "[STATS] NR PUSHES: " << nr_push << std::endl
+                             << "[STATS] BOUND: " << currentBound << std::endl; }
+};
+
 class ApproxMap {
 public:
     vec<PTRef> getComponents(SymRef vid, std::size_t bound) const {
@@ -63,22 +89,110 @@ private:
 
 class UnderApproxMap : public ApproxMap {};
 
-class OverApproxMap : public ApproxMap {};
+class OverApproxMap : public ApproxMap {
+public:
+    std::unordered_set<PTRef, PTRefHash> indLearnt;
+};
+
+class OverPredCache {
+public:
+    using InnerMap = std::unordered_map<SymRef, std::unordered_set<PTRef, PTRefHash>, SymRefHash>;
+    using OuterMap = std::map<EId, InnerMap>;
+
+    // Iterator that flattens the two-level map, yielding (SymRef, set<PTRef>) pairs
+    // where the set has at least INSERT_MAY_PO_THRESHOLD elements
+    class FilterIterator {
+    public:
+        using value_type = InnerMap::value_type;
+        using reference  = value_type const &;
+        using pointer    = value_type const *;
+
+        FilterIterator(OuterMap::const_iterator outer, OuterMap::const_iterator outerEnd)
+            : outer(outer), outerEnd(outerEnd) {
+            if (outer != outerEnd) { inner = outer->second.begin(); }
+            advanceToValid();
+        }
+
+        reference operator*()  const { return *inner; }
+        pointer   operator->() const { return &*inner; }
+
+        FilterIterator & operator++() {
+            ++inner;
+            advanceToValid();
+            return *this;
+        }
+
+        bool operator==(FilterIterator const & other) const {
+            assert(other.outerEnd == outerEnd);
+            if (outer != other.outer) return false;
+            if (outer == outerEnd) return true; // outer = other.outer == outerEnd
+            return inner == other.inner;
+        }
+        bool operator!=(FilterIterator const & other) const { return !(*this == other); }
+
+        SymRef getNode() const {
+            return inner->first;
+        }
+        vec<PTRef> getApprox() const {
+            vec<PTRef> approx;
+            approx.capacity(inner->second.size());
+            for (PTRef con : inner->second) { approx.push(con); }
+            return approx;
+        }
+
+    private:
+        OuterMap::const_iterator outer, outerEnd;
+        InnerMap::const_iterator inner;
+        const std::size_t INSERT_MAY_PO_THRESHOLD = 5;
+
+        void advanceToValid() {
+            while (outer != outerEnd) {
+                while (inner != outer->second.end()) {
+                    if (inner->second.size() >= INSERT_MAY_PO_THRESHOLD) return;
+                    ++inner;
+                }
+                ++outer;
+                if (outer != outerEnd) { inner = outer->second.begin(); }
+            }
+        }
+    };
+
+    FilterIterator begin() const {
+        auto it = FilterIterator(cache.begin(), cache.end());
+        return it;
+    }
+    FilterIterator end() const { return {cache.end(), cache.end()}; }
+
+    bool empty() const { return cache.empty(); }
+    void insert(EId edge, SymRef node, PTRef cons) {
+        cache[edge][node].insert(cons);
+    }
+
+private:
+    OuterMap cache;
+};
+
+const std::size_t MAY_PO_INIT_LIFE = 0;
 
 struct ProofObligation {
     SymRef vertex;
     std::size_t bound;
     PTRef constraint;
+    bool isMayPO = false;
+    mutable OverPredCache overPredCache;
+    mutable std::size_t life = MAY_PO_INIT_LIFE;
 };
 
 bool operator<(ProofObligation const & pob1, ProofObligation const & pob2) {
     // TODO: Does it make sense to break ties using vertices?
-    return pob1.bound < pob2.bound or (pob1.bound == pob2.bound and pob1.vertex.x < pob2.vertex.x);
+    return pob1.bound < pob2.bound or (pob1.bound == pob2.bound and pob1.isMayPO > pob2.isMayPO);
+        (pob1.bound == pob2.bound and pob1.isMayPO == pob2.isMayPO and pob1.vertex.x > pob2.vertex.x);
 }
 
 // TODO: why we need both operators??
 bool operator>(ProofObligation const & pob1, ProofObligation const & pob2) {
-    return pob1.bound > pob2.bound or (pob1.bound == pob2.bound and pob1.vertex.x > pob2.vertex.x);
+    return pob1.bound > pob2.bound or (pob1.bound == pob2.bound and pob1.isMayPO < pob2.isMayPO) or
+        (pob1.bound == pob2.bound and pob1.isMayPO == pob2.isMayPO and pob1.vertex.x < pob2.vertex.x);
 }
 
 struct PriorityQueue {
@@ -163,12 +277,19 @@ class SpacerContext {
     DerivationDatabase database;
     bool logProof;
 
+    SpacerStats stats;
+
     std::size_t lowestChangedLevel = 0;
 
     // Helper data structures to get the versioning right
     ChcDirectedHyperGraph::VertexInstances vertexInstances;
 
-    void addMaySummary(SymRef vid, std::size_t bound, PTRef summary) { over.insert(vid, bound, summary); }
+    void addMaySummary(SymRef vid, std::size_t bound, PTRef summary, bool isInductive = false) {
+        over.insert(vid, bound, summary);
+        if (isInductive) {
+            over.indLearnt.insert(summary);
+        }
+    }
 
     void addMustSummary(SymRef vid, std::size_t bound, PTRef summary) { under.insert(vid, bound, summary); }
 
@@ -177,6 +298,10 @@ class SpacerContext {
     PTRef getMaySummary(SymRef vid, std::size_t bound) const { return logic.mkAnd(over.getComponents(vid, bound)); }
 
     PTRef getEdgeMustSummary(EId eid, std::size_t bound) const;
+
+    PTRef getEdgeTransition(EId eid) const;
+
+    PTRef getEdgeGuardedMaySummary(EId eid, std::size_t bound) const;
 
     PTRef getEdgeMaySummary(EId eid, std::size_t bound) const;
 
@@ -211,6 +336,10 @@ class SpacerContext {
         PTRef interpolant = PTRef_Undef;
     };
     ItpQueryResult interpolatingSat(PTRef A, PTRef B);
+    ItpQueryResult inductiveItp(PTRef T, PTRef A, PTRef B, PTRef guardVariable);
+
+    PTRef generalize(PTRef lemma, PTRef maySumm, PTRef transitions, PTRef guardVariable);
+    PTRef generalize_frame(PTRef lemma, const vec<PTRef>& maySumm, PTRef transitions, PTRef guardVariable);
 
     bool checkMustReachability(std::vector<EId> const & edges, ProofObligation const & pob);
 
@@ -219,6 +348,8 @@ class SpacerContext {
     std::optional<ProofObligation> computePredecessor(EId eid, ProofObligation const & pob) const;
 
     PTRef projectFormula(PTRef fla, vec<PTRef> const & vars, Model & model) const;
+
+    std::pair<PTRef, PTRef> projectFormulaWithOver(PTRef fla, vec<PTRef> const & vars, Model & model) const;
 
     void logNewFactIntoDatabase(PTRef fact, SymRef vertex, std::size_t sourceLevel, EId eid, Model & model);
 
@@ -262,6 +393,7 @@ VerificationResult SpacerContext::run() {
         auto boundedResult = boundSafety(currentBound);
         switch (boundedResult) {
             case BoundedSafetyResult::UNSAFE:
+                stats.print();
                 return {VerificationAnswer::UNSAFE, reconstructInvalidityWitness()};
             case BoundedSafetyResult::SAFE: {
                 auto inductiveResult = isInductive(currentBound);
@@ -281,9 +413,12 @@ VerificationResult SpacerContext::run() {
                             throw std::logic_error("Duplicate definition for a predicate encountered!");
                         }
                     }
+                    stats.print();
                     return {VerificationAnswer::SAFE, ValidityWitness(std::move(solution))};
                 }
                 ++currentBound;
+                stats.setBound(currentBound);
+                stats.print();
                 break;
             }
             default:
@@ -298,22 +433,24 @@ std::vector<EId> const & SpacerContext::incomingEdges(SymRef v) const {
 }
 
 SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t currentBound) {
-    TRACE(1, "\nRunning bounded safety check at level " << currentBound)
+    TRACE(1, "\n\n++++++++++++++++++++++++++++++++\n\nRunning bounded safety check at level " << currentBound)
     auto query = graph.getExit();
     PriorityQueue pqueue;
     pqueue.push(ProofObligation{query, currentBound, logic.getTerm_true()});
     lowestChangedLevel = currentBound;
     while (not pqueue.empty()) {
-        TRACE(2, "Examining proof obligation " << pqueue.peek().vertex.x)
         auto const & pob = pqueue.peek();
-        if (pob.vertex == graph.getEntry()) {
+        TRACE(1, "[?] Examining " << ((pob.isMayPO) ? "MAY" : "MUST") << " PO " << pob.constraint.x << " at level " << pob.bound)
+        TRACE(2, " proof obligation " << logic.printTerm(pob.constraint))
+
+        if (pob.vertex == graph.getEntry() and not pob.isMayPO) {
             assert(false); // With the must summaries, we actually never finish here
             return BoundedSafetyResult::UNSAFE;
         }
         auto const & edges = incomingEdges(pob.vertex);
         bool mustReached = checkMustReachability(edges, pob);
         if (mustReached) {
-            if (pob.vertex == query) {
+            if (pob.vertex == query and not pob.isMayPO) {
                 return BoundedSafetyResult::UNSAFE; // query is reachable
             }
             pqueue.pop();
@@ -322,34 +459,173 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
         std::vector<ProofObligation> newProofObligations;
         for (EId edgeId : edges) {
             auto newProofObligation = computePredecessor(edgeId, pob);
-            if (newProofObligation.has_value()) { newProofObligations.push_back(newProofObligation.value()); }
+            if (newProofObligation.has_value()) {
+                newProofObligations.push_back(newProofObligation.value());
+            }
         }
+
+#if MAYPO
+        // [MayPO] Collect MayPO as a convex over-approximation of the predecessors
+        std::vector<ProofObligation> newMayPO;
+        if (not pob.isMayPO) {
+            for (auto it = pob.overPredCache.begin(); it != pob.overPredCache.end(); ++it) {
+                ProofObligation mayPred{it.getNode(), pob.bound - 1, logic.mkAnd(it.getApprox()), true};
+                newMayPO.push_back(mayPred);
+            }
+        }
+#endif
+
         if (newProofObligations.empty()) {
             // all edges are blocked; compute new lemma blocking the current proof obligation
             // TODO:
             vec<PTRef> edgeRepresentations;
             edgeRepresentations.capacity(edges.size());
             for (EId eid : edges) {
-                edgeRepresentations.push(getEdgeMaySummary(eid, pob.bound - 1));
+                edgeRepresentations.push(getEdgeTransition(eid));
             }
-            auto res = interpolatingSat(logic.mkOr(edgeRepresentations), pob.constraint);
-            assert(res.answer == QueryAnswer::UNSAT);
-            if (res.answer != QueryAnswer::UNSAT) {
-                throw std::logic_error("All edges should have been blocked, but they are not!");
+            auto transitions = logic.mkOr(edgeRepresentations);
+
+            vec<PTRef> maySummaries;
+            maySummaries.capacity(edges.size());
+            for (EId eid : edges) {
+                maySummaries.push(getEdgeGuardedMaySummary(eid, pob.bound - 1));
             }
-            PTRef newLemma = VersionManager(logic).targetFormulaToBase(res.interpolant);
-            TRACE(2,
-                  "Learnt new lemma for " << pob.vertex.x << " at level " << pob.bound << " - " << logic.pp(newLemma))
-            addMaySummary(pob.vertex, pob.bound, newLemma);
+            PTRef maySummary = logic.mkAnd(maySummaries);
+
+            PTRef edgeMaySummary = logic.mkAnd(maySummary, transitions);
+
+            auto guardVar = VersionManager(logic).baseFormulaToSource(graph.getVertexGuardVariable(pob.vertex));
+
+            auto allVars = TermUtils(logic).getVars(transitions);
+            bool inductiveChance = (std::find(allVars.begin(), allVars.end(), guardVar) != allVars.end());
+
+            if (inductiveChance) {
+
+#if BOTH || !INDITP
+                auto originalRes = interpolatingSat(edgeMaySummary, pob.constraint);
+                auto originalNewLemma = VersionManager(logic).targetFormulaToBase(originalRes.interpolant);
+                assert(originalRes.answer == QueryAnswer::UNSAT);
+                if (originalRes.answer != QueryAnswer::UNSAT) {
+                    throw std::logic_error("All edges should have been blocked, but they are not!");
+                }
+                TRACE(2,
+                      "Original learnt lemma for " << pob.vertex.x << " at level " << pob.bound << " - " << logic.pp(originalNewLemma));
+                TRACE(1,
+                      "---- [ITP] Learnt lemma: "
+                      << " disj? " << is_clause(logic, originalNewLemma)
+                      << " nr disj: " << TermUtils(logic).getTopLevelDisjuncts(originalNewLemma).size()
+                      << " nr vars: " << TermUtils(logic).getVars(originalNewLemma).size());
+
+#if GENERALIZE
+                originalNewLemma = generalize(originalNewLemma, maySummary, transitions, guardVar);
+                TRACE(1,
+                      "---- [ITP] Generalization:"
+                      << " disj? " << is_clause(logic, originalNewLemma)
+                      << " nr disj: " << TermUtils(logic).getTopLevelDisjuncts(originalNewLemma).size()
+                      << " nr vars: " << TermUtils(logic).getVars(originalNewLemma).size());
+#endif
+#endif
+
+#if INDITP
+                auto indRes = inductiveItp(transitions, maySummary, pob.constraint, guardVar);
+                assert(indRes.answer == QueryAnswer::UNSAT);
+                if (indRes.answer != QueryAnswer::UNSAT) {
+                    throw std::logic_error("All edges should have been blocked, but they are not!");
+                }
+                auto indNewLemma = VersionManager(logic).sourceFormulaToBase(indRes.interpolant);
+                TRACE(2,
+                      "INDUCTIVE lemma for " << pob.vertex.x << " at level " << pob.bound << " - " << logic.pp(indNewLemma))
+                // TODO: let this be returned by interpolating SAT
+
+                // Add the new ind Lemma
+                TRACE(1,
+                      "---- [IND] Learnt lemma:"
+                      << " disj? " << is_clause(logic, indNewLemma)
+                      << " nr disj: " << TermUtils(logic).getTopLevelDisjuncts(indNewLemma).size()
+                      << " nr vars: " << TermUtils(logic).getVars(indNewLemma).size());
+
+                indNewLemma = generalize(indNewLemma, maySummary, transitions, guardVar);
+                TRACE(1,
+                      "---- [IND] Generalization:"
+                      << " disj? " << is_clause(logic, indNewLemma)
+                      << " nr disj: " << TermUtils(logic).getTopLevelDisjuncts(indNewLemma).size()
+                      << " nr vars: " << TermUtils(logic).getVars(indNewLemma).size());
+
+#if BOTH
+                bool strongerOldLemma = not implies(originalNewLemma, indNewLemma, logic);
+                bool strongerMaySumm = \
+                    not implies(edgeMaySummary,
+                                VersionManager(logic).baseFormulaToTarget(indNewLemma),
+                                logic);
+
+                TRACE(2, "=================== INDUCTIVE ITP!! ====================");
+                if (strongerMaySumm)
+                    TRACE(1, ">>>> NEW LEMMA DOES NOT OVERAPPROX MAY SUMM");
+                if (strongerOldLemma)
+                    TRACE(1, ">>>> NEW LEMMA IS STRONGER");
+                if (strongerOldLemma or strongerMaySumm) {
+                    addMaySummary(pob.vertex, pob.bound, indNewLemma, true);
+                } else {
+                    addMaySummary(pob.vertex, pob.bound, originalNewLemma, false);
+                }
+#else // not BOTH
+                addMaySummary(pob.vertex, pob.bound, indNewLemma, true);
+#endif
+#else // not INDITP
+                addMaySummary(pob.vertex, pob.bound, originalNewLemma, false);
+#endif
+            }
+            else {
+                // This is the usual path
+                auto originalRes = interpolatingSat(edgeMaySummary, pob.constraint);
+                auto originalNewLemma = VersionManager(logic).targetFormulaToBase(originalRes.interpolant);
+                assert(originalRes.answer == QueryAnswer::UNSAT);
+                if (originalRes.answer != QueryAnswer::UNSAT) {
+                    throw std::logic_error("All edges should have been blocked, but they are not!");
+                }
+                TRACE(2,
+                      "Original learnt lemma for " << pob.vertex.x << " at level " << pob.bound << " - " << logic.pp(originalNewLemma))
+                    TRACE(1,
+                          "---- [ITP] Learnt lemma: "
+                          << " disj? " << is_clause(logic, originalNewLemma)
+                          << " nr disj: " << TermUtils(logic).getTopLevelDisjuncts(originalNewLemma).size()
+                          << " nr vars: " << TermUtils(logic).getVars(originalNewLemma).size());
+                addMaySummary(pob.vertex, pob.bound, originalNewLemma, false);
+            }
+
             if (pob.bound < lowestChangedLevel) { lowestChangedLevel = pob.bound; }
+
+            if (pob.isMayPO) {
+                TRACE(1, "    $$$$$$$$$$$$ MAY PO WAS BLOCKED $$$$$$$$$$$$");
+            }
+            TRACE(1, "[x] Blocked POB with new lemma at level " << pob.bound);
             pqueue.pop(); // This POB has been successfully blocked
+
         } else {
-            for (auto const & npob : newProofObligations) {
-                TRACE(2, "Pushing new proof obligation " << logic.pp(npob.constraint) << " for " << npob.vertex.x
-                                                         << " at level " << npob.bound)
+            if (pob.isMayPO) {
+                // [MayPO] mayPO is reachable. just drop it?
+                TRACE(1, "    MayPO is not blocked. Removed.");
+                if (pob.life-- <= 0) {
+                    pqueue.pop();
+                }
+            }
+            else {
+                for (auto const & npob : newProofObligations) {
+                    TRACE(1, "[+] Adding new MUST PO at level " << npob.bound);
+                    TRACE(2, "Pushing new proof obligation " << logic.pp(npob.constraint) << " for " << npob.vertex.x
+                          << " at level " << npob.bound)
+                    pqueue.push(npob);
+                }
+            }
+#if MAYPO
+            // CHECKME: do this only if blocked?
+            for (auto const & npob : newMayPO) {
+                TRACE(1, "[+] Adding new MAY PO at level " << npob.bound);
                 pqueue.push(npob);
             }
+#endif
         }
+
     } // end of main cycle
     return BoundedSafetyResult::SAFE; // not reachable at this bound
 }
@@ -407,6 +683,130 @@ SpacerContext::ItpQueryResult SpacerContext::interpolatingSat(PTRef A, PTRef B) 
     return qres;
 }
 
+SpacerContext::ItpQueryResult SpacerContext::inductiveItp(PTRef T, PTRef A, PTRef B, PTRef guardVariable) {
+    SMTSolver solver(logic, SMTSolver::WitnessProduction::ONLY_INTERPOLANTS);
+    solver.getConfig().setSimplifyInterpolant(4);
+    solver.assertProp(T);
+    solver.assertProp(A);
+    solver.assertProp(B);
+    auto res = solver.check();
+    ItpQueryResult qres;
+    if (res == SMTSolver::Answer::SAT) {
+        qres.answer = QueryAnswer::SAT;
+    } else if (res == SMTSolver::Answer::UNSAT) {
+        qres.answer = QueryAnswer::UNSAT;
+        auto toSource = [this](PTRef fla) { return VersionManager(logic).targetFormulaToSource(fla); };
+        qres.interpolant = inductiveConflict(logic, T, A, B, guardVariable, toSource);
+    } else if (res == SMTSolver::Answer::UNKNOWN) {
+        qres.answer = QueryAnswer::UNKNOWN;
+    } else if (res == SMTSolver::Answer::ERROR) {
+        qres.answer = QueryAnswer::ERROR;
+    } else {
+        assert(false);
+        throw std::logic_error("Unreachable code!");
+    }
+    return qres;
+}
+
+PTRef SpacerContext::generalize_frame(PTRef lemma, const vec<PTRef>& frameLemmas, PTRef transition, PTRef guardVariable) {
+    SMTSolver solver(logic, SMTSolver::WitnessProduction::ONLY_UNSAT_CORE);
+    VersionManager vManager(logic);
+
+    static std::size_t i = 0;
+    for (const auto frameLemma : frameLemmas) {
+        std::string name = "_frame#indgen#" + std::to_string(i++);
+        bool added = solver.tryAssertNamedProp(frameLemma, name);
+        assert(added);
+    }
+    solver.assertProp(transition);
+
+    PTRef source = logic.mkImpl(guardVariable, vManager.baseFormulaToSource(lemma));
+    PTRef target = logic.mkNot(vManager.baseFormulaToTarget(lemma));
+    solver.assertProp(source);
+    solver.assertProp(target);
+
+    auto res = solver.check();
+    if (res != SMTSolver::Answer::UNSAT) {
+        throw std::logic_error("Error in Generalize: formula is not unsatisfiable!");
+    }
+
+    auto core = solver.getUnsatCore();
+    vec<PTRef> inductiveDisjs;
+    const auto& coreAssumptions = core->getTerms();
+    auto newSize = coreAssumptions.size();
+    PTRef neededFrameLemmas = logic.mkAnd(coreAssumptions);
+
+    TRACE(1,
+          "---- [IND] General frame:"
+          << " from : " << frameLemmas.size() << " - to: " << newSize);
+
+    return neededFrameLemmas;
+}
+
+PTRef SpacerContext::generalize(PTRef lemma, PTRef maySumm, PTRef transitions, PTRef guardVariable) {
+    SMTSolver solver(logic, SMTSolver::WitnessProduction::ONLY_UNSAT_CORE);
+    VersionManager vManager(logic);
+
+    const auto& candidates = TermUtils(logic).getTopLevelDisjuncts(lemma);
+    vec<PTRef> assumedSources, assumedTargets;
+    std::map<PTRef, PTRef> mapping;
+    assumedSources.capacity(candidates.size());
+    assumedTargets.capacity(candidates.size());
+
+    static std::size_t i = 0;
+    for (const auto candidate : candidates) {
+        std::string name = "_assume#indgen#" + std::to_string(i++);
+        PTRef assumption = logic.mkBoolVar(name.c_str());
+        mapping[assumption] = candidate;
+        PTRef source = vManager.baseFormulaToSource(candidate);
+        assumedSources.push(logic.mkAnd(assumption, source));
+        PTRef notTarget = logic.mkNot(vManager.baseFormulaToTarget(candidate));
+        assumedTargets.push(logic.mkImpl(assumption, notTarget));
+
+        // std::cerr << logic.pp(assumption) << " := " << logic.pp(candidate) << std::endl;
+        bool added = solver.tryAssertNamedProp(assumption, name);
+        assert(added);
+    }
+
+    PTRef source = logic.mkImpl(guardVariable, logic.mkOr(assumedSources));
+    PTRef target = logic.mkAnd(assumedTargets);
+
+    solver.assertProp(maySumm);
+    solver.assertProp(transitions);
+    solver.assertProp(source);
+    solver.assertProp(target);
+
+    auto res = solver.check();
+    if (res != SMTSolver::Answer::UNSAT) {
+        throw std::logic_error("Error in Generalize: formula is not unsatisfiable!");
+    }
+
+    auto core = solver.getUnsatCore();
+    vec<PTRef> inductiveDisjs;
+    const auto& coreAssumptions = core->getTerms();
+    for (auto term : coreAssumptions) { inductiveDisjs.push(mapping[term]); }
+    auto newLemma = logic.mkOr(inductiveDisjs);
+
+    // std::cerr << "Old Lemma: " << logic.pp(lemma) << std::endl;
+    // std::cerr << "New Lemma: " << logic.pp(newLemma) << std::endl;
+
+#if DEBUG
+    SMTSolver debug_solver(logic);
+    for (PTRef frameLemma : frameLemmas) { debug_solver.assertProp(frameLemma); }
+    debug_solver.assertProp(transitions);
+    // std::cerr << "Checking if NEW lemma is inductive " << std::endl;
+    debug_solver.push();
+    debug_solver.assertProp(logic.mkImpl(guardVariable, vManager.baseFormulaToSource(newLemma)));
+    debug_solver.assertProp(logic.mkNot(vManager.baseFormulaToTarget(newLemma)));
+    res = debug_solver.check();
+    if (res != SMTSolver::Answer::UNSAT) {
+        throw std::logic_error("Error in Generalize: newLemma is not inductive!");
+    }
+#endif
+
+    return newLemma;
+}
+
 bool SpacerContext::checkMustReachability(std::vector<EId> const & edges, ProofObligation const & pob) {
     assert(pob.bound > 0);
     // test if vertex can be reached using must summaries
@@ -419,7 +819,7 @@ bool SpacerContext::checkMustReachability(std::vector<EId> const & edges, ProofO
     PTRef anySummary = logic.mkOr(summaries);
     auto checkRes = sat(anySummary, pob.constraint);
     if (checkRes.answer == SpacerContext::QueryAnswer::SAT) {
-        TRACE(1, "Must summary successfully applied!")
+        TRACE(1, "[r] Reachable PO. Must summary successfully applied!")
         assert(checkRes.model);
         // eliminate variables from body except variables present in predicate of pob's vertex
         auto predicateVars = TermUtils(logic).getVars(graph.getNextStateVersion(pob.vertex));
@@ -468,12 +868,19 @@ std::optional<ProofObligation> SpacerContext::computePredecessor(EId eid, ProofO
             // When this source is over-approximated and the edge becomes feasible -> extract next proof obligation
             auto source = sources[0];
             auto predicateVars = TermUtils(logic).getVars(graph.getStateVersion(source));
-            PTRef newConstraint = projectFormula(logic.mkAnd(maySummary, pob.constraint), predicateVars, *res.model);
+            auto [newConstraint, newOverConstraint] = \
+                projectFormulaWithOver(logic.mkAnd(maySummary, pob.constraint), predicateVars, *res.model);
             PTRef newPob = VersionManager(logic).sourceFormulaToTarget(newConstraint); // ensure POB is target fla
+#if MAYPO
+            PTRef newOverPob = VersionManager(logic).sourceFormulaToTarget(newOverConstraint); // ensure POB is target fla
+            if (newOverPob != newPob and newOverPob != logic.getTerm_true()) {
+                pob.overPredCache.insert(eid, sources[0], newOverPob);
+            }
+#endif
             TRACE(2, "New proof obligation generated")
-            return ProofObligation{source, sourceBound, newPob};
+            return ProofObligation{source, sourceBound, newPob, pob.isMayPO};
         } else if (res.answer == QueryAnswer::UNSAT) {
-            TRACE(2, "Edge blocked by current may-summaries")
+            TRACE(2, "Edge blocked by current  may-summaries")
             return std::nullopt;
         }
         assert(false);
@@ -500,11 +907,17 @@ std::optional<ProofObligation> SpacerContext::computePredecessor(EId eid, ProofO
             auto source = sources[vertexToRefine];
             auto predicateVars = TermUtils(logic).getVars(
                 graph.getStateVersion(source, vertexInstances.getInstanceNumber(eid, vertexToRefine)));
-            PTRef newConstraint =
-                projectFormula(logic.mkAnd(mixedEdgeSummary, pob.constraint), predicateVars, *res.model);
+            auto [newConstraint, newOverConstraint] =
+                projectFormulaWithOver(logic.mkAnd(mixedEdgeSummary, pob.constraint), predicateVars, *res.model);
             PTRef newPob = VersionManager(logic).sourceFormulaToTarget(newConstraint); // ensure POB is target fla
             TRACE(2, "New proof obligation generated")
-            return ProofObligation{sources[vertexToRefine], sourceBound, newPob};
+#if MAYPO
+            PTRef newOverPob = VersionManager(logic).sourceFormulaToTarget(newOverConstraint); // ensure POB is target fla
+            if (newOverPob != newPob and newOverPob != logic.getTerm_true()) {
+                pob.overPredCache.insert(eid, sources[vertexToRefine], newOverPob);
+            }
+#endif
+            return ProofObligation{sources[vertexToRefine], sourceBound, newPob, pob.isMayPO};
         } else if (res.answer == QueryAnswer::UNSAT) {
             // Continue with the next vertex to refine
             ++vertexToRefine;
@@ -536,10 +949,19 @@ SpacerContext::InductiveCheckResult SpacerContext::isInductive(std::size_t maxLe
             // Figure out which components of the may summary are implied by body at level n and so can be pushed to level n+1
             //            std::cout << "Need to check " << maySummaryComponents.size() << " components for vertex " << vid.id << std::endl;
             bool allPushed = tryPushComponents(vid, level, body);
+            if (allPushed) {
+                const auto& allComponents = over.getComponents(vid, level);
+                TRACE(1, "[v] INDUCTIVE FRAME FOUND: ");
+                for (PTRef component : over.getComponents(vid, level)) {
+                    TRACE(1, component.x << " ind? " << over.indLearnt.contains(component));
+                }
+            }
             inductive = inductive and allPushed;
             // TODO does it make sense to push other vertices if I already know the current level is not inductive?
         }
-        if (inductive) { return InductiveCheckResult{InductiveCheckAnswer::INDUCTIVE, level}; }
+        if (inductive) {
+            return InductiveCheckResult{InductiveCheckAnswer::INDUCTIVE, level};
+        }
     }
     return InductiveCheckResult{InductiveCheckAnswer::NOT_INDUCTIVE, 0};
 }
@@ -587,6 +1009,10 @@ bool SpacerContext::tryPushComponents(SymRef vid, std::size_t level, PTRef body)
     if (candidatesCount == 0) { return true; }
 
     auto pushed = impliedBy(std::move(targetCandidates), body, logic);
+    if (pushed.size() > 0)
+        TRACE(1, "[>] Pushed " << pushed.size() << " lemmas to " << level + 1);
+
+    stats.increse_push(pushed.size());
 
     for (PTRef const lemma : pushed) {
         addMaySummary(vid, level + 1, VersionManager(logic).targetFormulaToBase(lemma));
@@ -612,6 +1038,25 @@ PTRef SpacerContext::projectFormula(PTRef fla, const vec<PTRef> & toVars, Model 
     return res;
 }
 
+std::pair<PTRef, PTRef> SpacerContext::projectFormulaWithOver(PTRef fla, const vec<PTRef> & toVars, Model & model) const {
+    assert(std::all_of(toVars.begin(), toVars.end(), [this](PTRef var) { return logic.isVar(var); }));
+    //    std::cout << "Projecting " << logic.printTerm(fla) << " to variables ";
+    //    std::for_each(toVars.begin(), toVars.end(), [&](PTRef var) { std::cout << logic.printTerm(var) << ' '; });
+    //    std::cout << std::endl;
+    auto varsInFla = TermUtils(logic).getVars(fla);
+
+    vec<PTRef> toEliminate;
+    for (PTRef var : varsInFla) {
+        auto it = std::find(toVars.begin(), toVars.end(), var);
+        if (it == toVars.end()) { toEliminate.push(var); }
+    }
+    ModelBasedProjection mbp(logic);
+    PTRef overapprox = PTRef_Undef;
+    PTRef res = mbp.project(fla, toEliminate, model, overapprox);
+    //    std::cout << "\nResult is " << logic.printTerm(res) << std::endl;
+    return {res, overapprox};
+}
+
 PTRef SpacerContext::getEdgeMustSummary(EId eid, std::size_t bound) const {
     //    std::cout << "Must summary:\n ";
     PTRef edgeLabel = graph.getEdgeLabel(eid); // Edge labels are versioned
@@ -631,23 +1076,39 @@ PTRef SpacerContext::getEdgeMustSummary(EId eid, std::size_t bound) const {
     return logic.mkAnd(std::move(bodyComponents));
 }
 
-PTRef SpacerContext::getEdgeMaySummary(EId eid, std::size_t bound) const {
-    //    std::cout << "May summary:\n ";
+PTRef SpacerContext::getEdgeTransition(EId eid) const {
     PTRef edgeLabel = graph.getEdgeLabel(eid);
-    //    std::cout << "Edge label: " << logic.pp(edgeLabel) << '\n';
     vec<PTRef> bodyComponents{edgeLabel};
-    //    std::cout << "Edge sources:\n";
     auto const & sources = graph.getSources(eid);
+    for (unsigned sourceIndex = 0; sourceIndex < sources.size(); ++sourceIndex) {
+        auto guardVar = graph.getVertexGuardVariable(sources[sourceIndex]);
+        auto instance = vertexInstances.getInstanceNumber(eid, sourceIndex);
+        bodyComponents.push(VersionManager(logic).baseFormulaToSource(guardVar, instance));
+    }
+    return logic.mkAnd(std::move(bodyComponents));
+}
+
+PTRef SpacerContext::getEdgeGuardedMaySummary(EId eid, std::size_t bound) const {
+    vec<PTRef> bodyComponents;
+    auto const & sources = graph.getSources(eid);
+    bodyComponents.capacity(sources.size());
     for (unsigned sourceIndex = 0; sourceIndex < sources.size(); ++sourceIndex) {
         auto source = sources[sourceIndex];
         PTRef maySummary = getMaySummary(source, bound);
+        PTRef guardVar = graph.getVertexGuardVariable(source);
+        PTRef guardedMaySumm = logic.mkImpl(guardVar, maySummary);
+        auto instance = vertexInstances.getInstanceNumber(eid, sourceIndex);
         PTRef summaryAsSource =
-            VersionManager(logic).baseFormulaToSource(maySummary, vertexInstances.getInstanceNumber(eid, sourceIndex));
+            VersionManager(logic).baseFormulaToSource(guardedMaySumm, instance);
         //        std::cout << source.id << " with summary " << logic.pp(summaryAsSource) << '\n';
         bodyComponents.push(summaryAsSource);
     }
     //    std::cout << std::flush;
     return logic.mkAnd(std::move(bodyComponents));
+}
+
+PTRef SpacerContext::getEdgeMaySummary(EId eid, std::size_t bound) const {
+    return logic.mkAnd(getEdgeTransition(eid), getEdgeGuardedMaySummary(eid, bound));
 }
 
 PTRef SpacerContext::getEdgeMixedSummary(EId eid, std::size_t bound, std::size_t lastMayIndex) const {

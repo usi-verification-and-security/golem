@@ -341,6 +341,7 @@ public:
     PTRef baseFormulaToTarget(PTRef fla) const;
     PTRef baseFormulaToSource(PTRef fla, unsigned instance = 0) const;
     PTRef targetFormulaToBase(PTRef fla) const;
+    PTRef targetFormulaToSource(PTRef fla) const;
     PTRef sourceFormulaToBase(PTRef fla) const;
     PTRef sourceFormulaToTarget(PTRef fla) const;
 

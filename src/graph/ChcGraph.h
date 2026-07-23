@@ -9,6 +9,7 @@
 
 #include "ChcSystem.h"
 #include "TermUtils.h"
+#include "symbols/SymRef.h"
 
 #include <iosfwd>
 #include <map>
@@ -312,6 +313,11 @@ public:
         assert(not isHyperEdge(eid));
         auto const & edge = getEdge(eid);
         return edge.from.front() == edge.to;
+    }
+
+    PTRef getVertexGuardVariable(SymRef ref) const {
+        std::string name = "guard#b#" + std::to_string(ref.x);
+        return logic.mkBoolVar(name.c_str());
     }
 
 private:
