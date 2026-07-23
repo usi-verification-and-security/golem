@@ -103,6 +103,7 @@ std::pair<LinearFactor, PTRef> separateVarFromTerm(PTRef var, PTRef term, ArithL
 }
 
 template<typename TIt> void normalizeEqualities(TIt begin, TIt end, ArithLogic & logic) {
+    // TODO: normalize mod operation as well
     std::for_each(begin, end, [&logic](PtAsgn & lit) {
         if (logic.isEquality(lit.tr)) {
             PTRef lhs = logic.getPterm(lit.tr)[0];
@@ -865,13 +866,13 @@ void ModelBasedProjection::processClassicLiterals(PTRef var, div_constraints_t &
                         upper.push_back(LIABound{
                             .term = lialogic.mkPlus(lialogic.getTerm_IntMinusOne(), lialogic.mkNeg(res.second)),
                             .coeff = factor.coeff,
-                            .isLower = true
+                            .isLower = false
                             });
                     } else {
                         lower.push_back(LIABound{
                                 .term = lialogic.mkPlus(lialogic.getTerm_IntOne(), res.second),
                                 .coeff = lialogic.mkIntConst(-coeff),
-                                .isLower = false
+                                .isLower = true
                             });
                     }
                 }
