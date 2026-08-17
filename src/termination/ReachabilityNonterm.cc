@@ -653,8 +653,7 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, Options
                                          TimeMachine(logic).sendFlaThroughTime(
                                              logic.mkAnd({logic.mkNot(sink), logic.mkNot(covered)}), num_non)});
                         smt_checker.assertProp(transitions);
-                        auto res = smt_checker.check();
-                        assert(res == SMTSolver::Answer::SAT);
+                        if (smt_checker.check() != SMTSolver::Answer::SAT) assert(false);
                         // We get some of the reachable states
                         reached = TermUtils(logic).simplifyMax(TimeMachine(logic).sendFlaThroughTime(
                             ModelBasedProjection(logic).keepOnly(transitions, last_vars, *smt_checker.getModel()),
