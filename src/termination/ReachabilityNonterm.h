@@ -16,17 +16,25 @@ namespace golem::termination {
 
 class ReachabilityNonterm {
 public:
-    explicit ReachabilityNonterm(Options const & options) : options(options) {}
+    explicit ReachabilityNonterm(Options const & givenOptions) : options(givenOptions) {
+        options.addOption(options.COMPUTE_WITNESS, "true");
+    }
 
     enum struct Answer { YES, NO, UNKNOWN, ERROR };
 
     Answer run(TransitionSystem const & ts);
 
 private:
-    Options const & options;
-    std::tuple<Answer, PTRef> analyzeTS(PTRef init, PTRef transition, PTRef sink, Options const & witnesses,
-                                        ArithLogic & logic, std::vector<PTRef> const & vars,
-                                        bool DETERMENISTIC_TRANSITION, PTRef & covered);
+    bool DETERMINISTIC_TRANSITION;
+    std::vector<PTRef> vars;
+    Options options;
+    PTRef covered;
+    vec<PTRef> strictCandidates;
+
+    std::tuple<Answer, PTRef> analyzeTS(PTRef init, PTRef transition, PTRef sink, ArithLogic & logic);
+
+    std::tuple<PTRef, PTRef> blockDeterministicPrefix(PTRef init, PTRef transition, PTRef sink, PTRef trace, uint num, ArithLogic & logic);
+
 };
 } // namespace golem::termination
 
