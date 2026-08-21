@@ -478,7 +478,7 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, ArithLo
                 auto [answer, res] = tryTransitionInvariant(originalTransition, sink, trace, num, logic, strictCandidates);
                 if (answer == Answer::ERROR) continue;
                 if (answer != Answer::UNKNOWN)  return {answer, res};
-                auto [answer1, res1] = refineTransitionInvariant(init, transition, sink, logic, strictCandidates);
+                auto [answer1, res1] = refineTransitionInvariant(init, transition, originalTransition, sink, logic, strictCandidates);
                 if (answer1 != Answer::UNKNOWN)  return {answer1, res1};
             }
         } else if (res.getAnswer() == VerificationAnswer::SAFE) {
@@ -680,12 +680,12 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::tryTransitio
 
 
 std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::refineTransitionInvariant(PTRef init,
-    PTRef transition, PTRef sink, ArithLogic & logic, vec<PTRef> & strictCandidates) {
+    PTRef transition, PTRef originalTransition, PTRef sink, ArithLogic & logic, vec<PTRef> & strictCandidates) {
     PTRef trInv = logic.mkOr(strictCandidates);
     SMTSolver smt_checker(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
     PTRef id = getId(vars, logic);
     PTRef noncoveredStates = QuantifierElimination(logic).keepOnly(
-        logic.mkAnd({logic.mkOr(trInv, id), TimeMachine(logic).sendFlaThroughTime(transition, 1),
+        logic.mkAnd({logic.mkOr(trInv, id), TimeMachine(logic).sendFlaThroughTime(originalTransition, 1),
                         logic.mkNot(shiftOnlyNextVars(trInv, vars, logic))}),
      vars);
     covered = TermUtils(logic).simplifyMax(logic.mkOr(covered, logic.mkNot(noncoveredStates)));

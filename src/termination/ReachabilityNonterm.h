@@ -36,7 +36,7 @@ private:
 
     std::tuple<Answer, PTRef> tryTransitionInvariant(PTRef transition, PTRef sink, PTRef trace, uint num, ArithLogic & logic, vec<PTRef> & strictCandidates);
 
-    std::tuple<Answer, PTRef> refineTransitionInvariant(PTRef init, PTRef transition, PTRef sink, ArithLogic & logic, vec<PTRef> & strictCandidates);
+    std::tuple<Answer, PTRef> refineTransitionInvariant(PTRef init, PTRef transition, PTRef originalTransition, PTRef sink, ArithLogic & logic, vec<PTRef> & strictCandidates);
 };
 } // namespace golem::termination
 
