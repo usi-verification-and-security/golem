@@ -474,7 +474,7 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, ArithLo
             // This is an extension of the approach, constructing TrInv and attempting to prove termination
             // and non-termination using invariants
             if (num > 0) {
-                auto [answer, res] = tryTransitionInvariant(init, transition, sink, trace, num, logic);
+                auto [answer, res] = tryTransitionInvariant(init, originalTransition, sink, trace, num, logic);
                 if (answer != Answer::UNKNOWN)  return {answer, res};
             }
         } else if (res.getAnswer() == VerificationAnswer::SAFE) {
@@ -659,16 +659,13 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::tryTransitio
     PTRef trInv = logic.mkOr(strictCandidates);
     PTRef id = getId(vars, logic);
 
-    SMTSolver smt_checker(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
-    smt_checker.resetSolver();
-
     // We check if TrInv is a general transition invariant
     // (trInv \/ Id) /\ Tr => trInv
-    smt_checker.assertProp(
+    SMTsolver.assertProp(
         logic.mkAnd({logic.mkOr(trInv, id), TimeMachine(logic).sendFlaThroughTime(transition, 1),
                      logic.mkNot(shiftOnlyNextVars(trInv, vars, logic))}));
     // Check if trInv is Transition Invariant
-    if (smt_checker.check() == SMTSolver::Answer::UNSAT) {
+    if (SMTsolver.check() == SMTSolver::Answer::UNSAT) {
         // If trInv is Transition invariant, then Tr leads to termination on the whole state-space
         return {Answer::YES, trInv};
     }
@@ -683,7 +680,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::refineTransi
     PTRef id = getId(vars, logic);
     PTRef noncoveredStates = QuantifierElimination(logic).keepOnly(
         logic.mkAnd({logic.mkOr(trInv, id), TimeMachine(logic).sendFlaThroughTime(transition, 1),
-        logic.mkNot(shiftOnlyNextVars(trInv, vars, logic))}),
+                        logic.mkNot(shiftOnlyNextVars(trInv, vars, logic))}),
      vars);
     covered = TermUtils(logic).simplifyMax(logic.mkOr(covered, logic.mkNot(noncoveredStates)));
 
@@ -745,7 +742,6 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::refineTransi
         //   If this terminates, then the whole TS terminates, but if it nonterinates we need to prove
         //   reachability
         if (answer == Answer::YES) {
-            smt_checker.resetSolver();
             // TODO: Need to change TrInv, adding found subinv in a better way
             strictCandidates.clear();
             strictCandidates.push(subinv);
