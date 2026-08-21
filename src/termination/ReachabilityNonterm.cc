@@ -475,8 +475,10 @@ ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink, ArithLo
             // This is an extension of the approach, constructing TrInv and attempting to prove termination
             // and non-termination using invariants
             if (num > 0) {
-                auto [answer, res] = tryTransitionInvariant(init, originalTransition, transition, sink, trace, num, logic, strictCandidates);
+                auto [answer, res] = tryTransitionInvariant(init, originalTransition, sink, trace, num, logic, strictCandidates);
                 if (answer != Answer::UNKNOWN)  return {answer, res};
+                auto [answer1, res1] = refineTransitionInvariant(init, transition, sink, logic.mkOr(strictCandidates), logic, strictCandidates);
+                if (answer1 != Answer::UNKNOWN)  return {answer1, res1};
             }
         } else if (res.getAnswer() == VerificationAnswer::SAFE) {
             SMTSolver SMTsolver(logic, SMTSolver::WitnessProduction::NONE);
@@ -633,7 +635,7 @@ std::tuple<PTRef, PTRef> ReachabilityNonterm::blockDeterministicPrefix(PTRef ini
             return {init, transition};
 }
 
-std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::tryTransitionInvariant(PTRef init, PTRef transition, PTRef narrowedTransition, PTRef sink, PTRef trace, uint num, ArithLogic & logic, vec<PTRef> & strictCandidates) {
+std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::tryTransitionInvariant(PTRef init, PTRef transition, PTRef sink, PTRef trace, uint num, ArithLogic & logic, vec<PTRef> & strictCandidates) {
     SMTSolver SMTsolver(logic, SMTSolver::WitnessProduction::NONE);
     // Calculate the states that are guaranteed to terminate within num transitions:
     // Tr^n(x,x') /\ not Sink(x') - is a formula, which can be satisfied by any x which can
@@ -672,12 +674,12 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::tryTransitio
         return {Answer::YES, trInv};
     }
 
-    return refineTransitionInvariant(init, transition, narrowedTransition, sink, trInv, logic, strictCandidates);
+    return {Answer::UNKNOWN, logic.getTerm_false()};
 }
 
 
 std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::refineTransitionInvariant(PTRef init,
-    PTRef transition, PTRef narrowedTransition, PTRef sink, PTRef trInv, ArithLogic & logic, vec<PTRef> & strictCandidates) {
+    PTRef transition, PTRef sink, PTRef trInv, ArithLogic & logic, vec<PTRef> & strictCandidates) {
     SMTSolver smt_checker(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
     PTRef id = getId(vars, logic);
     PTRef noncoveredStates = QuantifierElimination(logic).keepOnly(
@@ -687,7 +689,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::refineTransi
     covered = TermUtils(logic).simplifyMax(logic.mkOr(covered, logic.mkNot(noncoveredStates)));
 
     // We check if the states that are not covered by TrInv are reachable
-    auto graph = constructHyperGraph(init, narrowedTransition,
+    auto graph = constructHyperGraph(init, transition,
                                      logic.mkAnd({logic.mkNot(sink), logic.mkNot(covered)}), logic, vars);
     auto engine =
         EngineFactory(logic, options).getEngine(options.getOrDefault(Options::ENGINE, "spacer"));
@@ -718,7 +720,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::refineTransi
             // Init(x) /\ Tr(x,x') /\ ... /\ Bad(x^(num))
             std::vector<PTRef> formulas(num_non);
             for (int k = 0; k < num_non; k++) {
-                formulas[k] = TimeMachine(logic).sendFlaThroughTime(narrowedTransition, k);
+                formulas[k] = TimeMachine(logic).sendFlaThroughTime(transition, k);
             }
             PTRef transitions =
                 logic.mkAnd({init, logic.mkAnd(formulas),
@@ -737,7 +739,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::refineTransi
 
         assert(reached != logic.getTerm_false());
         // Algorithm checks if reachable states are terminating
-        auto [answer, subinv] = analyzeTS(reached, narrowedTransition,
+        auto [answer, subinv] = analyzeTS(reached, transition,
             TermUtils(logic).simplifyMax(logic.mkNot(noncoveredStates)), logic);
         // TODO: It is possible to do check differently, analyzing <noncoveredStates, tr,
         //   not(noncoveredStates)>
@@ -755,7 +757,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::refineTransi
             // TODO: It should work for  subinv \/ TrInv, but it does not
             //    weaker TrInv seems to fail more often then stronger TrInv :(
             smt_checker.assertProp(logic.mkAnd({noncoveredStates, logic.mkOr(subinv, id),
-                                                TimeMachine(logic).sendFlaThroughTime(narrowedTransition, 1),
+                                                TimeMachine(logic).sendFlaThroughTime(transition, 1),
                                                 logic.mkNot(shiftOnlyNextVars(subinv, vars, logic))}));
             // Check if trInv is Transition Invariant on the whole state-space
             if (smt_checker.check() == SMTSolver::Answer::UNSAT) {
