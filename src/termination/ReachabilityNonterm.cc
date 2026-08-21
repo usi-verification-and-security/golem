@@ -648,6 +648,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::tryTransitio
 
     uint addedCands = 0;
     for (auto cand : newCands) {
+        SMTsolver.resetSolver();
         SMTsolver.assertProp(logic.mkAnd(cand, logic.mkNot(logic.mkOr(strictCandidates))));
         if (SMTsolver.check() == SMTSolver::Answer::SAT) {
             strictCandidates.push(cand);
