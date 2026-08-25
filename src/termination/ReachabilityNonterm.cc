@@ -475,10 +475,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
             // This is an extension of the approach, constructing TrInv and attempting to prove termination
             // and non-termination using invariants
             if (num > 0) {
-                auto [answer, res1] =
-                    tryTransitionInvariant(originalTransition, sink, trace, num, logic, strictCandidates);
-                if (answer == Answer::ERROR) continue;
-                if (answer != Answer::UNKNOWN) return {answer, res1};
+                if (!generateWellfoundedDisjuncts(originalTransition, sink, trace, num, logic, strictCandidates)) continue;
                 auto [answer1, res2] = refineTransitionInvariant(init, transition, sink, logic, strictCandidates);
                 if (answer1 != Answer::UNKNOWN) return {answer1, res2};
             }
@@ -636,8 +633,9 @@ std::tuple<PTRef, PTRef> ReachabilityNonterm::blockDeterministicPrefix(PTRef ini
     return {init, transition};
 }
 
-std::tuple<ReachabilityNonterm::Answer, PTRef>
-ReachabilityNonterm::tryTransitionInvariant(PTRef transition, PTRef sink, PTRef trace, uint num, ArithLogic & logic,
+// This function attempts to construct transition invariant. It constructs disjuncts of transition invariant
+// candidate, by building interpolant. Interpolants are DNFized, and disjuncts are checked for well-foundness.
+bool ReachabilityNonterm::generateWellfoundedDisjuncts(PTRef transition, PTRef sink, PTRef trace, uint num, ArithLogic & logic,
                                             vec<PTRef> & strictCandidates) {
     SMTSolver SMTsolver(logic, SMTSolver::WitnessProduction::NONE);
     // Calculate the states that are guaranteed to terminate within num transitions:
@@ -662,30 +660,29 @@ ReachabilityNonterm::tryTransitionInvariant(PTRef transition, PTRef sink, PTRef 
             addedCands++;
         }
     }
-    if (addedCands == 0) return {Answer::ERROR, logic.getTerm_false()};
-    PTRef trInv = logic.mkOr(strictCandidates);
-    PTRef id = getId(vars, logic);
+    return addedCands == 0;
 
-    // We check if TrInv is a general transition invariant
-    // (trInv \/ Id) /\ Tr => trInv
-    SMTsolver.resetSolver();
-    SMTsolver.assertProp(logic.mkAnd({logic.mkOr(trInv, id), TimeMachine(logic).sendFlaThroughTime(transition, 1),
-                                      logic.mkNot(shiftOnlyNextVars(trInv, vars, logic))}));
-    // Check if trInv is Transition Invariant
-    if (SMTsolver.check() == SMTSolver::Answer::UNSAT) {
-        // If trInv is Transition invariant, then Tr leads to termination on the whole state-space
-        return {Answer::YES, trInv};
-    }
-
-    return {Answer::UNKNOWN, logic.getTerm_false()};
 }
 
+// This function uses transition invariants candidates, constructing states which are not covered by the current.
+// These states are checked for reachability. If they are not reachable - TS is terminating.
+// If they are reachable - TS checks the termination for these states.
 std::tuple<ReachabilityNonterm::Answer, PTRef>
 ReachabilityNonterm::refineTransitionInvariant(PTRef init, PTRef transition, PTRef & sink, ArithLogic & logic,
                                                vec<PTRef> & strictCandidates) {
     PTRef trInv = logic.mkOr(strictCandidates);
     PTRef id = getId(vars, logic);
     SMTSolver smt_checker(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
+    // We check if TrInv is a general transition invariant
+    // (trInv \/ Id) /\ Tr => trInv
+    smt_checker.assertProp(logic.mkAnd({logic.mkOr(trInv, id), TimeMachine(logic).sendFlaThroughTime(transition, 1),
+                                      logic.mkNot(shiftOnlyNextVars(trInv, vars, logic))}));
+    // Check if trInv is Transition Invariant
+    if (smt_checker.check() == SMTSolver::Answer::UNSAT) {
+        // If trInv is Transition invariant, then Tr leads to termination on the whole state-space
+        return {Answer::YES, trInv};
+    }
+
     PTRef noncoveredStates = QuantifierElimination(logic).keepOnly(
         logic.mkAnd({logic.mkOr(trInv, id), TimeMachine(logic).sendFlaThroughTime(transition, 1),
                      logic.mkNot(shiftOnlyNextVars(trInv, vars, logic))}),
