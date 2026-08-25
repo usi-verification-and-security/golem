@@ -476,8 +476,8 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
             // and non-termination using invariants
             if (num > 0) {
                 if (!generateWellfoundedDisjuncts(originalTransition, sink, trace, num, logic, strictCandidates)) continue;
-                auto [answer1, res2] = refineTransitionInvariant(init, transition, sink, logic, strictCandidates);
-                if (answer1 != Answer::UNKNOWN) return {answer1, res2};
+                auto [answer, res] = refineTransitionInvariant(init, transition, sink, logic, strictCandidates);
+                if (answer != Answer::UNKNOWN) return {answer, res};
             }
         } else if (res.getAnswer() == VerificationAnswer::SAFE) {
             SMTSolver SMTsolver(logic, SMTSolver::WitnessProduction::NONE);
@@ -660,7 +660,7 @@ bool ReachabilityNonterm::generateWellfoundedDisjuncts(PTRef transition, PTRef s
             addedCands++;
         }
     }
-    return addedCands == 0;
+    return addedCands != 0;
 
 }
 
