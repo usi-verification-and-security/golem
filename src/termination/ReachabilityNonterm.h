@@ -29,6 +29,7 @@ private:
     std::vector<PTRef> vars;
     Options options;
     PTRef covered;
+    vec<PTRef> & strictCandidates;
 
     std::tuple<Answer, PTRef> analyzeTS(PTRef init, PTRef transition, PTRef sink, ArithLogic & logic);
 
@@ -36,10 +37,10 @@ private:
                                                       ArithLogic & logic);
 
     std::tuple<Answer, PTRef> tryTransitionInvariant(PTRef transition, PTRef sink, PTRef trace, uint num,
-                                                     ArithLogic & logic, vec<PTRef> & strictCandidates);
+                                                     ArithLogic & logic);
 
     std::tuple<Answer, PTRef> refineTransitionInvariant(PTRef init, PTRef transition,
-                                                        PTRef & sink, ArithLogic & logic, vec<PTRef> & strictCandidates);
+                                                        PTRef & sink, ArithLogic & logic);
 };
 } // namespace golem::termination
 

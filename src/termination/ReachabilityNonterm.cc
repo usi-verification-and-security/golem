@@ -446,7 +446,7 @@ PTRef constructTransitionInvariantCandidates(PTRef init, PTRef transition, PTRef
 
 std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink,
                                                                               ArithLogic & logic) {
-    vec<PTRef> strictCandidates;
+    // vec<PTRef> strictCandidates;
     while (true) {
         // TODO:  graph based instead of TS
         auto graph = constructHyperGraph(init, transition, sink, logic, vars);
@@ -476,11 +476,11 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
             // and non-termination using invariants
             if (num > 0) {
                 auto [answer, res1] =
-                    tryTransitionInvariant(originalTransition, sink, trace, num, logic, strictCandidates);
+                    tryTransitionInvariant(originalTransition, sink, trace, num, logic);
                 if (answer == Answer::ERROR) continue;
                 if (answer != Answer::UNKNOWN) return {answer, res1};
                 auto [answer1, res2] =
-                    refineTransitionInvariant(init, transition, sink, logic, strictCandidates);
+                    refineTransitionInvariant(init, transition, sink, logic);
                 if (answer1 != Answer::UNKNOWN) return {answer1, res2};
             }
         } else if (res.getAnswer() == VerificationAnswer::SAFE) {
@@ -638,8 +638,7 @@ std::tuple<PTRef, PTRef> ReachabilityNonterm::blockDeterministicPrefix(PTRef ini
 }
 
 std::tuple<ReachabilityNonterm::Answer, PTRef>
-ReachabilityNonterm::tryTransitionInvariant(PTRef transition, PTRef sink, PTRef trace, uint num, ArithLogic & logic,
-                                            vec<PTRef> & strictCandidates) {
+ReachabilityNonterm::tryTransitionInvariant(PTRef transition, PTRef sink, PTRef trace, uint num, ArithLogic & logic) {
     SMTSolver SMTsolver(logic, SMTSolver::WitnessProduction::NONE);
     // Calculate the states that are guaranteed to terminate within num transitions:
     // Tr^n(x,x') /\ not Sink(x') - is a formula, which can be satisfied by any x which can
@@ -683,7 +682,7 @@ ReachabilityNonterm::tryTransitionInvariant(PTRef transition, PTRef sink, PTRef 
 
 std::tuple<ReachabilityNonterm::Answer, PTRef>
 ReachabilityNonterm::refineTransitionInvariant(PTRef init, PTRef transition, PTRef & sink,
-                                               ArithLogic & logic, vec<PTRef> & strictCandidates) {
+                                               ArithLogic & logic) {
     PTRef trInv = logic.mkOr(strictCandidates);
     PTRef id = getId(vars, logic);
     SMTSolver smt_checker(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
