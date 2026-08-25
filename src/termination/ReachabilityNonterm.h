@@ -39,7 +39,7 @@ private:
                                                      ArithLogic & logic, vec<PTRef> & strictCandidates);
 
     std::tuple<Answer, PTRef> refineTransitionInvariant(PTRef init, PTRef transition, PTRef originalTransition,
-                                                        PTRef sink, ArithLogic & logic, vec<PTRef> & strictCandidates);
+                                                        PTRef & sink, ArithLogic & logic, vec<PTRef> & strictCandidates);
 };
 } // namespace golem::termination
 
