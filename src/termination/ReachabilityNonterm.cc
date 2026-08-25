@@ -475,7 +475,8 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
             // This is an extension of the approach, constructing TrInv and attempting to prove termination
             // and non-termination using invariants
             if (num > 0) {
-                if (!generateWellfoundedDisjuncts(originalTransition, sink, trace, num, logic, strictCandidates)) continue;
+                if (!generateWellfoundedDisjuncts(originalTransition, sink, trace, num, logic, strictCandidates))
+                    continue;
                 auto [answer, res] = refineTransitionInvariant(init, transition, sink, logic, strictCandidates);
                 if (answer != Answer::UNKNOWN) return {answer, res};
             }
@@ -635,8 +636,8 @@ std::tuple<PTRef, PTRef> ReachabilityNonterm::blockDeterministicPrefix(PTRef ini
 
 // This function attempts to construct transition invariant. It constructs disjuncts of transition invariant
 // candidate, by building interpolant. Interpolants are DNFized, and disjuncts are checked for well-foundness.
-bool ReachabilityNonterm::generateWellfoundedDisjuncts(PTRef transition, PTRef sink, PTRef trace, uint num, ArithLogic & logic,
-                                            vec<PTRef> & strictCandidates) {
+bool ReachabilityNonterm::generateWellfoundedDisjuncts(PTRef transition, PTRef sink, PTRef trace, uint num,
+                                                       ArithLogic & logic, vec<PTRef> & strictCandidates) {
     SMTSolver SMTsolver(logic, SMTSolver::WitnessProduction::NONE);
     // Calculate the states that are guaranteed to terminate within num transitions:
     // Tr^n(x,x') /\ not Sink(x') - is a formula, which can be satisfied by any x which can
@@ -661,7 +662,6 @@ bool ReachabilityNonterm::generateWellfoundedDisjuncts(PTRef transition, PTRef s
         }
     }
     return addedCands != 0;
-
 }
 
 // This function uses transition invariants candidates, constructing states which are not covered by the current.
@@ -676,7 +676,7 @@ ReachabilityNonterm::refineTransitionInvariant(PTRef init, PTRef transition, PTR
     // We check if TrInv is a general transition invariant
     // (trInv \/ Id) /\ Tr => trInv
     smt_checker.assertProp(logic.mkAnd({logic.mkOr(trInv, id), TimeMachine(logic).sendFlaThroughTime(transition, 1),
-                                      logic.mkNot(shiftOnlyNextVars(trInv, vars, logic))}));
+                                        logic.mkNot(shiftOnlyNextVars(trInv, vars, logic))}));
     // Check if trInv is Transition Invariant
     if (smt_checker.check() == SMTSolver::Answer::UNSAT) {
         // If trInv is Transition invariant, then Tr leads to termination on the whole state-space
