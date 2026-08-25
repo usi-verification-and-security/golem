@@ -29,7 +29,7 @@ private:
     std::vector<PTRef> vars;
     Options options;
     PTRef covered;
-    vec<PTRef> & strictCandidates;
+    vec<PTRef> strictCandidates;
 
     std::tuple<Answer, PTRef> analyzeTS(PTRef init, PTRef transition, PTRef sink, ArithLogic & logic);
 
