@@ -480,7 +480,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                 if (answer == Answer::ERROR) continue;
                 if (answer != Answer::UNKNOWN) return {answer, res1};
                 auto [answer1, res2] =
-                    refineTransitionInvariant(init, transition, originalTransition, sink, logic, strictCandidates);
+                    refineTransitionInvariant(init, transition, sink, logic, strictCandidates);
                 if (answer1 != Answer::UNKNOWN) return {answer1, res2};
             }
         } else if (res.getAnswer() == VerificationAnswer::SAFE) {
@@ -682,13 +682,13 @@ ReachabilityNonterm::tryTransitionInvariant(PTRef transition, PTRef sink, PTRef 
 }
 
 std::tuple<ReachabilityNonterm::Answer, PTRef>
-ReachabilityNonterm::refineTransitionInvariant(PTRef init, PTRef transition, PTRef originalTransition, PTRef & sink,
+ReachabilityNonterm::refineTransitionInvariant(PTRef init, PTRef transition, PTRef & sink,
                                                ArithLogic & logic, vec<PTRef> & strictCandidates) {
     PTRef trInv = logic.mkOr(strictCandidates);
     PTRef id = getId(vars, logic);
     SMTSolver smt_checker(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
     PTRef noncoveredStates = QuantifierElimination(logic).keepOnly(
-        logic.mkAnd({logic.mkOr(trInv, id), TimeMachine(logic).sendFlaThroughTime(originalTransition, 1),
+        logic.mkAnd({logic.mkOr(trInv, id), TimeMachine(logic).sendFlaThroughTime(transition, 1),
                      logic.mkNot(shiftOnlyNextVars(trInv, vars, logic))}),
         vars);
     covered = TermUtils(logic).simplifyMax(logic.mkOr(covered, logic.mkNot(noncoveredStates)));
