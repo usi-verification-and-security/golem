@@ -38,7 +38,7 @@ private:
     bool generateWellfoundedDisjuncts(PTRef transition, PTRef sink, PTRef trace, uint num, ArithLogic & logic,
                                       vec<PTRef> & strictCandidates);
 
-    std::tuple<Answer, PTRef> refineTransitionInvariant(PTRef init, PTRef transition, PTRef & sink, ArithLogic & logic,
+    std::tuple<Answer, PTRef> checkTermination(PTRef init, PTRef transition, PTRef & sink, ArithLogic & logic,
                                                         vec<PTRef> & strictCandidates);
 };
 } // namespace golem::termination

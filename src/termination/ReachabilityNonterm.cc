@@ -477,7 +477,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
             if (num > 0) {
                 if (!generateWellfoundedDisjuncts(originalTransition, sink, trace, num, logic, strictCandidates))
                     continue;
-                auto [answer, res] = refineTransitionInvariant(init, transition, sink, logic, strictCandidates);
+                auto [answer, res] = checkTermination(init, transition, sink, logic, strictCandidates);
                 if (answer != Answer::UNKNOWN) return {answer, res};
             }
         } else if (res.getAnswer() == VerificationAnswer::SAFE) {
@@ -634,8 +634,8 @@ std::tuple<PTRef, PTRef> ReachabilityNonterm::blockDeterministicPrefix(PTRef ini
     return {init, transition};
 }
 
-// This function attempts to construct transition invariant. It constructs disjuncts of transition invariant
-// candidate, by building interpolant. Interpolants are DNFized, and disjuncts are checked for well-foundness.
+// This function attempts to construct well founded disjuncts to produce transition invariant, using interpolation.
+// Interpolants are DNFized, and disjuncts are checked for well-foundness.
 bool ReachabilityNonterm::generateWellfoundedDisjuncts(PTRef transition, PTRef sink, PTRef trace, uint num,
                                                        ArithLogic & logic, vec<PTRef> & strictCandidates) {
     SMTSolver SMTsolver(logic, SMTSolver::WitnessProduction::NONE);
@@ -664,11 +664,12 @@ bool ReachabilityNonterm::generateWellfoundedDisjuncts(PTRef transition, PTRef s
     return addedCands != 0;
 }
 
-// This function uses transition invariants candidates, constructing states which are not covered by the current.
+// This function uses transition invariants candidates, cheking termination.
+// It constructs the states which are not covered by the current transition invariant candidate.
 // These states are checked for reachability. If they are not reachable - TS is terminating.
 // If they are reachable - TS checks the termination for these states.
 std::tuple<ReachabilityNonterm::Answer, PTRef>
-ReachabilityNonterm::refineTransitionInvariant(PTRef init, PTRef transition, PTRef & sink, ArithLogic & logic,
+ReachabilityNonterm::checkTermination(PTRef init, PTRef transition, PTRef & sink, ArithLogic & logic,
                                                vec<PTRef> & strictCandidates) {
     PTRef trInv = logic.mkOr(strictCandidates);
     PTRef id = getId(vars, logic);
