@@ -78,6 +78,7 @@ target_sources(golem_lib
     PRIVATE transformers/SingleLoopTransformation.cc
     PRIVATE transformers/TransformationPipeline.cc
     PRIVATE transformers/TrivialEdgePruner.cc
+    PRIVATE utils/ConvexClosure.cc
     PRIVATE utils/SmtSolver.cc
     PRIVATE utils/SExpressions.cc
     PRIVATE vmt/FrontEnd.cc

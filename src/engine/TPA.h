@@ -11,6 +11,8 @@
 #include "TransitionSystemEngine.h"
 
 #include "osmt_solver.h"
+#include <unordered_set>
+#include <vector>
 
 namespace golem {
 class TransitionSystem;
@@ -170,7 +172,7 @@ protected:
     PTRef getNextVersion(PTRef currentVersion) const { return getNextVersion(currentVersion, 1); };
 
     /* Shifts only next-next vars to next vars */
-    PTRef cleanInterpolant(PTRef itp);
+    PTRef cleanInterpolant(PTRef itp) const;
     /* Shifts only next vars to next-next vars */
     PTRef shiftOnlyNextVars(PTRef transition) const;
 
@@ -194,6 +196,8 @@ protected:
     PTRef safeSupersetOfInitialStates(PTRef start, PTRef transitionInvariant, PTRef target) const;
 
     void houdiniCheck(PTRef invCandidates, PTRef transition, SafetyExplanation::FixedPointType alignment);
+
+    virtual void learnInvariant(PTRef invariant, SafetyExplanation::FixedPointType alignment);
 
     bool checkLessThanFixedPoint(unsigned short power);
 
@@ -248,7 +252,7 @@ private:
 
 class TPABasic : public TPABase {
 
-    vec<PTRef> transitionHierarchy;
+    std::vector<vec<PTRef>> transitionHierarchy;
 
     vec<SolverWrapper *> reachabilitySolvers;
 
@@ -267,6 +271,14 @@ private:
 
     PTRef getLevelTransition(unsigned short) const;
     void storeLevelTransition(unsigned short, PTRef);
+
+    bool propagateTransitions();
+
+    void learnInvariant(PTRef invariant, SafetyExplanation::FixedPointType alignment) override;
+
+    PTRef inductiveItp(unsigned short power, PTRef goal) const;
+
+    PTRef generalize(unsigned short power, PTRef lemma) const;
 
     SolverWrapper * getReachabilitySolver(unsigned short power) const;
 

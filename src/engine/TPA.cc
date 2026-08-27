@@ -13,14 +13,30 @@
 #include "TransformationUtils.h"
 #include "TransitionSystem.h"
 #include "Witnesses.h"
+#include "pterms/PTRef.h"
 #include "transformers/NestedLoopTransformation.h"
 #include "transformers/SingleLoopTransformation.h"
+#include "unsatcores/UnsatCore.h"
+#include "utils/InductiveInterpolants.h"
 #include "utils/SmtSolver.h"
+#include <memory>
 
-#define TRACE_LEVEL 0
+#define GENERALIZE 1
+#define INDITP 1
+#define PROPAGATE 1
+#define BOTH 0
 
-#define TRACE(l, m)                                                                                                    \
-    if (TRACE_LEVEL >= l) { std::cout << m << std::endl; }
+#define TRACE_LEVEL 2
+
+static int INDENT = -1;
+
+#define INCR_INDENT INDENT++;
+#define DECR_INDENT INDENT--;
+
+#define TRACE(l, m) \
+    if (TRACE_LEVEL >= l) { \
+        for (auto _i = 0; _i < INDENT; ++_i) std::cout << " - "; \
+        std::cout << m << std::endl; }
 
 namespace golem {
 const std::string TPAEngine::TPA = "tpa";
@@ -166,7 +182,10 @@ public:
 
     ReachabilityResult checkConsistent(PTRef query) override {
         //        std::cout << "Query: " << logic.printTerm(query) << std::endl;
-        assert(not pushed);
+        if (pushed) {
+            solver.pop();
+            pushed = false;
+        }
         solver.push();
         pushed = true;
         solver.assertProp(query);
@@ -182,7 +201,10 @@ public:
     }
 
     void strengthenTransition(PTRef nTransition) override {
-        assert(not pushed);
+        if (pushed) {
+            solver.pop();
+            pushed = false;
+        }
         solver.push();
         solver.assertProp(nTransition);
         opensmt::setbit(mask, allformulasInserted++);
@@ -445,7 +467,7 @@ VerificationAnswer TPABase::checkTrivialUnreachability() {
 }
 
 VerificationAnswer TPASplit::checkPower(unsigned short power) {
-    TRACE(1, "Checking power " << power)
+    TRACE(1, "Checking power " << power);
     queryCache.emplace_back();
     auto res = reachabilityQueryLessThan(init, query, power);
     if (isReachable(res)) {
@@ -713,6 +735,71 @@ TPASplit::QueryResult TPASplit::reachabilityQueryLessThan(PTRef from, PTRef to, 
     }
 }
 
+PTRef TPABasic::generalize(unsigned short power, PTRef lemma) const {
+    SMTSolver solver(logic, SMTSolver::WitnessProduction::ONLY_UNSAT_CORE);
+
+    const auto& candidates = TermUtils(logic).getTopLevelDisjuncts(lemma);
+    vec<PTRef> assumedSources, assumedTargets;
+    std::map<PTRef, PTRef> mapping;
+    assumedSources.capacity(candidates.size());
+    assumedTargets.capacity(candidates.size());
+
+    static std::size_t i = 0;
+    for (const auto candidate : candidates) {
+        std::string name = "_assume#indgen#" + std::to_string(i++);
+        PTRef assumption = logic.mkBoolVar(name.c_str());
+        mapping[assumption] = candidate;
+        PTRef source = logic.mkImpl(assumption, logic.mkAnd({candidate, getNextVersion(candidate)}));
+        assumedSources.push(source);
+        PTRef notTarget = logic.mkNot(shiftOnlyNextVars(candidate));
+        assumedTargets.push(logic.mkImpl(assumption, notTarget));
+
+        // std::cerr << logic.pp(assumption) << " := " << logic.pp(candidate) << std::endl;
+        bool added = solver.tryAssertNamedProp(assumption, name);
+        assert(added);
+    }
+
+    PTRef source = logic.mkOr(assumedSources);
+    PTRef target = logic.mkAnd(assumedTargets);
+
+    PTRef absTrans = getLevelTransition(power);
+    PTRef body = logic.mkAnd({absTrans, getNextVersion(absTrans), source});
+    PTRef bodyOrTrans = logic.mkOr(shiftOnlyNextVars(transition), body);
+    solver.assertProp(bodyOrTrans);
+    solver.assertProp(target);
+
+    auto res = solver.check();
+    if (res != SMTSolver::Answer::UNSAT) {
+        throw std::logic_error("Error in Generalize: formula is not unsatisfiable!");
+    }
+
+    auto core = solver.getUnsatCore();
+    vec<PTRef> inductiveDisjs;
+    const auto& coreAssumptions = core->getTerms();
+    for (auto term : coreAssumptions) { inductiveDisjs.push(mapping[term]); }
+    assert(inductiveDisjs.size() > 0);
+    auto newLemma = logic.mkOr(inductiveDisjs);
+
+    TRACE(3, "[GENERALIZE] Old Lemma: " << logic.pp(lemma));
+    TRACE(3, "[GENERALIZE] New Lemma: " << logic.pp(newLemma));
+
+    return newLemma;
+}
+
+PTRef TPABasic::inductiveItp(unsigned short power, PTRef goal) const {
+    PTRef level = getLevelTransition(power);
+    PTRef twoAbsTrans = logic.mkAnd(level, getNextVersion(level));
+
+    auto getVarsAt = [this](int level){ return getStateVars(level); };
+
+    PTRef lemma = inductiveTransConflict(logic,
+                                         logic.mkOr(identity, transition),
+                                         twoAbsTrans, goal,
+                                         getVarsAt
+                                         );
+    return lemma;
+}
+
 PTRef TPABase::simplifyInterpolant(PTRef itp) {
     auto & laLogic = dynamic_cast<ArithLogic &>(logic);
     LATermUtils utils(laLogic);
@@ -727,7 +814,7 @@ PTRef TPABase::simplifyInterpolant(PTRef itp) {
 }
 
 // TODO: unify cleanInterpolant and shiftOnlyNextVars. They are dual to each other and very similar
-PTRef TPABase::cleanInterpolant(PTRef itp) {
+PTRef TPABase::cleanInterpolant(PTRef itp) const {
     TermUtils utils(logic);
     auto itpVars = utils.getVars(itp);
     auto currentVars = getStateVars(0);
@@ -791,7 +878,8 @@ void TPABase::resetTransitionSystem(TransitionSystem const & system) {
         this->stateVariables.push(var);
     }
     for (PTRef var : auxVars) {
-        this->auxiliaryVariables.push(var);
+        //this->auxiliaryVariables.push(var);
+        this->stateVariables.push(var);
     }
     this->init = system.getInit();
     this->init = utils.toNNF(this->init);
@@ -914,9 +1002,21 @@ void TPABase::houdiniCheck(PTRef invCandidates, PTRef transition, SafetyExplanat
     solver.push();
     auto candidates = topLevelConjuncts(logic, invCandidates);
     if (alignment == SafetyExplanation::FixedPointType::RIGHT) {
+        solver.assertProp(init);
         solver.assertProp(getNextVersion(transition));
-    } else {
-        if (alignment == SafetyExplanation::FixedPointType::LEFT) { solver.assertProp(transition); }
+        for (PTRef rt : rightInvariants) {
+            solver.assertProp(rt);
+            solver.assertProp(getNextVersion(rt));
+            solver.assertProp(shiftOnlyNextVars(rt));
+        }
+    } else if (alignment == SafetyExplanation::FixedPointType::LEFT) {
+        solver.assertProp(getNextVersion(query, 2));
+        solver.assertProp(transition);
+        for (PTRef lt : leftInvariants) {
+            solver.assertProp(lt);
+            solver.assertProp(getNextVersion(lt));
+            solver.assertProp(shiftOnlyNextVars(lt));
+        }
     }
 
     solver.push();
@@ -934,6 +1034,8 @@ void TPABase::houdiniCheck(PTRef invCandidates, PTRef transition, SafetyExplanat
     } else if (alignment == SafetyExplanation::FixedPointType::LEFT) {
         solver.assertProp(logic.mkAnd(getNextVersion(invCandidates), logic.mkNot(goal)));
     }
+    // ANNA: this can be done in fewer iterations asking for a cti of (candidates & !candidates') and removing
+    // all candidate lemmas thare are violated by the same model.
     while (solver.check() == SMTSolver::Answer::SAT) {
         for (int i = candidates.size() - 1; i >= 0; i--) {
             PTRef cand = candidates[i];
@@ -961,14 +1063,9 @@ void TPABase::houdiniCheck(PTRef invCandidates, PTRef transition, SafetyExplanat
             solver.assertProp(logic.mkAnd(getNextVersion(logic.mkAnd(candidates)), logic.mkNot(goal)));
         }
     }
+    // Anna: why not assume existing right/left invariants in the prev check?
     for (auto cand : candidates) {
-        if (alignment == SafetyExplanation::FixedPointType::RIGHT) {
-            if (std::find(rightInvariants.begin(), rightInvariants.end(), cand) != rightInvariants.end()) { continue; }
-            rightInvariants.push(cand);
-        } else {
-            if (std::find(leftInvariants.begin(), leftInvariants.end(), cand) != leftInvariants.end()) { continue; }
-            leftInvariants.push(cand);
-        }
+        learnInvariant(cand, alignment);
     }
 }
 
@@ -979,6 +1076,7 @@ bool TPABase::checkLessThanFixedPoint(unsigned short power) {
         // first check if it is a fixed point with respect to the initial states
         SMTSolver solver(logic, SMTSolver::WitnessProduction::NONE);
         {
+            // ANNA: asserting rightInvariants looks like restricting the assumption to the Finfinity frame.
             houdiniCheck(currentLevelTransition, transition, SafetyExplanation::FixedPointType::RIGHT);
             solver.assertProp(
                 logic.mkAnd({logic.mkAnd(rightInvariants), currentLevelTransition, getNextVersion(transition),
@@ -1000,6 +1098,9 @@ bool TPABase::checkLessThanFixedPoint(unsigned short power) {
                                                           : "transition relation restricted to init")
                               << std::endl;
                 }
+                TRACE(2, "[FP] Right fixpoint detected at level " << i << ". Restricted? " << restrictedInvariant);
+                vec<PTRef> conjs = TermUtils(logic).getTopLevelConjuncts(currentLevelTransition);
+                TRACE(2, "[FP] Fixpoint: " << std::endl; for (auto c : conjs) std::cout << c.x << std::endl; std::cout)
                 explanation.invariantType = restrictedInvariant
                                                 ? SafetyExplanation::TransitionInvariantType::RESTRICTED_TO_INIT
                                                 : SafetyExplanation::TransitionInvariantType::UNRESTRICTED;
@@ -1034,6 +1135,10 @@ bool TPABase::checkLessThanFixedPoint(unsigned short power) {
                                                           : "transition relation restricted to bad")
                               << std::endl;
                 }
+                TRACE(2, "[FP] Left fixpoint detected at level " << i << ". Restricted? " << restrictedInvariant)
+                vec<PTRef> conjs = TermUtils(logic).getTopLevelConjuncts(currentLevelTransition);
+                TRACE(2, "[FP] Fixpoint: " << std::endl; for (auto c : conjs) std::cout << c.x << std::endl; std::cout);
+
                 explanation.invariantType = restrictedInvariant
                                                 ? SafetyExplanation::TransitionInvariantType::RESTRICTED_TO_QUERY
                                                 : SafetyExplanation::TransitionInvariantType::UNRESTRICTED;
@@ -1046,6 +1151,7 @@ bool TPABase::checkLessThanFixedPoint(unsigned short power) {
         }
         // TODO: Move this to a separate method?
         // now check the produced if transition invariants are actually safety invariants
+        // ANNA: this can be done right after Houdini check.
         {
             solver.resetSolver();
             solver.assertProp(logic.mkAnd({init, logic.mkAnd(rightInvariants), getNextVersion(query)}));
@@ -1056,6 +1162,16 @@ bool TPABase::checkLessThanFixedPoint(unsigned short power) {
                 explanation.fixedPointType = SafetyExplanation::FixedPointType::RIGHT;
                 explanation.inductivnessPowerExponent = 0;
                 explanation.safeTransitionInvariant = logic.mkAnd(rightInvariants);
+
+                solver.resetSolver();
+                solver.assertProp(init);
+                solver.assertProp(logic.mkAnd(rightInvariants));
+                solver.assertProp(getNextVersion(transition));
+                solver.assertProp(logic.mkNot(shiftOnlyNextVars(logic.mkAnd(rightInvariants))));
+                assert(solver.check() == SMTSolver::Answer::UNSAT);
+
+                TRACE(2, "[FP] Right Invariant is safety invariant: " << std::endl;
+                      for (auto c : rightInvariants) std::cout << c.x << std::endl; std::cout)
                 return true;
             }
         }
@@ -1070,12 +1186,40 @@ bool TPABase::checkLessThanFixedPoint(unsigned short power) {
                 explanation.fixedPointType = SafetyExplanation::FixedPointType::LEFT;
                 explanation.inductivnessPowerExponent = 0;
                 explanation.safeTransitionInvariant = logic.mkAnd(leftInvariants);
+
+
+                solver.resetSolver();
+                solver.assertProp(getNextVersion(getNextVersion(query)));
+                solver.assertProp(transition);
+                solver.assertProp(getNextVersion(logic.mkAnd(leftInvariants)));
+                solver.assertProp(logic.mkNot(shiftOnlyNextVars(logic.mkAnd(leftInvariants))));
+                assert(solver.check() == SMTSolver::Answer::UNSAT);
+
+                TRACE(2, "[FP] Left Invariant is safety invariant: " << std::endl;
+                      for (auto c : leftInvariants) std::cout << c.x << std::endl; std::cout)
                 return true;
             }
         }
     }
     return false;
 }
+
+void TPABase::learnInvariant(PTRef invariant, SafetyExplanation::FixedPointType alignment) {
+    bool right = (alignment == SafetyExplanation::FixedPointType::RIGHT);
+    auto& dst = right ? rightInvariants : leftInvariants;
+    if (std::find(dst.begin(), dst.end(), invariant) == dst.end()) {
+        dst.push(invariant);
+    }
+    TRACE(2, "[inf] New lemma in " << ((right) ? "Right" : "Left") << " infinity frame " << invariant.x);
+}
+
+void TPABasic::learnInvariant(PTRef invariant, SafetyExplanation::FixedPointType alignment) {
+    TPABase::learnInvariant(invariant, alignment);
+    if (alignment == SafetyExplanation::FixedPointType::RIGHT) {
+        storeLevelTransition(transitionHierarchy.size(), invariant);
+    }
+}
+
 
 bool TPASplit::checkExactFixedPoint(unsigned short power) {
     assert(power == 0 or verifyExactPower(power));
@@ -1188,31 +1332,52 @@ void TPABasic::clearReachabilitySolvers() {
 
 PTRef TPABasic::getLevelTransition(unsigned short power) const {
     assert(power < transitionHierarchy.size());
-    return transitionHierarchy[power];
+    return logic.mkAnd(transitionHierarchy[power]);
 }
 
 void TPABasic::storeLevelTransition(unsigned short power, PTRef tr) {
-    //    std::cout << "Strengthening exact reachability on level " << power << " with " << logic.printTerm(tr) <<
-    //    std::endl;
+    TRACE(3, "Strengthening level " << power << " with " << logic.printTerm(tr));
     if (power != 0 and not isPureTransitionFormula(tr)) {
         throw std::logic_error("Transition relation has some auxiliary variables!");
     }
-    transitionHierarchy.growTo(power + 1, PTRef_Undef);
-    PTRef current = transitionHierarchy[power];
-    PTRef toStore = current == PTRef_Undef ? tr : TermUtils(logic).conjoin(tr, current);
-    transitionHierarchy[power] = toStore;
+    for (auto i = transitionHierarchy.size(); i <= power; ++i) {
+        transitionHierarchy.push_back({});
+    }
+
+#if PROPAGATE || INDITP
+    for (auto i = 0; i <= power; ++i) {
+        auto& level = transitionHierarchy[i];
+        if (std::find(level.begin(), level.end(), tr) == level.end()) {
+            TRACE(2, "[+] Adding " << tr.x << " in TA " << i);
+            transitionHierarchy[i].push(tr);
+        } else {
+            TRACE(2, "   Trying to add the same lemma again. Skipping...");
+            // TODO: skip also asserting in the solver.
+        }
+    }
+#else
+    transitionHierarchy[power].push(tr);
+#endif
 
     reachabilitySolvers.growTo(power + 2, nullptr);
     PTRef nextLevelTransitionStrengthening = logic.mkAnd(tr, getNextVersion(tr));
-    if (not reachabilitySolvers[power + 1]) {
-        reachabilitySolvers[power + 1] =
+#if PROPAGATE || INDITP
+    for (auto i = 1; i <= power + 1; ++i) {
+#else
+    {
+    auto i = power + 1;
+#endif
+    if (not reachabilitySolvers[i]) {
+        reachabilitySolvers[i] =
             new SolverWrapperIncrementalWithRestarts(logic, nextLevelTransitionStrengthening);
         //        reachabilitySolvers[power + 1] = new SolverWrapperIncremental(logic,
         //        nextLevelTransitionStrengthening); reachabilitySolvers[power + 1] = new SolverWrapperSingleUse(logic,
         //        nextLevelTransitionStrengthening);
     } else {
-        reachabilitySolvers[power + 1]->strengthenTransition(nextLevelTransitionStrengthening);
+        reachabilitySolvers[i]->strengthenTransition(nextLevelTransitionStrengthening);
     }
+    }
+
 }
 
 SolverWrapper * TPABasic::getReachabilitySolver(unsigned short power) const {
@@ -1221,7 +1386,7 @@ SolverWrapper * TPABasic::getReachabilitySolver(unsigned short power) const {
 }
 
 VerificationAnswer TPABasic::checkPower(unsigned short power) {
-    TRACE(1, "Checking power " << power)
+    TRACE(1, "\n----------\nChecking power " << power)
     queryCache.emplace_back();
     auto res = reachabilityQuery(init, query, power);
     if (isReachable(res)) {
@@ -1229,7 +1394,12 @@ VerificationAnswer TPABasic::checkPower(unsigned short power) {
         return VerificationAnswer::UNSAFE;
     } else if (isUnreachable(res)) {
         if (verbose() > 0) { std::cout << "; System is safe up to <=2^" << power + 1 << " steps" << std::endl; }
+        TRACE(1, "System is safe up to <=2^" << power + 1 << "steps.");
         // Check if we have not reached fixed point.
+#if PROPAGATE
+        bool fixpoint = propagateTransitions();
+        if (fixpoint) { return VerificationAnswer::SAFE; }
+#endif
         bool fixedPointReached = checkLessThanFixedPoint(power + 1);
         if (fixedPointReached) { return VerificationAnswer::SAFE; }
     }
@@ -1244,23 +1414,27 @@ VerificationAnswer TPABasic::checkPower(unsigned short power) {
 TPABasic::QueryResult TPABasic::reachabilityQuery(PTRef from, PTRef to, unsigned short power) {
     //        std::cout << "Checking LEQ reachability on level " << power << " from " << logic.printTerm(from) << " to "
     //        << logic.printTerm(to) << std::endl;
-    TRACE(2, "Checking LEQ reachability on level " << power << " from " << from.x << " to " << to.x)
+    INCR_INDENT;
+    TRACE(2, "[RQ] Checking LEQ reachability on level " << power << " from " << from.x << " to " << to.x)
     assert(queryCache.size() > power);
     auto it = queryCache[power].find({from, to});
     if (it != queryCache[power].end()) {
-        TRACE(1, "Query found in cache on level " << power)
+        TRACE(1, "Query found in cache: truly reachable on level " << power);
+        DECR_INDENT;
         return it->second;
     }
     QueryResult result;
     PTRef goal = getNextVersion(to, 2);
     unsigned counter = 0;
     while (true) {
-        TRACE(3, "Exact: Iteration " << ++counter << " on level " << power)
+        TRACE(3, "... Iteration " << ++counter << " on level " << power);
+        TRACE(2, "[?] Can " << from.x << " reach " << to.x << " in <=2^" << power + 1 << " steps?")
         auto solver = getReachabilitySolver(power + 1);
         assert(solver);
         auto res = solver->checkConsistent(logic.mkAnd(from, goal));
         switch (res) {
             case ReachabilityResult::REACHABLE: {
+                TRACE(2, "[y] " << from.x << " reaches " << to.x << " in <=2^" << power + 1 << " steps.");
                 TRACE(3, "Top level query was reachable")
                 PTRef previousTransition = getLevelTransition(power);
                 PTRef translatedPreviousTransition = getNextVersion(previousTransition);
@@ -1273,11 +1447,12 @@ TPABasic::QueryResult TPABasic::reachabilityQuery(PTRef from, PTRef to, unsigned
                         (not firstStepTaken or model->evaluate(transition) == logic.getTerm_true()) and
                         (not secondStepTaken or model->evaluate(getNextVersion(transition)) == logic.getTerm_true()));
                     result.refinedTarget = refineTwoStepTarget(
-                        from, logic.mkAnd(previousTransition, translatedPreviousTransition), goal, *model);
+                           from, logic.mkAnd(previousTransition, translatedPreviousTransition), goal, *model);
                     result.steps = firstStepTaken + secondStepTaken;
                     // MB: Refined steps are computed from the whole formula representing 0-2 steps.
                     //     It might be possible that the step count is not correct ?!
-                    TRACE(3, "Exact: Truly reachable states are " << result.refinedTarget.x)
+                    TRACE(2, "[!] Exact: Truly reachable states are " << result.refinedTarget.x);
+                    DECR_INDENT;
                     assert(result.refinedTarget != logic.getTerm_false());
                     queryCache[power].insert({{from, to}, result});
                     return result;
@@ -1285,18 +1460,19 @@ TPABasic::QueryResult TPABasic::reachabilityQuery(PTRef from, PTRef to, unsigned
                 // Create the three states corresponding to current, next and next-next variables from the query
                 PTRef nextState = extractMidPoint(from, previousTransition, translatedPreviousTransition, goal, *model);
                 //              std::cout << "Midpoint single point: " << logic.printTerm(modelMidpoint) << '\n';
-                TRACE(3, "Midpoint from MBP: " << nextState.x)
+                TRACE(2, "[Q] Considering MidPoint query as target: " << nextState.x)
                 assert(power != 0);
                 // check the reachability using lower level abstraction
                 auto subQueryRes = reachabilityQuery(from, nextState, power - 1);
                 if (isUnreachable(subQueryRes)) {
-                    TRACE(3, "Exact: First half was unreachable, repeating...")
+                    TRACE(3, "Exact: First half was unreachable, repeating...");
                     assert(getLevelTransition(power) != previousTransition);
                     continue; // We need to re-check this level with refined abstraction
                 } else {
                     assert(isReachable(subQueryRes));
-                    TRACE(3, "Exact: First half was reachable")
+                    TRACE(3, "Exact: First half was reachable");
                     nextState = extractReachableTarget(subQueryRes);
+                    TRACE(2, "[Q] Considering MidPoint query as source: " << nextState.x);
                     TRACE(3, "Midpoint from MBP - part 2: " << nextState.x)
                     if (nextState == PTRef_Undef) {
                         throw std::logic_error("Refined reachable target not set in subquery!");
@@ -1316,25 +1492,105 @@ TPABasic::QueryResult TPABasic::reachabilityQuery(PTRef from, PTRef to, unsigned
                 // both halves of the found path are feasible => this path is feasible!
                 subQueryRes.steps += stepsToMidpoint;
                 queryCache[power].insert({{from, to}, subQueryRes});
+                TRACE(2, "[R] Query " << to.x << " was reachable");
+                DECR_INDENT;
                 return subQueryRes;
             }
             case ReachabilityResult::UNREACHABLE: {
-                TRACE(3, "Top level query was unreachable")
+                TRACE(3, "Top level query was unreachable");
+                TRACE(2, "[x] " << from.x << " cannot reach " << to.x << " in <=2^" << power + 1 << " steps.");
+
+#if INDITP || BOTH
+                PTRef lemma = inductiveItp(power, logic.mkAnd(from, goal));
+#if GENERALIZE
+                lemma = generalize(power, lemma);
+#endif
+#endif
+
+#if !INDITP || BOTH
                 PTRef itp = solver->lastQueryTransitionInterpolant();
                 itp = simplifyInterpolant(itp);
                 itp = cleanInterpolant(itp);
-                //                std::cout << "Strenghtening representation of exact reachability on level " << power
-                //                << " :"; TermUtils(logic).printTermWithLets(std::cout, itp); std::cout << std::endl;
-                TRACE(3, "Learning " << itp.x)
-                TRACE(4, "Learning " << logic.pp(itp))
+#if GENERALIZE
+                itp = generalize(power, itp);
+#endif
+#endif
+
+#if INDITP || BOTH
+                TRACE(2, "[+] Learning " << lemma.x << " in power: " << power + 1);
+                TRACE(4, "Learning " << logic.pp(lemma));
+                TRACE(2, "[U] Query " << to.x << " is NOT reachable");
+                // If itp == logic.getTerm_true, then the error states were trivially unreachable
+                if (lemma == logic.getTerm_true()) { assert(power == 0); }
+                storeLevelTransition(power + 1, lemma);
+#endif
+
+#if !INDITP || BOTH
+                TRACE(2, "[+] Learning " << itp.x << " in power: " << power + 1);
+                TRACE(4, "Learning " << logic.pp(itp));
+                TRACE(2, "[U] Query " << to.x << " is NOT reachable");
                 // If itp == logic.getTerm_true, then the error states were trivially unreachable
                 if (itp == logic.getTerm_true()) { assert(power == 0); }
                 storeLevelTransition(power + 1, itp);
+#endif
+
+                // if (not implies(itp, lemma, logic)) {
+                //     TRACE(2, "======== New ITP is stronger!");
+                //     TRACE(2, "New ITP: " << logic.pp(lemma));
+                //     TRACE(2, "Old ITP: " << logic.pp(itp));
+                //     itp = lemma;
+                // }
+
                 result.result = ReachabilityResult::UNREACHABLE;
+                DECR_INDENT;
                 return result;
             }
         }
     }
+}
+
+bool TPABasic::propagateTransitions() {
+    TRACE(2, "[->] Trying to propagate lemmas...")
+    SMTSolver solver(logic, SMTSolver::WitnessProduction::NONE);
+    for (auto i = 0; i < transitionHierarchy.size() - 1; ++i) {
+        solver.push();
+        auto currentLevel = getLevelTransition(i);
+        solver.assertProp(currentLevel);
+        solver.assertProp(getNextVersion(currentLevel));
+
+        vec<PTRef> propagated;
+        bool allPropagated = true;
+        const auto& candidates = transitionHierarchy[i];
+        const auto& nextLemmas = transitionHierarchy[i + 1];
+        for (PTRef candidate : candidates) {
+            // ANNA: todo: we can skip rightinvariant lemmas which are automatically pushed
+            bool duplicate = \
+                std::find(nextLemmas.begin(), nextLemmas.end(), candidate) != nextLemmas.end();
+            if (duplicate) {
+                continue;
+            }
+            // Check if AT^i(x,x') & AT^i(x', x'') -> candidate(x, x'')
+            solver.push();
+            auto shiftedCandidate = shiftOnlyNextVars(candidate);
+            solver.assertProp(logic.mkNot(shiftedCandidate));
+            if (solver.check() == SMTSolver::Answer::UNSAT) {
+                TRACE(1, "[push] Propagate " << candidate.x << " to " << i + 1);
+                propagated.push(candidate);
+            } else {
+                allPropagated = false;
+            }
+            solver.pop();
+        }
+        for (PTRef lemma : propagated) {
+            // ANNA: TODO: add a flag to avoid searching it in previous levels
+            storeLevelTransition(i + 1, lemma);
+        }
+        if (allPropagated) {
+            return true;
+        }
+        solver.pop();
+    }
+    return false;
 }
 
 void TPABasic::resetPowers() {
