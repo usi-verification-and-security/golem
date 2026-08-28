@@ -272,13 +272,15 @@ private:
     PTRef getLevelTransition(unsigned short) const;
     void storeLevelTransition(unsigned short, PTRef);
 
-    bool propagateTransitions();
+    bool propagateTransitions(unsigned short);
 
     void learnInvariant(PTRef invariant, SafetyExplanation::FixedPointType alignment) override;
 
     PTRef inductiveItp(unsigned short power, PTRef goal) const;
 
     PTRef generalize(unsigned short power, PTRef lemma) const;
+
+    bool checkLemma(unsigned short power, PTRef lemma, bool inductive) const;
 
     SolverWrapper * getReachabilitySolver(unsigned short power) const;
 

@@ -13,6 +13,7 @@
 #include "TransformationUtils.h"
 #include "TransitionSystem.h"
 #include "Witnesses.h"
+#include "common/TreeOps.h"
 #include "pterms/PTRef.h"
 #include "transformers/NestedLoopTransformation.h"
 #include "transformers/SingleLoopTransformation.h"
@@ -22,7 +23,7 @@
 #include <memory>
 
 #define GENERALIZE 1
-#define INDITP 1
+#define INDITP 0
 #define PROPAGATE 1
 #define BOTH 0
 
@@ -735,37 +736,120 @@ TPASplit::QueryResult TPASplit::reachabilityQueryLessThan(PTRef from, PTRef to, 
     }
 }
 
+bool TPABasic::checkLemma(unsigned short power, PTRef lemma01, bool inductive) const {
+    SMTSolver solver(logic, SMTSolver::WitnessProduction::NONE);
+    PTRef AT01 = getLevelTransition(power);
+    PTRef AT12 = getNextVersion(AT01);
+    PTRef lemma12 = getNextVersion(lemma01);
+    PTRef lemma02 = shiftOnlyNextVars(lemma01);
+
+    bool ok = true;
+
+    // Check: T -> AT
+    solver.push();
+    solver.assertProp(logic.mkOr(transition, identity));
+    solver.assertProp(logic.mkNot(AT01));
+    if (solver.check() != SMTSolver::Answer::UNSAT) {
+        std::cerr << "AT is not implied by T!" << std::endl;
+        ok = false;
+    }
+    solver.pop();
+
+    // Check: T -> lemma
+    solver.push();
+    solver.assertProp(logic.mkOr(transition, identity));
+    solver.assertProp(logic.mkNot(lemma01));
+    if (solver.check() != SMTSolver::Answer::UNSAT) {
+        std::cerr << "Lemma is not implied by T!" << std::endl;
+        ok = false;
+    }
+    solver.pop();
+
+    if (not inductive) {
+        // Check (A01 & A12) -> lemma02 
+        solver.push();
+        solver.assertProp(AT01);
+        solver.assertProp(AT12);
+        solver.assertProp(logic.mkNot(lemma02));
+        if (solver.check() != SMTSolver::Answer::UNSAT) {
+            std::cerr << "Lemma is not implied by previous frames" << std::endl;
+            ok = false;
+        }
+        solver.pop();
+    } else {
+        // Check (A01 & lemma01 & A12 & lemma12) -> lemma02 
+        solver.push();
+        solver.assertProp(AT01);
+        solver.assertProp(AT12);
+        solver.assertProp(lemma01);
+        solver.assertProp(lemma12);
+        solver.assertProp(logic.mkNot(lemma02));
+        if (solver.check() != SMTSolver::Answer::UNSAT) {
+            std::cerr << "Lemma is not inductive from by previous frames" << std::endl;
+            ok = false;
+        }
+        solver.pop();
+    }
+
+    return ok;
+}
+
 PTRef TPABasic::generalize(unsigned short power, PTRef lemma) const {
     SMTSolver solver(logic, SMTSolver::WitnessProduction::ONLY_UNSAT_CORE);
 
+    assert(checkLemma(power, lemma, false));
+
     const auto& candidates = TermUtils(logic).getTopLevelDisjuncts(lemma);
-    vec<PTRef> assumedSources, assumedTargets;
+    vec<PTRef> assumedSources1, assumedSources2, assumedTargets;
     std::map<PTRef, PTRef> mapping;
-    assumedSources.capacity(candidates.size());
+    assumedSources1.capacity(candidates.size());
+    assumedSources2.capacity(candidates.size());
     assumedTargets.capacity(candidates.size());
 
+    /*
+      bigand_i a_i     // named assumptions
+      & (
+         T(x, x'')     // base
+         or
+         (             // inductive step
+           TA^n(x, x') & TA^n(x', x'')
+           & bigor_i(a_i & l_i(x, x')) & // assumed sources 1
+           & bigor_i(a_i & l_i(x', x'')) // assumed sources 2
+         )
+        )
+      & bigand_i (a_i -> not l_i(x, x''))
+                      // assumed targets
+     */
     static std::size_t i = 0;
     for (const auto candidate : candidates) {
         std::string name = "_assume#indgen#" + std::to_string(i++);
         PTRef assumption = logic.mkBoolVar(name.c_str());
         mapping[assumption] = candidate;
-        PTRef source = logic.mkImpl(assumption, logic.mkAnd({candidate, getNextVersion(candidate)}));
-        assumedSources.push(source);
+        PTRef source1 = logic.mkAnd(assumption, candidate);
+        PTRef source2 = logic.mkAnd(assumption, getNextVersion(candidate));
+        assumedSources1.push(source1);
+        assumedSources2.push(source2);
         PTRef notTarget = logic.mkNot(shiftOnlyNextVars(candidate));
         assumedTargets.push(logic.mkImpl(assumption, notTarget));
 
-        // std::cerr << logic.pp(assumption) << " := " << logic.pp(candidate) << std::endl;
+        // assert assumptions
         bool added = solver.tryAssertNamedProp(assumption, name);
         assert(added);
     }
 
-    PTRef source = logic.mkOr(assumedSources);
-    PTRef target = logic.mkAnd(assumedTargets);
-
     PTRef absTrans = getLevelTransition(power);
-    PTRef body = logic.mkAnd({absTrans, getNextVersion(absTrans), source});
-    PTRef bodyOrTrans = logic.mkOr(shiftOnlyNextVars(transition), body);
-    solver.assertProp(bodyOrTrans);
+    PTRef inductiveStep = \
+        logic.mkAnd({
+                absTrans, getNextVersion(absTrans),
+                logic.mkOr(assumedSources1),
+                logic.mkOr(assumedSources2)
+            });
+    PTRef base = logic.mkOr(identity, transition);
+    PTRef baseOrindStep = \
+        logic.mkOr(shiftOnlyNextVars(base), inductiveStep);
+    solver.assertProp(baseOrindStep);
+
+    PTRef target = logic.mkAnd(assumedTargets);
     solver.assertProp(target);
 
     auto res = solver.check();
@@ -780,8 +864,10 @@ PTRef TPABasic::generalize(unsigned short power, PTRef lemma) const {
     assert(inductiveDisjs.size() > 0);
     auto newLemma = logic.mkOr(inductiveDisjs);
 
-    TRACE(3, "[GENERALIZE] Old Lemma: " << logic.pp(lemma));
-    TRACE(3, "[GENERALIZE] New Lemma: " << logic.pp(newLemma));
+    TRACE(3, "==== [GENERALIZE] Old Lemma: " << logic.pp(lemma));
+    TRACE(3, "==== [GENERALIZE] New Lemma: " << logic.pp(newLemma));
+
+    assert(checkLemma(power, newLemma, true));
 
     return newLemma;
 }
@@ -1344,19 +1430,25 @@ void TPABasic::storeLevelTransition(unsigned short power, PTRef tr) {
         transitionHierarchy.push_back({});
     }
 
+    vec<PTRef> allTr = TermUtils(logic).getTopLevelConjuncts(tr);
+
 #if PROPAGATE || INDITP
     for (auto i = 0; i <= power; ++i) {
         auto& level = transitionHierarchy[i];
-        if (std::find(level.begin(), level.end(), tr) == level.end()) {
-            TRACE(2, "[+] Adding " << tr.x << " in TA " << i);
-            transitionHierarchy[i].push(tr);
-        } else {
-            TRACE(2, "   Trying to add the same lemma again. Skipping...");
-            // TODO: skip also asserting in the solver.
+        for (auto t : allTr) {
+            if (std::find(level.begin(), level.end(), t) == level.end()) {
+                TRACE(2, "[+] Adding " << t.x << " in TA " << i);
+                transitionHierarchy[i].push(t);
+            } else {
+                TRACE(4, "   Trying to add the same lemma again. Skipping...");
+                // TODO: skip also asserting in the solver.
+            }
         }
     }
 #else
-    transitionHierarchy[power].push(tr);
+    for (auto t : allTr) {
+        transitionHierarchy[power].push(t);
+    }
 #endif
 
     reachabilitySolvers.growTo(power + 2, nullptr);
@@ -1397,7 +1489,7 @@ VerificationAnswer TPABasic::checkPower(unsigned short power) {
         TRACE(1, "System is safe up to <=2^" << power + 1 << "steps.");
         // Check if we have not reached fixed point.
 #if PROPAGATE
-        bool fixpoint = propagateTransitions();
+        bool fixpoint = propagateTransitions(power + 1);
         if (fixpoint) { return VerificationAnswer::SAFE; }
 #endif
         bool fixedPointReached = checkLessThanFixedPoint(power + 1);
@@ -1549,7 +1641,7 @@ TPABasic::QueryResult TPABasic::reachabilityQuery(PTRef from, PTRef to, unsigned
     }
 }
 
-bool TPABasic::propagateTransitions() {
+bool TPABasic::propagateTransitions(unsigned short power) {
     TRACE(2, "[->] Trying to propagate lemmas...")
     SMTSolver solver(logic, SMTSolver::WitnessProduction::NONE);
     for (auto i = 0; i < transitionHierarchy.size() - 1; ++i) {
@@ -1585,7 +1677,12 @@ bool TPABasic::propagateTransitions() {
             // ANNA: TODO: add a flag to avoid searching it in previous levels
             storeLevelTransition(i + 1, lemma);
         }
-        if (allPropagated) {
+        if (i < power and allPropagated) {
+            explanation.invariantType = SafetyExplanation::TransitionInvariantType::UNRESTRICTED;
+            explanation.relationType = TPAType::LESS_THAN;
+            explanation.fixedPointType = SafetyExplanation::FixedPointType::RIGHT;
+            explanation.inductivnessPowerExponent = 0;
+            explanation.safeTransitionInvariant = getLevelTransition(i);
             return true;
         }
         solver.pop();
