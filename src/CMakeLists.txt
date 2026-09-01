@@ -44,6 +44,9 @@ target_sources(golem_lib
     PRIVATE engine/Spacer.cc
     PRIVATE engine/SymbolicExecution.cc
     PRIVATE engine/TPA.cc
+    PRIVATE engine/TPABase.cc
+    PRIVATE engine/TPABasic.cc
+    PRIVATE engine/TPASplit.cc
     PRIVATE engine/TRL.cc
     PRIVATE engine/TransitionSystemEngine.cc
     PRIVATE TransitionSystem.cc
