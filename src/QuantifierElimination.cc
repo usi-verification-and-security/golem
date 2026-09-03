@@ -41,6 +41,7 @@ QEResult eliminate_aux(Logic & logic, PTRef fla, vec<PTRef> const & vars, QEOpti
         if (outer_res != SMTSolver::Answer::SAT) {
             throw std::logic_error("Error in solver during quantifier elimination");
         }
+        if (limits.max_mbp > 0 and outer_iter > limits.max_mbp) break;
         ++outer_iter;
         auto model = outer_solver.getModel();
         ModelBasedProjection mbp(logic);

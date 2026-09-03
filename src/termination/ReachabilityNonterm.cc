@@ -389,7 +389,6 @@ PTRef getId(const std::vector<PTRef> & vars, Logic & logic) {
 
 PTRef constructTransitionInvariantCandidates(PTRef init, PTRef transition, PTRef sink, int depth, Logic & logic,
                                              const std::vector<PTRef> & vars) {
-    SMTSolver solver(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
     PTRef id = getId(vars, logic);
     PTRef transitionOrId = logic.mkOr(transition, id);
     std::vector deterministic_trace{transition};
@@ -408,11 +407,10 @@ PTRef constructTransitionInvariantCandidates(PTRef init, PTRef transition, PTRef
         for (auto var : vars) {
             temp_vars.push(TimeMachine(logic).sendVarThroughTime(var, depth - 1));
         }
-        solver.assertProp(logic.mkAnd(init, trace));
-        solver.check();
-        auto model = solver.getModel();
+        QEOptions options;
+        options.max_mbp = 10;
         checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(
-            ModelBasedProjection(logic).keepOnly(logic.mkAnd(init, trace), temp_vars, *model), 1));
+            QuantifierElimination(logic).keepOnly(logic.mkAnd(init, trace), temp_vars, options).under, 1));
     }
     checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(sink, depth));
     // sink is updated, representing states that are guaranteed to reach termination

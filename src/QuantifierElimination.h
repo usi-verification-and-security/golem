@@ -25,11 +25,12 @@ Options for quantifier elimination technique.
   overapproximation is not precise.
  */
 struct QEOptions {
-    QEOptions() : max_disjunctions_in_over(0), max_mbp_per_poly(0), compute_overapproximation(false) {}
+    QEOptions() : max_disjunctions_in_over(0), max_mbp_per_poly(0), max_mbp(0), compute_overapproximation(false) {}
     QEOptions(short max_disjunctions_in_over, short max_mbp_per_poly, bool compute_overapproximation)
         : max_disjunctions_in_over(max_disjunctions_in_over), max_mbp_per_poly(max_mbp_per_poly), compute_overapproximation(compute_overapproximation) {}
     short max_disjunctions_in_over;
     short max_mbp_per_poly;
+    short max_mbp;
     bool compute_overapproximation;
 };
 
