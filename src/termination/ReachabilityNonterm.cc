@@ -408,7 +408,7 @@ PTRef constructTransitionInvariantCandidates(PTRef init, PTRef transition, PTRef
             temp_vars.push(TimeMachine(logic).sendVarThroughTime(var, depth - 1));
         }
         QEOptions options;
-        options.max_mbp = 10;
+        options.max_mbp = 100;
         checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(
             QuantifierElimination(logic).keepOnly(logic.mkAnd(init, trace), temp_vars, options).under, 1));
     }
