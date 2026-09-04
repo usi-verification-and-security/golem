@@ -410,7 +410,7 @@ PTRef constructTransitionInvariantCandidates(PTRef init, PTRef transition, PTRef
         QEOptions options;
         options.max_mbp = 100;
         checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(
-            QuantifierElimination(logic).keepOnly(logic.mkAnd(init, trace), temp_vars), 1));
+            QuantifierElimination(logic).keepOnly(logic.mkAnd(init, trace), temp_vars, options).under, 1));
     }
     checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(sink, depth));
     // sink is updated, representing states that are guaranteed to reach termination
