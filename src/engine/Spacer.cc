@@ -16,19 +16,22 @@
 #include "utils/SmtSolver.h"
 #include "utils/InductiveInterpolants.h"
 
+#include <algorithm>
 #include <cstddef>
+#include <exception>
 #include <iostream>
 #include <memory>
 #include <queue>
+#include <stdexcept>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
 #define TRACE_LEVEL 2
-#define DEBUG 0
+#define DEBUG 1
 #define GENERALIZE 1
-#define BOTH 0
-#define INDITP 0
+#define BOTH 1
+#define INDITP 1
 #define MAYPO 0
 #define CC 1
 #define BMBP 1
@@ -45,6 +48,19 @@ struct SpacerStats {
     void setBound(std::size_t nr) { currentBound = nr; }
     void print() { std::cerr << "[STATS] NR PUSHES: " << nr_push << std::endl
                              << "[STATS] BOUND: " << currentBound << std::endl; }
+};
+
+struct GuardVar {
+    SymRef vertex;
+    PTRef baseGuard;
+    std::size_t instance;
+    PTRef get(Logic& logic) const {
+        return VersionManager(logic).baseFormulaToSource(baseGuard, instance);
+    }
+    PTRef getGuardedVersion(Logic& logic, PTRef phi) const {
+        return VersionManager(logic).
+            baseFormulaToSource(logic.mkImpl(baseGuard, phi), instance);
+    }
 };
 
 class ApproxMap {
@@ -118,7 +134,6 @@ class OverApproxMap : public ApproxMap {
 public:
     std::unordered_set<PTRef, PTRefHash> indLearnt;
 };
-
 
 const unsigned short MAY_PO_GAS = 3; // nr of predecessors allowed on a may pos
 const unsigned short TRIGGER_MAY_PO = 3; // nr of visits before adding may pos
@@ -449,13 +464,19 @@ class SpacerContext {
 
     PTRef getEdgeMustSummary(EId eid, std::size_t bound) const;
 
-    PTRef getEdgeTransition(EId eid) const;
+    PTRef getEdgeTransition(EId eid, std::vector<GuardVar>& guadVars) const;
 
-    PTRef getEdgeGuardedMaySummary(EId eid, std::size_t bound) const;
+    PTRef getGuardedMaySummary(const std::vector<GuardVar>& guards, std::size_t bound) const;
+    PTRef getGuardedMaySummary(const GuardVar& guard, std::size_t bound) const;
 
     PTRef getEdgeMaySummary(EId eid, std::size_t bound) const;
 
+    // For debugging
+    PTRef getEdgeMaySummaryWithNewLemma(EId eid, std::size_t bound, SymRef v, PTRef lemma) const;
+
     PTRef getEdgeMixedSummary(EId eid, std::size_t bound, std::size_t lastMayIndex) const;
+
+    bool checkNewLemma(SymRef v, std::size_t bound, PTRef lemma) const;
 
     std::vector<EId> const & incomingEdges(SymRef v) const;
 
@@ -486,10 +507,11 @@ class SpacerContext {
         PTRef interpolant = PTRef_Undef;
     };
     ItpQueryResult interpolatingSat(PTRef A, PTRef B);
-    ItpQueryResult inductiveItp(PTRef T, PTRef A, PTRef B, PTRef guardVariable);
+    ItpQueryResult inductiveItp(PTRef maySumm, PTRef trans, const std::vector<GuardVar>& guardVariables, PTRef phi);
 
-    PTRef generalize(PTRef lemma, PTRef maySumm, PTRef transitions, PTRef guardVariable);
-    PTRef generalize_frame(PTRef lemma, const vec<PTRef>& maySumm, PTRef transitions, PTRef guardVariable);
+    PTRef inductiveConflict(PTRef maySumm, PTRef trans, const std::vector<GuardVar>& guardVariables, PTRef phi);
+
+    PTRef generalize(PTRef lemma, PTRef maySumm, PTRef transitions, const std::vector<GuardVar>& guardVariables);
 
     bool checkMustReachability(std::vector<EId> const & edges, ProofObligationCore const & pob);
 
@@ -582,6 +604,20 @@ VerificationResult SpacerContext::run() {
 std::vector<EId> const & SpacerContext::incomingEdges(SymRef v) const {
     return adjacencyLists.getIncomingEdgesFor(v);
 }
+
+bool SpacerContext::checkNewLemma(SymRef v, std::size_t bound, PTRef lemma) const {
+    const auto& edges = incomingEdges(v);
+    vec<PTRef> maySummaries;
+    for (auto eid : edges) {
+        maySummaries.push(getEdgeMaySummaryWithNewLemma(eid, bound, v, lemma));
+    }
+    PTRef edgeTransitions = logic.mkOr(maySummaries);
+    PTRef lemmaPrime = VersionManager(logic).baseFormulaToTarget(lemma);
+    SMTSolver debug_solver(logic);
+    debug_solver.assertProp(edgeTransitions);
+    debug_solver.assertProp(logic.mkNot(lemmaPrime));
+    return debug_solver.check() == SMTSolver::Answer::UNSAT;
+ }
 
 SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t currentBound) {
     TRACE(1, "\n\n++++++++++++++++++++++++++++++++\n\nRunning bounded safety check at level " << currentBound)
@@ -699,34 +735,41 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
 
         if (newProofObligations.empty()) {
             // all edges are blocked; compute new lemma blocking the current proof obligation
-            // TODO:
+
             vec<PTRef> edgeRepresentations;
             edgeRepresentations.capacity(edges.size());
+            std::vector<GuardVar> sourceGuards;
             for (EId eid : edges) {
-                edgeRepresentations.push(getEdgeTransition(eid));
+                edgeRepresentations.push(getEdgeTransition(eid, sourceGuards));
             }
-            auto transitions = logic.mkOr(edgeRepresentations);
+            PTRef transitions = logic.mkOr(std::move(edgeRepresentations));
+            PTRef maySummary = getGuardedMaySummary(sourceGuards, pob.bound - 1);
 
-            vec<PTRef> maySummaries;
-            maySummaries.capacity(edges.size());
-            for (EId eid : edges) {
-                maySummaries.push(getEdgeGuardedMaySummary(eid, pob.bound - 1));
+            PTRef edgesMaySummary = logic.mkAnd(maySummary, transitions);
+
+            std::vector<GuardVar> inductiveSources;
+            for (const auto& sourceGuard : sourceGuards) {
+                if (sourceGuard.vertex == pob.vertex) {
+                    inductiveSources.push_back(sourceGuard);
+                }
             }
-            PTRef maySummary = logic.mkAnd(maySummaries);
+            bool inductiveChance = not inductiveSources.empty();
 
-            PTRef edgeMaySummary = logic.mkAnd(maySummary, transitions);
-
-            auto guardVar = VersionManager(logic).baseFormulaToSource(graph.getVertexGuardVariable(pob.vertex));
-
+            // DEBUG
             auto allVars = TermUtils(logic).getVars(transitions);
-            bool inductiveChance = (std::find(allVars.begin(), allVars.end(), guardVar) != allVars.end());
+            auto isInTrans = [this, &allVars](GuardVar guardVar) {
+                PTRef guard = guardVar.get(logic);
+                return std::find(allVars.begin(), allVars.end(), guard) != allVars.end();
+            };
+            assert(not inductiveChance or std::any_of(inductiveSources.begin(), inductiveSources.end(), isInTrans));
+            // end DEBUG
 
             PTRef newLemma = PTRef_Undef;
 
             if (inductiveChance) {
 
 #if BOTH || !INDITP
-                auto originalRes = interpolatingSat(edgeMaySummary, pob.constraint);
+                auto originalRes = interpolatingSat(edgesMaySummary, pob.constraint);
                 auto originalNewLemma = VersionManager(logic).targetFormulaToBase(originalRes.interpolant);
                 assert(originalRes.answer == QueryAnswer::UNSAT);
                 if (originalRes.answer != QueryAnswer::UNSAT) {
@@ -739,7 +782,7 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
                       << " nr vars: " << TermUtils(logic).getVars(originalNewLemma).size());
 
 #if GENERALIZE
-                originalNewLemma = generalize(originalNewLemma, maySummary, transitions, guardVar);
+                originalNewLemma = generalize(originalNewLemma, maySummary, transitions, inductiveSources);
                 TRACE(1,
                       "---- [ITP] Generalization: " << originalNewLemma.x
                       // << " disj? " << is_clause(logic, originalNewLemma)
@@ -748,16 +791,20 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
 #endif
                 TRACE(2,
                       "Lemma for " << pob.vertex.x << " at level " << pob.bound << " - "
-                      << logic.pp(originalNewLemma))
+                      << logic.pp(originalNewLemma));
+
+                if (not checkNewLemma(pob.vertex, pob.bound - 1, originalNewLemma)) {
+                    throw std::logic_error("After generalization, originalNewLemma is not consistent with edeges!");
+                }
 #endif
 
 #if INDITP
-                auto indRes = inductiveItp(transitions, maySummary, pob.constraint, guardVar);
+                auto indRes = inductiveItp(maySummary, transitions, inductiveSources, pob.constraint);
                 assert(indRes.answer == QueryAnswer::UNSAT);
                 if (indRes.answer != QueryAnswer::UNSAT) {
                     throw std::logic_error("All edges should have been blocked, but they are not!");
                 }
-                auto indNewLemma = VersionManager(logic).sourceFormulaToBase(indRes.interpolant);
+                auto indNewLemma = indRes.interpolant;
 
                 // Add the new ind Lemma
                 TRACE(1,
@@ -766,7 +813,11 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
                       << " nr disj: " << TermUtils(logic).getTopLevelDisjuncts(indNewLemma).size()
                       << " nr vars: " << TermUtils(logic).getVars(indNewLemma).size());
 
-                indNewLemma = generalize(indNewLemma, maySummary, transitions, guardVar);
+                if (not checkNewLemma(pob.vertex, pob.bound - 1, indNewLemma)) {
+                    throw std::logic_error("indNewLemma is not consistent with edeges!");
+                }
+
+                indNewLemma = generalize(indNewLemma, maySummary, transitions, inductiveSources);
                 TRACE(1,
                       "---- [IND] Generalization: " << indNewLemma.x
                       // << " disj? " << is_clause(logic, indNewLemma)
@@ -775,24 +826,21 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
                 TRACE(2,
                       "Lemma for " << pob.vertex.x << " at level " << pob.bound << " - "
                       << logic.pp(indNewLemma))
+
+                if (not checkNewLemma(pob.vertex, pob.bound - 1, indNewLemma)) {
+                    throw std::logic_error("After generalization, indNewLemma is not consistent with edeges!");
+                }
+
 #if BOTH
                 bool strongerOldLemma = not implies(originalNewLemma, indNewLemma, logic);
-                bool strongerMaySumm = \
-                    not implies(edgeMaySummary,
-                                VersionManager(logic).baseFormulaToTarget(indNewLemma),
-                                logic);
 
                 TRACE(2, "=================== INDUCTIVE ITP!! ====================");
-                if (strongerMaySumm)
-                    TRACE(1, ">>>> NEW LEMMA DOES NOT OVERAPPROX MAY SUMM");
                 if (strongerOldLemma)
-                    TRACE(1, ">>>> NEW LEMMA IS STRONGER");
-                if (strongerOldLemma or strongerMaySumm) {
-                    newLemma = indNewLemma;
-                } else {
-                    newLemma = originalNewLemma;
-                }
-                addMaySummary(pob.vertex, pob.bound, newLemma, strongerOldLemma or strongerMaySumm);
+                    TRACE(1, ">>>> NEWLEMMA IS STRONGER OR INCOMPARABLE ");
+                newLemma = indNewLemma;
+                addMaySummary(pob.vertex, pob.bound, newLemma, true);
+                newLemma = originalNewLemma;
+                addMaySummary(pob.vertex, pob.bound, newLemma, false);
 #else // not BOTH
                 newLemma = indNewLemma;
                 addMaySummary(pob.vertex, pob.bound, newLemma, true);
@@ -804,7 +852,7 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
             }
             else {
                 // This is the usual path
-                auto originalRes = interpolatingSat(edgeMaySummary, pob.constraint);
+                auto originalRes = interpolatingSat(edgesMaySummary, pob.constraint);
                 auto originalNewLemma = VersionManager(logic).targetFormulaToBase(originalRes.interpolant);
                 assert(originalRes.answer == QueryAnswer::UNSAT);
                 if (originalRes.answer != QueryAnswer::UNSAT) {
@@ -906,20 +954,130 @@ SpacerContext::ItpQueryResult SpacerContext::interpolatingSat(PTRef A, PTRef B) 
     return qres;
 }
 
-SpacerContext::ItpQueryResult SpacerContext::inductiveItp(PTRef T, PTRef A, PTRef B, PTRef guardVariable) {
+PTRef SpacerContext::inductiveConflict(PTRef maySummary, PTRef transition, const std::vector<GuardVar>& guardVariables, PTRef phi) {
+    TermUtils termUtils(logic);
+
+    ModelBasedProjection mbp_solver(logic);
+
+    SMTSolver cti_solver(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
+    cti_solver.assertProp(maySummary);
+    cti_solver.assertProp(transition);
+
+    vec<PTRef> xsPrime = termUtils.getVars(phi);
+    vec<PTRef> xs;
+    // TODO this could be improved
+    for (PTRef var : termUtils.getVars(logic.mkAnd(maySummary, transition))) {
+        if (std::find(xsPrime.begin(), xsPrime.end(), var) == xsPrime.end()) {
+            xs.push(var);
+        }
+    }
+
+    // TODO: incrementality
+    auto get_local_unsatcore = [&](PTRef mbp) -> std::pair<PTRef, PTRef> {
+        SMTSolver itp_solver(logic, SMTSolver::WitnessProduction::ONLY_UNSAT_CORE);
+        itp_solver.assertProp(phi);
+        int counter = 0;
+        for (auto conj : termUtils.getTopLevelConjuncts(mbp)) {
+            itp_solver.tryAssertNamedProp(conj, std::to_string(counter++));
+        }
+        // itp_solver.push();
+        // std::cerr << "ITP(mbp, B) with mbp := " << logic.printTerm(mbp) << std::endl;
+        auto res = itp_solver.check();
+        if (res != SMTSolver::Answer::UNSAT) {
+            throw std::logic_error("Error in UCORE: result is not unsatisfiable.");
+        }
+        auto core = itp_solver.getUnsatCore();
+        const auto& terms = core->getTerms();
+        // vec<PTRef> negatedTerms;
+        // negatedTerms.capacity(terms.size());
+        // for (PTRef term : terms) { negatedTerms.push(logic.mkNot(term)); }
+        // auto interpolantPrime = logic.mkOr(negatedTerms);
+        auto interpolantPrime = logic.mkAnd(terms);
+        auto interpolant = VersionManager(logic).targetFormulaToBase(interpolantPrime);
+
+        // assert(is_clause(is_clause, interpolant));
+        // itp_solver.pop();
+        return {interpolant, interpolantPrime};
+    };
+
+    // TODO: incrementality
+    auto get_local_itp = [&](PTRef mbp) -> std::pair<PTRef, PTRef> {
+        SMTSolver itp_solver(logic, SMTSolver::WitnessProduction::ONLY_INTERPOLANTS);
+        itp_solver.getConfig().setSimplifyInterpolant(4);
+        itp_solver.assertProp(mbp);
+        itp_solver.assertProp(phi);
+        // itp_solver.push();
+        // std::cerr << "ITP(mbp, B) with mbp := " << logic.printTerm(mbp) << std::endl;
+        auto res = itp_solver.check();
+        if (res != SMTSolver::Answer::UNSAT) {
+            throw std::logic_error("Error in ITP: result is not unsatisfiable.");
+        }
+        auto itpCtx = itp_solver.getInterpolationContext();
+        std::vector<PTRef> itps;
+        ipartitions_t mask = 1;
+        itpCtx->getSingleInterpolant(itps, mask);
+        PTRef interpolantPrime = itps[0];
+        PTRef interpolant = VersionManager(logic).targetFormulaToBase(interpolantPrime);
+        // auto ok = is_clause(logic, interpolant);
+        // assert(is_clause(is_clause, interpolant));
+        // itp_solver.pop();
+        return {interpolant, interpolantPrime};
+    };
+
+    auto lemma = logic.getTerm_false();
+    auto interpolantPrime = logic.getTerm_false();
+
+    do {
+        cti_solver.assertProp(logic.mkNot(interpolantPrime));
+
+        cti_solver.push();
+        for (const auto& guard : guardVariables) {
+            cti_solver.assertProp(logic.mkImpl(guard.get(logic),
+                                               VersionManager(logic).baseFormulaToSource(lemma, guard.instance)));
+        }
+        // cti_solver.assertProp(logic.mkNot(interpolantPrime));
+        // TODO: exploit incrementality
+        auto res = cti_solver.check();
+        if (res == SMTSolver::Answer::UNSAT) { break; }
+        if (res != SMTSolver::Answer::SAT) {
+            throw std::logic_error("Error in looking for CTIs.");
+        }
+        auto cti = cti_solver.getModel();
+        PTRef implicant = mbp_solver.getModelBasedImplicant(logic.mkAnd(maySummary, transition), xs, *cti);
+        auto pair = get_local_itp(implicant);
+        // PTRef mbp = mbp_solver.keepOnly(logic.mkAnd(maySummary, transition), xsPrime, *cti);
+        // auto pair = get_local_unsatcore(mbp);
+        lemma = logic.mkOr(lemma, pair.first);
+        // auto pair = get_local_itp(logic.mkOr(interpolantPrime, implicant));
+        // lemma = pair.first;
+        interpolantPrime = pair.second;
+        cti_solver.pop();
+    } while (true);
+
+    if (logic.isAnd(lemma) or logic.isOr(lemma)) {
+        lemma = ::rewriteMaxArityAggresive(logic, lemma);
+        lemma = ::simplifyUnderAssignment_Aggressive(lemma, logic);
+    }
+
+    return lemma; 
+}
+
+SpacerContext::ItpQueryResult SpacerContext::inductiveItp(PTRef maySummary,
+                                                          PTRef transition,
+                                                          const std::vector<GuardVar>& guardVariables,
+                                                          PTRef phi) {
     SMTSolver solver(logic, SMTSolver::WitnessProduction::ONLY_INTERPOLANTS);
     solver.getConfig().setSimplifyInterpolant(4);
-    solver.assertProp(T);
-    solver.assertProp(A);
-    solver.assertProp(B);
+    solver.assertProp(maySummary);
+    solver.assertProp(transition);
+    solver.assertProp(phi);
     auto res = solver.check();
     ItpQueryResult qres;
     if (res == SMTSolver::Answer::SAT) {
         qres.answer = QueryAnswer::SAT;
     } else if (res == SMTSolver::Answer::UNSAT) {
         qres.answer = QueryAnswer::UNSAT;
-        auto toSource = [this](PTRef fla) { return VersionManager(logic).targetFormulaToSource(fla); };
-        qres.interpolant = inductiveConflict(logic, T, A, B, guardVariable, toSource);
+        qres.interpolant = inductiveConflict(maySummary, transition, guardVariables, phi);
     } else if (res == SMTSolver::Answer::UNKNOWN) {
         qres.answer = QueryAnswer::UNKNOWN;
     } else if (res == SMTSolver::Answer::ERROR) {
@@ -931,6 +1089,7 @@ SpacerContext::ItpQueryResult SpacerContext::inductiveItp(PTRef T, PTRef A, PTRe
     return qres;
 }
 
+#if 0
 PTRef SpacerContext::generalize_frame(PTRef lemma, const vec<PTRef>& frameLemmas, PTRef transition, PTRef guardVariable) {
     SMTSolver solver(logic, SMTSolver::WitnessProduction::ONLY_UNSAT_CORE);
     VersionManager vManager(logic);
@@ -965,24 +1124,36 @@ PTRef SpacerContext::generalize_frame(PTRef lemma, const vec<PTRef>& frameLemmas
 
     return neededFrameLemmas;
 }
+#endif
 
-PTRef SpacerContext::generalize(PTRef lemma, PTRef maySumm, PTRef transitions, PTRef guardVariable) {
+PTRef SpacerContext::generalize(PTRef lemma, PTRef maySumm, PTRef transitions, const std::vector<GuardVar>& guardVariables) {
     SMTSolver solver(logic, SMTSolver::WitnessProduction::ONLY_UNSAT_CORE);
     VersionManager vManager(logic);
 
     const auto& candidates = TermUtils(logic).getTopLevelDisjuncts(lemma);
-    vec<PTRef> assumedSources, assumedTargets;
-    std::map<PTRef, PTRef> mapping;
-    assumedSources.capacity(candidates.size());
+
+    if (candidates.size() == 0 or logic.isConstant(candidates[0])) {
+        return lemma;
+    }
+
+    vec<PTRef> assumedTargets;
     assumedTargets.capacity(candidates.size());
+    std::vector<vec<PTRef>> assumedSources;
+    assumedSources.resize(guardVariables.size());
+    std::map<PTRef, PTRef> mapping;
 
     static std::size_t i = 0;
     for (const auto candidate : candidates) {
         std::string name = "_assume#indgen#" + std::to_string(i++);
         PTRef assumption = logic.mkBoolVar(name.c_str());
         mapping[assumption] = candidate;
-        PTRef source = vManager.baseFormulaToSource(candidate);
-        assumedSources.push(logic.mkAnd(assumption, source));
+
+        for (auto gi = 0; gi < guardVariables.size(); ++gi) {
+            const GuardVar& guardVar = guardVariables[gi];
+            PTRef source = vManager.baseFormulaToSource(candidate, guardVar.instance);
+            assumedSources[gi].push(logic.mkAnd(assumption, source));
+        }
+
         PTRef notTarget = logic.mkNot(vManager.baseFormulaToTarget(candidate));
         assumedTargets.push(logic.mkImpl(assumption, notTarget));
 
@@ -991,7 +1162,12 @@ PTRef SpacerContext::generalize(PTRef lemma, PTRef maySumm, PTRef transitions, P
         assert(added);
     }
 
-    PTRef source = logic.mkImpl(guardVariable, logic.mkOr(assumedSources));
+    vec<PTRef> allSources; allSources.capacity(guardVariables.size());
+    for (auto gi = 0; gi < guardVariables.size(); ++gi) {
+        const GuardVar& guardVar = guardVariables[gi];
+        allSources.push(logic.mkImpl(guardVar.get(logic), logic.mkOr(assumedSources[gi])));
+    }
+    PTRef source = logic.mkAnd(allSources);
     PTRef target = logic.mkAnd(assumedTargets);
 
     solver.assertProp(maySumm);
@@ -1015,11 +1191,14 @@ PTRef SpacerContext::generalize(PTRef lemma, PTRef maySumm, PTRef transitions, P
 
 #if DEBUG
     SMTSolver debug_solver(logic);
-    for (PTRef frameLemma : frameLemmas) { debug_solver.assertProp(frameLemma); }
+    debug_solver.assertProp(maySumm);
     debug_solver.assertProp(transitions);
-    // std::cerr << "Checking if NEW lemma is inductive " << std::endl;
     debug_solver.push();
-    debug_solver.assertProp(logic.mkImpl(guardVariable, vManager.baseFormulaToSource(newLemma)));
+    for (auto gi = 0; gi < guardVariables.size(); ++gi) {
+        const GuardVar& guardVar = guardVariables[gi];
+        debug_solver.assertProp(logic.mkImpl(guardVar.get(logic),
+                                             vManager.baseFormulaToSource(newLemma, guardVar.instance)));
+    }
     debug_solver.assertProp(logic.mkNot(vManager.baseFormulaToTarget(newLemma)));
     res = debug_solver.check();
     if (res != SMTSolver::Answer::UNSAT) {
@@ -1311,30 +1490,51 @@ PTRef SpacerContext::getEdgeMustSummary(EId eid, std::size_t bound) const {
     return logic.mkAnd(std::move(bodyComponents));
 }
 
-PTRef SpacerContext::getEdgeTransition(EId eid) const {
+PTRef SpacerContext::getEdgeTransition(EId eid, std::vector<GuardVar>& sourceGuards) const {
     PTRef edgeLabel = graph.getEdgeLabel(eid);
     vec<PTRef> bodyComponents{edgeLabel};
     auto const & sources = graph.getSources(eid);
     for (unsigned sourceIndex = 0; sourceIndex < sources.size(); ++sourceIndex) {
-        auto guardVar = graph.getVertexGuardVariable(sources[sourceIndex]);
+        auto source = sources[sourceIndex];
+        auto guardVar = graph.getVertexGuardVariable(source);
         auto instance = vertexInstances.getInstanceNumber(eid, sourceIndex);
         bodyComponents.push(VersionManager(logic).baseFormulaToSource(guardVar, instance));
+        // TODO: use std::set
+        if (not std::any_of(sourceGuards.begin(), sourceGuards.end(),
+                            [guardVar, instance](const GuardVar& gVar) {
+                                return gVar.baseGuard == guardVar and gVar.instance == instance;
+                            })) {
+            sourceGuards.push_back(GuardVar{source, guardVar, instance});
+        }
     }
     return logic.mkAnd(std::move(bodyComponents));
 }
 
-PTRef SpacerContext::getEdgeGuardedMaySummary(EId eid, std::size_t bound) const {
-    vec<PTRef> bodyComponents;
+
+PTRef SpacerContext::getGuardedMaySummary(const GuardVar& guard, std::size_t bound) const {
+    PTRef maySummary = getMaySummary(guard.vertex, bound);
+    return guard.getGuardedVersion(logic, maySummary);
+}
+
+PTRef SpacerContext::getGuardedMaySummary(const std::vector<GuardVar>& guards, std::size_t bound) const {
+    vec<PTRef> summaries;
+    summaries.capacity(guards.size());
+    for (const auto& guard : guards) {
+        summaries.push(getGuardedMaySummary(guard, bound));
+    }
+    return logic.mkAnd(std::move(summaries));
+}
+
+PTRef SpacerContext::getEdgeMaySummary(EId eid, std::size_t bound) const {
+    PTRef edgeLabel = graph.getEdgeLabel(eid);
+    vec<PTRef> bodyComponents{edgeLabel};
     auto const & sources = graph.getSources(eid);
-    bodyComponents.capacity(sources.size());
     for (unsigned sourceIndex = 0; sourceIndex < sources.size(); ++sourceIndex) {
         auto source = sources[sourceIndex];
         PTRef maySummary = getMaySummary(source, bound);
-        PTRef guardVar = graph.getVertexGuardVariable(source);
-        PTRef guardedMaySumm = logic.mkImpl(guardVar, maySummary);
         auto instance = vertexInstances.getInstanceNumber(eid, sourceIndex);
         PTRef summaryAsSource =
-            VersionManager(logic).baseFormulaToSource(guardedMaySumm, instance);
+            VersionManager(logic).baseFormulaToSource(maySummary, instance);
         //        std::cout << source.id << " with summary " << logic.pp(summaryAsSource) << '\n';
         bodyComponents.push(summaryAsSource);
     }
@@ -1342,8 +1542,24 @@ PTRef SpacerContext::getEdgeGuardedMaySummary(EId eid, std::size_t bound) const 
     return logic.mkAnd(std::move(bodyComponents));
 }
 
-PTRef SpacerContext::getEdgeMaySummary(EId eid, std::size_t bound) const {
-    return logic.mkAnd(getEdgeTransition(eid), getEdgeGuardedMaySummary(eid, bound));
+PTRef SpacerContext::getEdgeMaySummaryWithNewLemma(EId eid, std::size_t bound, SymRef v, PTRef lemma) const {
+    PTRef edgeLabel = graph.getEdgeLabel(eid);
+    vec<PTRef> bodyComponents{edgeLabel};
+    auto const & sources = graph.getSources(eid);
+    for (unsigned sourceIndex = 0; sourceIndex < sources.size(); ++sourceIndex) {
+        auto source = sources[sourceIndex];
+        PTRef maySummary = getMaySummary(source, bound);
+        if (source == v) {
+            maySummary = logic.mkAnd(maySummary, lemma);
+        }
+        auto instance = vertexInstances.getInstanceNumber(eid, sourceIndex);
+        PTRef summaryAsSource =
+            VersionManager(logic).baseFormulaToSource(maySummary, instance);
+        //        std::cout << source.id << " with summary " << logic.pp(summaryAsSource) << '\n';
+        bodyComponents.push(summaryAsSource);
+    }
+    //    std::cout << std::flush;
+    return logic.mkAnd(std::move(bodyComponents));
 }
 
 PTRef SpacerContext::getEdgeMixedSummary(EId eid, std::size_t bound, std::size_t lastMayIndex) const {
