@@ -28,9 +28,13 @@
 #include <vector>
 
 #define TRACE_LEVEL 2
-#define DEBUG 1
+#define DEBUG 0
 #define GENERALIZE 1
 #define GDOWN 1
+#define RELIND 1
+#define RELIND_LATE 1 // only try relative induction when the pob HAS predecessors
+#define RELIND_GROW 0 // 0 = ...Bool (drop pob conjuncts); 1 = grow-from-init variant
+#define RELIND_MAX_ITERATIONS 20 // budget for the grow-from-init loop
 #define BOTH 0
 #define INDITP 0
 #define MAYPO 0
@@ -517,6 +521,10 @@ class SpacerContext {
     PTRef generalize_down(PTRef lemma, PTRef maySumm, PTRef transitions,
                           const std::vector<GuardVar>& guardVariables);
 
+    PTRef tryBlockWithRelativeInductionBool(ProofObligationCore const & pob) const;
+
+    PTRef tryBlockWithRelativeInduction(ProofObligationCore const & pob) const;
+
     bool checkMustReachability(std::vector<EId> const & edges, ProofObligationCore const & pob);
 
     bool mayReachable(EId eid, PTRef targetConstraint, std::size_t bound) const;
@@ -662,7 +670,7 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
             pqueue.pop();
             continue;
         }
-
+ 
         std::vector<ProofObligation> newProofObligations;
         bool has_predecessors = false;
         for (EId edgeId : edges) {
@@ -690,6 +698,35 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
             pqueue.pop();
             continue;
         }
+
+#if RELIND
+        // Relative induction is only worth trying when the pob actually HAS predecessors.
+        if (not newProofObligations.empty()) {
+#if RELIND_GROW
+            PTRef relindLemma = tryBlockWithRelativeInduction(pob);
+#else
+            PTRef relindLemma = tryBlockWithRelativeInductionBool(pob);
+#endif
+            if (relindLemma != PTRef_Undef) {
+                if (not checkNewLemma(pob.vertex, pob.bound - 1, relindLemma)) {
+                    throw std::logic_error("After RelInd, newLemma is not consistent with edeges!");
+                }
+                TRACE(1, "[RELIND] Spared POBS: " << newProofObligations.size());
+                TRACE(2, " New lemma : " << logic.pp(relindLemma));
+                addMaySummary(pob.vertex, pob.bound, relindLemma, false);
+                if (pob.parent != nullptr) {
+                    pob.parent->blockingLemmas.insert(pob.vertex, relindLemma);
+                }
+                if (pob.isMayPO) {
+                    TRACE(1, "    $$$$$$$$$$$$ MAY PO WAS BLOCKED $$$$$$$$$$$$");
+                }
+                if (pob.bound < lowestChangedLevel) { lowestChangedLevel = pob.bound; }
+                TRACE(1, "[x] Blocked POB with new lemma at level " << pob.bound);
+                pqueue.pop();
+                continue;
+            }
+        }
+#endif
 
 #if MAYPO
         // [MayPO] Collect MayPO as a convex over-approximation of the predecessors
@@ -1324,6 +1361,330 @@ PTRef SpacerContext::generalize_down(PTRef lemma, PTRef maySumm, PTRef transitio
     debug_solver.assertProp(logic.mkNot(vManager.baseFormulaToTarget(newLemma)));
     if (debug_solver.check() != SMTSolver::Answer::UNSAT) {
         throw std::logic_error("Error in generalize_down: newLemma is not inductive!");
+    }
+#endif
+
+    return newLemma;
+}
+
+PTRef SpacerContext::tryBlockWithRelativeInduction(ProofObligationCore const & pob) const {
+    const auto& edges = incomingEdges(pob.vertex);
+    vec<PTRef> edgeRepresentations;
+    edgeRepresentations.capacity(edges.size());
+    std::vector<GuardVar> sourceGuards;
+    for (EId eid : edges) {
+        edgeRepresentations.push(getEdgeTransition(eid, sourceGuards));
+    }
+    PTRef transition = logic.mkOr(std::move(edgeRepresentations));
+    PTRef maySummary = getGuardedMaySummary(sourceGuards, pob.bound - 1);
+
+    std::vector<GuardVar> guardVariables;
+    for (const auto& sourceGuard : sourceGuards) {
+        if (sourceGuard.vertex == pob.vertex) {
+            guardVariables.push_back(sourceGuard);
+        }
+    }
+    if (guardVariables.empty()) {
+        // no inductive edge
+        return PTRef_Undef;
+    }
+
+    PTRef phi = pob.constraint; // already the target (primed) version
+
+    TermUtils termUtils(logic);
+
+    ModelBasedProjection mbp_solver(logic);
+
+    SMTSolver cti_solver(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
+    cti_solver.assertProp(maySummary);
+    cti_solver.assertProp(transition);
+
+    vec<PTRef> xsPrime = termUtils.getVars(phi);
+    vec<PTRef> xs;
+    // TODO this could be improved
+    for (PTRef var : termUtils.getVars(logic.mkAnd(maySummary, transition))) {
+        if (std::find(xsPrime.begin(), xsPrime.end(), var) == xsPrime.end()) {
+            xs.push(var);
+        }
+    }
+
+    // TODO: incrementality
+    auto get_local_unsatcore = [&](PTRef mbp) -> std::pair<PTRef, PTRef> {
+        SMTSolver itp_solver(logic, SMTSolver::WitnessProduction::ONLY_UNSAT_CORE);
+        itp_solver.assertProp(mbp);
+        int counter = 0;
+        for (auto conj : termUtils.getTopLevelConjuncts(phi)) {
+            itp_solver.tryAssertNamedProp(conj, std::to_string(counter++));
+        }
+        // itp_solver.push();
+        // std::cerr << "ITP(mbp, B) with mbp := " << logic.printTerm(mbp) << std::endl;
+        auto res = itp_solver.check();
+        if (res != SMTSolver::Answer::UNSAT) {
+            // Not an error here, unlike in inductiveConflict(): we never assumed phi to be
+            // one-step unreachable.  Every point of `mbp` has a predecessor in
+            // maySummary /\ transition, so a satisfiable pair witnesses that phi is
+            // reachable -- a counterexample to relative induction.  Report it upwards.
+            return {PTRef_Undef, PTRef_Undef};
+        }
+        auto core = itp_solver.getUnsatCore();
+        const auto& terms = core->getTerms();
+        // auto interpolantPrime = logic.mkAnd(terms);
+        vec<PTRef> negatedTerms;
+         negatedTerms.capacity(terms.size());
+        for (PTRef term : terms) { negatedTerms.push(logic.mkNot(term)); }
+        auto interpolantPrime = logic.mkOr(negatedTerms);
+        auto interpolant = VersionManager(logic).targetFormulaToBase(interpolantPrime);
+
+        // assert(is_clause(is_clause, interpolant));
+        // itp_solver.pop();
+        return {interpolant, interpolantPrime};
+    };
+
+    // TODO: incrementality
+    auto get_local_itp = [&](PTRef mbp) -> std::pair<PTRef, PTRef> {
+        SMTSolver itp_solver(logic, SMTSolver::WitnessProduction::ONLY_INTERPOLANTS);
+        itp_solver.getConfig().setSimplifyInterpolant(4);
+        itp_solver.assertProp(mbp);
+        itp_solver.assertProp(phi);
+        // itp_solver.push();
+        // std::cerr << "ITP(mbp, B) with mbp := " << logic.printTerm(mbp) << std::endl;
+        auto res = itp_solver.check();
+        if (res != SMTSolver::Answer::UNSAT) {
+            // See get_local_unsatcore above: a satisfiable pair is a counterexample to
+            // relative induction, not an error.
+            return {PTRef_Undef, PTRef_Undef};
+        }
+        auto itpCtx = itp_solver.getInterpolationContext();
+        std::vector<PTRef> itps;
+        ipartitions_t mask = 1;
+        itpCtx->getSingleInterpolant(itps, mask);
+        PTRef interpolantPrime = itps[0];
+        PTRef interpolant = VersionManager(logic).targetFormulaToBase(interpolantPrime);
+        // auto ok = is_clause(logic, interpolant);
+        // assert(is_clause(is_clause, interpolant));
+        // itp_solver.pop();
+        return {interpolant, interpolantPrime};
+    };
+
+    auto lemma = logic.getTerm_false();
+    auto interpolantPrime = logic.getTerm_false();
+
+    std::size_t iterations = 0;
+
+    do {
+        // ~lemma(x') accumulated incrementally: lemma is the disjunction of every
+        // interpolant found so far, so its negation is the conjunction of the negations.
+        cti_solver.assertProp(logic.mkNot(interpolantPrime));
+
+        cti_solver.push();
+        for (const auto& guard : guardVariables) {
+            cti_solver.assertProp(logic.mkImpl(guard.get(logic),
+                                               VersionManager(logic).baseFormulaToSource(lemma, guard.instance)));
+        }
+        // TODO: exploit incrementality
+        auto res = cti_solver.check();
+        if (res == SMTSolver::Answer::UNSAT) {
+            cti_solver.pop();
+            break; // lemma is inductive relative to the may summary, and lemma |= ~phi
+        }
+        if (res != SMTSolver::Answer::SAT) {
+            throw std::logic_error("Error in looking for CTIs.");
+        }
+        if (++iterations > RELIND_MAX_ITERATIONS) {
+            // Out of budget.  The partial lemma is NOT a valid summary: it neither
+            // over-approximates the post-image nor is it closed under the transition, so it
+            // must be discarded rather than handed to the caller.  Discarding is why
+            // aborting at any iteration is safe.
+            cti_solver.pop();
+            return PTRef_Undef;
+        }
+        auto cti = cti_solver.getModel();
+        PTRef implicant = mbp_solver.getModelBasedImplicant(logic.mkAnd(maySummary, transition), xs, *cti);
+        auto pair = get_local_itp(implicant);
+        // PTRef mbp = mbp_solver.keepOnly(logic.mkAnd(maySummary, transition), xsPrime, *cti);
+        // auto pair = get_local_unsatcore(mbp);
+        if (pair.first == PTRef_Undef) {
+            // The region we would have to cover intersects phi, so it cannot be added
+            // without breaking the invariant  lemma |= ~phi.  And the situation is
+            // monotone: as the lemma grows the source restriction (g -> lemma(x)) only
+            // weakens, so phi stays reachable and the loop can never close.  Give up and
+            // let the caller fall back to the predecessor rule.
+            cti_solver.pop();
+            return PTRef_Undef;
+        }
+        lemma = logic.mkOr(lemma, pair.first);
+        interpolantPrime = pair.second;
+        cti_solver.pop();
+    } while (true);
+
+    if (logic.isAnd(lemma) or logic.isOr(lemma)) {
+        lemma = ::rewriteMaxArityAggresive(logic, lemma);
+        lemma = ::simplifyUnderAssignment_Aggressive(lemma, logic);
+    }
+
+#if DEBUG
+    {
+        VersionManager vManager(logic);
+        SMTSolver debug_solver(logic);
+        debug_solver.push();
+        debug_solver.assertProp(vManager.baseFormulaToTarget(lemma));
+        debug_solver.assertProp(phi);
+        if (debug_solver.check() != SMTSolver::Answer::UNSAT) {
+            throw std::logic_error("Error in relind-grow: newLemma is not removing pob");
+        }
+        debug_solver.pop();
+        debug_solver.assertProp(maySummary);
+        debug_solver.assertProp(transition);
+        for (auto const & guardVar : guardVariables) {
+            debug_solver.assertProp(
+                logic.mkImpl(guardVar.get(logic), vManager.baseFormulaToSource(lemma, guardVar.instance)));
+        }
+        debug_solver.assertProp(logic.mkNot(vManager.baseFormulaToTarget(lemma)));
+        if (debug_solver.check() != SMTSolver::Answer::UNSAT) {
+            throw std::logic_error("Error in relind-grow: newLemma is not inductive!");
+        }
+    }
+#endif
+    return lemma;
+}
+
+PTRef SpacerContext::tryBlockWithRelativeInductionBool(ProofObligationCore const & pob) const {
+    const auto& edges = incomingEdges(pob.vertex);
+    vec<PTRef> edgeRepresentations;
+    edgeRepresentations.capacity(edges.size());
+    std::vector<GuardVar> sourceGuards;
+    for (EId eid : edges) {
+        edgeRepresentations.push(getEdgeTransition(eid, sourceGuards));
+    }
+    PTRef transitions = logic.mkOr(std::move(edgeRepresentations));
+    PTRef maySummary = getGuardedMaySummary(sourceGuards, pob.bound - 1);
+    
+    PTRef edgesMaySummary = logic.mkAnd(maySummary, transitions);
+
+    std::vector<GuardVar> inductiveSources;
+    for (const auto& sourceGuard : sourceGuards) {
+        if (sourceGuard.vertex == pob.vertex) {
+            inductiveSources.push_back(sourceGuard);
+        }
+    }
+    if (inductiveSources.empty()) {
+        // no inductive edge
+        return PTRef_Undef;
+    }
+
+    // Try dropping conjuncts from pob.constraint looking for an UNSAT
+    VersionManager vManager(logic);
+    const auto& candidates = TermUtils(logic).getTopLevelConjuncts(vManager.targetFormulaToBase(pob.constraint));
+    const int n = candidates.size();
+
+    // Declare assumptions. do not assert them yet.
+    static std::size_t freshId = 0;
+    std::vector<PTRef> selectors;
+    selectors.reserve(n);
+    for (int i = 0; i < n; ++i) {
+        std::string name = "_assume#relind#" + std::to_string(freshId++);
+        selectors.push_back(logic.mkBoolVar(name.c_str()));
+    }
+
+    std::vector<vec<PTRef>> assumedSources(inductiveSources.size());
+    vec<PTRef> assumedTargets;
+    assumedTargets.capacity(n);
+    for (int i = 0; i < n; ++i) {
+        for (std::size_t gi = 0; gi < inductiveSources.size(); ++gi) {
+            PTRef source = vManager.baseFormulaToSource(candidates[i], inductiveSources[gi].instance);
+            assumedSources[gi].push(logic.mkAnd(selectors[i], logic.mkNot(source)));
+        }
+        assumedTargets.push(
+            logic.mkImpl(selectors[i], vManager.baseFormulaToTarget(candidates[i])));
+    }
+    vec<PTRef> allSources;
+    allSources.capacity(inductiveSources.size());
+    for (std::size_t gi = 0; gi < inductiveSources.size(); ++gi) {
+        allSources.push(logic.mkImpl(inductiveSources[gi].get(logic), logic.mkOr(assumedSources[gi])));
+    }
+
+    // baseline, without asserting assumption literals
+    SMTSolver solver(logic, SMTSolver::WitnessProduction::NONE);
+    solver.assertProp(maySummary);
+    solver.assertProp(transitions);
+    solver.assertProp(logic.mkAnd(allSources));
+    solver.assertProp(logic.mkAnd(assumedTargets));
+
+    // Is the lemma restricted to `keep` core inductive relative to the may summary?
+    auto inductiveFor = [&](std::vector<bool> const & keep) {
+        solver.push();
+        for (int i = 0; i < n; ++i) {
+            solver.assertProp(keep[i] ? selectors[i] : logic.mkNot(selectors[i]));
+        }
+        auto res = solver.check();
+        solver.pop();
+        return res == SMTSolver::Answer::UNSAT;
+    };
+
+    // Check which literals are inductive (rel to maysumm) on their own.
+    std::vector<bool> preserved(n, false);
+    for (int i = 0; i < n; ++i) {
+        // remove all but one literal
+        std::vector<bool> singleton(n, false);
+        singleton[i] = true;
+        preserved[i] = inductiveFor(singleton);
+    }
+    // Sort the literals prioritizing the ones that are *not* inductive
+    std::vector<int> order(n);
+    for (int i = 0; i < n; ++i) { order[i] = i; }
+    std::stable_sort(order.begin(), order.end(),
+                     [&](int a, int b) { return not preserved[a] and preserved[b]; });
+
+    // Down pass, with `order` sorting
+    std::vector<bool> keep(n, true);
+    bool found = inductiveFor(keep);
+    std::size_t kept = n;
+    for (int i : order) {
+        // try to delete next `i`
+        keep[i] = false;
+        --kept;
+        if (inductiveFor(keep)) {
+            // this removal obtains (or preserves) unsat
+            found = true;
+        } else {
+            if (found) {
+                // restore it, it is needed to preserve unsat
+                keep[i] = true;
+                ++kept;
+            }
+        }
+    }
+
+    if (not found) {
+        return PTRef_Undef;
+    }
+
+    vec<PTRef> inductiveDisjs;
+    inductiveDisjs.capacity(kept);
+    for (int i = 0; i < n; ++i) {
+        if (keep[i]) { inductiveDisjs.push(logic.mkNot(candidates[i])); }
+    }
+    PTRef newLemma = logic.mkOr(inductiveDisjs);
+
+#if DEBUG
+    SMTSolver debug_solver(logic);
+    debug_solver.push();
+    debug_solver.assertProp(newLemma);
+    debug_solver.assertProp(vManager.targetFormulaToBase(pob.constraint));
+    if (debug_solver.check() != SMTSolver::Answer::UNSAT) {
+        throw std::logic_error("Error in relind: newLemma is not removing pob");
+    }
+    debug_solver.pop();
+    debug_solver.assertProp(maySummary);
+    debug_solver.assertProp(transitions);
+    for (auto const & guardVar : inductiveSources) {
+        debug_solver.assertProp(
+            logic.mkImpl(guardVar.get(logic),
+                         vManager.baseFormulaToSource(newLemma, guardVar.instance)));
+    }
+    debug_solver.assertProp(logic.mkNot(vManager.baseFormulaToTarget(newLemma)));
+    if (debug_solver.check() != SMTSolver::Answer::UNSAT) {
+        throw std::logic_error("Error in relind: newLemma is not inductive!");
     }
 #endif
 
