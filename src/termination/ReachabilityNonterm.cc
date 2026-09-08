@@ -15,6 +15,9 @@
 #include "engine/EngineFactory.h"
 #include "graph/ChcGraphBuilder.h"
 
+#include <chrono>
+#include <iostream>
+
 namespace golem::termination {
 
 // Function to eliminate negations, replacing "not (a = b)" with "a < b \/ a > b"
@@ -408,9 +411,22 @@ PTRef constructTransitionInvariantCandidates(PTRef init, PTRef transition, PTRef
             temp_vars.push(TimeMachine(logic).sendVarThroughTime(var, depth - 1));
         }
         QEOptions options;
-        options.max_mbp = 100;
+        options.max_mbp = 0;
+        // std::cout << "[ReachabilityNonterm] init /\\ trace (smt2):\n"
+        //           << logic.printTerm(logic.mkAnd(init, trace)) << "\n";
+        std::cout << "Formula: " << logic.printTerm(logic.mkAnd(init, trace)) << "\n";
+        std::cout << "Vars to keep: \n";
+        for (auto var : temp_vars) {
+            std::cout << logic.printTerm(var) << "\n";
+        }
+        auto const qeStart = std::chrono::steady_clock::now();
         checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(
             QuantifierElimination(logic).keepOnly(logic.mkAnd(init, trace), temp_vars, options).under, 1));
+        auto const qeMs =
+            std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - qeStart).count();
+        // std::cout << "[ReachabilityNonterm] constructTransitionInvariantCandidates QE (depth=" << depth
+        //           << "): " << qeMs << " ms\n";
+        std::cout << "[ReachabilityNonterm] transitions (smt2) time: " << qeMs << "\n";
     }
     checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(sink, depth));
     // sink is updated, representing states that are guaranteed to reach termination
@@ -601,7 +617,19 @@ std::tuple<PTRef, PTRef> ReachabilityNonterm::blockDeterministicPrefix(PTRef ini
             }
             // Base is a formula, depicting all states reachable in j-1 transitions, which can reach
             // termination in n-j+1 transitions
+            // std::cout << "[ReachabilityNonterm] transitions (smt2):\n"
+            //       << logic.printTerm(transitions) << "\n";
+            auto const qeStart = std::chrono::steady_clock::now();
+            std::cout << "Formula: " << logic.printTerm(logic.mkAnd(trace, logic.mkNot(TimeMachine(logic).sendFlaThroughTime(sink, num)))) << "\n";
+            std::cout << "Vars to keep: \n";
+            for (auto var : prev_vars) {
+                std::cout << logic.printTerm(var) << "\n";
+            }
             PTRef Base = QuantifierElimination(logic).keepOnly(transitions, prev_vars);
+            auto const qeMs =
+                std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - qeStart).count();
+            std::cout << "[ReachabilityNonterm] block?Prefix QE: " << qeMs << " ms\n";
+
             SMTsolver.resetSolver();
             // Checking if it is possible to reach states which would not lead to termination in n-j states
             // (if j = n) it checks if it is possible to reach nontermination states from trace
@@ -644,8 +672,21 @@ bool ReachabilityNonterm::generateWellfoundedDisjuncts(PTRef transition, PTRef s
     // Calculate the states that are guaranteed to terminate within num transitions:
     // Tr^n(x,x') /\ not Sink(x') - is a formula, which can be satisfied by any x which can
     // reach "not Sink(x')" in n transitions:
+
+    auto const qeStart = std::chrono::steady_clock::now();
+    std::cout << "[ReachabilityNonterm] trace /\\ sink formula: "<< logic.printTerm(logic.mkAnd(trace, logic.mkNot(TimeMachine(logic).sendFlaThroughTime(sink, num)))) << "\n";
+    std::cout << "Vars to keep: \n";
+    for (auto var : vars) {
+        std::cout << logic.printTerm(var) << "\n";
+    }
+
     PTRef NT = QuantifierElimination(logic).keepOnly(
-        logic.mkAnd(trace, logic.mkNot(TimeMachine(logic).sendFlaThroughTime(sink, num))), vars);
+         logic.mkAnd(trace, logic.mkNot(TimeMachine(logic).sendFlaThroughTime(sink, num))), vars);
+    auto const qeMs =
+        std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - qeStart).count();
+    std::cout << "[ReachabilityNonterm] NT QE: " << qeMs << " ms\n";
+
+
     // States that can not reach "not Sink(x')" in n transitions (therefore necesarily reach Sink(x')):
     PTRef T = logic.mkNot(NT);
 
