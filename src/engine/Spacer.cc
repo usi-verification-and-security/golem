@@ -30,8 +30,9 @@
 #define TRACE_LEVEL 2
 #define DEBUG 1
 #define GENERALIZE 1
-#define BOTH 1
-#define INDITP 1
+#define GDOWN 1
+#define BOTH 0
+#define INDITP 0
 #define MAYPO 0
 #define CC 1
 #define BMBP 1
@@ -513,6 +514,9 @@ class SpacerContext {
 
     PTRef generalize(PTRef lemma, PTRef maySumm, PTRef transitions, const std::vector<GuardVar>& guardVariables);
 
+    PTRef generalize_down(PTRef lemma, PTRef maySumm, PTRef transitions,
+                          const std::vector<GuardVar>& guardVariables);
+
     bool checkMustReachability(std::vector<EId> const & edges, ProofObligationCore const & pob);
 
     bool mayReachable(EId eid, PTRef targetConstraint, std::size_t bound) const;
@@ -585,7 +589,9 @@ VerificationResult SpacerContext::run() {
                             throw std::logic_error("Duplicate definition for a predicate encountered!");
                         }
                     }
-                    assert(checkValidityWitness(solution));
+                    if (not checkValidityWitness(solution)) {
+                        throw std::logic_error("Error: wrong witness!");
+                    }
                     stats.print();
                     return {VerificationAnswer::SAFE, ValidityWitness(std::move(solution))};
                 }
@@ -782,7 +788,11 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
                       << " nr vars: " << TermUtils(logic).getVars(originalNewLemma).size());
 
 #if GENERALIZE
+#if GDOWN
+                originalNewLemma = generalize_down(originalNewLemma, maySummary, transitions, inductiveSources);
+#else
                 originalNewLemma = generalize(originalNewLemma, maySummary, transitions, inductiveSources);
+#endif
                 TRACE(1,
                       "---- [ITP] Generalization: " << originalNewLemma.x
                       // << " disj? " << is_clause(logic, originalNewLemma)
@@ -817,7 +827,11 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
                     throw std::logic_error("indNewLemma is not consistent with edeges!");
                 }
 
+#if GDOWN
+                indNewLemma = generalize_down(indNewLemma, maySummary, transitions, inductiveSources);
+#else
                 indNewLemma = generalize(indNewLemma, maySummary, transitions, inductiveSources);
+#endif
                 TRACE(1,
                       "---- [IND] Generalization: " << indNewLemma.x
                       // << " disj? " << is_clause(logic, indNewLemma)
@@ -1203,6 +1217,113 @@ PTRef SpacerContext::generalize(PTRef lemma, PTRef maySumm, PTRef transitions, c
     res = debug_solver.check();
     if (res != SMTSolver::Answer::UNSAT) {
         throw std::logic_error("Error in Generalize: newLemma is not inductive!");
+    }
+#endif
+
+    return newLemma;
+}
+
+PTRef SpacerContext::generalize_down(PTRef lemma, PTRef maySumm, PTRef transitions,
+                                     const std::vector<GuardVar>& guardVariables) {
+    VersionManager vManager(logic);
+    const auto& candidates = TermUtils(logic).getTopLevelDisjuncts(lemma);
+
+    if (candidates.size() < 2 or logic.isConstant(candidates[0])) { return lemma; }
+    const int n = candidates.size();
+
+    // Declare assumptions. do not assert them yet.
+    static std::size_t freshId = 0;
+    std::vector<PTRef> selectors;
+    selectors.reserve(n);
+    for (int i = 0; i < n; ++i) {
+        std::string name = "_assume#gdown#" + std::to_string(freshId++);
+        selectors.push_back(logic.mkBoolVar(name.c_str()));
+    }
+
+    std::vector<vec<PTRef>> assumedSources(guardVariables.size());
+    vec<PTRef> assumedTargets;
+    assumedTargets.capacity(n);
+    for (int i = 0; i < n; ++i) {
+        for (std::size_t gi = 0; gi < guardVariables.size(); ++gi) {
+            PTRef source = vManager.baseFormulaToSource(candidates[i], guardVariables[gi].instance);
+            assumedSources[gi].push(logic.mkAnd(selectors[i], source));
+        }
+        assumedTargets.push(
+            logic.mkImpl(selectors[i], logic.mkNot(vManager.baseFormulaToTarget(candidates[i]))));
+    }
+    vec<PTRef> allSources;
+    allSources.capacity(static_cast<int>(guardVariables.size()));
+    for (std::size_t gi = 0; gi < guardVariables.size(); ++gi) {
+        allSources.push(logic.mkImpl(guardVariables[gi].get(logic), logic.mkOr(assumedSources[gi])));
+    }
+
+    // baseline, without asserting assumption literals
+    SMTSolver solver(logic, SMTSolver::WitnessProduction::NONE);
+    solver.assertProp(maySumm);
+    solver.assertProp(transitions);
+    solver.assertProp(logic.mkAnd(allSources));
+    solver.assertProp(logic.mkAnd(assumedTargets));
+
+    // Is the lemma restricted to `keep` core inductive relative to the may summary?
+    auto inductiveFor = [&](std::vector<bool> const & keep) {
+        solver.push();
+        for (int i = 0; i < n; ++i) {
+            solver.assertProp(keep[i] ? selectors[i] : logic.mkNot(selectors[i]));
+        }
+        auto res = solver.check();
+        solver.pop();
+        return res == SMTSolver::Answer::UNSAT;
+    };
+
+    // Check which literals are inductive (rel to maysumm) on their own.
+    std::vector<bool> preserved(n, false);
+    for (int i = 0; i < n; ++i) {
+        // remove all but one literal
+        std::vector<bool> singleton(n, false);
+        singleton[i] = true;
+        preserved[i] = inductiveFor(singleton);
+    }
+    // Sort the literals prioritizing the ones that are *not* inductive
+    std::vector<int> order(n);
+    for (int i = 0; i < n; ++i) { order[i] = i; }
+    std::stable_sort(order.begin(), order.end(),
+                     [&](int a, int b) { return not preserved[a] and preserved[b]; });
+
+    // Down pass, with `order` sorting
+    std::vector<bool> keep(n, true);
+    int kept = n;
+    for (int i : order) {
+        // try to delete `i`
+        keep[i] = false;
+        if (inductiveFor(keep)) {
+            --kept;
+        } else {
+            // if `i` cannot be removed without breking induction, then restore it
+            keep[i] = true;
+        }
+    }
+    if (kept == 0) {
+        TRACE(1, "---- [GDW] Empty core: vertex proved unreachable, lemma is false");
+    }
+
+    vec<PTRef> inductiveDisjs;
+    inductiveDisjs.capacity(kept);
+    for (int i = 0; i < n; ++i) {
+        if (keep[i]) { inductiveDisjs.push(candidates[i]); }
+    }
+    PTRef newLemma = logic.mkOr(inductiveDisjs);
+
+#if DEBUG
+    SMTSolver debug_solver(logic);
+    debug_solver.assertProp(maySumm);
+    debug_solver.assertProp(transitions);
+    for (auto const & guardVar : guardVariables) {
+        debug_solver.assertProp(
+            logic.mkImpl(guardVar.get(logic), vManager.baseFormulaToSource(newLemma, guardVar.instance)));
+    }
+    debug_solver.assertProp(logic.mkNot(vManager.baseFormulaToTarget(newLemma)));
+    if (debug_solver.check() != SMTSolver::Answer::UNSAT) {
+        throw std::logic_error("Error in generalize_down: newLemma is not inductive!");
     }
 #endif
 
