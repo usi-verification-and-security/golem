@@ -28,7 +28,7 @@
 #include <vector>
 
 #define TRACE_LEVEL 2
-#define DEBUG 0
+#define DEBUG 1
 #define GENERALIZE 1
 #define GDOWN 1
 #define RELIND 1
@@ -1244,16 +1244,21 @@ PTRef SpacerContext::generalize(PTRef lemma, PTRef maySumm, PTRef transitions, c
     SMTSolver debug_solver(logic);
     debug_solver.assertProp(maySumm);
     debug_solver.assertProp(transitions);
+    debug_solver.assertProp(logic.mkNot(vManager.baseFormulaToTarget(newLemma)));
     debug_solver.push();
     for (auto gi = 0; gi < guardVariables.size(); ++gi) {
         const GuardVar& guardVar = guardVariables[gi];
         debug_solver.assertProp(logic.mkImpl(guardVar.get(logic),
                                              vManager.baseFormulaToSource(newLemma, guardVar.instance)));
     }
-    debug_solver.assertProp(logic.mkNot(vManager.baseFormulaToTarget(newLemma)));
     res = debug_solver.check();
     if (res != SMTSolver::Answer::UNSAT) {
         throw std::logic_error("Error in Generalize: newLemma is not inductive!");
+    }
+    debug_solver.pop();
+    res = debug_solver.check();
+    if (res != SMTSolver::Answer::UNSAT) {
+        TRACE(1, "Ing-gen: newLemma is stronger than min-gen!");
     }
 #endif
 
@@ -1354,13 +1359,18 @@ PTRef SpacerContext::generalize_down(PTRef lemma, PTRef maySumm, PTRef transitio
     SMTSolver debug_solver(logic);
     debug_solver.assertProp(maySumm);
     debug_solver.assertProp(transitions);
+    debug_solver.assertProp(logic.mkNot(vManager.baseFormulaToTarget(newLemma)));
+    debug_solver.push();
     for (auto const & guardVar : guardVariables) {
         debug_solver.assertProp(
             logic.mkImpl(guardVar.get(logic), vManager.baseFormulaToSource(newLemma, guardVar.instance)));
     }
-    debug_solver.assertProp(logic.mkNot(vManager.baseFormulaToTarget(newLemma)));
     if (debug_solver.check() != SMTSolver::Answer::UNSAT) {
         throw std::logic_error("Error in generalize_down: newLemma is not inductive!");
+    }
+    debug_solver.pop();
+    if (debug_solver.check() != SMTSolver::Answer::UNSAT) {
+        TRACE(1, "Ing-gen: newLemma is stronger than min-gen!");
     }
 #endif
 
