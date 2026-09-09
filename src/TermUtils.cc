@@ -152,7 +152,7 @@ PTRef LATermUtils::expressZeroTermFor(PTRef zeroTerm, PTRef var) {
     }
 }
 
-void TermUtils::printTermWithLets(std::ostream & out, PTRef root) {
+void TermUtils::termToSMT2StringWithLets(std::ostream & out, PTRef root) {
     // true means parent and we should put it in the order; false means child and we should process it
     struct Entry {
         PTRef node;
@@ -187,13 +187,13 @@ void TermUtils::printTermWithLets(std::ostream & out, PTRef root) {
         SymRef symbol = pterm.symb();
         if (pterm.size() == 0) {
             if (auto * arithLogic = dynamic_cast<ArithLogic *>(&logic); arithLogic and arithLogic->isNumConst(symbol)) {
-                // TODO: OpenSMT should override printSym in ArithLogic in a similar manner it overrides printTerm
-                return logic.printTerm(ref);
+                // TODO: OpenSMT should override symToString in ArithLogic in a similar manner it overrides termToSMT2String
+                return logic.termToSMT2String(ref);
             }
-            return logic.printSym(symbol);
+            return logic.symToString(symbol);
         }
         std::stringstream ss;
-        ss << '(' << logic.printSym(symbol) << ' ';
+        ss << '(' << logic.symToString(symbol) << ' ';
         for (PTRef child : pterm) {
             ss << strRepr.at(child) << ' ';
         }
@@ -525,7 +525,7 @@ bool LATermUtils::termContainsVar(PTRef term, PTRef var) {
 }
 
 bool LATermUtils::atomContainsVar(PTRef atom, PTRef var) {
-    if (logic.isBoolAtom(atom) or logic.isConstant(atom)) { return false; }
+    if (logic.isBoolVar(atom) or logic.isConstant(atom)) { return false; }
     assert(logic.isLeq(atom) || logic.isNumEq(atom));
     if (logic.isNumEq(atom)) {
         PTRef lhs = logic.getPterm(atom)[0];

@@ -482,7 +482,7 @@ PTRef ModelBasedProjection::project(PTRef fla, const vec<PTRef> & varsToEliminat
     }
     for (auto it = boolEndIt; it != tmp.end(); ++it) {
         PTRef var = *it;
-        // std::cout << "Eliminating " << logic.printTerm(var) << std::endl;
+        // std::cout << "Eliminating " << logic.termToSMT2String(var) << std::endl;
         implicant = projectSingleVar(var, std::move(implicant), model);
         // dumpImplicant(std::cout, implicant);
         checkImplicant(implicant, logic, model);
@@ -499,7 +499,7 @@ PTRef ModelBasedProjection::project(PTRef fla, const vec<PTRef> & varsToEliminat
 void ModelBasedProjection::dumpImplicant(std::ostream & out, implicant_t const & implicant) {
     out << "Implicant:\n";
     std::for_each(implicant.begin(), implicant.end(),
-                  [&](PtAsgn i) { out << logic.printTerm(i.tr) << ' ' << toInt(i.sgn) << '\n'; });
+                  [&](PtAsgn i) { out << logic.termToSMT2String(i.tr) << ' ' << toInt(i.sgn) << '\n'; });
     out << std::endl;
 }
 
