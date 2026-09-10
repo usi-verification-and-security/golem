@@ -429,8 +429,9 @@ PTRef constructTransitionInvariantCandidates(PTRef init, PTRef transition, PTRef
     SMTSolver smt_solver(logic, SMTSolver::WitnessProduction::ONLY_INTERPOLANTS);
     smt_solver.getConfig().setSimplifyInterpolant(4);
     smt_solver.assertProp(trace);
-    smt_solver.push();
+    // smt_solver.push();
     smt_solver.assertProp(logic.mkAnd(init, logic.mkNot(terminating_states)));
+    // std::cout<<"Interpolant: \n" << "A: " << logic.termToSMT2String(trace) << "\nB: " <<  logic.termToSMT2String(logic.mkAnd(init, logic.mkNot(terminating_states))) << "\n";
     if (smt_solver.check() != SMTSolver::Answer::UNSAT) {
         assert(false);
         return logic.getTerm_false();
