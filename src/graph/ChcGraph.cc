@@ -123,13 +123,13 @@ void ChcDirectedGraph::toDot(std::ostream & out, bool full) const {
     for (SymRef sym : getVertices()) {
         auto pred = this->getStateVersion(sym);
         dotIds.insert(std::make_pair(sym, "n" + std::to_string(sym.x)));
-        std::string label = full ? logic.printTerm(pred) : logic.printSym(sym);
+        std::string label = full ? logic.termToSMT2String(pred) : logic.symToString(sym);
         out << dotIds[sym] << "\t[label =  \"" << label << "\"];\n";
     }
 
     forEachEdge([&](auto const & edge) {
         out << dotIds[edge.from] << " -> " << dotIds[edge.to] << " [label = \""
-            << (full ? logic.printTerm(edge.fla.fla) : "") << "\"];\n";
+            << (full ? logic.termToSMT2String(edge.fla.fla) : "") << "\"];\n";
     });
 
     out << "}" << std::endl;

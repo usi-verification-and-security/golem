@@ -138,7 +138,7 @@ public:
         }
     }
 
-    void printTermWithLets(std::ostream & out, PTRef term);
+    void termToSMT2StringWithLets(std::ostream & out, PTRef term);
 
     [[nodiscard]] PTRef simplifyMax(PTRef const root) const {
         if (logic.isAnd(root) or logic.isOr(root)) {

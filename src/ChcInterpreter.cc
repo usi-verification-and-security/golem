@@ -196,7 +196,7 @@ void ChcInterpreterContext::interpretAssert(ASTNode & node) {
         if (logic.getTerm_true() == term) { return; }
         auto chclause = chclauseFromPTRef(term);
         if (not chclause) {
-            reportError("Assertion is not a Horn clause: " + logic.printTerm(term));
+            reportError("Assertion is not a Horn clause: " + logic.termToSMT2String(term));
             doExit = true;
             return;
         }
@@ -255,7 +255,7 @@ std::shared_ptr<Term> ChcInterpreterContext::ASTtoTerm(const ASTNode & node) {
         }
         assert(not args.empty());
         if (op == "-" and args.size() == 1 and args[0]->getTermType() == Term::termType::TERMINAL) {
-            return std::make_shared<Terminal>("(- " + args[0]->printTerm() + ")", args[0]->getTerminalType());
+            return std::make_shared<Terminal>("(- " + args[0]->termToSMT2String() + ")", args[0]->getTerminalType());
         }
         if (isOperator(op)) {
             return std::make_shared<Op>(op, args);
