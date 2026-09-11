@@ -365,6 +365,43 @@ ModelBasedProjection::implicant_t ModelBasedProjection::projectSingleVar(PTRef v
 }
 
 namespace {
+/*
+ * An implicant must denote a convex region, and a disequality does not: it is a
+ * hole.  Replace it with the strict inequality that the model satisfies.  That
+ * is a strengthening, so the conjunction stays an implicant of the formula, and
+ * it is the same case split projectSingleVar / processClassicLiterals perform
+ * internally -- doing it here instead means the implicant handed to
+ * `impliedBy` already records which side was taken, so the over-approximation
+ * keeps it.
+ *
+ * Returns PTRef_Undef when `atom` is not an arithmetic equality and the literal
+ * should be kept as it is.
+ */
+PTRef splitDisequality(Logic & logic, PTRef atom, Model & model) {
+    auto * lalogic = dynamic_cast<ArithLogic *>(&logic);
+    if (lalogic == nullptr or not lalogic->isNumEq(atom)) { return PTRef_Undef; }
+    PTRef const lhs = logic.getPterm(atom)[0];
+    PTRef const rhs = logic.getPterm(atom)[1];
+    PTRef const lt = lalogic->mkLt(lhs, rhs);
+    PTRef const chosen = model.evaluate(lt) == logic.getTerm_true() ? lt : lalogic->mkLt(rhs, lhs);
+    assert(chosen != logic.getTerm_false());
+    return chosen;
+}
+
+// Appends the literal for a false atom, splitting disequalities on the way.
+void pushNegatedAtom(Logic & logic, PTRef atom, Model & model, std::vector<PtAsgn> & literals) {
+    PTRef const split = splitDisequality(logic, atom, model);
+    if (split == PTRef_Undef) {
+        literals.push_back(PtAsgn(atom, l_False));
+    } else if (split == logic.getTerm_true()) {
+        // A disequality that holds outright, such as "x != x + 1": no constraint.
+    } else if (logic.isNot(split)) {
+        literals.push_back(PtAsgn(logic.getPterm(split)[0], l_False));
+    } else {
+        literals.push_back(PtAsgn(split, l_True));
+    }
+}
+
 void collectImplicant(Logic & logic, PTRef fla, Model & model, std::vector<char> & processed,
                       std::vector<PtAsgn> & literals, ModelBasedProjection::VarsInfo const & varsInfo) {
     auto id = Idx(logic.getPterm(fla).getId());
@@ -412,7 +449,7 @@ void collectImplicant(Logic & logic, PTRef fla, Model & model, std::vector<char>
         PTRef child = logic.getPterm(fla)[0];
         if (logic.isAtom(child)) {
             assert(model.evaluate(child) == logic.getTerm_false());
-            literals.push_back(PtAsgn(child, l_False));
+            pushNegatedAtom(logic, child, model, literals);
             return;
         }
         throw std::logic_error("Formula is not in NNF in collectImplicant!");
@@ -473,7 +510,18 @@ collectImplicantWithUnsatCore(Logic & logic,
         todos.pop();
         if (logic.isAtom(x)) {
             bool sat = model.evaluate(x) == logic.getTerm_true();
-            literals.push_back(sat ? x : logic.mkNot(x));
+            if (sat) {
+                literals.push_back(x);
+            } else {
+                // Same convexity argument as in collectImplicant; the split
+                // literal implies the disequality, so the core still implies fla.
+                PTRef const split = splitDisequality(logic, x, model);
+                if (split == PTRef_Undef) {
+                    literals.push_back(logic.mkNot(x));
+                } else if (split != logic.getTerm_true()) {
+                    literals.push_back(split);
+                }
+            }
             continue;
         }
         for (int i = 0; i < logic.getPterm(x).size(); i++) {

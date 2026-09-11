@@ -466,7 +466,8 @@ std::size_t nodeCount(ArithLogic const & logic, PTRef term) {
 char const * csvHeaderLine =
     "file,logic,mode,compute_over,max_disjunctions,max_mbp_per_poly,"
     "fm_bound_threshold,pick_best_side,unsat_core,preserved,eliminated,"
-    "parse_ms,qe_ms,precise_under,precise_over,under_nodes,over_nodes,under_vars,status";
+    "parse_ms,qe_ms,precise_under,precise_over,under_nodes,over_nodes,under_vars,"
+    "outer_iters,max_mbps,total_mbps,status";
 
 } // namespace
 
@@ -548,7 +549,8 @@ int main(int argc, char ** argv) {
                   << preserved.size() << ',' << existentials.size() << ',' << parseMs << ',' << qeMs << ','
                   << (result.precise_under ? 1 : 0) << ',' << (haveOver ? (result.precise_over ? 1 : 0) : -1) << ','
                   << underNodes << ',' << (haveOver ? static_cast<long>(overNodes) : -1L) << ',' << underVars << ','
-                  << status << '\n';
+                  << result.outer_iterations << ',' << result.max_mbps_per_implicant << ','
+                  << result.total_mbps << ',' << status << '\n';
     } else if (not options.quiet) {
         std::cout << "input                  : " << options.inputFile << '\n'
                   << "logic                  : " << logicName << '\n'
@@ -564,6 +566,9 @@ int main(int argc, char ** argv) {
                   << "parse time             : " << parseMs << " ms\n"
                   << "qe time                : " << qeMs << " ms\n"
                   << "result                 : " << status << '\n'
+                  << "work                   : " << result.outer_iterations << " implicant(s), "
+                  << result.max_mbps_per_implicant << " mbp(s) at most per implicant, "
+                  << result.total_mbps << " mbp(s) in total\n"
                   << "under: precise=" << (result.precise_under ? "yes" : "no") << " nodes=" << underNodes
                   << " vars=" << underVars << '\n';
         if (haveOver) {

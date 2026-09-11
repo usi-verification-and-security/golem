@@ -15,6 +15,7 @@
 
 namespace {
 using namespace golem;
+
 QEResult eliminate_aux(Logic & logic, PTRef fla, vec<PTRef> const & vars, QEOptions limits) {
     vec<PTRef> under_projections;
     vec<PTRef> over_projections;
@@ -30,8 +31,7 @@ QEResult eliminate_aux(Logic & logic, PTRef fla, vec<PTRef> const & vars, QEOpti
     result.precise_under = true;
     result.precise_over = limits.compute_overapproximation;
 
-    // for logging purposes only
-    // auto max_inner_iter = 0;
+    auto max_inner_iter = 0;
 
     outer_solver.assertProp(fla);
     auto outer_iter = 0;
@@ -50,6 +50,7 @@ QEResult eliminate_aux(Logic & logic, PTRef fla, vec<PTRef> const & vars, QEOpti
             // This is the original algorithm collecting mbps
             PTRef under_projection = mbp.project(fla, vars, *model);
             under_projections.push(under_projection);
+            max_inner_iter = std::max(max_inner_iter, 1);
             outer_solver.assertProp(logic.mkNot(under_projection));
             continue;
         }
@@ -99,19 +100,31 @@ QEResult eliminate_aux(Logic & logic, PTRef fla, vec<PTRef> const & vars, QEOpti
             inner_solver.assertProp(logic.mkNot(under_projection));
 
             if (limits.max_mbp_per_poly > 0 and inner_iter >= limits.max_mbp_per_poly) {
+                // The under-approximation loses whatever of this implicant the
+                // MBPs found so far do not cover.
                 result.precise_under = false;
+                // So does the over-approximation: `implicant_over_conjuncts`
+                // collects, per MBP, the literals entailed by the implicant, and
+                // the conjunction only tightens as more MBPs are added.
+                // Stopping early leaves it weaker than the exact projection.
+                result.precise_over = false;
                 break;
             }
-            // max_inner_iter = std::max(max_inner_iter, inner_iter);
         }
+        max_inner_iter = std::max(max_inner_iter, inner_iter);
         // Here QE of implicant is done
         inner_solver.pop();
 
         PTRef implicant_projection_with_over = logic.mkAnd(implicant_over_conjuncts);
+
         over_projections.push(implicant_projection_with_over);
         outer_solver.assertProp(logic.mkNot(implicant_projection_with_over));
         unexplored = logic.mkAnd(unexplored, logic.mkNot(implicant_projection_with_over));
     }
+
+    result.outer_iterations = static_cast<unsigned>(outer_iter);
+    result.max_mbps_per_implicant = static_cast<unsigned>(max_inner_iter);
+    result.total_mbps = static_cast<unsigned>(under_projections.size());
 
     result.under = logic.mkOr(under_projections);
     result.over = limits.compute_overapproximation ?
@@ -150,11 +163,6 @@ QEResult eliminate_aux(Logic & logic, PTRef fla, vec<PTRef> const & vars, QEOpti
         }
     }
 #endif
-
-    // if (max_inner_iter > 1) {
-    //     std::cerr << "QE done: " << outer_iter << " blocks, " << max_inner_iter
-    //             << " max mbps per block" << std::endl;
-    // }
 
     return result;
 }

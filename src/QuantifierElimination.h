@@ -59,6 +59,15 @@ struct QEResult {
     bool precise_under;
     bool precise_over;
 
+    // Work actually done, which is what the limits above are compared against:
+    // `outer_iterations` is the number of convex implicants explored (and hence
+    // the number of disjuncts of `over`), `max_mbps_per_implicant` the largest
+    // number of MBPs any one of them needed, `total_mbps` the number of
+    // disjuncts of `under`.  A limit only bites when the corresponding count
+    // would have exceeded it.
+    unsigned outer_iterations = 0;
+    unsigned max_mbps_per_implicant = 0;
+    unsigned total_mbps = 0;
 };
 
 /*
