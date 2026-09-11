@@ -7,6 +7,7 @@
 #ifndef OPENSMT_QUANTIFIERELIMINATION_H
 #define OPENSMT_QUANTIFIERELIMINATION_H
 
+#include "ModelBasedProjection.h"
 #include "osmt_terms.h"
 
 namespace golem {
@@ -23,14 +24,20 @@ Options for quantifier elimination technique.
   It applies only when `compute_overapproximation` is true.
   If 0, no limit is applied. When exceeded, the returned result is an underapproximaton,
   overapproximation is not precise.
+- `mbp_options`: options of the underlying model-based projection; they are
+  handed to every ModelBasedProjection instance the procedure creates.
+  See MBPOptions in ModelBasedProjection.h.
  */
 struct QEOptions {
-    QEOptions() : max_disjunctions_in_over(0), max_mbp_per_poly(0), compute_overapproximation(false) {}
+    QEOptions() : max_disjunctions_in_over(0), max_mbp_per_poly(0), compute_overapproximation(false), mbp_options() {}
     QEOptions(short max_disjunctions_in_over, short max_mbp_per_poly, bool compute_overapproximation)
-        : max_disjunctions_in_over(max_disjunctions_in_over), max_mbp_per_poly(max_mbp_per_poly), compute_overapproximation(compute_overapproximation) {}
+        : max_disjunctions_in_over(max_disjunctions_in_over), max_mbp_per_poly(max_mbp_per_poly), compute_overapproximation(compute_overapproximation), mbp_options() {}
+    QEOptions(short max_disjunctions_in_over, short max_mbp_per_poly, bool compute_overapproximation, MBPOptions mbp_options)
+        : max_disjunctions_in_over(max_disjunctions_in_over), max_mbp_per_poly(max_mbp_per_poly), compute_overapproximation(compute_overapproximation), mbp_options(mbp_options) {}
     short max_disjunctions_in_over;
     short max_mbp_per_poly;
     bool compute_overapproximation;
+    MBPOptions mbp_options;
 };
 
 /*

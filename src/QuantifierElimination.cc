@@ -43,7 +43,7 @@ QEResult eliminate_aux(Logic & logic, PTRef fla, vec<PTRef> const & vars, QEOpti
         }
         ++outer_iter;
         auto model = outer_solver.getModel();
-        ModelBasedProjection mbp(logic);
+        ModelBasedProjection mbp(logic, limits.mbp_options);
 
         PTRef implicant;
         if (not limits.compute_overapproximation) {
