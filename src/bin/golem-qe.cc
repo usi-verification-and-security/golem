@@ -73,6 +73,10 @@ struct CliOptions {
 }
 
 void printUsage(std::ostream & out) {
+    // Defaults are read off the option structs so the help never goes stale.
+    golem::QEOptions const qeDefaults;
+    auto const & mbpDefaults = qeDefaults.mbp_options;
+    auto onOff = [](bool value) { return value ? "on" : "off"; };
     out << "usage: golem-qe [options] <file.smt2>\n"
            "\n"
            "Eliminates the existentially quantified variables of the input and reports\n"
@@ -84,24 +88,29 @@ void printUsage(std::ostream & out) {
            "                            i.e. plain MBP producing only the precise result)\n"
            "  --max-disjunctions <n>    QEOptions::max_disjunctions_in_over; cap on the number\n"
            "                            of disjuncts of the over-approximation. 0 = no limit,\n"
-           "                            1 = convex polyhedron. Implies --over. (default: 0)\n"
+           "                            1 = convex polyhedron. Implies --over. (default: "
+        << qeDefaults.max_disjunctions_in_over << ")\n"
            "  --max-mbp-per-poly <n>    QEOptions::max_mbp_per_poly; cap on the number of MBPs\n"
            "                            per convex implicant. 0 = no limit; when exceeded the\n"
            "                            under-approximation is no longer precise.\n"
-           "                            Implies --over. (default: 0)\n"
+           "                            Implies --over. (default: "
+        << qeDefaults.max_mbp_per_poly << ")\n"
            "\n"
            "Model-based projection options (MBPOptions), passed to every MBP the\n"
            "procedure creates:\n"
            "  --fm-bound-threshold <n>  MBPOptions::fm_bound_threshold; up to this many bounds\n"
            "                            on a side, eliminate a variable by complete\n"
            "                            Fourier-Motzkin resolution instead of picking the\n"
-           "                            single model-best bound (default: 3)\n"
+           "                            single model-best bound (default: "
+        << mbpDefaults.fm_bound_threshold << ")\n"
            "  --[no-]pick-best-side     MBPOptions::pick_best_side; resolve on the side with\n"
            "                            fewer bounds, rather than always on the lower bounds\n"
-           "                            (default: on)\n"
+           "                            (default: "
+        << onOff(mbpDefaults.pick_best_side) << ")\n"
            "  --[no-]unsat-core         MBPOptions::use_unsat_core; collect the implicant with\n"
            "                            an unsat core instead of a plain model-based traversal\n"
-           "                            (default: on)\n"
+           "                            (default: "
+        << onOff(mbpDefaults.use_unsat_core) << ")\n"
            "\n"
            "Problem options:\n"
            "  --mode <eliminate|keep>   call QuantifierElimination::eliminate on the bound\n"
@@ -133,7 +142,7 @@ int parseNonNegative(char const * text, char const * flag) {
 
 CliOptions parseCli(int argc, char ** argv) {
     CliOptions options;
-    bool sawOverFlag = false;
+    bool sawLimitFlag = false;  // a limit only means something with the over-approximation
     for (int i = 1; i < argc; ++i) {
         std::string const arg = argv[i];
         auto next = [&](char const * flag) -> char const * {
@@ -150,13 +159,12 @@ CliOptions parseCli(int argc, char ** argv) {
             options.csvHeader = true;
         } else if (arg == "--over") {
             options.qe.compute_overapproximation = true;
-            sawOverFlag = true;
         } else if (arg == "--max-disjunctions") {
             options.qe.max_disjunctions_in_over = static_cast<short>(parseNonNegative(next("--max-disjunctions"), "--max-disjunctions"));
-            sawOverFlag = true;
+            sawLimitFlag = true;
         } else if (arg == "--max-mbp-per-poly") {
             options.qe.max_mbp_per_poly = static_cast<short>(parseNonNegative(next("--max-mbp-per-poly"), "--max-mbp-per-poly"));
-            sawOverFlag = true;
+            sawLimitFlag = true;
         } else if (arg == "--fm-bound-threshold") {
             options.qe.mbp_options.fm_bound_threshold =
                 static_cast<short>(parseNonNegative(next("--fm-bound-threshold"), "--fm-bound-threshold"));
@@ -199,8 +207,9 @@ CliOptions parseCli(int argc, char ** argv) {
             die("more than one input file given ('" + options.inputFile + "' and '" + arg + "')");
         }
     }
-    // The limits only have an effect when the over-approximation is computed.
-    if (sawOverFlag) { options.qe.compute_overapproximation = true; }
+    // Both limits are only read while the over-approximation is being computed,
+    // so asking for one implies asking for the over-approximation.
+    if (sawLimitFlag) { options.qe.compute_overapproximation = true; }
     return options;
 }
 
