@@ -14,6 +14,7 @@
 #include "pterms/PTRef.h"
 #include "symbols/SymRef.h"
 #include "utils/SmtSolver.h"
+#include "utils/ConvexClosure.h"
 #include "utils/InductiveInterpolants.h"
 
 #include <algorithm>
@@ -30,7 +31,7 @@
 #define TRACE_LEVEL 2
 #define DEBUG 1
 #define GENERALIZE 1
-#define GDOWN 1
+#define GDOWN 0
 #define RELIND 1
 #define RELIND_LATE 1 // only try relative induction when the pob HAS predecessors
 #define RELIND_GROW 0 // 0 = ...Bool (drop pob conjuncts); 1 = grow-from-init variant
@@ -410,7 +411,9 @@ class SpacerContext {
 
     void addMaySummary(SymRef vid, std::size_t bound, PTRef summary, bool isInductive = false) {
         // TODO bound = propagateLemma(vid, bound, summary);
-        over.insert(vid, bound, summary);
+        for (auto boundI = 0; boundI <= bound; ++boundI) {
+            over.insert(vid, boundI, summary);
+        }
         if (isInductive) {
             over.indLearnt.insert(summary);
         }
@@ -713,7 +716,7 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
                 }
                 TRACE(1, "[RELIND] Spared POBS: " << newProofObligations.size());
                 TRACE(2, " New lemma : " << logic.pp(relindLemma));
-                addMaySummary(pob.vertex, pob.bound, relindLemma, false);
+                addMaySummary(pob.vertex, pob.bound, relindLemma, true);
                 if (pob.parent != nullptr) {
                     pob.parent->blockingLemmas.insert(pob.vertex, relindLemma);
                 }
@@ -818,7 +821,7 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
                 if (originalRes.answer != QueryAnswer::UNSAT) {
                     throw std::logic_error("All edges should have been blocked, but they are not!");
                 }
-                TRACE(1,
+                TRACE(2,
                       "---- [ITP] Learnt lemma: " << originalNewLemma.x 
                       // << " disj? " << is_clause(logic, originalNewLemma)
                       << " nr disj: " << TermUtils(logic).getTopLevelDisjuncts(originalNewLemma).size()
@@ -830,7 +833,7 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
 #else
                 originalNewLemma = generalize(originalNewLemma, maySummary, transitions, inductiveSources);
 #endif
-                TRACE(1,
+                TRACE(2,
                       "---- [ITP] Generalization: " << originalNewLemma.x
                       // << " disj? " << is_clause(logic, originalNewLemma)
                       << " nr disj: " << TermUtils(logic).getTopLevelDisjuncts(originalNewLemma).size()
@@ -854,7 +857,7 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
                 auto indNewLemma = indRes.interpolant;
 
                 // Add the new ind Lemma
-                TRACE(1,
+                TRACE(2,
                       "---- [IND] Learnt lemma: " << indNewLemma.x 
                       // << " disj? " << is_clause(logic, indNewLemma)
                       << " nr disj: " << TermUtils(logic).getTopLevelDisjuncts(indNewLemma).size()
@@ -869,7 +872,7 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
 #else
                 indNewLemma = generalize(indNewLemma, maySummary, transitions, inductiveSources);
 #endif
-                TRACE(1,
+                TRACE(2,
                       "---- [IND] Generalization: " << indNewLemma.x
                       // << " disj? " << is_clause(logic, indNewLemma)
                       << " nr disj: " << TermUtils(logic).getTopLevelDisjuncts(indNewLemma).size()
@@ -884,8 +887,6 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
 
 #if BOTH
                 bool strongerOldLemma = not implies(originalNewLemma, indNewLemma, logic);
-
-                TRACE(2, "=================== INDUCTIVE ITP!! ====================");
                 if (strongerOldLemma)
                     TRACE(1, ">>>> NEWLEMMA IS STRONGER OR INCOMPARABLE ");
                 newLemma = indNewLemma;
@@ -911,13 +912,14 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
                 }
                 TRACE(2,
                       "Original learnt lemma for " << pob.vertex.x << " at level " << pob.bound << " - " << logic.pp(originalNewLemma))
-                    TRACE(1,
+                TRACE(2,
                           "---- [ITP] Learnt lemma: " << originalNewLemma.x
                           // << " disj? " << is_clause(logic, originalNewLemma)
                           << " nr disj: " << TermUtils(logic).getTopLevelDisjuncts(originalNewLemma).size()
                           << " nr vars: " << TermUtils(logic).getVars(originalNewLemma).size());
                 newLemma = originalNewLemma;
-                addMaySummary(pob.vertex, pob.bound, newLemma, pob.isMayPO);
+                newLemma = generalize(newLemma, maySummary, transitions, inductiveSources);
+                addMaySummary(pob.vertex, pob.bound, newLemma, false);
             }
 
             if (pob.parent != nullptr) {
@@ -1239,6 +1241,9 @@ PTRef SpacerContext::generalize(PTRef lemma, PTRef maySumm, PTRef transitions, c
 
     // std::cerr << "Old Lemma: " << logic.pp(lemma) << std::endl;
     // std::cerr << "New Lemma: " << logic.pp(newLemma) << std::endl;
+    if (inductiveDisjs.size() != candidates.size()) {
+        TRACE(1, "Generalization applied: newLemma is stronger");
+    }
 
 #if DEBUG
     SMTSolver debug_solver(logic);
@@ -1258,7 +1263,7 @@ PTRef SpacerContext::generalize(PTRef lemma, PTRef maySumm, PTRef transitions, c
     debug_solver.pop();
     res = debug_solver.check();
     if (res != SMTSolver::Answer::UNSAT) {
-        TRACE(1, "Ing-gen: newLemma is stronger than min-gen!");
+        TRACE(1, "Inductive-generalization applied: newLemma is stronger than min-gen!");
     }
 #endif
 
@@ -1355,6 +1360,10 @@ PTRef SpacerContext::generalize_down(PTRef lemma, PTRef maySumm, PTRef transitio
     }
     PTRef newLemma = logic.mkOr(inductiveDisjs);
 
+    if (inductiveDisjs.size() != candidates.size()) {
+        TRACE(1, "Generalization applied: newLemma is stronger");
+    }
+
 #if DEBUG
     SMTSolver debug_solver(logic);
     debug_solver.assertProp(maySumm);
@@ -1370,7 +1379,7 @@ PTRef SpacerContext::generalize_down(PTRef lemma, PTRef maySumm, PTRef transitio
     }
     debug_solver.pop();
     if (debug_solver.check() != SMTSolver::Answer::UNSAT) {
-        TRACE(1, "Ing-gen: newLemma is stronger than min-gen!");
+        TRACE(1, "Inductive-generalization applied: newLemma is stronger than min-gen!");
     }
 #endif
 
