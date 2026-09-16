@@ -33,7 +33,7 @@
 #define DEBUG 1
 #define GENERALIZE 1
 #define GDOWN 1
-#define RELIND 0
+#define RELIND 1
 #define RELIND_LATE 1 // only try relative induction when the pob HAS predecessors
 #define RELIND_GROW 0 // 0 = ...Bool (drop pob conjuncts); 1 = grow-from-init variant
 #define RELIND_MAX_ITERATIONS 20 // budget for the grow-from-init loop
@@ -216,7 +216,7 @@ const unsigned short MIN_BMBP_OVER_LITS = 1; // nr of literals in BMBP overappro
 
 class EdgeVidPredCache {
 public:
-    using InnerMap = std::unordered_map<SymRef, std::unordered_set<PTRef, PTRefHash>, SymRefHash>;
+    using InnerMap = std::unordered_map<std::size_t, std::unordered_set<PTRef, PTRefHash>>;
     using OuterMap = std::map<EId, InnerMap>;
 
     // Iterator that flattens the two-level map, yielding (SymRef, set<PTRef>) pairs
@@ -250,8 +250,8 @@ public:
         }
         bool operator!=(FilterIterator const & other) const { return !(*this == other); }
 
-        SymRef getNode() const {
-            return inner->first;
+        SymRef getNode(ChcDirectedHyperGraph const & graph) const {
+            return graph.getSources(outer->first)[inner->first];
         }
         vec<PTRef> getApprox() const {
             vec<PTRef> approx;
@@ -283,7 +283,7 @@ public:
     FilterIterator end() const { return {cache.end(), cache.end()}; }
 
     bool empty() const { return cache.empty(); }
-    void insert(EId edge, SymRef node, PTRef cons) {
+    void insert(EId edge, std::size_t node, PTRef cons) {
         cache[edge][node].insert(cons);
     }
 
@@ -815,7 +815,10 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
 #if BMBP
             // Bidirectional Model based projection
             for (auto it = pob.overPredCache.begin(); it != pob.overPredCache.end(); ++it) {
-                ProofObligation mayPred(new ProofObligationCore{it.getNode(), pob.bound - 1, logic.mkAnd(it.getApprox()), true});
+                ProofObligation mayPred(new ProofObligationCore{it.getNode(graph),
+                                                                pob.bound - 1,
+                                                                logic.mkAnd(it.getApprox()),
+                                                                true});
                 // do not remember parent if the parent will be removed from the queue
                 // TODO: use shared pointers instead
                 mayPred->parent = (newProofObligations.empty()) ? nullptr : &pob;
@@ -1820,7 +1823,7 @@ ProofObligation SpacerContext::computePredecessor(EId eid, ProofObligationCore c
 #if MAYPO
             PTRef newOverPob = VersionManager(logic).sourceFormulaToTarget(newOverConstraint); // ensure POB is target fla
             if (newOverPob != newPob and newOverPob != logic.getTerm_true()) {
-                pob.overPredCache.insert(eid, sources[0], newOverPob);
+                pob.overPredCache.insert(eid, 0, newOverPob);
             }
 #endif
             TRACE(2, "New proof obligation generated");
@@ -1864,8 +1867,7 @@ ProofObligation SpacerContext::computePredecessor(EId eid, ProofObligationCore c
 #if MAYPO
             PTRef newOverPob = VersionManager(logic).sourceFormulaToTarget(newOverConstraint); // ensure POB is target fla
             if (newOverPob != newPob and newOverPob != logic.getTerm_true()) {
-                // FIXME
-                pob.overPredCache.insert(eid, sources[vertexToRefine], newOverPob);
+                pob.overPredCache.insert(eid, vertexToRefine, newOverPob);
             }
 #endif
             ProofObligation predPob(new ProofObligationCore{sources[vertexToRefine], sourceBound, newPob, pob.isMayPO});
@@ -1905,9 +1907,9 @@ SpacerContext::InductiveCheckResult SpacerContext::isInductive(std::size_t maxLe
             // Figure out which components of the may summary are implied by body at level n and so can be pushed to level n+1
             //            std::cout << "Need to check " << maySummaryComponents.size() << " components for vertex " << vid.id << std::endl;
             bool allPushed = tryPushComponents(vid, level, body);
-            if (allPushed) {
+            if (allPushed and vid != graph.getExit()) {
                 const auto& allComponents = over.getComponents(vid, level);
-                TRACE(1, "[v] INDUCTIVE FRAME FOUND: ");
+                TRACE(1, "[v] INDUCTIVE FRAME FOUND: pred: " << vid.x << " level: " << level );
                 for (PTRef component : over.getComponents(vid, level)) {
                     auto const provenance = over.getProvenance(vid, component);
                     TRACE(1, component.x << " learnt with tag "
