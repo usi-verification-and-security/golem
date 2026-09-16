@@ -24,6 +24,7 @@
 #include <memory>
 #include <queue>
 #include <stdexcept>
+#include <string>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -31,14 +32,14 @@
 #define TRACE_LEVEL 2
 #define DEBUG 1
 #define GENERALIZE 1
-#define GDOWN 0
-#define RELIND 1
+#define GDOWN 1
+#define RELIND 0
 #define RELIND_LATE 1 // only try relative induction when the pob HAS predecessors
 #define RELIND_GROW 0 // 0 = ...Bool (drop pob conjuncts); 1 = grow-from-init variant
 #define RELIND_MAX_ITERATIONS 20 // budget for the grow-from-init loop
 #define BOTH 0
 #define INDITP 0
-#define MAYPO 0
+#define MAYPO 1
 #define CC 1
 #define BMBP 1
 
@@ -136,9 +137,76 @@ private:
 
 class UnderApproxMap : public ApproxMap {};
 
+// How a lemma was derived
+using LemmaOriginMask = unsigned char;
+
+namespace LemmaOrigin {
+constexpr LemmaOriginMask None = 0;
+// how the lemma was derived
+constexpr LemmaOriginMask Itp = 1u << 0;        // plain interpolant
+constexpr LemmaOriginMask IndItp = 1u << 1;     // inductive interpolant
+constexpr LemmaOriginMask RelInd = 1u << 2;     // relative induction, drop-conjuncts variant
+constexpr LemmaOriginMask RelIndGrow = 1u << 3; // relative induction, grow-from-init variant
+// which kind of proof obligation was being blocked
+constexpr LemmaOriginMask Must = 1u << 4;
+constexpr LemmaOriginMask May = 1u << 5;
+
+constexpr LemmaOriginMask MechanismMask = Itp | IndItp | RelInd | RelIndGrow;
+constexpr LemmaOriginMask PobMask = Must | May;
+
+constexpr LemmaOriginMask ofPob(bool isMayPO) { return isMayPO ? May : Must; }
+} // namespace LemmaOrigin
+
+inline std::string lemmaOriginToString(LemmaOriginMask origin) {
+    if (origin == LemmaOrigin::None) { return "NONE"; }
+    std::string res;
+    auto add = [&](LemmaOriginMask bit, char const * name) {
+        if ((origin & bit) == 0) { return; }
+        if (not res.empty()) { res += '|'; }
+        res += name;
+    };
+    add(LemmaOrigin::Itp, "ITP");
+    add(LemmaOrigin::IndItp, "INDITP");
+    add(LemmaOrigin::RelInd, "RELIND");
+    add(LemmaOrigin::RelIndGrow, "RELINDGROW");
+    add(LemmaOrigin::Must, "MUST");
+    add(LemmaOrigin::May, "MAY");
+    return res;
+}
+
+/// `first` is the authoritative tag: the origin of the first discovery of the lemma.
+/// `seen` is the union of every origin the lemma was ever derived with
+struct LemmaProvenance {
+    LemmaOriginMask first = LemmaOrigin::None;
+    LemmaOriginMask seen = LemmaOrigin::None;
+};
+
 class OverApproxMap : public ApproxMap {
 public:
-    std::unordered_set<PTRef, PTRefHash> indLearnt;
+    /// Records how `lemma` was discovered for `vid`.  The first origin wins and is kept.
+    /// Returns the stored first origin when `origin` disagrees with it, None otherwise.
+    LemmaOriginMask recordOrigin(SymRef vid, PTRef lemma, LemmaOriginMask origin) {
+        if (origin == LemmaOrigin::None) { return LemmaOrigin::None; }
+        auto & provenance = origins[vid][lemma];
+        if (provenance.first == LemmaOrigin::None) {
+            provenance.first = origin;
+            provenance.seen = origin;
+            return LemmaOrigin::None;
+        }
+        provenance.seen |= origin;
+        return provenance.first == origin ? LemmaOrigin::None : provenance.first;
+    }
+
+    LemmaProvenance getProvenance(SymRef vid, PTRef lemma) const {
+        auto vit = origins.find(vid);
+        if (vit == origins.end()) { return {}; }
+        auto it = vit->second.find(lemma);
+        return it == vit->second.end() ? LemmaProvenance{} : it->second;
+    }
+
+private:
+    /// vertex -> lemma -> provenance
+    std::unordered_map<SymRef, std::unordered_map<PTRef, LemmaProvenance, PTRefHash>, SymRefHash> origins;
 };
 
 const unsigned short MAY_PO_GAS = 3; // nr of predecessors allowed on a may pos
@@ -409,13 +477,17 @@ class SpacerContext {
     // Helper data structures to get the versioning right
     ChcDirectedHyperGraph::VertexInstances vertexInstances;
 
-    void addMaySummary(SymRef vid, std::size_t bound, PTRef summary, bool isInductive = false) {
+    void addMaySummary(SymRef vid, std::size_t bound, PTRef summary,
+                       LemmaOriginMask origin = LemmaOrigin::None) {
         // TODO bound = propagateLemma(vid, bound, summary);
         for (auto boundI = 0; boundI <= bound; ++boundI) {
             over.insert(vid, boundI, summary);
         }
-        if (isInductive) {
-            over.indLearnt.insert(summary);
+        LemmaOriginMask const clash = over.recordOrigin(vid, summary, origin);
+        if (clash != LemmaOrigin::None) {
+            TRACE(1, "[!] Lemma " << summary.x << " for " << vid.x << " rediscovered as "
+                  << lemmaOriginToString(origin) << ", keeping first origin "
+                  << lemmaOriginToString(clash));
         }
     }
 
@@ -707,8 +779,10 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
         if (not newProofObligations.empty()) {
 #if RELIND_GROW
             PTRef relindLemma = tryBlockWithRelativeInduction(pob);
+            LemmaOriginMask RelIndVariant = LemmaOrigin::RelIndGrow;
 #else
             PTRef relindLemma = tryBlockWithRelativeInductionBool(pob);
+            LemmaOriginMask RelIndVariant = LemmaOrigin::RelInd;
 #endif
             if (relindLemma != PTRef_Undef) {
                 if (not checkNewLemma(pob.vertex, pob.bound - 1, relindLemma)) {
@@ -716,7 +790,8 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
                 }
                 TRACE(1, "[RELIND] Spared POBS: " << newProofObligations.size());
                 TRACE(2, " New lemma : " << logic.pp(relindLemma));
-                addMaySummary(pob.vertex, pob.bound, relindLemma, true);
+                addMaySummary(pob.vertex, pob.bound, relindLemma,
+                              RelIndVariant | LemmaOrigin::ofPob(pob.isMayPO));
                 if (pob.parent != nullptr) {
                     pob.parent->blockingLemmas.insert(pob.vertex, relindLemma);
                 }
@@ -799,128 +874,96 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
                     inductiveSources.push_back(sourceGuard);
                 }
             }
-            bool inductiveChance = not inductiveSources.empty();
-
-            // DEBUG
-            auto allVars = TermUtils(logic).getVars(transitions);
-            auto isInTrans = [this, &allVars](GuardVar guardVar) {
-                PTRef guard = guardVar.get(logic);
-                return std::find(allVars.begin(), allVars.end(), guard) != allVars.end();
-            };
-            assert(not inductiveChance or std::any_of(inductiveSources.begin(), inductiveSources.end(), isInTrans));
-            // end DEBUG
 
             PTRef newLemma = PTRef_Undef;
 
-            if (inductiveChance) {
-
 #if BOTH || !INDITP
-                auto originalRes = interpolatingSat(edgesMaySummary, pob.constraint);
-                auto originalNewLemma = VersionManager(logic).targetFormulaToBase(originalRes.interpolant);
-                assert(originalRes.answer == QueryAnswer::UNSAT);
-                if (originalRes.answer != QueryAnswer::UNSAT) {
-                    throw std::logic_error("All edges should have been blocked, but they are not!");
-                }
-                TRACE(2,
-                      "---- [ITP] Learnt lemma: " << originalNewLemma.x 
-                      // << " disj? " << is_clause(logic, originalNewLemma)
-                      << " nr disj: " << TermUtils(logic).getTopLevelDisjuncts(originalNewLemma).size()
-                      << " nr vars: " << TermUtils(logic).getVars(originalNewLemma).size());
+            auto originalRes = interpolatingSat(edgesMaySummary, pob.constraint);
+            auto originalNewLemma = VersionManager(logic).targetFormulaToBase(originalRes.interpolant);
+            assert(originalRes.answer == QueryAnswer::UNSAT);
+            if (originalRes.answer != QueryAnswer::UNSAT) {
+                throw std::logic_error("All edges should have been blocked, but they are not!");
+            }
+            TRACE(2,
+                  "---- [ITP] Learnt lemma: " << originalNewLemma.x 
+                  << " nr disj: " << TermUtils(logic).getTopLevelDisjuncts(originalNewLemma).size()
+                  << " nr vars: " << TermUtils(logic).getVars(originalNewLemma).size());
 
 #if GENERALIZE
 #if GDOWN
-                originalNewLemma = generalize_down(originalNewLemma, maySummary, transitions, inductiveSources);
+            originalNewLemma = generalize_down(originalNewLemma, maySummary, transitions, inductiveSources);
 #else
-                originalNewLemma = generalize(originalNewLemma, maySummary, transitions, inductiveSources);
+            originalNewLemma = generalize(originalNewLemma, maySummary, transitions, inductiveSources);
 #endif
-                TRACE(2,
-                      "---- [ITP] Generalization: " << originalNewLemma.x
-                      // << " disj? " << is_clause(logic, originalNewLemma)
-                      << " nr disj: " << TermUtils(logic).getTopLevelDisjuncts(originalNewLemma).size()
-                      << " nr vars: " << TermUtils(logic).getVars(originalNewLemma).size());
+            TRACE(2,
+                  "---- [ITP] Generalization: " << originalNewLemma.x
+                  << " nr disj: " << TermUtils(logic).getTopLevelDisjuncts(originalNewLemma).size()
+                  << " nr vars: " << TermUtils(logic).getVars(originalNewLemma).size());
 #endif
-                TRACE(2,
-                      "Lemma for " << pob.vertex.x << " at level " << pob.bound << " - "
-                      << logic.pp(originalNewLemma));
+            TRACE(2,
+                  "Lemma for " << pob.vertex.x << " at level " << pob.bound << " - "
+                  << logic.pp(originalNewLemma));
 
-                if (not checkNewLemma(pob.vertex, pob.bound - 1, originalNewLemma)) {
-                    throw std::logic_error("After generalization, originalNewLemma is not consistent with edeges!");
-                }
+            if (not checkNewLemma(pob.vertex, pob.bound - 1, originalNewLemma)) {
+                throw std::logic_error("After generalization, originalNewLemma is not consistent with edeges!");
+            }
 #endif
 
 #if INDITP
-                auto indRes = inductiveItp(maySummary, transitions, inductiveSources, pob.constraint);
-                assert(indRes.answer == QueryAnswer::UNSAT);
-                if (indRes.answer != QueryAnswer::UNSAT) {
-                    throw std::logic_error("All edges should have been blocked, but they are not!");
-                }
-                auto indNewLemma = indRes.interpolant;
+            auto indRes = inductiveItp(maySummary, transitions, inductiveSources, pob.constraint);
+            assert(indRes.answer == QueryAnswer::UNSAT);
+            if (indRes.answer != QueryAnswer::UNSAT) {
+                throw std::logic_error("All edges should have been blocked, but they are not!");
+            }
+            auto indNewLemma = indRes.interpolant;
 
-                // Add the new ind Lemma
-                TRACE(2,
-                      "---- [IND] Learnt lemma: " << indNewLemma.x 
-                      // << " disj? " << is_clause(logic, indNewLemma)
-                      << " nr disj: " << TermUtils(logic).getTopLevelDisjuncts(indNewLemma).size()
-                      << " nr vars: " << TermUtils(logic).getVars(indNewLemma).size());
+            // Add the new ind Lemma
+            TRACE(2,
+                  "---- [IND] Learnt lemma: " << indNewLemma.x 
+                  << " nr disj: " << TermUtils(logic).getTopLevelDisjuncts(indNewLemma).size()
+                  << " nr vars: " << TermUtils(logic).getVars(indNewLemma).size());
 
-                if (not checkNewLemma(pob.vertex, pob.bound - 1, indNewLemma)) {
-                    throw std::logic_error("indNewLemma is not consistent with edeges!");
-                }
+            if (not checkNewLemma(pob.vertex, pob.bound - 1, indNewLemma)) {
+                throw std::logic_error("indNewLemma is not consistent with edeges!");
+            }
 
 #if GDOWN
-                indNewLemma = generalize_down(indNewLemma, maySummary, transitions, inductiveSources);
+            indNewLemma = generalize_down(indNewLemma, maySummary, transitions, inductiveSources);
 #else
-                indNewLemma = generalize(indNewLemma, maySummary, transitions, inductiveSources);
+            indNewLemma = generalize(indNewLemma, maySummary, transitions, inductiveSources);
 #endif
-                TRACE(2,
-                      "---- [IND] Generalization: " << indNewLemma.x
-                      // << " disj? " << is_clause(logic, indNewLemma)
-                      << " nr disj: " << TermUtils(logic).getTopLevelDisjuncts(indNewLemma).size()
-                      << " nr vars: " << TermUtils(logic).getVars(indNewLemma).size());
-                TRACE(2,
-                      "Lemma for " << pob.vertex.x << " at level " << pob.bound << " - "
-                      << logic.pp(indNewLemma))
+            TRACE(2,
+                  "---- [IND] Generalization: " << indNewLemma.x
+                  << " nr disj: " << TermUtils(logic).getTopLevelDisjuncts(indNewLemma).size()
+                  << " nr vars: " << TermUtils(logic).getVars(indNewLemma).size());
+            TRACE(2,
+                  "Lemma for " << pob.vertex.x << " at level " << pob.bound << " - "
+                  << logic.pp(indNewLemma));
 
-                if (not checkNewLemma(pob.vertex, pob.bound - 1, indNewLemma)) {
-                    throw std::logic_error("After generalization, indNewLemma is not consistent with edeges!");
-                }
+            if (not checkNewLemma(pob.vertex, pob.bound - 1, indNewLemma)) {
+                throw std::logic_error("After generalization, indNewLemma is not consistent with edeges!");
+            }
 
 #if BOTH
-                bool strongerOldLemma = not implies(originalNewLemma, indNewLemma, logic);
-                if (strongerOldLemma)
-                    TRACE(1, ">>>> NEWLEMMA IS STRONGER OR INCOMPARABLE ");
-                newLemma = indNewLemma;
-                addMaySummary(pob.vertex, pob.bound, newLemma, true);
-                newLemma = originalNewLemma;
-                addMaySummary(pob.vertex, pob.bound, newLemma, false);
+            bool strongerOldLemma = not implies(originalNewLemma, indNewLemma, logic);
+            if (strongerOldLemma)
+                TRACE(1, ">>>> NEWLEMMA IS STRONGER OR INCOMPARABLE ");
+            newLemma = indNewLemma;
+            addMaySummary(pob.vertex, pob.bound, newLemma,
+                          LemmaOrigin::IndItp | LemmaOrigin::ofPob(pob.isMayPO));
+            newLemma = originalNewLemma;
+            addMaySummary(pob.vertex, pob.bound, newLemma,
+                          LemmaOrigin::Itp | LemmaOrigin::ofPob(pob.isMayPO));
 #else // not BOTH
-                newLemma = indNewLemma;
-                addMaySummary(pob.vertex, pob.bound, newLemma, true);
+            newLemma = indNewLemma;
+            addMaySummary(pob.vertex, pob.bound, newLemma,
+                          LemmaOrigin::IndItp | LemmaOrigin::ofPob(pob.isMayPO));
 #endif
 #else // not INDITP
-                newLemma = originalNewLemma;
-                addMaySummary(pob.vertex, pob.bound, newLemma, pob.isMayPO);
+            newLemma = originalNewLemma;
+            addMaySummary(pob.vertex, pob.bound, newLemma,
+                          LemmaOrigin::Itp | LemmaOrigin::ofPob(pob.isMayPO));
 #endif
-            }
-            else {
-                // This is the usual path
-                auto originalRes = interpolatingSat(edgesMaySummary, pob.constraint);
-                auto originalNewLemma = VersionManager(logic).targetFormulaToBase(originalRes.interpolant);
-                assert(originalRes.answer == QueryAnswer::UNSAT);
-                if (originalRes.answer != QueryAnswer::UNSAT) {
-                    throw std::logic_error("All edges should have been blocked, but they are not!");
-                }
-                TRACE(2,
-                      "Original learnt lemma for " << pob.vertex.x << " at level " << pob.bound << " - " << logic.pp(originalNewLemma))
-                TRACE(2,
-                          "---- [ITP] Learnt lemma: " << originalNewLemma.x
-                          // << " disj? " << is_clause(logic, originalNewLemma)
-                          << " nr disj: " << TermUtils(logic).getTopLevelDisjuncts(originalNewLemma).size()
-                          << " nr vars: " << TermUtils(logic).getVars(originalNewLemma).size());
-                newLemma = originalNewLemma;
-                newLemma = generalize(newLemma, maySummary, transitions, inductiveSources);
-                addMaySummary(pob.vertex, pob.bound, newLemma, false);
-            }
 
             if (pob.parent != nullptr) {
                 pob.parent->blockingLemmas.insert(pob.vertex, newLemma);
@@ -1821,6 +1864,7 @@ ProofObligation SpacerContext::computePredecessor(EId eid, ProofObligationCore c
 #if MAYPO
             PTRef newOverPob = VersionManager(logic).sourceFormulaToTarget(newOverConstraint); // ensure POB is target fla
             if (newOverPob != newPob and newOverPob != logic.getTerm_true()) {
+                // FIXME
                 pob.overPredCache.insert(eid, sources[vertexToRefine], newOverPob);
             }
 #endif
@@ -1865,7 +1909,12 @@ SpacerContext::InductiveCheckResult SpacerContext::isInductive(std::size_t maxLe
                 const auto& allComponents = over.getComponents(vid, level);
                 TRACE(1, "[v] INDUCTIVE FRAME FOUND: ");
                 for (PTRef component : over.getComponents(vid, level)) {
-                    TRACE(1, component.x << " learnt with mayPO? " << over.indLearnt.contains(component));
+                    auto const provenance = over.getProvenance(vid, component);
+                    TRACE(1, component.x << " learnt with tag "
+                          << lemmaOriginToString(provenance.first)
+                          << (provenance.seen != provenance.first
+                                  ? " also-seen " + lemmaOriginToString(provenance.seen)
+                                  : std::string{}));
                 }
             }
             inductive = inductive and allPushed;
