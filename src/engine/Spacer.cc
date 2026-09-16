@@ -829,7 +829,6 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
 #endif
 
 #if CC
-            if (!logic.hasIntegers()) {
             // Convex Closure of blocking lemmas
             for (auto it = pob.blockingLemmas.begin(); it != pob.blockingLemmas.end(); ++it) {
                 vec<PTRef> negatedLemmas;
@@ -837,9 +836,12 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
                     negatedLemmas.push(logic.mkNot(lemma));
                 }
                 PTRef mayConstraint = convexClosure.getConvexClosure(negatedLemmas);
-                if (logic.isTrue(mayConstraint)) {
+                if (logic.isTrue(mayConstraint) or logic.isFalse(mayConstraint)) {
                     continue;
                 }
+                // Blocking lemmas are summaries, stored in base form; a pob constraint must be a
+                // target formula.
+                mayConstraint = VersionManager(logic).baseFormulaToTarget(mayConstraint);
                 TRACE(2, "[CC] Adding a ConvexClosure of " << negatedLemmas.size() << " lemmas");
                 TRACE(3, "[CC] Added " << logic.pp(mayConstraint));
                 TRACE(3, "[CC] Blocking:" << std::endl;
@@ -851,7 +853,6 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
                 mayPred->life = pob.life - 1;
                 if (mayPred->life > 0)
                     newMayPO.push_back(std::move(mayPred));
-            }
             }
 #endif
         }
