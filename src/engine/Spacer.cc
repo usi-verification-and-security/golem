@@ -40,8 +40,14 @@
 #define BOTH 0
 #define INDITP 0
 #define MAYPO 1
-#define CC 0
-#define BMBP 1
+#define MAYPO_ON_LAST_VISIT 0
+#define MAY_POBS_FIRST 1
+#define CC_SINGLE_DIRECT 1 // with a single lemma use !l verbatim: ConvexClosure keeps only
+                           // arithmetic literals, so it would drop the boolean guards of !l
+#define MAYPO_SKIP_BLOCKED 1 // skip a may-pob already refuted by the frame: blocking it
+                             // costs a full interpolation and re-learns a known lemma // 1 = pop may-pobs before must-pobs at the same bound (original) // also build may-pobs on a pob's final visit, bypassing the trigger
+#define CC 1
+#define BMBP 0
 
 #define TRACE(l, m)                                                                                                    \
     if (TRACE_LEVEL >= l) { std::cout << m << std::endl; }
@@ -219,9 +225,9 @@ private:
 };
 
 const unsigned short MAY_PO_GAS = 20; // nr of predecessors allowed on a may pos
-const unsigned short TRIGGER_MAY_PO = 3; // nr of visits before adding may pos
-const unsigned short MIN_LEMMAS_FOR_CC = 2; // nr of lemmas triggering a CC
-const unsigned short MIN_BMBP_OVER_LITS = 1; // nr of literals in BMBP overapprox
+const unsigned short TRIGGER_MAY_PO = 6;
+const unsigned short MIN_LEMMAS_FOR_CC = 1;
+const unsigned short MIN_BMBP_OVER_LITS = 1;
 
 class EdgeVidPredCache {
 public:
@@ -366,14 +372,29 @@ private:
     InnerMap cache;
 };
 
+/// Everything we know about a proof obligation *as a subgoal*, i.e. about the pair
+/// (vertex, formula), independently of the bound it is currently being examined at.
+/// A pob object lives only inside one boundSafety() call; this survives the whole run,
+/// so the evidence gathered about a subgoal is not thrown away and re-derived each bound.
+struct PobInfo {
+    /// total examinations of this (vertex, formula), summed over every bound
+    std::size_t globalCounter = 0;
+    /// bound at which this subgoal was first examined
+    std::size_t firstBound = 0;
+    bool seen = false;
+    /// over-approximations of the predecessors, collected by BMBP
+    EdgeVidPredCache overPredCache;
+    /// lemmas that blocked a child of this subgoal, used by CC
+    VidPredCache blockingLemmas;
+};
+
 struct ProofObligationCore {
     SymRef vertex;
     std::size_t bound;
     PTRef constraint;
     bool isMayPO = false;
-    mutable std::size_t counter = 0;
-    mutable EdgeVidPredCache overPredCache;
-    mutable VidPredCache blockingLemmas;
+    /// examinations of THIS occurrence; the cross-bound count lives in PobInfo
+    mutable std::size_t localCounter = 0;
     mutable std::size_t life = MAY_PO_GAS;
     mutable const ProofObligationCore* parent = nullptr;
     mutable bool closed = false;
@@ -395,7 +416,8 @@ using ProofObligation = std::unique_ptr<ProofObligationCore>;
 bool operator<(ProofObligation const & pob1, ProofObligation const & pob2) {
     // TODO: Does it make sense to break ties using vertices?
     return pob1->bound < pob2->bound or \
-        (pob1->bound == pob2->bound and pob1->isMayPO > pob2->isMayPO) or \
+        (pob1->bound == pob2->bound and (MAY_POBS_FIRST ? pob1->isMayPO > pob2->isMayPO
+                                                        : pob1->isMayPO < pob2->isMayPO)) or \
         (pob1->bound == pob2->bound and pob1->isMayPO == pob2->isMayPO \
          and pob1->vertex.x > pob2->vertex.x);
 }
@@ -403,7 +425,8 @@ bool operator<(ProofObligation const & pob1, ProofObligation const & pob2) {
 // TODO: why we need both operators??
 bool operator>(ProofObligation const & pob1, ProofObligation const & pob2) {
     return pob1->bound > pob2->bound or \
-        (pob1->bound == pob2->bound and pob1->isMayPO < pob2->isMayPO) or \
+        (pob1->bound == pob2->bound and (MAY_POBS_FIRST ? pob1->isMayPO < pob2->isMayPO
+                                                        : pob1->isMayPO > pob2->isMayPO)) or \
         (pob1->bound == pob2->bound and pob1->isMayPO == pob2->isMayPO \
          and pob1->vertex.x < pob2->vertex.x);
 }
@@ -496,6 +519,13 @@ class SpacerContext {
 
     // Helper data structures to get the versioning right
     ChcDirectedHyperGraph::VertexInstances vertexInstances;
+
+    /// vertex -> pob formula -> what we know about that subgoal. Never cleared: the point
+    /// is that it outlives the per-bound pob objects.  mutable so that computePredecessor,
+    /// which is const, can record over-approximations.
+    mutable std::unordered_map<SymRef, std::unordered_map<PTRef, PobInfo, PTRefHash>, SymRefHash> pobDb;
+
+    PobInfo & pobInfo(SymRef vid, PTRef formula) const { return pobDb[vid][formula]; }
 
     void addMaySummary(SymRef vid, std::size_t bound, PTRef summary,
                        LemmaOriginMask origin = LemmaOrigin::None) {
@@ -606,6 +636,14 @@ class SpacerContext {
         std::unique_ptr<Model> model;
     };
     QueryResult sat(PTRef A, PTRef B) const;
+
+    /// Is `targetConstraint` already excluded by the frame of `vid` at `bound`?  Such a pob
+    /// still costs a full interpolatingSat + generalize_down when examined, and the lemma it
+    /// yields is one we already have, so there is no point queueing it.
+    bool alreadyRefuted(SymRef vid, std::size_t bound, PTRef targetConstraint) const {
+        PTRef frame = VersionManager(logic).baseFormulaToTarget(getMaySummary(vid, bound));
+        return sat(frame, targetConstraint).answer == QueryAnswer::UNSAT;
+    }
 
     struct ItpQueryResult {
         QueryAnswer answer;
@@ -748,7 +786,10 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
         TRACE(1, "[MAYPO] id=" << p.constraint.x
               << " src=" << lemmaOriginToString(p.maySource)
               << (p.mayRoot ? " root" : " desc")
-              << " lvl=" << p.bound << " life=" << p.life << " visits=" << p.counter
+              << " lvl=" << p.bound << " life=" << p.life
+              << " visits=" << p.localCounter
+              << "/" << pobInfo(p.vertex, p.constraint).globalCounter
+              << " firstBound=" << pobInfo(p.vertex, p.constraint).firstBound
               << " atoms=" << TermUtils(logic).getTopLevelConjuncts(p.constraint).size()
               << " fate=" << fate);
     };
@@ -762,7 +803,13 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
             continue;
         }
 
-        pob.counter++;
+        pob.localCounter++;
+        PobInfo & info = pobInfo(pob.vertex, pob.constraint);
+        if (not info.seen) {
+            info.seen = true;
+            info.firstBound = pob.bound;
+        }
+        info.globalCounter++;
         TRACE(1, "[?] Examining "
               << ((pob.isMayPO) ? "MAY" : "MUST") << " PO " << pob.constraint.x
               << " at level " << pob.bound
@@ -832,7 +879,8 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
                 addMaySummary(pob.vertex, pob.bound, relindLemma,
                               RelIndVariant | lemmaOriginOfPob(pob));
                 if (pob.parent != nullptr) {
-                    pob.parent->blockingLemmas.insert(pob.vertex, relindLemma);
+                    pobInfo(pob.parent->vertex, pob.parent->constraint)
+                        .blockingLemmas.insert(pob.vertex, relindLemma);
                 }
                 if (pob.isMayPO) {
                     TRACE(1, "    $$$$$$$$$$$$ MAY PO WAS BLOCKED $$$$$$$$$$$$");
@@ -850,11 +898,16 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
         // [MayPO] Collect MayPO as a convex over-approximation of the predecessors
         std::vector<ProofObligation> newMayPO;
         ConvexClosure convexClosure(logic);
-        if (pob.counter >= TRIGGER_MAY_PO or newProofObligations.empty()) {
+        // Evidence is gathered per subgoal across bounds, so the trigger is the cross-bound
+        // counter.  `bound >= firstBound` keeps us from using evidence collected higher up
+        // than where we now are.
+        bool const evidenceReady =
+            pob.bound >= info.firstBound and info.globalCounter >= TRIGGER_MAY_PO;
+        if (evidenceReady or (MAYPO_ON_LAST_VISIT and newProofObligations.empty())) {
 
 #if BMBP
             // Bidirectional Model based projection
-            for (auto it = pob.overPredCache.begin(); it != pob.overPredCache.end(); ++it) {
+            for (auto it = info.overPredCache.begin(); it != info.overPredCache.end(); ++it) {
                 ProofObligation mayPred(new ProofObligationCore{it.getNode(graph),
                                                                 pob.bound - 1,
                                                                 logic.mkAnd(it.getApprox()),
@@ -865,6 +918,10 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
                 mayPred->life = pob.life - 1;
                 mayPred->maySource = LemmaOrigin::MayBmbp;
                 mayPred->mayRoot = true;
+                if (MAYPO_SKIP_BLOCKED and alreadyRefuted(mayPred->vertex, mayPred->bound, mayPred->constraint)) {
+                    TRACE(1, "[MAYPO] skipped, already refuted by the frame");
+                    continue;
+                }
                 if (mayPred->life > 0)
                     newMayPO.push_back(std::move(mayPred));
             }
@@ -872,12 +929,14 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
 
 #if CC
             // Convex Closure of blocking lemmas
-            for (auto it = pob.blockingLemmas.begin(); it != pob.blockingLemmas.end(); ++it) {
+            for (auto it = info.blockingLemmas.begin(); it != info.blockingLemmas.end(); ++it) {
                 vec<PTRef> negatedLemmas;
                 for (PTRef lemma : it.getApprox()) {
                     negatedLemmas.push(logic.mkNot(lemma));
                 }
-                PTRef mayConstraint = convexClosure.getConvexClosure(negatedLemmas);
+                PTRef mayConstraint = (CC_SINGLE_DIRECT and negatedLemmas.size() == 1)
+                                          ? negatedLemmas[0]
+                                          : convexClosure.getConvexClosure(negatedLemmas);
                 if (logic.isTrue(mayConstraint) or logic.isFalse(mayConstraint)) {
                     continue;
                 }
@@ -897,6 +956,10 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
                 mayPred->life = pob.life - 1;
                 mayPred->maySource = LemmaOrigin::MayCc;
                 mayPred->mayRoot = true;
+                if (MAYPO_SKIP_BLOCKED and alreadyRefuted(mayPred->vertex, mayPred->bound, mayPred->constraint)) {
+                    TRACE(1, "[MAYPO] skipped, already refuted by the frame");
+                    continue;
+                }
                 if (mayPred->life > 0)
                     newMayPO.push_back(std::move(mayPred));
             }
@@ -1016,7 +1079,8 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
 #endif
 
             if (pob.parent != nullptr) {
-                pob.parent->blockingLemmas.insert(pob.vertex, newLemma);
+                pobInfo(pob.parent->vertex, pob.parent->constraint)
+                    .blockingLemmas.insert(pob.vertex, newLemma);
             }
 
             if (pob.bound < lowestChangedLevel) { lowestChangedLevel = pob.bound; }
@@ -1884,7 +1948,7 @@ ProofObligation SpacerContext::computePredecessor(EId eid, ProofObligationCore c
 #if MAYPO
             PTRef newOverPob = VersionManager(logic).sourceFormulaToTarget(newOverConstraint); // ensure POB is target fla
             if (newOverPob != newPob and newOverPob != logic.getTerm_true()) {
-                pob.overPredCache.insert(eid, 0, newOverPob);
+                pobInfo(pob.vertex, pob.constraint).overPredCache.insert(eid, 0, newOverPob);
             }
 #endif
             TRACE(2, "New proof obligation generated");
@@ -1931,7 +1995,7 @@ ProofObligation SpacerContext::computePredecessor(EId eid, ProofObligationCore c
 #if MAYPO
             PTRef newOverPob = VersionManager(logic).sourceFormulaToTarget(newOverConstraint); // ensure POB is target fla
             if (newOverPob != newPob and newOverPob != logic.getTerm_true()) {
-                pob.overPredCache.insert(eid, vertexToRefine, newOverPob);
+                pobInfo(pob.vertex, pob.constraint).overPredCache.insert(eid, vertexToRefine, newOverPob);
             }
 #endif
             ProofObligation predPob(new ProofObligationCore{sources[vertexToRefine], sourceBound, newPob, pob.isMayPO});
