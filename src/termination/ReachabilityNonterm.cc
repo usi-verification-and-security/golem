@@ -758,6 +758,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::checkTermina
     // TODO: Reached are not in the initial states
     assert(reached != logic.getTerm_false());
     // Algorithm checks if reachable states are terminating
+    // TODO: I can also extract all covered states from here and use them as terminating (updating tr)
     auto [answer, subinv] =
         analyzeTS(reached, transition, TermUtils(logic).simplifyMax(logic.mkNot(noncoveredStates)), logic);
     // TODO: It is possible to do check differently, analyzing <noncoveredStates, tr,
@@ -770,9 +771,8 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::checkTermina
         strictCandidates.clear();
         strictCandidates.push(subinv);
         strictCandidates.push(trInv);
-
         // TODO: Think if maybe sink can be even more restricted...
-        transition = logic.mkAnd(transition, logic.mkNot(TermUtils(logic).simplifyMax(reached)));
+        transition = logic.mkAnd(transition, logic.mkNot(TimeMachine(logic).sendFlaThroughTime(TermUtils(logic).simplifyMax(reached),1)));
         smt_checker.resetSolver();
         // TODO: It should work for  subinv \/ TrInv, but it does not
         //    weaker TrInv seems to fail more often then stronger TrInv :(
