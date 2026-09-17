@@ -7,6 +7,7 @@
 #ifndef OPENSMT_QUANTIFIERELIMINATION_H
 #define OPENSMT_QUANTIFIERELIMINATION_H
 
+#include "ModelBasedProjection.h"
 #include "osmt_terms.h"
 
 namespace golem {
@@ -23,14 +24,20 @@ Options for quantifier elimination technique.
   It applies only when `compute_overapproximation` is true.
   If 0, no limit is applied. When exceeded, the returned result is an underapproximaton,
   overapproximation is not precise.
+- `mbp_options`: options of the underlying model-based projection; they are
+  handed to every ModelBasedProjection instance the procedure creates.
+  See MBPOptions in ModelBasedProjection.h.
  */
 struct QEOptions {
-    QEOptions() : max_disjunctions_in_over(0), max_mbp_per_poly(0), compute_overapproximation(false) {}
+    QEOptions() : max_disjunctions_in_over(0), max_mbp_per_poly(0), compute_overapproximation(false), mbp_options() {}
     QEOptions(short max_disjunctions_in_over, short max_mbp_per_poly, bool compute_overapproximation)
-        : max_disjunctions_in_over(max_disjunctions_in_over), max_mbp_per_poly(max_mbp_per_poly), compute_overapproximation(compute_overapproximation) {}
+        : max_disjunctions_in_over(max_disjunctions_in_over), max_mbp_per_poly(max_mbp_per_poly), compute_overapproximation(compute_overapproximation), mbp_options() {}
+    QEOptions(short max_disjunctions_in_over, short max_mbp_per_poly, bool compute_overapproximation, MBPOptions mbp_options)
+        : max_disjunctions_in_over(max_disjunctions_in_over), max_mbp_per_poly(max_mbp_per_poly), compute_overapproximation(compute_overapproximation), mbp_options(mbp_options) {}
     short max_disjunctions_in_over;
     short max_mbp_per_poly;
     bool compute_overapproximation;
+    MBPOptions mbp_options;
 };
 
 /*
@@ -52,6 +59,15 @@ struct QEResult {
     bool precise_under;
     bool precise_over;
 
+    // Work actually done, which is what the limits above are compared against:
+    // `outer_iterations` is the number of convex implicants explored (and hence
+    // the number of disjuncts of `over`), `max_mbps_per_implicant` the largest
+    // number of MBPs any one of them needed, `total_mbps` the number of
+    // disjuncts of `under`.  A limit only bites when the corresponding count
+    // would have exceeded it.
+    unsigned outer_iterations = 0;
+    unsigned max_mbps_per_implicant = 0;
+    unsigned total_mbps = 0;
 };
 
 /*
