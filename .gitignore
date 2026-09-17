@@ -11,3 +11,8 @@ run_benchmark.sh
 
 ## macos
 .DS_Store
+
+*~
+
+## claude code (local, per-machine)
+.claude/settings.local.json
