@@ -20,6 +20,9 @@ Options for quantifier elimination technique.
   It applies only when `compute_overapproximation` is true.
   If 0, no limit is applied. In particular, if 1, then the
   over-approximation will be a convex polyhedron.
+  Reaching the limit only makes the overapproximation imprecise if the part that
+  has to be wrapped into a single convex piece is not already a cube; in
+  particular, a conjunctive input remains precise under a limit of 1.
 - `max_mbp_per_poly`: limits the number of mbps per convex implicant.
   It applies only when `compute_overapproximation` is true.
   If 0, no limit is applied. When exceeded, the returned result is an underapproximaton,
