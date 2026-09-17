@@ -413,13 +413,7 @@ PTRef constructTransitionInvariantCandidates(PTRef init, PTRef transition, PTRef
     // states reachable from `init` within 1..depth-1 steps that already satisfy the trace.
     std::vector<PTRef> checked_states;
     if (depth > 1) {
-        // TODO: Maybe can do in 1 transition
-        vec<PTRef> temp_vars;
-        for (auto var : vars) {
-            temp_vars.push(TimeMachine(logic).sendVarThroughTime(var, depth - 1));
-        }
-        checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(
-            QuantifierElimination(logic).keepOnly(logic.mkAnd(init, trace), temp_vars), 1));
+        checked_states.push_back(QuantifierElimination(logic).eliminate(logic.mkAnd(init, transition), vars));
     }
     checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(sink, depth));
     // sink is updated, representing states that are guaranteed to reach termination
@@ -772,7 +766,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::checkTermina
         strictCandidates.push(subinv);
         strictCandidates.push(trInv);
         // TODO: Think if maybe sink can be even more restricted...
-        transition = logic.mkAnd(transition, logic.mkNot(TimeMachine(logic).sendFlaThroughTime(TermUtils(logic).simplifyMax(reached),1)));
+        sink = logic.mkAnd(sink, reached);
         smt_checker.resetSolver();
         // TODO: It should work for  subinv \/ TrInv, but it does not
         //    weaker TrInv seems to fail more often then stronger TrInv :(
