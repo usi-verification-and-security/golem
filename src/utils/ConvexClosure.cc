@@ -5,7 +5,9 @@
 #include "TermUtils.h"
 
 #include <algorithm>
+#include <cassert>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -271,6 +273,17 @@ private:
 
 } // namespace
 
+ConvexClosure::ConvexClosure(Logic & logic, QEOptions options) : logic(logic), options(options) {
+    if (not options.compute_overapproximation) {
+        throw std::invalid_argument(
+            "ConvexClosure requires QEOptions::compute_overapproximation to be set");
+    }
+    if (options.max_disjunctions_in_over != 1) {
+        throw std::invalid_argument(
+            "ConvexClosure requires QEOptions::max_disjunctions_in_over to be 1");
+    }
+}
+
 PTRef ConvexClosure::getConvexClosure(vec<PTRef> const & formulas) {
     auto * arithLogic = dynamic_cast<ArithLogic *>(&logic);
     if (not arithLogic) { throw std::logic_error("ConvexClosure currently supports only arithmetic logics"); }
@@ -426,11 +439,10 @@ PTRef ConvexClosure::getConvexClosure(vec<PTRef> const & formulas) {
     }
 
     QuantifierElimination qe(encodingLogic);
-    QEOptions options;
-    options.compute_overapproximation = true;
-    options.max_mbp_per_poly = 10;
-    options.max_disjunctions_in_over = 1;
     QEResult result = qe.eliminate(closureFormula, varsToEliminate, options);
+    // The encoding is a cube, so the disjunction budget of 1 costs nothing; without a projection
+    // budget the inner loop also runs to completion. The elimination is then exact.
+    assert(options.max_mbp_per_poly > 0 or result.precise_over);
     if (result.over == PTRef_Undef) { return logic.getTerm_true(); }
 
     // Anything the elimination failed to remove cannot be expressed in the source logic; giving up

@@ -293,6 +293,21 @@ TEST_F(QE_RealTest, test_LRA_disjunctive) {
     EXPECT_TRUE(implies(precise, result.over, logic));
 }
 
+// A conjunctive formula is its own only model-based implicant, so the outer loop needs a single
+// iteration and a disjunction budget of 1 does not restrict it: the over-approximation is exact and
+// must be reported as precise.
+TEST_F(QE_RealTest, test_LRA_conjunctiveFormulaStaysPreciseUnderDisjunctionLimit) {
+    // exists y. (0 <= y /\ y <= x /\ y <= 3)  is  0 <= x
+    PTRef fla = logic.mkAnd({logic.mkLeq(zero, y), logic.mkLeq(y, x), logic.mkLeq(y, logic.mkRealConst(3))});
+    PTRef precise = QuantifierElimination(logic).eliminate(fla, y);
+    QEResult result = QuantifierElimination(logic).eliminate(fla, vec<PTRef>{y}, QEOptions(1, 0, true));
+    EXPECT_EQ(result.outer_iterations, 1u);
+    EXPECT_TRUE(result.precise_under);
+    EXPECT_TRUE(result.precise_over);
+    EXPECT_TRUE(isEquivalent(result.under, precise, logic));
+    EXPECT_TRUE(isEquivalent(result.over, precise, logic));
+}
+
 class QE_IntTest : public ::testing::Test {
 protected:
     ArithLogic logic {opensmt::Logic_t::QF_LIA};

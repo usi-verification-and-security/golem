@@ -1,6 +1,7 @@
 #ifndef GOLEM_CONVEXCLOSURE_H
 #define GOLEM_CONVEXCLOSURE_H
 
+#include "QuantifierElimination.h"
 #include "osmt_terms.h"
 
 namespace golem {
@@ -22,12 +23,30 @@ namespace golem {
  */
 class ConvexClosure {
 public:
-    explicit ConvexClosure(Logic & logic) : logic(logic) {}
+    /**
+     * Options for the quantifier elimination that closes the encoding.
+     *
+     * Two of the three fields are fixed by what a convex closure is: `compute_overapproximation`
+     * must be set, and `max_disjunctions_in_over` must be 1 so that the result is a single convex
+     * polyhedron rather than a disjunction. Passing anything else is rejected. `max_mbp_per_poly`
+     * is free; 0 (the default) means no limit.
+     *
+     * The encoding handed to quantifier elimination is a cube, which is its own only implicant, so
+     * a disjunction budget of 1 never restricts the search. With `max_mbp_per_poly` left at 0 the
+     * elimination is therefore exact and `QEResult::precise_over` holds.
+     */
+    static QEOptions defaultOptions() {
+        return QEOptions(/* max_disjunctions_in_over */ 1, /* max_mbp_per_poly */ 0,
+                         /* compute_overapproximation */ true);
+    }
+
+    explicit ConvexClosure(Logic & logic, QEOptions options = defaultOptions());
 
     PTRef getConvexClosure(vec<PTRef> const & formulas);
 
 private:
     Logic & logic;
+    QEOptions options;
 };
 
 } // namespace golem
