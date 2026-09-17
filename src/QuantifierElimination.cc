@@ -16,6 +16,16 @@
 namespace {
 using namespace golem;
 
+// True if `fla` (in NNF) is a conjunction of literals, i.e. a single cube.
+bool isCube(Logic & logic, PTRef fla) {
+    vec<PTRef> conjuncts = TermUtils(logic).getTopLevelConjuncts(fla);
+    for (int i = 0; i < conjuncts.size(); ++i) {
+        PTRef atom = logic.isNot(conjuncts[i]) ? logic.getPterm(conjuncts[i])[0] : conjuncts[i];
+        if (logic.isBooleanOperator(atom)) { return false; }
+    }
+    return true;
+}
+
 QEResult eliminate_aux(Logic & logic, PTRef fla, vec<PTRef> const & vars, QEOptions limits) {
     vec<PTRef> under_projections;
     vec<PTRef> over_projections;
@@ -59,8 +69,9 @@ QEResult eliminate_aux(Logic & logic, PTRef fla, vec<PTRef> const & vars, QEOpti
 
         if (limits.max_disjunctions_in_over > 0 and limits.max_disjunctions_in_over <= outer_iter) {
             // let's wrap everything that remains in a single convex-overapproximation
-            result.precise_over = false;
             implicant = unexplored;
+            // This costs precision only when what remains is not already a cube.
+            if (not isCube(logic, implicant)) { result.precise_over = false; }
             // std::cerr << "OUT: exceeded limit " << outer_iter << "..." << std::endl;
             // std::cerr << "   remaining part: " << logic.printTerm(implicant) << std::endl;
         } else {
