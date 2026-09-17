@@ -413,7 +413,7 @@ PTRef constructTransitionInvariantCandidates(PTRef init, PTRef transition, PTRef
     // states reachable from `init` within 1..depth-1 steps that already satisfy the trace.
     std::vector<PTRef> checked_states;
     if (depth > 1) {
-        checked_states.push_back(QuantifierElimination(logic).eliminate(logic.mkAnd(init, transition), vars));
+        checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(QuantifierElimination(logic).eliminate(logic.mkAnd(init, transition), vars), depth - 1));
     }
     checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(sink, depth));
     // sink is updated, representing states that are guaranteed to reach termination
