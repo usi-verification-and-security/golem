@@ -40,7 +40,7 @@
 #define BOTH 0
 #define INDITP 0
 #define MAYPO 1
-#define CC 1
+#define CC 0
 #define BMBP 1
 
 #define TRACE(l, m)                                                                                                    \
@@ -138,7 +138,7 @@ private:
 class UnderApproxMap : public ApproxMap {};
 
 // How a lemma was derived
-using LemmaOriginMask = unsigned char;
+using LemmaOriginMask = unsigned short;
 
 namespace LemmaOrigin {
 constexpr LemmaOriginMask None = 0;
@@ -150,9 +150,15 @@ constexpr LemmaOriginMask RelIndGrow = 1u << 3; // relative induction, grow-from
 // which kind of proof obligation was being blocked
 constexpr LemmaOriginMask Must = 1u << 4;
 constexpr LemmaOriginMask May = 1u << 5;
+// which mechanism created the ROOT of this may-pob's subtree; inherited by every descendant
+constexpr LemmaOriginMask MayCc = 1u << 6;
+constexpr LemmaOriginMask MayBmbp = 1u << 7;
+// set only on the pob the CC / BMBP block created directly, not on its descendants
+constexpr LemmaOriginMask MayRoot = 1u << 8;
 
 constexpr LemmaOriginMask MechanismMask = Itp | IndItp | RelInd | RelIndGrow;
 constexpr LemmaOriginMask PobMask = Must | May;
+constexpr LemmaOriginMask MaySourceMask = MayCc | MayBmbp;
 
 constexpr LemmaOriginMask ofPob(bool isMayPO) { return isMayPO ? May : Must; }
 } // namespace LemmaOrigin
@@ -171,6 +177,9 @@ inline std::string lemmaOriginToString(LemmaOriginMask origin) {
     add(LemmaOrigin::RelIndGrow, "RELINDGROW");
     add(LemmaOrigin::Must, "MUST");
     add(LemmaOrigin::May, "MAY");
+    add(LemmaOrigin::MayCc, "CC");
+    add(LemmaOrigin::MayBmbp, "BMBP");
+    add(LemmaOrigin::MayRoot, "ROOT");
     return res;
 }
 
@@ -209,7 +218,7 @@ private:
     std::unordered_map<SymRef, std::unordered_map<PTRef, LemmaProvenance, PTRefHash>, SymRefHash> origins;
 };
 
-const unsigned short MAY_PO_GAS = 3; // nr of predecessors allowed on a may pos
+const unsigned short MAY_PO_GAS = 20; // nr of predecessors allowed on a may pos
 const unsigned short TRIGGER_MAY_PO = 3; // nr of visits before adding may pos
 const unsigned short MIN_LEMMAS_FOR_CC = 2; // nr of lemmas triggering a CC
 const unsigned short MIN_BMBP_OVER_LITS = 1; // nr of literals in BMBP overapprox
@@ -368,7 +377,18 @@ struct ProofObligationCore {
     mutable std::size_t life = MAY_PO_GAS;
     mutable const ProofObligationCore* parent = nullptr;
     mutable bool closed = false;
+    /// MayCc / MayBmbp: which mechanism created the root of this pob's may subtree.
+    /// Descendants are ordinary MBP predecessors, so they inherit the root's source.
+    mutable LemmaOriginMask maySource = LemmaOrigin::None;
+    /// true only for the pob a CC / BMBP block created directly.
+    mutable bool mayRoot = false;
 };
+
+/// Full provenance of a lemma learnt while blocking `pob`: pob type, may source, root flag.
+inline LemmaOriginMask lemmaOriginOfPob(ProofObligationCore const & pob) {
+    return LemmaOrigin::ofPob(pob.isMayPO) | pob.maySource |
+           (pob.mayRoot ? LemmaOrigin::MayRoot : LemmaOrigin::None);
+}
 
 using ProofObligation = std::unique_ptr<ProofObligationCore>;
 
@@ -479,10 +499,7 @@ class SpacerContext {
 
     void addMaySummary(SymRef vid, std::size_t bound, PTRef summary,
                        LemmaOriginMask origin = LemmaOrigin::None) {
-        // TODO bound = propagateLemma(vid, bound, summary);
-        for (auto boundI = 0; boundI <= bound; ++boundI) {
-            over.insert(vid, boundI, summary);
-        }
+        over.insert(vid, bound, summary);
         LemmaOriginMask const clash = over.recordOrigin(vid, summary, origin);
         if (clash != LemmaOrigin::None) {
             TRACE(1, "[!] Lemma " << summary.x << " for " << vid.x << " rediscovered as "
@@ -555,6 +572,14 @@ class SpacerContext {
     PTRef getEdgeMaySummaryWithNewLemma(EId eid, std::size_t bound, SymRef v, PTRef lemma) const;
 
     PTRef getEdgeMixedSummary(EId eid, std::size_t bound, std::size_t lastMayIndex) const;
+
+    /// Like getEdgeMixedSummary, but WITHOUT the may-summaries of sources [0, lastMayIndex].
+    /// Used as the MBP argument when computing a predecessor: dropping the may-summary makes
+    /// the projection depend only on the transition (and the must-summaries of the other
+    /// sources), so the under/over pair approximates the weakest precondition of the pob
+    /// itself rather than its frame-restricted version.  For a single-source edge this is
+    /// just the edge label.
+    PTRef getEdgeMustOnlySummary(EId eid, std::size_t bound, std::size_t lastMayIndex) const;
 
     bool checkNewLemma(SymRef v, std::size_t bound, PTRef lemma) const;
 
@@ -716,11 +741,23 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
         ProofObligation(new ProofObligationCore{query, currentBound, logic.getTerm_true(), false});
     pqueue.push(std::move(goal));
     lowestChangedLevel = currentBound;
+    // One line per may-pob exit, so the fate of every may-pob is greppable instead of
+    // having to be reconstructed from the surrounding trace.
+    auto traceMayFate = [this](ProofObligationCore const & p, char const * fate) {
+        if (not p.isMayPO) { return; }
+        TRACE(1, "[MAYPO] id=" << p.constraint.x
+              << " src=" << lemmaOriginToString(p.maySource)
+              << (p.mayRoot ? " root" : " desc")
+              << " lvl=" << p.bound << " life=" << p.life << " visits=" << p.counter
+              << " atoms=" << TermUtils(logic).getTopLevelConjuncts(p.constraint).size()
+              << " fate=" << fate);
+    };
     while (not pqueue.empty()) {
         assert(pqueue.peek());
         ProofObligationCore const & pob = *(pqueue.peek());
 
         if (pob.closed or (pob.isMayPO and pob.bound == 0)) {
+            traceMayFate(pob, pob.closed ? "CLOSED" : "LEVEL0");
             pqueue.pop();
             continue;
         }
@@ -742,6 +779,7 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
             if (pob.vertex == query and not pob.isMayPO) {
                 return BoundedSafetyResult::UNSAFE; // query is reachable
             }
+            traceMayFate(pob, "REACHABLE");
             pqueue.pop();
             continue;
         }
@@ -762,6 +800,7 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
             assert(pob.parent != &pob);
             // all predecessors of a may pob had 0 life.
             TRACE(1, "    Removing MayPO branch due to EOL");
+            traceMayFate(pob, "EOL");
             if (pob.parent == nullptr) continue;
             assert(pob.parent != nullptr);
             const ProofObligationCore* parentPob = pob.parent;
@@ -791,7 +830,7 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
                 TRACE(1, "[RELIND] Spared POBS: " << newProofObligations.size());
                 TRACE(2, " New lemma : " << logic.pp(relindLemma));
                 addMaySummary(pob.vertex, pob.bound, relindLemma,
-                              RelIndVariant | LemmaOrigin::ofPob(pob.isMayPO));
+                              RelIndVariant | lemmaOriginOfPob(pob));
                 if (pob.parent != nullptr) {
                     pob.parent->blockingLemmas.insert(pob.vertex, relindLemma);
                 }
@@ -800,6 +839,7 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
                 }
                 if (pob.bound < lowestChangedLevel) { lowestChangedLevel = pob.bound; }
                 TRACE(1, "[x] Blocked POB with new lemma at level " << pob.bound);
+                traceMayFate(pob, "BLOCKED_RELIND");
                 pqueue.pop();
                 continue;
             }
@@ -823,6 +863,8 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
                 // TODO: use shared pointers instead
                 mayPred->parent = (newProofObligations.empty()) ? nullptr : &pob;
                 mayPred->life = pob.life - 1;
+                mayPred->maySource = LemmaOrigin::MayBmbp;
+                mayPred->mayRoot = true;
                 if (mayPred->life > 0)
                     newMayPO.push_back(std::move(mayPred));
             }
@@ -842,7 +884,9 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
                 // Blocking lemmas are summaries, stored in base form; a pob constraint must be a
                 // target formula.
                 mayConstraint = VersionManager(logic).baseFormulaToTarget(mayConstraint);
-                TRACE(2, "[CC] Adding a ConvexClosure of " << negatedLemmas.size() << " lemmas");
+                TRACE(1, "[CC] Adding a ConvexClosure of " << negatedLemmas.size() << " lemmas"
+         << " -> atoms: " << TermUtils(logic).getTopLevelConjuncts(mayConstraint).size()
+         << " vars: " << TermUtils(logic).getVars(mayConstraint).size());
                 TRACE(3, "[CC] Added " << logic.pp(mayConstraint));
                 TRACE(3, "[CC] Blocking:" << std::endl;
                       for (auto lemma : negatedLemmas) {
@@ -851,6 +895,8 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
                 ProofObligation mayPred(new ProofObligationCore{it.getNode(), pob.bound - 1, mayConstraint, true});
                 mayPred->parent = (newProofObligations.empty()) ? nullptr : &pob;
                 mayPred->life = pob.life - 1;
+                mayPred->maySource = LemmaOrigin::MayCc;
+                mayPred->mayRoot = true;
                 if (mayPred->life > 0)
                     newMayPO.push_back(std::move(mayPred));
             }
@@ -954,19 +1000,19 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
                 TRACE(1, ">>>> NEWLEMMA IS STRONGER OR INCOMPARABLE ");
             newLemma = indNewLemma;
             addMaySummary(pob.vertex, pob.bound, newLemma,
-                          LemmaOrigin::IndItp | LemmaOrigin::ofPob(pob.isMayPO));
+                          LemmaOrigin::IndItp | lemmaOriginOfPob(pob));
             newLemma = originalNewLemma;
             addMaySummary(pob.vertex, pob.bound, newLemma,
-                          LemmaOrigin::Itp | LemmaOrigin::ofPob(pob.isMayPO));
+                          LemmaOrigin::Itp | lemmaOriginOfPob(pob));
 #else // not BOTH
             newLemma = indNewLemma;
             addMaySummary(pob.vertex, pob.bound, newLemma,
-                          LemmaOrigin::IndItp | LemmaOrigin::ofPob(pob.isMayPO));
+                          LemmaOrigin::IndItp | lemmaOriginOfPob(pob));
 #endif
 #else // not INDITP
             newLemma = originalNewLemma;
             addMaySummary(pob.vertex, pob.bound, newLemma,
-                          LemmaOrigin::Itp | LemmaOrigin::ofPob(pob.isMayPO));
+                          LemmaOrigin::Itp | lemmaOriginOfPob(pob));
 #endif
 
             if (pob.parent != nullptr) {
@@ -979,9 +1025,11 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
                 TRACE(1, "    $$$$$$$$$$$$ MAY PO WAS BLOCKED $$$$$$$$$$$$");
             }
             TRACE(1, "[x] Blocked POB with new lemma at level " << pob.bound);
+            traceMayFate(pob, "BLOCKED");
             pqueue.pop(); // This POB has been successfully blocked
 
         } else {
+            traceMayFate(pob, "SPAWNED");
             for (auto & npob : newProofObligations) {
                 TRACE(1, "[+] MUST PRED: Adding new "
                       << (npob->isMayPO ? "MAY" : "MUST") << " PO "
@@ -1779,6 +1827,14 @@ bool SpacerContext::checkMustReachability(std::vector<EId> const & edges, ProofO
                 PTRef newMustSummary = projectFormula(summary, predicateVars, *checkRes.model);
                 assert(newMustSummary != PTRef_Undef);
                 PTRef definitelyReachable = VersionManager(logic).targetFormulaToBase(newMustSummary);
+                // Does this fact widen the under-approximation, or is it already covered?
+                // This is the pay-off of a may-pob that cannot be blocked, so report it.
+                if (pob.isMayPO) {
+                    PTRef known = getMustSummary(pob.vertex, pob.bound);
+                    bool const isNew = not implies(definitelyReachable, known, logic);
+                    TRACE(1, "[r] MAY PO reachable -> must fact " << definitelyReachable.x
+                          << " new? " << isNew);
+                }
                 addMustSummary(pob.vertex, pob.bound, definitelyReachable);
                 if (logProof) {
                     logNewFactIntoDatabase(definitelyReachable, pob.vertex, pob.bound - 1, edges[counter],
@@ -1818,8 +1874,12 @@ ProofObligation SpacerContext::computePredecessor(EId eid, ProofObligationCore c
             // When this source is over-approximated and the edge becomes feasible -> extract next proof obligation
             auto source = sources[0];
             auto predicateVars = TermUtils(logic).getVars(graph.getStateVersion(source));
+            // The model comes from the may-summary check above, but the projection runs on the
+            // transition alone, so under/over approximate the weakest precondition of the pob
+            // and do not depend on the frame we happened to be at.
+            PTRef mbpArgument = getEdgeMustOnlySummary(eid, sourceBound, 0);
             auto [newConstraint, newOverConstraint] = \
-                projectFormulaWithOver(logic.mkAnd(maySummary, pob.constraint), predicateVars, *res.model);
+                projectFormulaWithOver(logic.mkAnd(mbpArgument, pob.constraint), predicateVars, *res.model);
             PTRef newPob = VersionManager(logic).sourceFormulaToTarget(newConstraint); // ensure POB is target fla
 #if MAYPO
             PTRef newOverPob = VersionManager(logic).sourceFormulaToTarget(newOverConstraint); // ensure POB is target fla
@@ -1830,6 +1890,7 @@ ProofObligation SpacerContext::computePredecessor(EId eid, ProofObligationCore c
             TRACE(2, "New proof obligation generated");
             ProofObligation predPob(new ProofObligationCore{source, sourceBound, newPob, pob.isMayPO});
             predPob->parent = &pob;
+            predPob->maySource = pob.maySource;
             if (pob.isMayPO)
                 predPob->life = pob.life - 1;
             return std::move(predPob);
@@ -1861,8 +1922,10 @@ ProofObligation SpacerContext::computePredecessor(EId eid, ProofObligationCore c
             auto source = sources[vertexToRefine];
             auto predicateVars = TermUtils(logic).getVars(
                 graph.getStateVersion(source, vertexInstances.getInstanceNumber(eid, vertexToRefine)));
+            // As above: model from the mixed summary, projection without the may-summaries.
+            PTRef mbpArgument = getEdgeMustOnlySummary(eid, sourceBound, vertexToRefine);
             auto [newConstraint, newOverConstraint] =
-                projectFormulaWithOver(logic.mkAnd(mixedEdgeSummary, pob.constraint), predicateVars, *res.model);
+                projectFormulaWithOver(logic.mkAnd(mbpArgument, pob.constraint), predicateVars, *res.model);
             PTRef newPob = VersionManager(logic).sourceFormulaToTarget(newConstraint); // ensure POB is target fla
             TRACE(2, "New proof obligation generated")
 #if MAYPO
@@ -1873,6 +1936,7 @@ ProofObligation SpacerContext::computePredecessor(EId eid, ProofObligationCore c
 #endif
             ProofObligation predPob(new ProofObligationCore{sources[vertexToRefine], sourceBound, newPob, pob.isMayPO});
             predPob->parent = &pob;
+            predPob->maySource = pob.maySource;
             if (pob.isMayPO)
                 predPob->life = pob.life - 1;
             return std::move(predPob);
@@ -1980,6 +2044,8 @@ bool SpacerContext::tryPushComponents(SymRef vid, std::size_t level, PTRef body)
 
     for (PTRef const lemma : pushed) {
         auto newLemma = VersionManager(logic).targetFormulaToBase(lemma);
+        TRACE(1, "[>] Pushed lemma " << newLemma.x << " to " << level + 1
+              << " tag " << lemmaOriginToString(over.getProvenance(vid, newLemma).first));
         addMaySummary(vid, level + 1, newLemma);
         over.remove(vid, level, newLemma);
     }
@@ -2131,6 +2197,22 @@ PTRef SpacerContext::getEdgeMixedSummary(EId eid, std::size_t bound, std::size_t
         PTRef summaryAsSource =
             VersionManager(logic).baseFormulaToSource(mustSummary, vertexInstances.getInstanceNumber(eid, i));
         components.push(summaryAsSource);
+    }
+    components.push(graph.getEdgeLabel(eid));
+    return logic.mkAnd(std::move(components));
+}
+
+PTRef SpacerContext::getEdgeMustOnlySummary(EId eid, std::size_t bound, std::size_t lastMayIndex) const {
+    auto const & sources = graph.getSources(eid);
+    vec<PTRef> components;
+    components.capacity(static_cast<int>(sources.size()) + 1);
+    // sources [0, lastMayIndex] are deliberately omitted: their may-summary is what makes the
+    // projection bound-dependent.  The must-summaries are kept, they are needed for the
+    // predecessor of a hyperedge to be meaningful.
+    for (std::size_t i = lastMayIndex + 1; i < sources.size(); ++i) {
+        PTRef mustSummary = getMustSummary(sources[i], bound);
+        components.push(VersionManager(logic).baseFormulaToSource(
+            mustSummary, vertexInstances.getInstanceNumber(eid, i)));
     }
     components.push(graph.getEdgeLabel(eid));
     return logic.mkAnd(std::move(components));
