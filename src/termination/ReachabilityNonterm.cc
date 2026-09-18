@@ -22,7 +22,7 @@ namespace golem::termination {
 
 // Function to eliminate negations, replacing "not (a = b)" with "a < b \/ a > b"
 PTRef normalize(PTRef input, ArithLogic & logic, bool negated = false) {
-    assert(logic.isNot(input) || logic.isAnd(input) || logic.isOr(input) || logic.isNumEq(input) || logic.isLeq(input));
+    assert(logic.isNot(input) || logic.isAnd(input) || logic.isOr(input) || logic.isNumEq(input) || logic.isLeq(input) || logic.isBoolAtom(input));
     if (logic.isAnd(input) || logic.isOr(input)) {
         // Check every junct
         auto juncts = logic.isAnd(input) ? TermUtils(logic).getTopLevelConjuncts(input)
@@ -91,20 +91,6 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
         }
     }
 
-    vec<PTRef> leq_conjuncts;
-    for (auto conj : conjuncts) {
-        if (logic.isLeq(conj))
-            leq_conjuncts.push(conj);
-        else if (logic.isNumEq(conj)) {
-            auto it = logic.getPterm(conj).begin();
-            // x == y <=> y <= x /\ x <= y
-            leq_conjuncts.push(logic.mkLeq(it[0], it[1]));
-            leq_conjuncts.push(logic.mkLeq(it[1], it[0]));
-        } else {
-            assert(false);
-        }
-    }
-
     SMTSolver solver(logic, SMTSolver::WitnessProduction::NONE);
 
     // Equality check (x = x') - should be UNSAT for termination
@@ -116,6 +102,21 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
     }
     solver.assertProp(logic.mkAnd(formula, logic.mkAnd(eq_vars)));
     if (solver.check() == SMTSolver::Answer::SAT) return false;
+
+    vec<PTRef> leq_conjuncts;
+    for (auto conj : conjuncts) {
+        if (logic.isLeq(conj))
+            leq_conjuncts.push(conj);
+        else if (logic.isNumEq(conj)) {
+            auto it = logic.getPterm(conj).begin();
+            // x == y <=> y <= x /\ x <= y
+            leq_conjuncts.push(logic.mkLeq(it[0], it[1]));
+            leq_conjuncts.push(logic.mkLeq(it[1], it[0]));
+        }
+    }
+
+    if (leq_conjuncts.size() == 0) return false;
+
 
     // If two transitions in a row are UNSAT, formula is well-founded
     solver.resetSolver();
@@ -414,10 +415,17 @@ PTRef constructTransitionInvariantCandidates(PTRef init, PTRef transition, PTRef
     std::vector<PTRef> checked_states;
     // std::vector<PTRef> next_vars;
     if (depth > 1) {
-        checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(QuantifierElimination(logic).eliminate(logic.mkAnd(init, transition), vars), depth - 1));
-    } else {
-        checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(sink, depth));
+        vec<PTRef> temp_vars;
+        for (auto var : vars) {
+                temp_vars.push(TimeMachine(logic).sendVarThroughTime(var, depth - 1));
+            }
+        checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(
+            QuantifierElimination(logic).keepOnly(logic.mkAnd(init, trace), temp_vars), 1));
+        // checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(QuantifierElimination(logic).eliminate(logic.mkAnd(init, transition), vars), depth - 1));
     }
+    // else {
+    checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(sink, depth));
+    // }
     // sink is updated, representing states that are guaranteed to reach termination
     PTRef terminating_states = logic.mkOr(checked_states);
     // std::cout << "Constructing invariant candidates for depth " << depth << "   " << logic.pp(init) << std::endl;
@@ -426,9 +434,6 @@ PTRef constructTransitionInvariantCandidates(PTRef init, PTRef transition, PTRef
     // Itp(Tr /\ ... /\ Tr, Init /\ not TerminatingStates) should be UNSAT: by construction,
     // `terminating_states` already covers everything reachable from `init` via the trace.
     SMTSolver smt_solver(logic, SMTSolver::WitnessProduction::ONLY_INTERPOLANTS);
-    // smt_solver.assertProp(logic.mkAnd(sink, logic.mkNot(init)));
-    // assert(smt_solver.check() == SMTSolver::Answer::UNSAT);
-    // smt_solver.resetSolver();
     smt_solver.getConfig().setSimplifyInterpolant(4);
     smt_solver.assertProp(trace);
     smt_solver.push();
@@ -661,15 +666,11 @@ bool ReachabilityNonterm::generateWellfoundedDisjuncts(PTRef transition, PTRef s
     // Tr^n(x,x') /\ not Sink(x') - is a formula, which can be satisfied by any x which can
     // reach "not Sink(x')" in n transitions:
     PTRef NT = QuantifierElimination(logic).keepOnly(
-        logic.mkAnd(trace, logic.mkNot(TimeMachine(logic).sendFlaThroughTime(sink, num))), vars);
+        logic.mkAnd({logic.mkNot(sink), trace, logic.mkNot(TimeMachine(logic).sendFlaThroughTime(sink, num))}), vars);
     // std::cout << "NT: " << logic.pp(NT) << std::endl;
     // States that can not reach "not Sink(x')" in n transitions (therefore necesarily reach Sink(x')):
     // TODO: Can underapproximate
     PTRef T = logic.mkNot(NT);
-    // SMTsolver.resetSolver();
-    // SMTsolver.assertProp(logic.mkAnd({sink, logic.mkNot(T)}));
-    // assert(SMTsolver.check() == SMTSolver::Answer::UNSAT);
-    // SMTsolver.resetSolver();
     // The procedure to construct transition invariants is executed
     PTRef itp = constructTransitionInvariantCandidates(T, transition, sink, num, logic, vars);
     // Extract well-founded disjuncts from the transition invariant
@@ -765,7 +766,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::checkTermina
     // Algorithm checks if reachable states are terminating
     // TODO: I can also extract all covered states from here and use them as terminating (updating tr)
     auto [answer, subinv] =
-        analyzeTS(reached, transition, sink, logic);
+        analyzeTS(reached, transition, covered, logic);
     // TODO: It is possible to do check differently, analyzing <noncoveredStates, tr,
     //   not(noncoveredStates)>
     //   If this terminates, then the whole TS terminates, but if it nonterinates we need to prove
