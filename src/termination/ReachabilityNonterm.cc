@@ -396,7 +396,7 @@ PTRef getId(const std::vector<PTRef> & vars, Logic & logic) {
     return logic.mkAnd(eq_vars);
 }
 
-PTRef constructTransitionInvariantCandidates(PTRef init, PTRef transition, PTRef sink, int depth, Logic & logic,
+PTRef constructTransitionInvariantCandidates(PTRef init, PTRef transition, PTRef sink, int depth, ArithLogic & logic,
                                              std::vector<PTRef> const & vars) {
     PTRef id = getId(vars, logic);
     PTRef transitionOrId = logic.mkOr(transition, id);
@@ -412,20 +412,27 @@ PTRef constructTransitionInvariantCandidates(PTRef init, PTRef transition, PTRef
     // States guaranteed to reach termination: Sink at exactly `depth` steps, plus (if depth > 1)
     // states reachable from `init` within 1..depth-1 steps that already satisfy the trace.
     std::vector<PTRef> checked_states;
-    std::vector<PTRef> next_vars;
-    if (depth > 1) {
-        for (auto var: vars) {
-            next_vars.push_back(TimeMachine(logic).sendVarThroughTime(var, 1));
-        }
-        checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(QuantifierElimination(logic).eliminate(logic.mkAnd(init, transition), next_vars), depth - 1));
-    }
-    checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(sink, depth));
+    // std::vector<PTRef> next_vars;
+    // if (depth > 1) {
+    //     // for (auto var: vars) {
+    //     //     next_vars.push_back(TimeMachine(logic).sendVarThroughTime(var, 1));
+    //     // }
+    //     checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(QuantifierElimination(logic).eliminate(logic.mkAnd(init, transition), vars), depth - 1));
+    // } else {
+    //     checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(sink, depth));
+    // }
+    checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(init, depth));
     // sink is updated, representing states that are guaranteed to reach termination
     PTRef terminating_states = logic.mkOr(checked_states);
+    // std::cout << "Constructing invariant candidates for depth " << depth << "   " << logic.pp(init) << std::endl;
+    // std::cout << "Constructing invariant candidates for depth " << depth << "   " << logic.pp(TimeMachine(logic).sendFlaThroughTime(sink, depth)) << std::endl;
 
     // Itp(Tr /\ ... /\ Tr, Init /\ not TerminatingStates) should be UNSAT: by construction,
     // `terminating_states` already covers everything reachable from `init` via the trace.
     SMTSolver smt_solver(logic, SMTSolver::WitnessProduction::ONLY_INTERPOLANTS);
+    smt_solver.assertProp(logic.mkAnd(sink, logic.mkNot(init)));
+    assert(smt_solver.check() == SMTSolver::Answer::UNSAT);
+    smt_solver.resetSolver();
     smt_solver.getConfig().setSimplifyInterpolant(4);
     smt_solver.assertProp(trace);
     smt_solver.push();
@@ -659,10 +666,14 @@ bool ReachabilityNonterm::generateWellfoundedDisjuncts(PTRef transition, PTRef s
     // reach "not Sink(x')" in n transitions:
     PTRef NT = QuantifierElimination(logic).keepOnly(
         logic.mkAnd(trace, logic.mkNot(TimeMachine(logic).sendFlaThroughTime(sink, num))), vars);
+    // std::cout << "NT: " << logic.pp(NT) << std::endl;
     // States that can not reach "not Sink(x')" in n transitions (therefore necesarily reach Sink(x')):
     // TODO: Can underapproximate
     PTRef T = logic.mkNot(NT);
-
+    // SMTsolver.resetSolver();
+    // SMTsolver.assertProp(logic.mkAnd({sink, logic.mkNot(T)}));
+    // assert(SMTsolver.check() == SMTSolver::Answer::UNSAT);
+    // SMTsolver.resetSolver();
     // The procedure to construct transition invariants is executed
     PTRef itp = constructTransitionInvariantCandidates(T, transition, sink, num, logic, vars);
     // Extract well-founded disjuncts from the transition invariant
@@ -758,7 +769,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::checkTermina
     // Algorithm checks if reachable states are terminating
     // TODO: I can also extract all covered states from here and use them as terminating (updating tr)
     auto [answer, subinv] =
-        analyzeTS(reached, transition, TermUtils(logic).simplifyMax(logic.mkNot(noncoveredStates)), logic);
+        analyzeTS(reached, transition, sink, logic);
     // TODO: It is possible to do check differently, analyzing <noncoveredStates, tr,
     //   not(noncoveredStates)>
     //   If this terminates, then the whole TS terminates, but if it nonterinates we need to prove
