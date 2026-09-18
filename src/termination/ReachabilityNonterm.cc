@@ -430,9 +430,9 @@ PTRef constructTransitionInvariantCandidates(PTRef init, PTRef transition, PTRef
     // Itp(Tr /\ ... /\ Tr, Init /\ not TerminatingStates) should be UNSAT: by construction,
     // `terminating_states` already covers everything reachable from `init` via the trace.
     SMTSolver smt_solver(logic, SMTSolver::WitnessProduction::ONLY_INTERPOLANTS);
-    smt_solver.assertProp(logic.mkAnd(sink, logic.mkNot(init)));
-    assert(smt_solver.check() == SMTSolver::Answer::UNSAT);
-    smt_solver.resetSolver();
+    // smt_solver.assertProp(logic.mkAnd(sink, logic.mkNot(init)));
+    // assert(smt_solver.check() == SMTSolver::Answer::UNSAT);
+    // smt_solver.resetSolver();
     smt_solver.getConfig().setSimplifyInterpolant(4);
     smt_solver.assertProp(trace);
     smt_solver.push();
@@ -769,7 +769,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::checkTermina
     // Algorithm checks if reachable states are terminating
     // TODO: I can also extract all covered states from here and use them as terminating (updating tr)
     auto [answer, subinv] =
-        analyzeTS(reached, transition, logic.mkNot(noncoveredStates), logic);
+        analyzeTS(reached, logic.mkAnd(transition, logic.mkNot(covered)), covered, logic);
     // TODO: It is possible to do check differently, analyzing <noncoveredStates, tr,
     //   not(noncoveredStates)>
     //   If this terminates, then the whole TS terminates, but if it nonterinates we need to prove
