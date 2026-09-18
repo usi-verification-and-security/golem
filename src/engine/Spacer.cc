@@ -30,45 +30,109 @@
 #include <vector>
 
 #define TRACE_LEVEL 2
-#define DEBUG 1
-#define GENERALIZE 1
-#define GDOWN 1
-#define RELIND 0
-#define RELIND_LATE 1 // only try relative induction when the pob HAS predecessors
-#define RELIND_GROW 0 // 0 = ...Bool (drop pob conjuncts); 1 = grow-from-init variant
-#define RELIND_MAX_ITERATIONS 20 // budget for the grow-from-init loop
-#define BOTH 0
-#define INDITP 0
-#define MAYPO 0
-// also build may-pobs on a pob's final visit, bypassing the trigger
-#define MAYPO_ON_LAST_VISIT 0
-// 1 = pop may-pobs before must-pobs at the same bound (original)
-#define MAY_POBS_FIRST 1
-// with a single lemma use !l verbatim: ConvexClosure keeps only arithmetic
-// literals, so it would drop the boolean guards of !l
-#define CC_SINGLE_DIRECT 1
-// skip a may-pob already refuted by the frame: blocking it costs a full
-// interpolation and re-learns a lemma we already have
-#define MAYPO_SKIP_BLOCKED 1
-// What computePredecessor projects on, AFTER the model has been taken from the
-// full (may-summary) check.
-//   1 = include the may-summaries: the projection is relative to the frame we
-//       happen to be at, so under/over are bound-dependent. Requires
-//       POBDB_PER_BOUND, since such an over-approximation must not be merged
-//       with one computed at another bound.
-//   0 = transition + must-summaries only: under/over approximate the weakest
-//       precondition of the pob itself, and are valid at every bound.
-#define MBP_WITH_MAY_SUMMARY 1
-// Scope of the pob database; follows MBP_WITH_MAY_SUMMARY by default.
-//   1 = key PobInfo by (vertex, formula, bound). Restores pre-database may-pob
-//       handling: both caches, the counter and firstBound reset every bound, so
-//       globalCounter == localCounter and the `bound >= firstBound` gate is inert.
-//   0 = key by (vertex, formula), accumulating evidence across bounds.
-#define POBDB_PER_BOUND MBP_WITH_MAY_SUMMARY
-#define CC 1
-#define BMBP 0
 
-#define TRACE(l, m)                                                                                                    \
+namespace golem {
+
+struct SpacerConfig {
+    // wired to the command line
+    bool maypo = false;          // may-POB main guard
+    bool bmbp = true;            // may-POBs from bidirectional MBP
+    bool cc = true;              // may-POBs from the convex closure of blocking lemmas
+    bool generalize = true;      // generalize learnt lemmas (inductively if possible)
+    bool relind = true;          // try to block with relative induction even when there are predecessors
+
+    // other options, not wired to cmd line
+    bool gdown = true;           // generalize by dropping disjuncts (otherwise, use unsatcore)
+    bool relindGrow = false;     // relative induction: grow-from-init mbp-based variant
+
+    /// How a blocking lemma is derived. At least one must hold; both may, in which case
+    /// both learnt lemmas are added
+    bool interpolation = true;   // lemma from the interpolant of the blocked query
+    bool indConflict = false;    // lemma from the mbp-based inductive conflict
+
+    bool debug = true;           // run validity checks of new lemmas
+
+    bool mayPobOnLastVisit = false; // also build may-POBs on a pob's final visit
+
+    /// What computePredecessor projects on, AFTER taking the model from the full check.
+    /// true  = include the may-summaries: the projection is relative to the frame, so
+    ///         under/over are bound-dependent and require pobDbPerBound.
+    /// false = transition + must-summaries only, valid at every bound.
+    bool mbpWithMaySummary = true;
+
+    /// Key PobInfo by (vertex, formula, bound) instead of (vertex, formula). Follows
+    /// mbpWithMaySummary: frame-relative evidence must not be merged across bounds.
+    bool pobDbPerBound = mbpWithMaySummary;
+
+    // tuning parameters
+    std::size_t mayPoGas = 20;            // predecessor-chain length allowed from a may-POB
+    std::size_t triggerMayPo = 3;         // visits before may-POBs are built
+    std::size_t minLemmasForCc = 1;       // blocking lemmas needed before CC fires
+    std::size_t minBmbpOverLits = 1;      // literals needed in a BMBP over-approximation
+    std::size_t relindMaxIterations = 20; // budget for the grow-from-init loop
+
+    // Make sure we have a way to produce a lemma
+    void validate() const {
+        if (not interpolation and not indConflict) {
+            throw std::logic_error(
+                "Spacer: at least one of SpacerConfig::interpolation and ::indConflict must be set, "
+                "otherwise blocking a proof obligation derives no lemma");
+        }
+    }
+
+    static SpacerConfig from(Options const & options) {
+        SpacerConfig cfg;
+        // Tri-state: nullopt = not given, so "absent" and "=false" stay distinguishable.
+        auto flag = [&options](std::string const & key) -> std::optional<bool> {
+            auto value = options.getOption(key);
+            if (not value) { return std::nullopt; }
+            return *value == "true";
+        };
+        auto const maypob = flag(Options::SPACER_MAYPOB);
+        auto const bmbp = flag(Options::SPACER_BMBP);
+        auto const cc = flag(Options::SPACER_CC);
+
+        // --spacer.maypob turns both sources on, or the whole mechanism off.
+        if (maypob) {
+            cfg.maypo = *maypob;
+            if (*maypob) {
+                cfg.bmbp = true;
+                cfg.cc = true;
+            }
+        }
+        // --spacer.bmbp and --spacer.cc each select their own source: asking for one without
+        // mentioning the other turns the other off, asking for both keeps both.
+        if (bmbp) {
+            cfg.bmbp = *bmbp;
+            if (*bmbp) {
+                cfg.maypo = true;
+                if (not cc) { cfg.cc = false; }
+            }
+        }
+        if (cc) {
+            cfg.cc = *cc;
+            if (*cc) {
+                cfg.maypo = true;
+                if (not bmbp) { cfg.bmbp = false; }
+            }
+        }
+        if (auto const indgen = flag(Options::SPACER_INDGEN)) {
+            cfg.generalize = *indgen;
+            cfg.relind = *indgen;
+        }
+        // The pob database follows: a frame-relative over-approximation is only valid at the
+        // bound it was produced at, so it must not be merged with one from another bound.
+        if (auto const mbpMaySummary = flag(Options::SPACER_MBP_MAY_SUMMARY)) {
+            cfg.mbpWithMaySummary = *mbpMaySummary;
+            cfg.pobDbPerBound = *mbpMaySummary;
+        }
+        cfg.validate();
+        return cfg;
+    }
+};
+} // namespace golem
+
+#define TRACE(l, m) \
     if (TRACE_LEVEL >= l) { std::cout << m << std::endl; }
 
 namespace golem {
@@ -243,10 +307,6 @@ private:
     std::unordered_map<SymRef, std::unordered_map<PTRef, LemmaProvenance, PTRefHash>, SymRefHash> origins;
 };
 
-const unsigned short MAY_PO_GAS = 20; // nr of predecessors allowed on a may pos
-const unsigned short TRIGGER_MAY_PO = 3;
-const unsigned short MIN_LEMMAS_FOR_CC = 1;
-const unsigned short MIN_BMBP_OVER_LITS = 1;
 
 class EdgeVidPredCache {
 public:
@@ -261,8 +321,9 @@ public:
         using reference  = value_type const &;
         using pointer    = value_type const *;
 
-        FilterIterator(OuterMap::const_iterator outer, OuterMap::const_iterator outerEnd)
-            : outer(outer), outerEnd(outerEnd) {
+        FilterIterator(OuterMap::const_iterator outer, OuterMap::const_iterator outerEnd,
+                       std::size_t minSize = 0)
+            : outer(outer), outerEnd(outerEnd), minSize(minSize) {
             if (outer != outerEnd) { inner = outer->second.begin(); }
             advanceToValid();
         }
@@ -297,11 +358,12 @@ public:
     private:
         OuterMap::const_iterator outer, outerEnd;
         InnerMap::const_iterator inner;
+        std::size_t minSize = 0;
 
         void advanceToValid() {
             while (outer != outerEnd) {
                 while (inner != outer->second.end()) {
-                    if (inner->second.size() >= MIN_BMBP_OVER_LITS) return;
+                    if (inner->second.size() >= minSize) return;
                     ++inner;
                 }
                 ++outer;
@@ -310,9 +372,9 @@ public:
         }
     };
 
-    FilterIterator begin() const {
-        auto it = FilterIterator(cache.begin(), cache.end());
-        return it;
+    /// `minSize` filters out entries with fewer than that many collected formulas.
+    FilterIterator begin(std::size_t minSize) const {
+        return FilterIterator(cache.begin(), cache.end(), minSize);
     }
     FilterIterator end() const { return {cache.end(), cache.end()}; }
 
@@ -337,8 +399,9 @@ public:
         using reference  = value_type const &;
         using pointer    = value_type const *;
 
-        explicit FilterIterator(InnerMap::const_iterator inner, InnerMap::const_iterator innerEnd)
-            : inner(inner), innerEnd(innerEnd) {
+        FilterIterator(InnerMap::const_iterator inner, InnerMap::const_iterator innerEnd,
+                       std::size_t minSize = 0)
+            : inner(inner), innerEnd(innerEnd), minSize(minSize) {
             advanceToValid();
         }
 
@@ -368,17 +431,19 @@ public:
 
     private:
         InnerMap::const_iterator inner, innerEnd;
+        std::size_t minSize = 0;
 
         void advanceToValid() {
             while (inner != innerEnd) {
-                if (inner->second.size() >= MIN_LEMMAS_FOR_CC) return;
+                if (inner->second.size() >= minSize) return;
                 ++inner;
             }
         }
     };
 
-    FilterIterator begin() const {
-        return FilterIterator(cache.begin(), cache.end());
+    /// `minSize` filters out entries with fewer than that many collected lemmas.
+    FilterIterator begin(std::size_t minSize) const {
+        return FilterIterator(cache.begin(), cache.end(), minSize);
     }
     FilterIterator end() const { return FilterIterator(cache.end(), cache.end()); }
 
@@ -414,7 +479,7 @@ struct ProofObligationCore {
     bool isMayPO = false;
     /// examinations of THIS occurrence; the cross-bound count lives in PobInfo
     mutable std::size_t localCounter = 0;
-    mutable std::size_t life = MAY_PO_GAS;
+    mutable std::size_t life = 0; ///< set from SpacerConfig::mayPoGas at construction
     mutable const ProofObligationCore* parent = nullptr;
     mutable bool closed = false;
     /// MayCc / MayBmbp: which mechanism created the root of this pob's may subtree.
@@ -435,8 +500,7 @@ using ProofObligation = std::unique_ptr<ProofObligationCore>;
 bool operator<(ProofObligation const & pob1, ProofObligation const & pob2) {
     // TODO: Does it make sense to break ties using vertices?
     return pob1->bound < pob2->bound or \
-        (pob1->bound == pob2->bound and (MAY_POBS_FIRST ? pob1->isMayPO > pob2->isMayPO
-                                                        : pob1->isMayPO < pob2->isMayPO)) or \
+        (pob1->bound == pob2->bound and pob1->isMayPO > pob2->isMayPO) or \
         (pob1->bound == pob2->bound and pob1->isMayPO == pob2->isMayPO \
          and pob1->vertex.x > pob2->vertex.x);
 }
@@ -444,8 +508,7 @@ bool operator<(ProofObligation const & pob1, ProofObligation const & pob2) {
 // TODO: why we need both operators??
 bool operator>(ProofObligation const & pob1, ProofObligation const & pob2) {
     return pob1->bound > pob2->bound or \
-        (pob1->bound == pob2->bound and (MAY_POBS_FIRST ? pob1->isMayPO < pob2->isMayPO
-                                                        : pob1->isMayPO > pob2->isMayPO)) or \
+        (pob1->bound == pob2->bound and pob1->isMayPO < pob2->isMayPO) or \
         (pob1->bound == pob2->bound and pob1->isMayPO == pob2->isMayPO \
          and pob1->vertex.x < pob2->vertex.x);
 }
@@ -531,6 +594,7 @@ class SpacerContext {
 
     DerivationDatabase database;
     bool logProof;
+    SpacerConfig cfg;
 
     SpacerStats stats;
 
@@ -550,7 +614,7 @@ class SpacerContext {
     /// records predecessors, the parent's bound when a child records a blocking lemma.
     /// With POBDB_PER_BOUND off the bound key collapses to 0 and every bound shares one entry.
     PobInfo & pobInfo(SymRef vid, PTRef formula, std::size_t bound) const {
-        return pobDb[vid][formula][POBDB_PER_BOUND ? bound : 0];
+        return pobDb[vid][formula][cfg.pobDbPerBound ? bound : 0];
     }
 
     void addMaySummary(SymRef vid, std::size_t bound, PTRef summary,
@@ -663,13 +727,6 @@ class SpacerContext {
     };
     QueryResult sat(PTRef A, PTRef B) const;
 
-    /// Is `targetConstraint` already excluded by the frame of `vid` at `bound`?  Such a pob
-    /// still costs a full interpolatingSat + generalize_down when examined, and the lemma it
-    /// yields is one we already have, so there is no point queueing it.
-    bool alreadyRefuted(SymRef vid, std::size_t bound, PTRef targetConstraint) const {
-        PTRef frame = VersionManager(logic).baseFormulaToTarget(getMaySummary(vid, bound));
-        return sat(frame, targetConstraint).answer == QueryAnswer::UNSAT;
-    }
 
     struct ItpQueryResult {
         QueryAnswer answer;
@@ -704,7 +761,7 @@ class SpacerContext {
     InvalidityWitness reconstructInvalidityWitness() const;
 
 public:
-    SpacerContext(Logic & logic, ChcDirectedHyperGraph const & graph, bool logProof);
+    SpacerContext(Logic & logic, ChcDirectedHyperGraph const & graph, bool logProof, SpacerConfig cfg);
 
     VerificationResult run();
 };
@@ -713,15 +770,17 @@ VerificationResult Spacer::solve(ChcDirectedHyperGraph const & system) {
     if (logic.hasArrays()) { return VerificationResult{VerificationAnswer::UNKNOWN}; }
     bool logProof =
         options.hasOption(Options::COMPUTE_WITNESS) and options.getOption(Options::COMPUTE_WITNESS) == "true";
-    return SpacerContext(logic, system, logProof).run();
+    return SpacerContext(logic, system, logProof, SpacerConfig::from(options)).run();
 }
 
-SpacerContext::SpacerContext(Logic & logic, ChcDirectedHyperGraph const & graph, bool logProof)
+SpacerContext::SpacerContext(Logic & logic, ChcDirectedHyperGraph const & graph, bool logProof, SpacerConfig cfg)
     : logic(logic),
       graph(graph),
       adjacencyLists(AdjacencyListsGraphRepresentation::from(graph)),
       logProof(logProof),
+      cfg(cfg),
       vertexInstances(graph) {
+    this->cfg.validate();
     auto vertices = graph.getVertices();
     for (auto vid : vertices) {
         PTRef toInsert = vid == graph.getEntry() ? logic.getTerm_true() : logic.getTerm_false();
@@ -803,6 +862,7 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
     PriorityQueue pqueue;
     ProofObligation goal = \
         ProofObligation(new ProofObligationCore{query, currentBound, logic.getTerm_true(), false});
+    goal->life = cfg.mayPoGas;
     pqueue.push(std::move(goal));
     lowestChangedLevel = currentBound;
     // One line per may-pob exit, so the fate of every may-pob is greppable instead of
@@ -886,16 +946,12 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
             continue;
         }
 
-#if RELIND
         // Relative induction is only worth trying when the pob actually HAS predecessors.
-        if (not newProofObligations.empty()) {
-#if RELIND_GROW
-            PTRef relindLemma = tryBlockWithRelativeInduction(pob);
-            LemmaOriginMask RelIndVariant = LemmaOrigin::RelIndGrow;
-#else
-            PTRef relindLemma = tryBlockWithRelativeInductionBool(pob);
-            LemmaOriginMask RelIndVariant = LemmaOrigin::RelInd;
-#endif
+        if (cfg.relind and not newProofObligations.empty()) {
+            PTRef relindLemma = cfg.relindGrow ? tryBlockWithRelativeInduction(pob)
+                                               : tryBlockWithRelativeInductionBool(pob);
+            LemmaOriginMask RelIndVariant =
+                cfg.relindGrow ? LemmaOrigin::RelIndGrow : LemmaOrigin::RelInd;
             if (relindLemma != PTRef_Undef) {
                 if (not checkNewLemma(pob.vertex, pob.bound - 1, relindLemma)) {
                     throw std::logic_error("After RelInd, newLemma is not consistent with edeges!");
@@ -918,9 +974,7 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
                 continue;
             }
         }
-#endif
 
-#if MAYPO
         // [MayPO] Collect MayPO as a convex over-approximation of the predecessors
         std::vector<ProofObligation> newMayPO;
         ConvexClosure convexClosure(logic);
@@ -933,14 +987,16 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
         // otherwise distinct pob objects sharing (vertex, formula, bound) would pool
         // their visits and fire the trigger earlier than the old code did.
         std::size_t const triggerCounter =
-            POBDB_PER_BOUND ? pob.localCounter : info.globalCounter;
+            cfg.pobDbPerBound ? pob.localCounter : info.globalCounter;
         bool const evidenceReady =
-            pob.bound >= info.firstBound and triggerCounter >= TRIGGER_MAY_PO;
-        if (evidenceReady or (MAYPO_ON_LAST_VISIT and newProofObligations.empty())) {
+            pob.bound >= info.firstBound and triggerCounter >= cfg.triggerMayPo;
+        if (cfg.maypo and
+            (evidenceReady or (cfg.mayPobOnLastVisit and newProofObligations.empty()))) {
 
-#if BMBP
+            if (cfg.bmbp) {
             // Bidirectional Model based projection
-            for (auto it = info.overPredCache.begin(); it != info.overPredCache.end(); ++it) {
+            for (auto it = info.overPredCache.begin(cfg.minBmbpOverLits);
+                 it != info.overPredCache.end(); ++it) {
                 ProofObligation mayPred(new ProofObligationCore{it.getNode(graph),
                                                                 pob.bound - 1,
                                                                 logic.mkAnd(it.getApprox()),
@@ -951,25 +1007,20 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
                 mayPred->life = pob.life - 1;
                 mayPred->maySource = LemmaOrigin::MayBmbp;
                 mayPred->mayRoot = true;
-                if (MAYPO_SKIP_BLOCKED and alreadyRefuted(mayPred->vertex, mayPred->bound, mayPred->constraint)) {
-                    TRACE(1, "[MAYPO] skipped, already refuted by the frame");
-                    continue;
-                }
                 if (mayPred->life > 0)
                     newMayPO.push_back(std::move(mayPred));
             }
-#endif
+            }
 
-#if CC
+            if (cfg.cc) {
             // Convex Closure of blocking lemmas
-            for (auto it = info.blockingLemmas.begin(); it != info.blockingLemmas.end(); ++it) {
+            for (auto it = info.blockingLemmas.begin(cfg.minLemmasForCc);
+                 it != info.blockingLemmas.end(); ++it) {
                 vec<PTRef> negatedLemmas;
                 for (PTRef lemma : it.getApprox()) {
                     negatedLemmas.push(logic.mkNot(lemma));
                 }
-                PTRef mayConstraint = (CC_SINGLE_DIRECT and negatedLemmas.size() == 1)
-                                          ? negatedLemmas[0]
-                                          : convexClosure.getConvexClosure(negatedLemmas);
+                PTRef mayConstraint = convexClosure.getConvexClosure(negatedLemmas);
                 if (logic.isTrue(mayConstraint) or logic.isFalse(mayConstraint)) {
                     continue;
                 }
@@ -989,16 +1040,11 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
                 mayPred->life = pob.life - 1;
                 mayPred->maySource = LemmaOrigin::MayCc;
                 mayPred->mayRoot = true;
-                if (MAYPO_SKIP_BLOCKED and alreadyRefuted(mayPred->vertex, mayPred->bound, mayPred->constraint)) {
-                    TRACE(1, "[MAYPO] skipped, already refuted by the frame");
-                    continue;
-                }
                 if (mayPred->life > 0)
                     newMayPO.push_back(std::move(mayPred));
             }
-#endif
+            }
         }
-#endif
 
         if (newProofObligations.empty()) {
             // all edges are blocked; compute new lemma blocking the current proof obligation
@@ -1023,93 +1069,85 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
 
             PTRef newLemma = PTRef_Undef;
 
-#if BOTH || !INDITP
-            auto originalRes = interpolatingSat(edgesMaySummary, pob.constraint);
-            auto originalNewLemma = VersionManager(logic).targetFormulaToBase(originalRes.interpolant);
-            assert(originalRes.answer == QueryAnswer::UNSAT);
-            if (originalRes.answer != QueryAnswer::UNSAT) {
-                throw std::logic_error("All edges should have been blocked, but they are not!");
-            }
-            TRACE(2,
-                  "---- [ITP] Learnt lemma: " << originalNewLemma.x 
-                  << " nr disj: " << TermUtils(logic).getTopLevelDisjuncts(originalNewLemma).size()
-                  << " nr vars: " << TermUtils(logic).getVars(originalNewLemma).size());
+            PTRef originalNewLemma = PTRef_Undef;
+            if (cfg.interpolation) {
+                auto originalRes = interpolatingSat(edgesMaySummary, pob.constraint);
+                originalNewLemma = VersionManager(logic).targetFormulaToBase(originalRes.interpolant);
+                assert(originalRes.answer == QueryAnswer::UNSAT);
+                if (originalRes.answer != QueryAnswer::UNSAT) {
+                    throw std::logic_error("All edges should have been blocked, but they are not!");
+                }
+                TRACE(2,
+                      "---- [ITP] Learnt lemma: " << originalNewLemma.x 
+                      << " nr disj: " << TermUtils(logic).getTopLevelDisjuncts(originalNewLemma).size()
+                      << " nr vars: " << TermUtils(logic).getVars(originalNewLemma).size());
 
-#if GENERALIZE
-#if GDOWN
-            originalNewLemma = generalize_down(originalNewLemma, maySummary, transitions, inductiveSources);
-#else
-            originalNewLemma = generalize(originalNewLemma, maySummary, transitions, inductiveSources);
-#endif
-            TRACE(2,
-                  "---- [ITP] Generalization: " << originalNewLemma.x
-                  << " nr disj: " << TermUtils(logic).getTopLevelDisjuncts(originalNewLemma).size()
-                  << " nr vars: " << TermUtils(logic).getVars(originalNewLemma).size());
-#endif
-            TRACE(2,
-                  "Lemma for " << pob.vertex.x << " at level " << pob.bound << " - "
-                  << logic.pp(originalNewLemma));
+                if (cfg.generalize) {
+                    originalNewLemma =
+                        cfg.gdown
+                        ? generalize_down(originalNewLemma, maySummary, transitions, inductiveSources)
+                        : generalize(originalNewLemma, maySummary, transitions, inductiveSources);
+                    TRACE(2,
+                          "---- [ITP] Generalization: " << originalNewLemma.x
+                          << " nr disj: " << TermUtils(logic).getTopLevelDisjuncts(originalNewLemma).size()
+                          << " nr vars: " << TermUtils(logic).getVars(originalNewLemma).size());
+                }
+                TRACE(2,
+                      "Lemma for " << pob.vertex.x << " at level " << pob.bound << " - "
+                      << logic.pp(originalNewLemma));
 
-            if (not checkNewLemma(pob.vertex, pob.bound - 1, originalNewLemma)) {
-                throw std::logic_error("After generalization, originalNewLemma is not consistent with edeges!");
-            }
-#endif
+                if (not checkNewLemma(pob.vertex, pob.bound - 1, originalNewLemma)) {
+                    throw std::logic_error("After generalization, originalNewLemma is not consistent with edeges!");
+                }
 
-#if INDITP
-            auto indRes = inductiveItp(maySummary, transitions, inductiveSources, pob.constraint);
-            assert(indRes.answer == QueryAnswer::UNSAT);
-            if (indRes.answer != QueryAnswer::UNSAT) {
-                throw std::logic_error("All edges should have been blocked, but they are not!");
-            }
-            auto indNewLemma = indRes.interpolant;
-
-            // Add the new ind Lemma
-            TRACE(2,
-                  "---- [IND] Learnt lemma: " << indNewLemma.x 
-                  << " nr disj: " << TermUtils(logic).getTopLevelDisjuncts(indNewLemma).size()
-                  << " nr vars: " << TermUtils(logic).getVars(indNewLemma).size());
-
-            if (not checkNewLemma(pob.vertex, pob.bound - 1, indNewLemma)) {
-                throw std::logic_error("indNewLemma is not consistent with edeges!");
+                newLemma = originalNewLemma;
+                addMaySummary(pob.vertex, pob.bound, newLemma,
+                              LemmaOrigin::Itp | lemmaOriginOfPob(pob));
             }
 
-#if GDOWN
-            indNewLemma = generalize_down(indNewLemma, maySummary, transitions, inductiveSources);
-#else
-            indNewLemma = generalize(indNewLemma, maySummary, transitions, inductiveSources);
-#endif
-            TRACE(2,
-                  "---- [IND] Generalization: " << indNewLemma.x
-                  << " nr disj: " << TermUtils(logic).getTopLevelDisjuncts(indNewLemma).size()
-                  << " nr vars: " << TermUtils(logic).getVars(indNewLemma).size());
-            TRACE(2,
-                  "Lemma for " << pob.vertex.x << " at level " << pob.bound << " - "
-                  << logic.pp(indNewLemma));
+            if (cfg.indConflict) {
+                auto indRes = inductiveItp(maySummary, transitions, inductiveSources, pob.constraint);
+                assert(indRes.answer == QueryAnswer::UNSAT);
+                if (indRes.answer != QueryAnswer::UNSAT) {
+                    throw std::logic_error("All edges should have been blocked, but they are not!");
+                }
+                auto indNewLemma = indRes.interpolant;
 
-            if (not checkNewLemma(pob.vertex, pob.bound - 1, indNewLemma)) {
-                throw std::logic_error("After generalization, indNewLemma is not consistent with edeges!");
+                // Add the new ind Lemma
+                TRACE(2,
+                      "---- [IND] Learnt lemma: " << indNewLemma.x 
+                      << " nr disj: " << TermUtils(logic).getTopLevelDisjuncts(indNewLemma).size()
+                      << " nr vars: " << TermUtils(logic).getVars(indNewLemma).size());
+
+                if (not checkNewLemma(pob.vertex, pob.bound - 1, indNewLemma)) {
+                    throw std::logic_error("indNewLemma is not consistent with edeges!");
+                }
+
+                indNewLemma = cfg.gdown
+                    ? generalize_down(indNewLemma, maySummary, transitions, inductiveSources)
+                    : generalize(indNewLemma, maySummary, transitions, inductiveSources);
+                TRACE(2,
+                      "---- [IND] Generalization: " << indNewLemma.x
+                      << " nr disj: " << TermUtils(logic).getTopLevelDisjuncts(indNewLemma).size()
+                      << " nr vars: " << TermUtils(logic).getVars(indNewLemma).size());
+                TRACE(2,
+                      "Lemma for " << pob.vertex.x << " at level " << pob.bound << " - "
+                      << logic.pp(indNewLemma));
+
+                if (not checkNewLemma(pob.vertex, pob.bound - 1, indNewLemma)) {
+                    throw std::logic_error("After generalization, indNewLemma is not consistent with edeges!");
+                }
+
+                newLemma = indNewLemma;
+                addMaySummary(pob.vertex, pob.bound, newLemma,
+                              LemmaOrigin::IndItp | lemmaOriginOfPob(pob));
+
+                if (cfg.interpolation) {
+                    bool strongerOldLemma = not implies(originalNewLemma, indNewLemma, logic);
+                    if (strongerOldLemma)
+                        TRACE(1, ">>>> NEWLEMMA IS STRONGER OR INCOMPARABLE ");
+                }
             }
-
-#if BOTH
-            bool strongerOldLemma = not implies(originalNewLemma, indNewLemma, logic);
-            if (strongerOldLemma)
-                TRACE(1, ">>>> NEWLEMMA IS STRONGER OR INCOMPARABLE ");
-            newLemma = indNewLemma;
-            addMaySummary(pob.vertex, pob.bound, newLemma,
-                          LemmaOrigin::IndItp | lemmaOriginOfPob(pob));
-            newLemma = originalNewLemma;
-            addMaySummary(pob.vertex, pob.bound, newLemma,
-                          LemmaOrigin::Itp | lemmaOriginOfPob(pob));
-#else // not BOTH
-            newLemma = indNewLemma;
-            addMaySummary(pob.vertex, pob.bound, newLemma,
-                          LemmaOrigin::IndItp | lemmaOriginOfPob(pob));
-#endif
-#else // not INDITP
-            newLemma = originalNewLemma;
-            addMaySummary(pob.vertex, pob.bound, newLemma,
-                          LemmaOrigin::Itp | lemmaOriginOfPob(pob));
-#endif
 
             if (pob.parent != nullptr) {
                 pobInfo(pob.parent->vertex, pob.parent->constraint, pob.parent->bound)
@@ -1136,12 +1174,10 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
                 pqueue.push(std::move(npob));
             }
         }
-#if MAYPO
         for (auto & npob : newMayPO) {
             TRACE(1, "[+] MAY PRED: Adding new MAY PO " << npob->constraint.x << " at level " << npob->bound);
             pqueue.push(std::move(npob));
         }
-#endif
     } // end of main cycle
     return BoundedSafetyResult::SAFE; // not reachable at this bound
 }
@@ -1437,7 +1473,7 @@ PTRef SpacerContext::generalize(PTRef lemma, PTRef maySumm, PTRef transitions, c
         TRACE(1, "Generalization applied: newLemma is stronger");
     }
 
-#if DEBUG
+if (cfg.debug) {
     SMTSolver debug_solver(logic);
     debug_solver.assertProp(maySumm);
     debug_solver.assertProp(transitions);
@@ -1457,7 +1493,7 @@ PTRef SpacerContext::generalize(PTRef lemma, PTRef maySumm, PTRef transitions, c
     if (res != SMTSolver::Answer::UNSAT) {
         TRACE(1, "Inductive-generalization applied: newLemma is stronger than min-gen!");
     }
-#endif
+}
 
     return newLemma;
 }
@@ -1556,7 +1592,7 @@ PTRef SpacerContext::generalize_down(PTRef lemma, PTRef maySumm, PTRef transitio
         TRACE(1, "Generalization applied: newLemma is stronger");
     }
 
-#if DEBUG
+if (cfg.debug) {
     SMTSolver debug_solver(logic);
     debug_solver.assertProp(maySumm);
     debug_solver.assertProp(transitions);
@@ -1573,7 +1609,7 @@ PTRef SpacerContext::generalize_down(PTRef lemma, PTRef maySumm, PTRef transitio
     if (debug_solver.check() != SMTSolver::Answer::UNSAT) {
         TRACE(1, "Inductive-generalization applied: newLemma is stronger than min-gen!");
     }
-#endif
+}
 
     return newLemma;
 }
@@ -1701,7 +1737,7 @@ PTRef SpacerContext::tryBlockWithRelativeInduction(ProofObligationCore const & p
         if (res != SMTSolver::Answer::SAT) {
             throw std::logic_error("Error in looking for CTIs.");
         }
-        if (++iterations > RELIND_MAX_ITERATIONS) {
+        if (++iterations > cfg.relindMaxIterations) {
             // Out of budget.  The partial lemma is NOT a valid summary: it neither
             // over-approximates the post-image nor is it closed under the transition, so it
             // must be discarded rather than handed to the caller.  Discarding is why
@@ -1733,7 +1769,7 @@ PTRef SpacerContext::tryBlockWithRelativeInduction(ProofObligationCore const & p
         lemma = ::simplifyUnderAssignment_Aggressive(lemma, logic);
     }
 
-#if DEBUG
+if (cfg.debug) {
     {
         VersionManager vManager(logic);
         SMTSolver debug_solver(logic);
@@ -1755,7 +1791,7 @@ PTRef SpacerContext::tryBlockWithRelativeInduction(ProofObligationCore const & p
             throw std::logic_error("Error in relind-grow: newLemma is not inductive!");
         }
     }
-#endif
+}
     return lemma;
 }
 
@@ -1877,7 +1913,7 @@ PTRef SpacerContext::tryBlockWithRelativeInductionBool(ProofObligationCore const
     }
     PTRef newLemma = logic.mkOr(inductiveDisjs);
 
-#if DEBUG
+if (cfg.debug) {
     SMTSolver debug_solver(logic);
     debug_solver.push();
     debug_solver.assertProp(newLemma);
@@ -1897,7 +1933,7 @@ PTRef SpacerContext::tryBlockWithRelativeInductionBool(ProofObligationCore const
     if (debug_solver.check() != SMTSolver::Answer::UNSAT) {
         throw std::logic_error("Error in relind: newLemma is not inductive!");
     }
-#endif
+}
 
     return newLemma;
 }
@@ -1973,25 +2009,24 @@ ProofObligation SpacerContext::computePredecessor(EId eid, ProofObligationCore c
             auto predicateVars = TermUtils(logic).getVars(graph.getStateVersion(source));
             // The model always comes from the may-summary check above; MBP_WITH_MAY_SUMMARY
             // decides whether the projection itself sees the frame.
-            PTRef mbpArgument = MBP_WITH_MAY_SUMMARY
+            PTRef mbpArgument = cfg.mbpWithMaySummary
                                     ? maySummary
                                     : getEdgeMustOnlySummary(eid, sourceBound, 0);
             auto [newConstraint, newOverConstraint] = \
                 projectFormulaWithOver(logic.mkAnd(mbpArgument, pob.constraint), predicateVars, *res.model);
             PTRef newPob = VersionManager(logic).sourceFormulaToTarget(newConstraint); // ensure POB is target fla
-#if MAYPO
+            if (cfg.maypo) {
             PTRef newOverPob = VersionManager(logic).sourceFormulaToTarget(newOverConstraint); // ensure POB is target fla
             if (newOverPob != newPob and newOverPob != logic.getTerm_true()) {
                 pobInfo(pob.vertex, pob.constraint, pob.bound)
                     .overPredCache.insert(eid, 0, newOverPob);
             }
-#endif
+            }
             TRACE(2, "New proof obligation generated");
             ProofObligation predPob(new ProofObligationCore{source, sourceBound, newPob, pob.isMayPO});
             predPob->parent = &pob;
             predPob->maySource = pob.maySource;
-            if (pob.isMayPO)
-                predPob->life = pob.life - 1;
+            predPob->life = pob.isMayPO ? pob.life - 1 : cfg.mayPoGas;
             return std::move(predPob);
         } else if (res.answer == QueryAnswer::UNSAT) {
             TRACE(2, "Edge blocked by current  may-summaries")
@@ -2023,25 +2058,24 @@ ProofObligation SpacerContext::computePredecessor(EId eid, ProofObligationCore c
                 graph.getStateVersion(source, vertexInstances.getInstanceNumber(eid, vertexToRefine)));
             // As above: model from the mixed summary; MBP_WITH_MAY_SUMMARY decides whether the
             // projection keeps the may-summaries of sources [0, vertexToRefine].
-            PTRef mbpArgument = MBP_WITH_MAY_SUMMARY
+            PTRef mbpArgument = cfg.mbpWithMaySummary
                                     ? mixedEdgeSummary
                                     : getEdgeMustOnlySummary(eid, sourceBound, vertexToRefine);
             auto [newConstraint, newOverConstraint] =
                 projectFormulaWithOver(logic.mkAnd(mbpArgument, pob.constraint), predicateVars, *res.model);
             PTRef newPob = VersionManager(logic).sourceFormulaToTarget(newConstraint); // ensure POB is target fla
             TRACE(2, "New proof obligation generated")
-#if MAYPO
+            if (cfg.maypo) {
             PTRef newOverPob = VersionManager(logic).sourceFormulaToTarget(newOverConstraint); // ensure POB is target fla
             if (newOverPob != newPob and newOverPob != logic.getTerm_true()) {
                 pobInfo(pob.vertex, pob.constraint, pob.bound)
                     .overPredCache.insert(eid, vertexToRefine, newOverPob);
             }
-#endif
+            }
             ProofObligation predPob(new ProofObligationCore{sources[vertexToRefine], sourceBound, newPob, pob.isMayPO});
             predPob->parent = &pob;
             predPob->maySource = pob.maySource;
-            if (pob.isMayPO)
-                predPob->life = pob.life - 1;
+            predPob->life = pob.isMayPO ? pob.life - 1 : cfg.mayPoGas;
             return std::move(predPob);
 
         } else if (res.answer == QueryAnswer::UNSAT) {

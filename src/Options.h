@@ -47,6 +47,11 @@ public:
     static const std::string TPA_USE_QE;
     static const std::string IC3IA_USE_UNSAT_CORE_GENERALIZATION;
     static const std::string IC3IA_ADD_INITIAL_RESET;
+    static const std::string SPACER_MAYPOB;
+    static const std::string SPACER_BMBP;
+    static const std::string SPACER_CC;
+    static const std::string SPACER_INDGEN;
+    static const std::string SPACER_MBP_MAY_SUMMARY;
     static const std::string FORCE_TS;
     static const std::string SIMPLIFY_NESTED;
     static const std::string TERMINATION_BACKEND;

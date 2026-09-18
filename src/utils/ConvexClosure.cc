@@ -290,6 +290,7 @@ PTRef ConvexClosure::getConvexClosure(vec<PTRef> const & formulas) {
     if (formulas.size() == 0) { return logic.getTerm_true(); }
 
     // Collect all polyhedra (sets of normalized arithmetic atoms) over-approximating each input formula.
+    // TODO: factorize Boolean variables.
     std::vector<std::vector<LinearAtom>> polyhedra;
 
     for (PTRef formula : formulas) {

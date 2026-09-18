@@ -25,6 +25,11 @@ const std::string Options::VERBOSE = "verbose";
 const std::string Options::TPA_USE_QE = "tpa.use-qe";
 const std::string Options::IC3IA_USE_UNSAT_CORE_GENERALIZATION = "ic3ia.unsat-core-generalization";
 const std::string Options::IC3IA_ADD_INITIAL_RESET = "ic3ia.initial-reset";
+const std::string Options::SPACER_MAYPOB = "spacer.maypob";
+const std::string Options::SPACER_BMBP = "spacer.bmbp";
+const std::string Options::SPACER_CC = "spacer.cc";
+const std::string Options::SPACER_INDGEN = "spacer.indgen";
+const std::string Options::SPACER_MBP_MAY_SUMMARY = "spacer.mbp-may-summary";
 const std::string Options::FORCE_TS = "force-ts";
 const std::string Options::SIMPLIFY_NESTED = "simplify-nested";
 const std::string Options::PROOF_FORMAT = "proof-format";
@@ -62,6 +67,15 @@ void printUsage() {
            "-v                              Increase verbosity (can be applied multiple times)\n"
            "-i,--input <file>               Input file (option not required)\n"
            "--force-ts                      Always encode linear system into transition system (affects BMC and TPA)\n"
+           "--spacer.maypob[=bool]          Spacer: enable may-proof-obligations from both\n"
+           "                                  sources (implies --spacer.bmbp --spacer.cc)\n"
+           "--spacer.bmbp[=bool]            Spacer: may-POBs from bidirectional MBP\n"
+           "--spacer.cc[=bool]              Spacer: may-POBs from convex closure of lemmas\n"
+           "--spacer.indgen[=bool]          Spacer: inductive generalization of learnt lemmas\n"
+           "                                  (generalization + relative induction)\n"
+           "--spacer.mbp-may-summary[=bool] Spacer: keep the may-summary in the MBP argument\n"
+           "                                  when computing a predecessor; also scopes the\n"
+           "                                  pob database per bound (default: true)\n"
            "--ic3ia.unsat-core-generalization[=bool]\n"
            "                                Use unsat-core-only cube generalization in IC3IA (default: true)\n"
            "--ic3ia.initial-reset[=bool]\n"
@@ -93,6 +107,13 @@ Options CommandLineParser::parse(int argc, char ** argv) {
     int printVersion = 0;
     int forceTS = 0;
     int simplifyNested = 0;
+    // -1 means "not given on the command line"; getopt sets the flag to 1 when it sees the
+    // option, and the handler below then resolves it to 0 or 1 according to the argument.
+    int spacerMayPob = -1;
+    int spacerBmbp = -1;
+    int spacerCc = -1;
+    int spacerIndGen = -1;
+    int spacerMbpMaySummary = -1;
 
     struct option long_options[] = {{"help", no_argument, nullptr, 'h'},
                                     {"version", no_argument, &printVersion, 1},
@@ -109,6 +130,11 @@ Options CommandLineParser::parse(int argc, char ** argv) {
                                     {Options::TPA_USE_QE.c_str(), optional_argument, &tpaUseQE, 1},
                                     {Options::IC3IA_USE_UNSAT_CORE_GENERALIZATION.c_str(), optional_argument, &ic3iaUseUnsatCoreGeneralization, 1},
                                     {Options::IC3IA_ADD_INITIAL_RESET.c_str(), optional_argument, &ic3iaAddInitialReset, 1},
+                                    {Options::SPACER_MAYPOB.c_str(), optional_argument, &spacerMayPob, 1},
+                                    {Options::SPACER_BMBP.c_str(), optional_argument, &spacerBmbp, 1},
+                                    {Options::SPACER_CC.c_str(), optional_argument, &spacerCc, 1},
+                                    {Options::SPACER_INDGEN.c_str(), optional_argument, &spacerIndGen, 1},
+                                    {Options::SPACER_MBP_MAY_SUMMARY.c_str(), optional_argument, &spacerMbpMaySummary, 1},
                                     {Options::PROOF_FORMAT.c_str(), required_argument, nullptr, 'p'},
                                     {Options::FORCE_TS.c_str(), no_argument, &forceTS, 1},
                                     {Options::SIMPLIFY_NESTED.c_str(), no_argument, &simplifyNested, 1},
@@ -155,6 +181,16 @@ Options CommandLineParser::parse(int argc, char ** argv) {
                 } else if (long_options[option_index].flag == &verbose) {
                     assert(optarg);
                     verbose = std::atoi(optarg);
+                } else if (long_options[option_index].flag == &spacerMayPob) {
+                    spacerMayPob = (optarg and isDisableKeyword(optarg)) ? 0 : 1;
+                } else if (long_options[option_index].flag == &spacerBmbp) {
+                    spacerBmbp = (optarg and isDisableKeyword(optarg)) ? 0 : 1;
+                } else if (long_options[option_index].flag == &spacerCc) {
+                    spacerCc = (optarg and isDisableKeyword(optarg)) ? 0 : 1;
+                } else if (long_options[option_index].flag == &spacerIndGen) {
+                    spacerIndGen = (optarg and isDisableKeyword(optarg)) ? 0 : 1;
+                } else if (long_options[option_index].flag == &spacerMbpMaySummary) {
+                    spacerMbpMaySummary = (optarg and isDisableKeyword(optarg)) ? 0 : 1;
                 } else if (long_options[option_index].flag == &forceTS) {
                     forceTS = 1;
                 } else if (long_options[option_index].flag == &simplifyNested) {
@@ -196,6 +232,13 @@ Options CommandLineParser::parse(int argc, char ** argv) {
         }
         // Assume the last argument not assigned to any option is input file
         res.addOption(Options::INPUT_FILE, argv[optind]);
+    }
+    if (spacerMayPob >= 0) { res.addOption(Options::SPACER_MAYPOB, spacerMayPob ? "true" : "false"); }
+    if (spacerBmbp >= 0) { res.addOption(Options::SPACER_BMBP, spacerBmbp ? "true" : "false"); }
+    if (spacerCc >= 0) { res.addOption(Options::SPACER_CC, spacerCc ? "true" : "false"); }
+    if (spacerIndGen >= 0) { res.addOption(Options::SPACER_INDGEN, spacerIndGen ? "true" : "false"); }
+    if (spacerMbpMaySummary >= 0) {
+        res.addOption(Options::SPACER_MBP_MAY_SUMMARY, spacerMbpMaySummary ? "true" : "false");
     }
     if (validate) { res.addOption(Options::VALIDATE_RESULT, "true"); }
     if (printWitness) { res.addOption(Options::PRINT_WITNESS, "true"); }
