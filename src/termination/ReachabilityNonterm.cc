@@ -401,27 +401,23 @@ PTRef constructTransitionInvariantCandidates(PTRef init, PTRef transition, PTRef
     PTRef id = getId(vars, logic);
     PTRef transitionOrId = logic.mkOr(transition, id);
     // TODO: rename det_trace
-    std::vector deterministic_trace{transition};
+    std::vector overapproximated_trace{transition};
     for (int k = 1; k < depth; k++) {
         // For every transition deterministic trace is updated, adding an Id or Tr
         // This is needed so that Interpolant overapproximates 1 <= n <= num transitions
-        deterministic_trace.push_back(TimeMachine(logic).sendFlaThroughTime(transitionOrId, k));
+        overapproximated_trace.push_back(TimeMachine(logic).sendFlaThroughTime(transitionOrId, k));
     }
-    PTRef trace = logic.mkAnd(deterministic_trace);
+    PTRef trace = logic.mkAnd(overapproximated_trace);
 
     // States guaranteed to reach termination: Sink at exactly `depth` steps, plus (if depth > 1)
     // states reachable from `init` within 1..depth-1 steps that already satisfy the trace.
     std::vector<PTRef> checked_states;
     // std::vector<PTRef> next_vars;
-    // if (depth > 1) {
-    //     // for (auto var: vars) {
-    //     //     next_vars.push_back(TimeMachine(logic).sendVarThroughTime(var, 1));
-    //     // }
-    //     checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(QuantifierElimination(logic).eliminate(logic.mkAnd(init, transition), vars), depth - 1));
-    // } else {
-    //     checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(sink, depth));
-    // }
-    checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(init, depth));
+    if (depth > 1) {
+        checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(QuantifierElimination(logic).eliminate(logic.mkAnd(init, transition), vars), depth - 1));
+    } else {
+        checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(sink, depth));
+    }
     // sink is updated, representing states that are guaranteed to reach termination
     PTRef terminating_states = logic.mkOr(checked_states);
     // std::cout << "Constructing invariant candidates for depth " << depth << "   " << logic.pp(init) << std::endl;
@@ -769,7 +765,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::checkTermina
     // Algorithm checks if reachable states are terminating
     // TODO: I can also extract all covered states from here and use them as terminating (updating tr)
     auto [answer, subinv] =
-        analyzeTS(reached, logic.mkAnd(transition, logic.mkNot(covered)), covered, logic);
+        analyzeTS(reached, transition, sink, logic);
     // TODO: It is possible to do check differently, analyzing <noncoveredStates, tr,
     //   not(noncoveredStates)>
     //   If this terminates, then the whole TS terminates, but if it nonterinates we need to prove
