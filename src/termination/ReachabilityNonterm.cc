@@ -703,7 +703,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::checkTermina
         logic.mkAnd({logic.mkOr(trInv, id), TimeMachine(logic).sendFlaThroughTime(transition, 1),
                      logic.mkNot(shiftOnlyNextVars(trInv, vars, logic))}),
         vars);
-    covered = TermUtils(logic).simplifyMax(logic.mkOr(covered, logic.mkNot(noncoveredStates)));
+    covered = TermUtils(logic).simplifyMax(logic.mkOr(covered, normalize(logic.mkNot(noncoveredStates), logic)));
 
     // We check if the states that are not covered by TrInv are reachable
     auto graph =
@@ -763,9 +763,13 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::checkTermina
         strictCandidates.clear();
         strictCandidates.push(subinv);
         strictCandidates.push(trInv);
+        PTRef newCov = QuantifierElimination(logic).keepOnly(
+            logic.mkAnd({logic.mkOr(subinv, id), TimeMachine(logic).sendFlaThroughTime(transition, 1),
+                         logic.mkNot(shiftOnlyNextVars(subinv, vars, logic))}),
+            vars);
 
         // TODO: Think if maybe sink can be even more restricted...
-        sink = TermUtils(logic).simplifyMax(logic.mkOr(sink, reached));
+        sink = TermUtils(logic).simplifyMax(logic.mkOr(sink, newCov));
         smt_checker.resetSolver();
         // TODO: It should work for  subinv \/ TrInv, but it does not
         //    weaker TrInv seems to fail more often then stronger TrInv :(
