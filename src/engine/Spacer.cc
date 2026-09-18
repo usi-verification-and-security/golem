@@ -33,19 +33,38 @@
 #define DEBUG 1
 #define GENERALIZE 1
 #define GDOWN 1
-#define RELIND 1
+#define RELIND 0
 #define RELIND_LATE 1 // only try relative induction when the pob HAS predecessors
 #define RELIND_GROW 0 // 0 = ...Bool (drop pob conjuncts); 1 = grow-from-init variant
 #define RELIND_MAX_ITERATIONS 20 // budget for the grow-from-init loop
 #define BOTH 0
 #define INDITP 0
-#define MAYPO 1
+#define MAYPO 0
+// also build may-pobs on a pob's final visit, bypassing the trigger
 #define MAYPO_ON_LAST_VISIT 0
+// 1 = pop may-pobs before must-pobs at the same bound (original)
 #define MAY_POBS_FIRST 1
-#define CC_SINGLE_DIRECT 1 // with a single lemma use !l verbatim: ConvexClosure keeps only
-                           // arithmetic literals, so it would drop the boolean guards of !l
-#define MAYPO_SKIP_BLOCKED 1 // skip a may-pob already refuted by the frame: blocking it
-                             // costs a full interpolation and re-learns a known lemma // 1 = pop may-pobs before must-pobs at the same bound (original) // also build may-pobs on a pob's final visit, bypassing the trigger
+// with a single lemma use !l verbatim: ConvexClosure keeps only arithmetic
+// literals, so it would drop the boolean guards of !l
+#define CC_SINGLE_DIRECT 1
+// skip a may-pob already refuted by the frame: blocking it costs a full
+// interpolation and re-learns a lemma we already have
+#define MAYPO_SKIP_BLOCKED 1
+// What computePredecessor projects on, AFTER the model has been taken from the
+// full (may-summary) check.
+//   1 = include the may-summaries: the projection is relative to the frame we
+//       happen to be at, so under/over are bound-dependent. Requires
+//       POBDB_PER_BOUND, since such an over-approximation must not be merged
+//       with one computed at another bound.
+//   0 = transition + must-summaries only: under/over approximate the weakest
+//       precondition of the pob itself, and are valid at every bound.
+#define MBP_WITH_MAY_SUMMARY 1
+// Scope of the pob database; follows MBP_WITH_MAY_SUMMARY by default.
+//   1 = key PobInfo by (vertex, formula, bound). Restores pre-database may-pob
+//       handling: both caches, the counter and firstBound reset every bound, so
+//       globalCounter == localCounter and the `bound >= firstBound` gate is inert.
+//   0 = key by (vertex, formula), accumulating evidence across bounds.
+#define POBDB_PER_BOUND MBP_WITH_MAY_SUMMARY
 #define CC 1
 #define BMBP 0
 
@@ -225,7 +244,7 @@ private:
 };
 
 const unsigned short MAY_PO_GAS = 20; // nr of predecessors allowed on a may pos
-const unsigned short TRIGGER_MAY_PO = 6;
+const unsigned short TRIGGER_MAY_PO = 3;
 const unsigned short MIN_LEMMAS_FOR_CC = 1;
 const unsigned short MIN_BMBP_OVER_LITS = 1;
 
@@ -523,9 +542,16 @@ class SpacerContext {
     /// vertex -> pob formula -> what we know about that subgoal. Never cleared: the point
     /// is that it outlives the per-bound pob objects.  mutable so that computePredecessor,
     /// which is const, can record over-approximations.
-    mutable std::unordered_map<SymRef, std::unordered_map<PTRef, PobInfo, PTRefHash>, SymRefHash> pobDb;
+    mutable std::unordered_map<
+        SymRef, std::unordered_map<PTRef, std::unordered_map<std::size_t, PobInfo>, PTRefHash>,
+        SymRefHash> pobDb;
 
-    PobInfo & pobInfo(SymRef vid, PTRef formula) const { return pobDb[vid][formula]; }
+    /// `bound` is the bound of the pob that OWNS this info -- its own bound when it
+    /// records predecessors, the parent's bound when a child records a blocking lemma.
+    /// With POBDB_PER_BOUND off the bound key collapses to 0 and every bound shares one entry.
+    PobInfo & pobInfo(SymRef vid, PTRef formula, std::size_t bound) const {
+        return pobDb[vid][formula][POBDB_PER_BOUND ? bound : 0];
+    }
 
     void addMaySummary(SymRef vid, std::size_t bound, PTRef summary,
                        LemmaOriginMask origin = LemmaOrigin::None) {
@@ -788,8 +814,8 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
               << (p.mayRoot ? " root" : " desc")
               << " lvl=" << p.bound << " life=" << p.life
               << " visits=" << p.localCounter
-              << "/" << pobInfo(p.vertex, p.constraint).globalCounter
-              << " firstBound=" << pobInfo(p.vertex, p.constraint).firstBound
+              << "/" << pobInfo(p.vertex, p.constraint, p.bound).globalCounter
+              << " firstBound=" << pobInfo(p.vertex, p.constraint, p.bound).firstBound
               << " atoms=" << TermUtils(logic).getTopLevelConjuncts(p.constraint).size()
               << " fate=" << fate);
     };
@@ -804,7 +830,7 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
         }
 
         pob.localCounter++;
-        PobInfo & info = pobInfo(pob.vertex, pob.constraint);
+        PobInfo & info = pobInfo(pob.vertex, pob.constraint, pob.bound);
         if (not info.seen) {
             info.seen = true;
             info.firstBound = pob.bound;
@@ -879,7 +905,7 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
                 addMaySummary(pob.vertex, pob.bound, relindLemma,
                               RelIndVariant | lemmaOriginOfPob(pob));
                 if (pob.parent != nullptr) {
-                    pobInfo(pob.parent->vertex, pob.parent->constraint)
+                    pobInfo(pob.parent->vertex, pob.parent->constraint, pob.parent->bound)
                         .blockingLemmas.insert(pob.vertex, relindLemma);
                 }
                 if (pob.isMayPO) {
@@ -901,8 +927,15 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
         // Evidence is gathered per subgoal across bounds, so the trigger is the cross-bound
         // counter.  `bound >= firstBound` keeps us from using evidence collected higher up
         // than where we now are.
+        // Pre-database Spacer triggered on the visit count of THIS pob object. The
+        // cross-bound counter is only meaningful when evidence actually accumulates, so
+        // with a per-bound database we trigger on the per-occurrence counter instead --
+        // otherwise distinct pob objects sharing (vertex, formula, bound) would pool
+        // their visits and fire the trigger earlier than the old code did.
+        std::size_t const triggerCounter =
+            POBDB_PER_BOUND ? pob.localCounter : info.globalCounter;
         bool const evidenceReady =
-            pob.bound >= info.firstBound and info.globalCounter >= TRIGGER_MAY_PO;
+            pob.bound >= info.firstBound and triggerCounter >= TRIGGER_MAY_PO;
         if (evidenceReady or (MAYPO_ON_LAST_VISIT and newProofObligations.empty())) {
 
 #if BMBP
@@ -1079,7 +1112,7 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
 #endif
 
             if (pob.parent != nullptr) {
-                pobInfo(pob.parent->vertex, pob.parent->constraint)
+                pobInfo(pob.parent->vertex, pob.parent->constraint, pob.parent->bound)
                     .blockingLemmas.insert(pob.vertex, newLemma);
             }
 
@@ -1938,17 +1971,19 @@ ProofObligation SpacerContext::computePredecessor(EId eid, ProofObligationCore c
             // When this source is over-approximated and the edge becomes feasible -> extract next proof obligation
             auto source = sources[0];
             auto predicateVars = TermUtils(logic).getVars(graph.getStateVersion(source));
-            // The model comes from the may-summary check above, but the projection runs on the
-            // transition alone, so under/over approximate the weakest precondition of the pob
-            // and do not depend on the frame we happened to be at.
-            PTRef mbpArgument = getEdgeMustOnlySummary(eid, sourceBound, 0);
+            // The model always comes from the may-summary check above; MBP_WITH_MAY_SUMMARY
+            // decides whether the projection itself sees the frame.
+            PTRef mbpArgument = MBP_WITH_MAY_SUMMARY
+                                    ? maySummary
+                                    : getEdgeMustOnlySummary(eid, sourceBound, 0);
             auto [newConstraint, newOverConstraint] = \
                 projectFormulaWithOver(logic.mkAnd(mbpArgument, pob.constraint), predicateVars, *res.model);
             PTRef newPob = VersionManager(logic).sourceFormulaToTarget(newConstraint); // ensure POB is target fla
 #if MAYPO
             PTRef newOverPob = VersionManager(logic).sourceFormulaToTarget(newOverConstraint); // ensure POB is target fla
             if (newOverPob != newPob and newOverPob != logic.getTerm_true()) {
-                pobInfo(pob.vertex, pob.constraint).overPredCache.insert(eid, 0, newOverPob);
+                pobInfo(pob.vertex, pob.constraint, pob.bound)
+                    .overPredCache.insert(eid, 0, newOverPob);
             }
 #endif
             TRACE(2, "New proof obligation generated");
@@ -1986,8 +2021,11 @@ ProofObligation SpacerContext::computePredecessor(EId eid, ProofObligationCore c
             auto source = sources[vertexToRefine];
             auto predicateVars = TermUtils(logic).getVars(
                 graph.getStateVersion(source, vertexInstances.getInstanceNumber(eid, vertexToRefine)));
-            // As above: model from the mixed summary, projection without the may-summaries.
-            PTRef mbpArgument = getEdgeMustOnlySummary(eid, sourceBound, vertexToRefine);
+            // As above: model from the mixed summary; MBP_WITH_MAY_SUMMARY decides whether the
+            // projection keeps the may-summaries of sources [0, vertexToRefine].
+            PTRef mbpArgument = MBP_WITH_MAY_SUMMARY
+                                    ? mixedEdgeSummary
+                                    : getEdgeMustOnlySummary(eid, sourceBound, vertexToRefine);
             auto [newConstraint, newOverConstraint] =
                 projectFormulaWithOver(logic.mkAnd(mbpArgument, pob.constraint), predicateVars, *res.model);
             PTRef newPob = VersionManager(logic).sourceFormulaToTarget(newConstraint); // ensure POB is target fla
@@ -1995,7 +2033,8 @@ ProofObligation SpacerContext::computePredecessor(EId eid, ProofObligationCore c
 #if MAYPO
             PTRef newOverPob = VersionManager(logic).sourceFormulaToTarget(newOverConstraint); // ensure POB is target fla
             if (newOverPob != newPob and newOverPob != logic.getTerm_true()) {
-                pobInfo(pob.vertex, pob.constraint).overPredCache.insert(eid, vertexToRefine, newOverPob);
+                pobInfo(pob.vertex, pob.constraint, pob.bound)
+                    .overPredCache.insert(eid, vertexToRefine, newOverPob);
             }
 #endif
             ProofObligation predPob(new ProofObligationCore{sources[vertexToRefine], sourceBound, newPob, pob.isMayPO});
