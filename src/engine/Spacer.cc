@@ -1469,15 +1469,21 @@ PTRef SpacerContext::generalize(PTRef lemma, PTRef maySumm, PTRef transitions, c
 
     // std::cerr << "Old Lemma: " << logic.pp(lemma) << std::endl;
     // std::cerr << "New Lemma: " << logic.pp(newLemma) << std::endl;
-    if (inductiveDisjs.size() != candidates.size()) {
-        TRACE(1, "Generalization applied: newLemma is stronger");
-    }
 
 if (cfg.debug) {
     SMTSolver debug_solver(logic);
+    debug_solver.assertProp(logic.mkNot(vManager.baseFormulaToTarget(newLemma)));
+
+    debug_solver.push();
+    debug_solver.assertProp(vManager.baseFormulaToTarget(lemma));
+    res = debug_solver.check();
+    if (res != SMTSolver::Answer::UNSAT) {
+        TRACE(1, "Generalization applied: newLemma is stronger!");
+    }
+    debug_solver.pop();
+
     debug_solver.assertProp(maySumm);
     debug_solver.assertProp(transitions);
-    debug_solver.assertProp(logic.mkNot(vManager.baseFormulaToTarget(newLemma)));
     debug_solver.push();
     for (auto gi = 0; gi < guardVariables.size(); ++gi) {
         const GuardVar& guardVar = guardVariables[gi];
@@ -1588,15 +1594,19 @@ PTRef SpacerContext::generalize_down(PTRef lemma, PTRef maySumm, PTRef transitio
     }
     PTRef newLemma = logic.mkOr(inductiveDisjs);
 
-    if (inductiveDisjs.size() != candidates.size()) {
-        TRACE(1, "Generalization applied: newLemma is stronger");
-    }
-
 if (cfg.debug) {
     SMTSolver debug_solver(logic);
+    debug_solver.assertProp(logic.mkNot(vManager.baseFormulaToTarget(newLemma)));
+
+    debug_solver.push();
+    debug_solver.assertProp(vManager.baseFormulaToTarget(lemma));
+    if (debug_solver.check() != SMTSolver::Answer::UNSAT) {
+        TRACE(1, "Generalization applied: newLemma is stronger!");
+    }
+    debug_solver.pop();
+
     debug_solver.assertProp(maySumm);
     debug_solver.assertProp(transitions);
-    debug_solver.assertProp(logic.mkNot(vManager.baseFormulaToTarget(newLemma)));
     debug_solver.push();
     for (auto const & guardVar : guardVariables) {
         debug_solver.assertProp(
