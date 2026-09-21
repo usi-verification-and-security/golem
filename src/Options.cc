@@ -29,7 +29,10 @@ const std::string Options::SPACER_MAYPOB = "spacer.maypob";
 const std::string Options::SPACER_BMBP = "spacer.bmbp";
 const std::string Options::SPACER_CC = "spacer.cc";
 const std::string Options::SPACER_INDGEN = "spacer.indgen";
+const std::string Options::SPACER_RELIND = "spacer.relind";
 const std::string Options::SPACER_MBP_MAY_SUMMARY = "spacer.mbp-may-summary";
+const std::string Options::SPACER_MAYPO_GAS = "spacer.maypo-gas";
+const std::string Options::SPACER_MAYPO_TRIGGER = "spacer.maypo-trigger";
 const std::string Options::FORCE_TS = "force-ts";
 const std::string Options::SIMPLIFY_NESTED = "simplify-nested";
 const std::string Options::PROOF_FORMAT = "proof-format";
@@ -71,11 +74,18 @@ void printUsage() {
            "                                  sources (implies --spacer.bmbp --spacer.cc)\n"
            "--spacer.bmbp[=bool]            Spacer: may-POBs from bidirectional MBP\n"
            "--spacer.cc[=bool]              Spacer: may-POBs from convex closure of lemmas\n"
-           "--spacer.indgen[=bool]          Spacer: inductive generalization of learnt lemmas\n"
-           "                                  (generalization + relative induction)\n"
+           "--spacer.indgen[=bool]          Spacer: inductive generalization of learnt lemmas;\n"
+           "                                  also drives relative induction unless\n"
+           "                                  --spacer.relind is given\n"
+           "--spacer.relind[=bool]          Spacer: try to block a pob by relative induction before\n"
+           "                                  creating predecessors\n"
            "--spacer.mbp-may-summary[=bool] Spacer: keep the may-summary in the MBP argument\n"
            "                                  when computing a predecessor; also scopes the\n"
            "                                  pob database per bound (default: true)\n"
+           "--spacer.maypo-gas <n>          Spacer: length of the predecessor chain a may-POB\n"
+           "                                  may spawn; n >= 1 (default: 20)\n"
+           "--spacer.maypo-trigger <n>      Spacer: visits of a pob before may-POBs are built\n"
+           "                                  from it; n >= 1 (default: 3)\n"
            "--ic3ia.unsat-core-generalization[=bool]\n"
            "                                Use unsat-core-only cube generalization in IC3IA (default: true)\n"
            "--ic3ia.initial-reset[=bool]\n"
@@ -113,7 +123,12 @@ Options CommandLineParser::parse(int argc, char ** argv) {
     int spacerBmbp = -1;
     int spacerCc = -1;
     int spacerIndGen = -1;
+    int spacerRelInd = -1;
     int spacerMbpMaySummary = -1;
+    // identity tokens only: the raw argument is stored, so it can be validated with a
+    // proper message instead of being silently atoi'd to 0
+    int spacerMayPoGas = 0;
+    int spacerMayPoTrigger = 0;
 
     struct option long_options[] = {{"help", no_argument, nullptr, 'h'},
                                     {"version", no_argument, &printVersion, 1},
@@ -134,7 +149,10 @@ Options CommandLineParser::parse(int argc, char ** argv) {
                                     {Options::SPACER_BMBP.c_str(), optional_argument, &spacerBmbp, 1},
                                     {Options::SPACER_CC.c_str(), optional_argument, &spacerCc, 1},
                                     {Options::SPACER_INDGEN.c_str(), optional_argument, &spacerIndGen, 1},
+                                    {Options::SPACER_RELIND.c_str(), optional_argument, &spacerRelInd, 1},
                                     {Options::SPACER_MBP_MAY_SUMMARY.c_str(), optional_argument, &spacerMbpMaySummary, 1},
+                                    {Options::SPACER_MAYPO_GAS.c_str(), required_argument, &spacerMayPoGas, 1},
+                                    {Options::SPACER_MAYPO_TRIGGER.c_str(), required_argument, &spacerMayPoTrigger, 1},
                                     {Options::PROOF_FORMAT.c_str(), required_argument, nullptr, 'p'},
                                     {Options::FORCE_TS.c_str(), no_argument, &forceTS, 1},
                                     {Options::SIMPLIFY_NESTED.c_str(), no_argument, &simplifyNested, 1},
@@ -189,8 +207,16 @@ Options CommandLineParser::parse(int argc, char ** argv) {
                     spacerCc = (optarg and isDisableKeyword(optarg)) ? 0 : 1;
                 } else if (long_options[option_index].flag == &spacerIndGen) {
                     spacerIndGen = (optarg and isDisableKeyword(optarg)) ? 0 : 1;
+                } else if (long_options[option_index].flag == &spacerRelInd) {
+                    spacerRelInd = (optarg and isDisableKeyword(optarg)) ? 0 : 1;
                 } else if (long_options[option_index].flag == &spacerMbpMaySummary) {
                     spacerMbpMaySummary = (optarg and isDisableKeyword(optarg)) ? 0 : 1;
+                } else if (long_options[option_index].flag == &spacerMayPoGas) {
+                    assert(optarg);
+                    res.addOption(Options::SPACER_MAYPO_GAS, optarg);
+                } else if (long_options[option_index].flag == &spacerMayPoTrigger) {
+                    assert(optarg);
+                    res.addOption(Options::SPACER_MAYPO_TRIGGER, optarg);
                 } else if (long_options[option_index].flag == &forceTS) {
                     forceTS = 1;
                 } else if (long_options[option_index].flag == &simplifyNested) {
@@ -237,6 +263,7 @@ Options CommandLineParser::parse(int argc, char ** argv) {
     if (spacerBmbp >= 0) { res.addOption(Options::SPACER_BMBP, spacerBmbp ? "true" : "false"); }
     if (spacerCc >= 0) { res.addOption(Options::SPACER_CC, spacerCc ? "true" : "false"); }
     if (spacerIndGen >= 0) { res.addOption(Options::SPACER_INDGEN, spacerIndGen ? "true" : "false"); }
+    if (spacerRelInd >= 0) { res.addOption(Options::SPACER_RELIND, spacerRelInd ? "true" : "false"); }
     if (spacerMbpMaySummary >= 0) {
         res.addOption(Options::SPACER_MBP_MAY_SUMMARY, spacerMbpMaySummary ? "true" : "false");
     }

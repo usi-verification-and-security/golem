@@ -41,7 +41,7 @@ struct SpacerConfig {
     bool generalize = true;      // generalize learnt lemmas (inductively if possible)
     bool relind = true;          // try to block with relative induction even when there are predecessors
 
-    // other options, not wired to cmd line
+    // not wired to cmd line: change the default here
     bool gdown = true;           // generalize by dropping disjuncts (otherwise, use unsatcore)
     bool relindGrow = false;     // relative induction: grow-from-init mbp-based variant
 
@@ -58,13 +58,14 @@ struct SpacerConfig {
     /// true  = include the may-summaries: the projection is relative to the frame, so
     ///         under/over are bound-dependent and require pobDbPerBound.
     /// false = transition + must-summaries only, valid at every bound.
+    /// Wired: --spacer.mbp-may-summary (also sets pobDbPerBound).
     bool mbpWithMaySummary = true;
 
     /// Key PobInfo by (vertex, formula, bound) instead of (vertex, formula). Follows
     /// mbpWithMaySummary: frame-relative evidence must not be merged across bounds.
     bool pobDbPerBound = mbpWithMaySummary;
 
-    // tuning parameters
+    // tuning parameters (the first two are wired: --spacer.maypo-gas / --spacer.maypo-trigger)
     std::size_t mayPoGas = 20;            // predecessor-chain length allowed from a may-POB
     std::size_t triggerMayPo = 3;         // visits before may-POBs are built
     std::size_t minLemmasForCc = 1;       // blocking lemmas needed before CC fires
@@ -73,6 +74,12 @@ struct SpacerConfig {
 
     // Make sure we have a way to produce a lemma
     void validate() const {
+        if (mayPoGas < 1) {
+            throw std::logic_error("Spacer: SpacerConfig::mayPoGas must be at least 1");
+        }
+        if (triggerMayPo < 1) {
+            throw std::logic_error("Spacer: SpacerConfig::triggerMayPo must be at least 1");
+        }
         if (not interpolation and not indConflict) {
             throw std::logic_error(
                 "Spacer: at least one of SpacerConfig::interpolation and ::indConflict must be set, "
@@ -116,16 +123,40 @@ struct SpacerConfig {
                 if (not bmbp) { cfg.bmbp = false; }
             }
         }
-        if (auto const indgen = flag(Options::SPACER_INDGEN)) {
+        // --spacer.indgen drives relative induction too, unless --spacer.relind names it
+        // explicitly -- the same "unless also specified" rule as bmbp/cc.
+        auto const indgen = flag(Options::SPACER_INDGEN);
+        auto const relind = flag(Options::SPACER_RELIND);
+        if (indgen) {
             cfg.generalize = *indgen;
-            cfg.relind = *indgen;
+            if (not relind) { cfg.relind = *indgen; }
         }
+        if (relind) { cfg.relind = *relind; }
         // The pob database follows: a frame-relative over-approximation is only valid at the
         // bound it was produced at, so it must not be merged with one from another bound.
         if (auto const mbpMaySummary = flag(Options::SPACER_MBP_MAY_SUMMARY)) {
             cfg.mbpWithMaySummary = *mbpMaySummary;
             cfg.pobDbPerBound = *mbpMaySummary;
         }
+        // Numeric knobs: the raw argument is kept by the parser so it can be rejected here
+        // with a message naming the flag, rather than silently becoming 0.
+        auto positive = [&options](std::string const & key, std::size_t & target) {
+            auto const value = options.getOption(key);
+            if (not value) { return; }
+            std::size_t consumed = 0;
+            long long parsed = 0;
+            try {
+                parsed = std::stoll(*value, &consumed);
+            } catch (std::exception const &) { consumed = 0; }
+            if (consumed != value->size() or parsed < 1) {
+                throw std::logic_error("Spacer: --" + key + " expects a positive integer, got '" +
+                                       *value + "'");
+            }
+            target = static_cast<std::size_t>(parsed);
+        };
+        positive(Options::SPACER_MAYPO_GAS, cfg.mayPoGas);
+        positive(Options::SPACER_MAYPO_TRIGGER, cfg.triggerMayPo);
+
         cfg.validate();
         return cfg;
     }
@@ -900,7 +931,7 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
               << ((pob.isMayPO) ? "MAY" : "MUST") << " PO " << pob.constraint.x
               << " at level " << pob.bound
               << " with life " << pob.life);
-        TRACE(3, " proof obligation " << logic.printTerm(pob.constraint))
+        TRACE(2, " proof obligation " << logic.printTerm(pob.constraint))
 
         if (pob.vertex == graph.getEntry() and not pob.isMayPO) {
             assert(false); // With the must summaries, we actually never finish here
@@ -1077,7 +1108,7 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
                 if (originalRes.answer != QueryAnswer::UNSAT) {
                     throw std::logic_error("All edges should have been blocked, but they are not!");
                 }
-                TRACE(2,
+                TRACE(1,
                       "---- [ITP] Learnt lemma: " << originalNewLemma.x 
                       << " nr disj: " << TermUtils(logic).getTopLevelDisjuncts(originalNewLemma).size()
                       << " nr vars: " << TermUtils(logic).getVars(originalNewLemma).size());
@@ -1087,7 +1118,7 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
                         cfg.gdown
                         ? generalize_down(originalNewLemma, maySummary, transitions, inductiveSources)
                         : generalize(originalNewLemma, maySummary, transitions, inductiveSources);
-                    TRACE(2,
+                    TRACE(1,
                           "---- [ITP] Generalization: " << originalNewLemma.x
                           << " nr disj: " << TermUtils(logic).getTopLevelDisjuncts(originalNewLemma).size()
                           << " nr vars: " << TermUtils(logic).getVars(originalNewLemma).size());
@@ -1114,7 +1145,7 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
                 auto indNewLemma = indRes.interpolant;
 
                 // Add the new ind Lemma
-                TRACE(2,
+                TRACE(1,
                       "---- [IND] Learnt lemma: " << indNewLemma.x 
                       << " nr disj: " << TermUtils(logic).getTopLevelDisjuncts(indNewLemma).size()
                       << " nr vars: " << TermUtils(logic).getVars(indNewLemma).size());
@@ -1126,7 +1157,7 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
                 indNewLemma = cfg.gdown
                     ? generalize_down(indNewLemma, maySummary, transitions, inductiveSources)
                     : generalize(indNewLemma, maySummary, transitions, inductiveSources);
-                TRACE(2,
+                TRACE(1,
                       "---- [IND] Generalization: " << indNewLemma.x
                       << " nr disj: " << TermUtils(logic).getTopLevelDisjuncts(indNewLemma).size()
                       << " nr vars: " << TermUtils(logic).getVars(indNewLemma).size());

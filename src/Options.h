@@ -51,7 +51,10 @@ public:
     static const std::string SPACER_BMBP;
     static const std::string SPACER_CC;
     static const std::string SPACER_INDGEN;
+    static const std::string SPACER_RELIND;
     static const std::string SPACER_MBP_MAY_SUMMARY;
+    static const std::string SPACER_MAYPO_GAS;
+    static const std::string SPACER_MAYPO_TRIGGER;
     static const std::string FORCE_TS;
     static const std::string SIMPLIFY_NESTED;
     static const std::string TERMINATION_BACKEND;
