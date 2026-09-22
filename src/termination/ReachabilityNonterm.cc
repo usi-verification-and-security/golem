@@ -78,6 +78,7 @@ PTRef mkZeroDotProductEqs(ArithLogic & logic, vec<PTRef> const & weights,
 }
 
 bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const & vars) {
+    if (logic.isNot(formula) || logic.isVar(formula)) return false;
     assert(logic.isAnd(formula) || logic.isLeq(formula) || logic.isEquality(formula));
     vec<PTRef> conjuncts = TermUtils(logic).getTopLevelConjuncts(formula);
 
@@ -715,6 +716,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::checkTermina
                      logic.mkNot(shiftOnlyNextVars(trInv, vars, logic))}),
         vars);
     // TODO: try adding covered to sink (new noncovered)
+    // std::cout << "Noncovered: " << logic.pp(noncoveredStates) << '\n';
     covered = TermUtils(logic).simplifyMax(logic.mkOr(covered, normalize(logic.mkNot(noncoveredStates), logic)));
 
     // We check if the states that are not covered by TrInv are reachable
@@ -777,11 +779,10 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::checkTermina
         strictCandidates.clear();
         strictCandidates.push(subinv);
         strictCandidates.push(trInv);
-        PTRef newCov = logic.mkOr(TimeMachine(logic).sendFlaThroughTime(QuantifierElimination(logic).eliminate(
-            logic.mkAnd({reached, subinv}),
-            vars), -1), reached);
+        PTRef newCov = TimeMachine(logic).sendFlaThroughTime(QuantifierElimination(logic).eliminate(
+            logic.mkAnd({reached, subinv}),vars), -1);
         // TODO: Think if maybe sink can be even more restricted...
-        sink = TermUtils(logic).simplifyMax(logic.mkOr(sink, newCov));
+        sink = TermUtils(logic).simplifyMax(logic.mkOr({sink, newCov, reached}));
         smt_checker.resetSolver();
         // TODO: It should work for  subinv \/ TrInv, but it does not
         //    weaker TrInv seems to fail more often then stronger TrInv :(
