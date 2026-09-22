@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cstddef>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -176,6 +177,94 @@ PTRef polyhedronToTerm(ArithLogic & logic, std::vector<LinearAtom> const & atoms
     return logic.mkAnd(conjuncts);
 }
 
+bool isArithmeticRelation(ArithLogic & logic, PTRef term) {
+    return logic.isNumEq(term) or logic.isLeq(term) or logic.isLt(term) or logic.isGeq(term) or
+           logic.isGt(term);
+}
+
+// A conjunct is factorizable when it constrains no arithmetic variable. That covers a Boolean
+// literal, but also a clause such as `(or ~b1 b2)`, which is what NNF makes of `(= b1 b2)`.
+// Only precision depends on this test: conjoining a conjunct of every input to the result is
+// sound whatever the conjunct says.
+bool isPureBoolean(Logic & logic, PTRef conj) {
+    for (PTRef var : TermUtils(logic).getVars(conj)) {
+        if (not logic.hasSortBool(var)) { return false; }
+    }
+    return true;
+}
+
+// Upper bound on the number of cubes `toDNF` would produce, saturating at `cap + 1`. Computing it
+// first is what makes the cube budget a bound on the work and not only on the result.
+std::size_t countCubes(Logic & logic, PTRef fla, std::size_t cap,
+                       std::unordered_map<PTRef, std::size_t, PTRefHash> & memo) {
+    auto it = memo.find(fla);
+    if (it != memo.end()) { return it->second; }
+    std::size_t result = 1;
+    bool const conjunction = logic.isAnd(fla);
+    if (conjunction or logic.isOr(fla)) {
+        result = conjunction ? 1 : 0;
+        Pterm const & term = logic.getPterm(fla);
+        for (int i = 0; i < term.size(); ++i) {
+            std::size_t const child = countCubes(logic, term[i], cap, memo);
+            result = conjunction ? result * child : result + child;
+            if (result > cap) {
+                result = cap + 1;
+                break;
+            }
+        }
+    }
+    memo.emplace(fla, result);
+    return result;
+}
+
+// One input of the closure: the polyhedron over-approximating its arithmetic literals, plus the
+// conjuncts that constrain no arithmetic variable.
+struct Disjunct {
+    std::vector<LinearAtom> polyhedron;
+    std::vector<PTRef> boolConjuncts;
+};
+
+/*
+ * Split the top-level conjuncts of an NNF formula. Returns nullopt when the conjunction is already
+ * syntactically infeasible. Conjuncts that are dropped are dropped soundly, since removing a
+ * conjunct only weakens the formula, and the closure over-approximates: disequalities (not convex),
+ * and conjuncts mixing Boolean and arithmetic content, which set `hasMixed` so that the caller can
+ * decide to expand the formula into cubes instead.
+ */
+std::optional<Disjunct> buildDisjunct(ArithLogic & logic, PTRef nnf, bool & hasMixed) {
+    Disjunct disjunct;
+    for (PTRef conj : TermUtils(logic).getTopLevelConjuncts(nnf)) {
+        if (logic.isTrue(conj)) { continue; }
+        if (logic.isFalse(conj)) { return std::nullopt; }
+        PTRef lit = conj;
+        bool negated = false;
+        if (logic.isNot(conj)) {
+            lit = logic.getPterm(conj)[0];
+            negated = true;
+        }
+        if (isArithmeticRelation(logic, lit)) {
+            auto normalized = normalizeArithmeticLiteral(logic, lit, negated);
+            // A disequality cannot be part of a convex polyhedron.
+            if (not normalized) { continue; }
+            if (normalized->coefficients.empty()) {
+                // A variable-free atom is either trivially true (drop it) or makes the polyhedron empty.
+                bool const holds = normalized->equality ? normalized->constant.sign() == 0
+                                                        : normalized->constant.sign() >= 0;
+                if (not holds) { return std::nullopt; }
+                continue;
+            }
+            disjunct.polyhedron.push_back(std::move(*normalized));
+            continue;
+        }
+        if (isPureBoolean(logic, conj)) {
+            disjunct.boolConjuncts.push_back(conj);
+            continue;
+        }
+        hasMixed = true;
+    }
+    return disjunct;
+}
+
 /*
  * Translates a formula of the rational encoding logic back into the source logic.
  *
@@ -273,7 +362,8 @@ private:
 
 } // namespace
 
-ConvexClosure::ConvexClosure(Logic & logic, QEOptions options) : logic(logic), options(options) {
+ConvexClosure::ConvexClosure(Logic & logic, QEOptions options, std::size_t maxCubesPerFormula)
+    : logic(logic), options(options), maxCubesPerFormula(maxCubesPerFormula) {
     if (not options.compute_overapproximation) {
         throw std::invalid_argument(
             "ConvexClosure requires QEOptions::compute_overapproximation to be set");
@@ -289,54 +379,86 @@ PTRef ConvexClosure::getConvexClosure(vec<PTRef> const & formulas) {
     if (not arithLogic) { throw std::logic_error("ConvexClosure currently supports only arithmetic logics"); }
     if (formulas.size() == 0) { return logic.getTerm_true(); }
 
-    // Collect all polyhedra (sets of normalized arithmetic atoms) over-approximating each input formula.
-    // TODO: factorize Boolean variables.
-    std::vector<std::vector<LinearAtom>> polyhedra;
-
+    // Split every input into its arithmetic polyhedron and its Boolean conjuncts. A formula holding
+    // a conjunct that mixes the two is expanded into its cubes when the budget allows it, so that
+    // the Boolean case split becomes several inputs instead of being thrown away.
+    std::vector<Disjunct> disjuncts;
     for (PTRef formula : formulas) {
         PTRef nnf = TermUtils(logic).toNNF(formula);
-        vec<PTRef> conjuncts = TermUtils(logic).getTopLevelConjuncts(nnf);
-        std::vector<LinearAtom> atoms;
-        bool infeasible = false;
-        for (PTRef conj : conjuncts) {
-            if (logic.isTrue(conj)) { continue; }
-            if (logic.isFalse(conj)) {
-                infeasible = true;
+        bool hasMixed = false;
+        auto disjunct = buildDisjunct(*arithLogic, nnf, hasMixed);
+        if (hasMixed) { fprintf(stderr, "@@CC_MIXED@@\n"); }
+        if (hasMixed and maxCubesPerFormula > 0) {
+            std::unordered_map<PTRef, std::size_t, PTRefHash> memo;
+            if (countCubes(logic, nnf, maxCubesPerFormula, memo) <= maxCubesPerFormula) {
+                fprintf(stderr, "@@CC_EXPANDED@@\n");
+                for (PTRef cube : TermUtils(logic).getTopLevelDisjuncts(TermUtils(logic).toDNF(nnf))) {
+                    bool cubeHasMixed = false;
+                    auto expanded = buildDisjunct(*arithLogic, cube, cubeHasMixed);
+                    assert(not cubeHasMixed);
+                    if (expanded) { disjuncts.push_back(std::move(*expanded)); }
+                }
                 continue;
             }
-            PTRef lit = conj;
-            bool negated = false;
-            if (logic.isNot(conj)) {
-                lit = logic.getPterm(conj)[0];
-                negated = true;
+        }
+        if (disjunct) { disjuncts.push_back(std::move(*disjunct)); }
+    }
+
+    // Keep the satisfiable inputs, collect their polyhedra, and intersect their Boolean conjuncts.
+    std::vector<std::vector<LinearAtom>> polyhedra;
+    std::vector<PTRef> sharedBoolConjuncts;
+    bool sharedInitialized = false;
+    bool arithUnconstrained = false;
+
+    for (auto & disjunct : disjuncts) {
+        if (not disjunct.polyhedron.empty() or not disjunct.boolConjuncts.empty()) {
+            // The syntactic convex closure is exact only for non-empty polyhedra: for an empty one the
+            // sigma_i = 0 case still admits its recession cone and would add spurious directions.
+            // The Boolean conjuncts take part in the check as well, so an input that only its Boolean
+            // part makes unsatisfiable contributes neither its conjuncts nor its polyhedron.
+            SMTSolver solver(logic, SMTSolver::WitnessProduction::NONE);
+            if (not disjunct.polyhedron.empty()) {
+                solver.assertProp(polyhedronToTerm(*arithLogic, disjunct.polyhedron));
             }
-            auto normalized = normalizeArithmeticLiteral(*arithLogic, lit, negated);
-            if (not normalized) { continue; }
-            if (normalized->coefficients.empty()) {
-                // A variable-free atom is either trivially true (drop it) or makes the polyhedron empty.
-                bool const holds = normalized->equality ? normalized->constant.sign() == 0
-                                                        : normalized->constant.sign() >= 0;
-                if (not holds) { infeasible = true; }
-                continue;
-            }
-            atoms.push_back(std::move(*normalized));
+            for (PTRef conj : disjunct.boolConjuncts) { solver.assertProp(conj); }
+            if (solver.check() == SMTSolver::Answer::UNSAT) { continue; }
         }
 
-        if (infeasible) { continue; }
-        if (atoms.empty()) {
-            // A single unconstrained polyhedron makes the whole convex closure unconstrained.
-            return logic.getTerm_true();
+        if (not sharedInitialized) {
+            // The order of the first surviving input decides the order of the result.
+            sharedBoolConjuncts = disjunct.boolConjuncts;
+            sharedInitialized = true;
+        } else {
+            std::unordered_set<PTRef, PTRefHash> present(disjunct.boolConjuncts.begin(),
+                                                         disjunct.boolConjuncts.end());
+            sharedBoolConjuncts.erase(
+                std::remove_if(sharedBoolConjuncts.begin(), sharedBoolConjuncts.end(),
+                               [&present](PTRef conj) { return present.find(conj) == present.end(); }),
+                sharedBoolConjuncts.end());
         }
-        // The syntactic convex closure is exact only for non-empty polyhedra: for an empty one the
-        // sigma_i = 0 case still admits its recession cone and would add spurious directions.
-        SMTSolver solver(logic, SMTSolver::WitnessProduction::NONE);
-        solver.assertProp(polyhedronToTerm(*arithLogic, atoms));
-        if (solver.check() == SMTSolver::Answer::UNSAT) { continue; }
-        polyhedra.push_back(std::move(atoms));
+
+        if (disjunct.polyhedron.empty()) {
+            arithUnconstrained = true;
+        } else {
+            polyhedra.push_back(std::move(disjunct.polyhedron));
+        }
     }
 
     // Every input formula is unsatisfiable, so is their disjunction.
-    if (polyhedra.empty()) { return logic.getTerm_false(); }
+    if (not sharedInitialized) { return logic.getTerm_false(); }
+
+    // Every conjunct left here is a conjunct of each satisfiable input, hence it holds in their
+    // union: conjoining it to the closure is sound, and it is all that is left of the Boolean part.
+    PTRef sharedBool = logic.getTerm_true();
+    {
+        vec<PTRef> conjuncts;
+        for (PTRef conj : sharedBoolConjuncts) { conjuncts.push(conj); }
+        if (conjuncts.size() > 0) { sharedBool = logic.mkAnd(std::move(conjuncts)); }
+    }
+
+    // A satisfiable input that constrains no arithmetic variable makes the arithmetic part of the
+    // closure unconstrained; the shared Boolean part is still valid.
+    if (arithUnconstrained) { return sharedBool; }
 
     // Collect all variables appearing in any polyhedron, in a deterministic order.
     std::vector<PTRef> variables;
@@ -349,7 +471,7 @@ PTRef ConvexClosure::getConvexClosure(vec<PTRef> const & formulas) {
             }
         }
     }
-    if (variables.empty()) { return logic.getTerm_true(); }
+    if (variables.empty()) { return sharedBool; }
 
     // Verify all collected variables are arithmetic and share the same sort.
     SRef sort = logic.getSortRef(variables.front());
@@ -444,16 +566,16 @@ PTRef ConvexClosure::getConvexClosure(vec<PTRef> const & formulas) {
     // The encoding is a cube, so the disjunction budget of 1 costs nothing; without a projection
     // budget the inner loop also runs to completion. The elimination is then exact.
     assert(options.max_mbp_per_poly > 0 or result.precise_over);
-    if (result.over == PTRef_Undef) { return logic.getTerm_true(); }
+    if (result.over == PTRef_Undef) { return sharedBool; }
 
     // Anything the elimination failed to remove cannot be expressed in the source logic; giving up
     // and returning the trivial over-approximation is always sound.
     for (PTRef var : TermUtils(encodingLogic).getVars(result.over)) {
-        if (shadowToOriginal.find(var) == shadowToOriginal.end()) { return logic.getTerm_true(); }
+        if (shadowToOriginal.find(var) == shadowToOriginal.end()) { return sharedBool; }
     }
 
     BackTranslator translator(encodingLogic, *arithLogic, std::move(shadowToOriginal), integers);
-    return translator.translate(result.over);
+    return logic.mkAnd(sharedBool, translator.translate(result.over));
 }
 
 } // namespace golem

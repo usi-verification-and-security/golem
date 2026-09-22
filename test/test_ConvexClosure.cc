@@ -10,6 +10,7 @@
 
 #include <gtest/gtest.h>
 
+#include <cstddef>
 #include <vector>
 
 using namespace golem;
@@ -43,12 +44,15 @@ protected:
     ArithLogic logic;
     SRef sort;
     PTRef x, y, z;
+    PTRef b, c;
 
     ConvexClosureTest(opensmt::Logic_t logicType, SRef (ArithLogic::*sortGetter)() const)
         : logic(logicType), sort((logic.*sortGetter)()) {
         x = logic.mkVar(sort, "x");
         y = logic.mkVar(sort, "y");
         z = logic.mkVar(sort, "z");
+        b = logic.mkBoolVar("b");
+        c = logic.mkBoolVar("c");
     }
 
     PTRef num(int value) { return logic.mkConst(sort, FastRational(value)); }
@@ -58,6 +62,8 @@ protected:
     PTRef sum(std::vector<PTRef> const & args) { return logic.mkPlus(vec<PTRef>(args)); }
     PTRef scale(int factor, PTRef term) { return logic.mkTimes(num(factor), term); }
     PTRef all(std::vector<PTRef> const & args) { return logic.mkAnd(vec<PTRef>(args)); }
+    PTRef any(std::vector<PTRef> const & args) { return logic.mkOr(vec<PTRef>(args)); }
+    PTRef neg(PTRef arg) { return logic.mkNot(arg); }
 
     // The point (a, b) in the x/y plane, as a polyhedron.
     PTRef point(int a, int b) { return all({eq(x, num(a)), eq(y, num(b))}); }
@@ -78,8 +84,13 @@ protected:
         }
     }
 
-    void expectClosure(std::vector<PTRef> const & polyhedra, PTRef expectedHull) {
-        PTRef closure = ConvexClosure(logic).getConvexClosure(vec<PTRef>(polyhedra));
+    // `maxCubesPerFormula` is the budget for expanding a formula that mixes Boolean and arithmetic
+    // content into cubes; 0 drops such a conjunct instead. The tests state the budget explicitly,
+    // so that they keep describing one behaviour each if the library default moves.
+    void expectClosure(std::vector<PTRef> const & polyhedra, PTRef expectedHull,
+                       std::size_t maxCubesPerFormula = 0) {
+        PTRef closure = ConvexClosure(logic, ConvexClosure::defaultOptions(), maxCubesPerFormula)
+                            .getConvexClosure(vec<PTRef>(polyhedra));
         expectCovers(closure, polyhedra);
         EXPECT_TRUE(isEquivalent(closure, expectedHull, logic))
             << "expected " << logic.pp(expectedHull) << "\nbut got  " << logic.pp(closure);
@@ -240,6 +251,94 @@ TEST_F(ConvexClosure_IntTest, test_UnconstrainedPolyhedron) {
     polyhedra.push(point(0, 0));
     polyhedra.push(logic.mkBoolVar("b"));
     EXPECT_EQ(ConvexClosure(logic).getConvexClosure(polyhedra), logic.getTerm_true());
+}
+
+
+/* --------------------------------------------------------------- booleans */
+
+// A literal every input agrees on is not part of the polyhedra, but it holds in their union, so it
+// comes back conjoined to the hull.
+TEST_F(ConvexClosure_IntTest, test_SharedBooleanLiteralIsKept) {
+    expectClosure({all({b, eq(x, num(0))}), all({b, eq(x, num(4))})},
+                  all({b, leq(num(0), x), leq(x, num(4))}));
+}
+
+// Polarity is part of the match: `~b` is shared here, `b` is not.
+TEST_F(ConvexClosure_IntTest, test_SharedNegatedBooleanLiteralIsKept) {
+    expectClosure({all({neg(b), eq(x, num(0))}), all({neg(b), eq(x, num(4))})},
+                  all({neg(b), leq(num(0), x), leq(x, num(4))}));
+}
+
+// `c` is split between the inputs, so nothing can be said about it; `b` still survives.
+TEST_F(ConvexClosure_IntTest, test_SplitBooleanLiteralIsDropped) {
+    expectClosure({all({b, c, eq(x, num(0))}), all({b, neg(c), eq(x, num(4))})},
+                  all({b, leq(num(0), x), leq(x, num(4))}));
+}
+
+// A Boolean equality is not a literal: NNF turns `(= b c)` into `(or ~b c) /\ (or ~c b)`. Both
+// clauses constrain no arithmetic variable, so both are shared and the equality comes back whole.
+TEST_F(ConvexClosure_IntTest, test_SharedBooleanEqualityIsKept) {
+    PTRef equivalence = logic.mkEq(b, c);
+    expectClosure({all({equivalence, eq(x, num(0))}), all({equivalence, eq(x, num(4))})},
+                  all({equivalence, leq(num(0), x), leq(x, num(4))}));
+}
+
+// With no arithmetic literal anywhere the hull is the whole space, but the shared Boolean part is
+// still a constraint worth reporting.
+TEST_F(ConvexClosure_IntTest, test_PurelyBooleanInputsKeepTheSharedPart) {
+    expectClosure({all({b, c}), all({b, neg(c)})}, b);
+}
+
+// An input that constrains no arithmetic variable makes the arithmetic part of the closure
+// unconstrained, and only the Boolean part is left.
+TEST_F(ConvexClosure_IntTest, test_UnconstrainedInputKeepsTheSharedPart) {
+    expectClosure({all({b, eq(x, num(0))}), b}, b);
+}
+
+// `(b \/ c) /\ ~b /\ ~c` is unsatisfiable, so that input describes no state at all: it must
+// neither widen the hull to x = 100 nor empty the shared Boolean part.
+TEST_F(ConvexClosure_IntTest, test_BooleanContradictionDropsTheInput) {
+    expectClosure({all({b, eq(x, num(0))}), all({b, eq(x, num(4))}),
+                   all({any({b, c}), neg(b), neg(c), eq(x, num(100))})},
+                  all({b, leq(num(0), x), leq(x, num(4))}));
+}
+
+// Without a budget a conjunct mixing the two theories is dropped: the guard is lost, and so is the
+// `y` it guards.
+TEST_F(ConvexClosure_IntTest, test_MixedConjunctIsDroppedWithoutABudget) {
+    PTRef guarded = any({neg(b), eq(y, num(2))});
+    expectClosure({all({guarded, eq(x, num(0))}), all({guarded, eq(x, num(4))})},
+                  all({leq(num(0), x), leq(x, num(4))}));
+}
+
+// A disjunctive input has a single mixed top-level conjunct, so without a budget it is dropped
+// whole and leaves the closure unconstrained.
+TEST_F(ConvexClosure_IntTest, test_DisjunctiveInputIsUnconstrainedWithoutABudget) {
+    PTRef branches = any({point(0, 0), point(1, 1)});
+    expectClosure({branches, point(4, 4)}, logic.getTerm_true());
+}
+
+// With a budget for two cubes the branches become inputs of their own and the hull is exact.
+TEST_F(ConvexClosure_IntTest, test_DisjunctiveInputIsExpandedWithABudget) {
+    PTRef branches = any({point(0, 0), point(1, 1)});
+    expectClosure({branches, point(4, 4)}, all({eq(x, y), leq(num(0), x), leq(x, num(4))}),
+                  /* maxCubesPerFormula */ 2);
+}
+
+// The budget is checked before the conversion runs, and a formula over it is processed as it would
+// be at 0.
+TEST_F(ConvexClosure_IntTest, test_BudgetTooSmallFallsBackToDropping) {
+    PTRef branches = any({point(0, 0), point(1, 1)});
+    expectClosure({branches, point(4, 4)}, logic.getTerm_true(), /* maxCubesPerFormula */ 1);
+}
+
+// The default budget expands, so a caller that asks for nothing in particular gets the case split.
+TEST_F(ConvexClosure_IntTest, test_DefaultBudgetExpands) {
+    std::vector<PTRef> polyhedra = {any({point(0, 0), point(1, 1)}), point(4, 4)};
+    PTRef closure = ConvexClosure(logic).getConvexClosure(vec<PTRef>(polyhedra));
+    expectCovers(closure, polyhedra);
+    EXPECT_TRUE(isEquivalent(closure, all({eq(x, y), leq(num(0), x), leq(x, num(4))}), logic))
+        << "got " << logic.pp(closure);
 }
 
 /* ---------------------------------------------------------------- options */
