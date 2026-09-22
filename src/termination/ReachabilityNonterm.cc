@@ -777,9 +777,9 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::checkTermina
         strictCandidates.clear();
         strictCandidates.push(subinv);
         strictCandidates.push(trInv);
-        PTRef newCov = TimeMachine(logic).sendFlaThroughTime(logic.mkNot(QuantifierElimination(logic).eliminate(
+        PTRef newCov = logic.mkOr(TimeMachine(logic).sendFlaThroughTime(QuantifierElimination(logic).eliminate(
             logic.mkAnd({reached, subinv}),
-            vars)), -1);
+            vars), -1), reached);
         // TODO: Think if maybe sink can be even more restricted...
         sink = TermUtils(logic).simplifyMax(logic.mkOr(sink, newCov));
         smt_checker.resetSolver();
