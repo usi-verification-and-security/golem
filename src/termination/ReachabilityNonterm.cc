@@ -402,7 +402,6 @@ PTRef constructTransitionInvariantCandidates(PTRef init, PTRef transition, PTRef
                                              std::vector<PTRef> const & vars) {
     PTRef id = getId(vars, logic);
     PTRef transitionOrId = logic.mkOr(transition, id);
-    // TODO: rename det_trace
     std::vector overapproximated_trace{transition};
     for (int k = 1; k < depth; k++) {
         // For every transition deterministic trace is updated, adding an Id or Tr
@@ -414,7 +413,7 @@ PTRef constructTransitionInvariantCandidates(PTRef init, PTRef transition, PTRef
     // States guaranteed to reach termination: Sink at exactly `depth` steps, plus (if depth > 1)
     // states reachable from `init` within 1..depth-1 steps that already satisfy the trace.
     std::vector<PTRef> checked_states;
-    // std::vector<PTRef> next_vars;
+    // TODO: correct this if
     if (depth > 1) {
         vec<PTRef> temp_vars;
         for (auto var : vars) {
@@ -566,12 +565,12 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
     auto aux_vars = ts.getAuxiliaryVars();
     ArithLogic & logic = dynamic_cast<ArithLogic &>(ts.getLogic());
     PTRef init = ts.getInit();
-    PTRef transition = normalize(ts.getTransition(), logic);
-    transition = enumerativeDNF(transition, logic);
+    PTRef transition = ts.getTransition();
+    // transition =normalize( enumerativeDNF(transition, logic), logic);
     std::vector<PTRef> tmp_vars = vars;
     tmp_vars.insert(tmp_vars.end(), aux_vars.begin(), aux_vars.end());
     // Transition relation is well-founded
-    if (!logic.isOr(transition) && checkWellFounded(transition, logic, tmp_vars)) { return Answer::YES; }
+    if (!logic.isOr(normalize( enumerativeDNF(transition, logic), logic)) && checkWellFounded(transition, logic, tmp_vars)) { return Answer::YES; }
 
     // In this case query is a set of sink states - states from which transition is not possible.
     // sink /\ transition is UNSAT
@@ -783,8 +782,8 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::checkTermina
             logic.mkAnd({reached, subinv}),vars), -1);
         // TODO: Think if maybe sink can be even more restricted...
         sink = TermUtils(logic).simplifyMax(logic.mkOr({sink, newCov, reached}));
-        transition = TermUtils(logic).simplifyMax(logic.mkAnd({transition,
-            TimeMachine(logic).sendFlaThroughTime(logic.mkNot(logic.mkOr(newCov, reached)),1)}));
+        // transition = TermUtils(logic).simplifyMax(logic.mkAnd({transition,
+        //     TimeMachine(logic).sendFlaThroughTime(logic.mkNot(logic.mkOr(newCov, reached)),1)}));
         smt_checker.resetSolver();
         // TODO: It should work for  subinv \/ TrInv, but it does not
         //    weaker TrInv seems to fail more often then stronger TrInv :(
