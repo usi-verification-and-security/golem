@@ -31,6 +31,7 @@ const std::string Options::SPACER_CC = "spacer.cc";
 const std::string Options::SPACER_INDGEN = "spacer.indgen";
 const std::string Options::SPACER_RELIND = "spacer.relind";
 const std::string Options::SPACER_MBP_MAY_SUMMARY = "spacer.mbp-may-summary";
+const std::string Options::SPACER_GLOBAL_POB_DB = "spacer.global-pob-db";
 const std::string Options::SPACER_MAYPO_GAS = "spacer.maypo-gas";
 const std::string Options::SPACER_MAYPO_TRIGGER = "spacer.maypo-trigger";
 const std::string Options::FORCE_TS = "force-ts";
@@ -125,6 +126,7 @@ Options CommandLineParser::parse(int argc, char ** argv) {
     int spacerIndGen = -1;
     int spacerRelInd = -1;
     int spacerMbpMaySummary = -1;
+    int spacerGlobalPobDb = -1;
     // identity tokens only: the raw argument is stored, so it can be validated with a
     // proper message instead of being silently atoi'd to 0
     int spacerMayPoGas = 0;
@@ -151,6 +153,7 @@ Options CommandLineParser::parse(int argc, char ** argv) {
                                     {Options::SPACER_INDGEN.c_str(), optional_argument, &spacerIndGen, 1},
                                     {Options::SPACER_RELIND.c_str(), optional_argument, &spacerRelInd, 1},
                                     {Options::SPACER_MBP_MAY_SUMMARY.c_str(), optional_argument, &spacerMbpMaySummary, 1},
+                                    {Options::SPACER_GLOBAL_POB_DB.c_str(), optional_argument, &spacerGlobalPobDb, 1},
                                     {Options::SPACER_MAYPO_GAS.c_str(), required_argument, &spacerMayPoGas, 1},
                                     {Options::SPACER_MAYPO_TRIGGER.c_str(), required_argument, &spacerMayPoTrigger, 1},
                                     {Options::PROOF_FORMAT.c_str(), required_argument, nullptr, 'p'},
@@ -211,6 +214,8 @@ Options CommandLineParser::parse(int argc, char ** argv) {
                     spacerRelInd = (optarg and isDisableKeyword(optarg)) ? 0 : 1;
                 } else if (long_options[option_index].flag == &spacerMbpMaySummary) {
                     spacerMbpMaySummary = (optarg and isDisableKeyword(optarg)) ? 0 : 1;
+                } else if (long_options[option_index].flag == &spacerGlobalPobDb) {
+                    spacerGlobalPobDb = (optarg and isDisableKeyword(optarg)) ? 0 : 1;
                 } else if (long_options[option_index].flag == &spacerMayPoGas) {
                     assert(optarg);
                     res.addOption(Options::SPACER_MAYPO_GAS, optarg);
@@ -266,6 +271,9 @@ Options CommandLineParser::parse(int argc, char ** argv) {
     if (spacerRelInd >= 0) { res.addOption(Options::SPACER_RELIND, spacerRelInd ? "true" : "false"); }
     if (spacerMbpMaySummary >= 0) {
         res.addOption(Options::SPACER_MBP_MAY_SUMMARY, spacerMbpMaySummary ? "true" : "false");
+    }
+    if (spacerGlobalPobDb >= 0) {
+        res.addOption(Options::SPACER_GLOBAL_POB_DB, spacerGlobalPobDb ? "true" : "false");
     }
     if (validate) { res.addOption(Options::VALIDATE_RESULT, "true"); }
     if (printWitness) { res.addOption(Options::PRINT_WITNESS, "true"); }

@@ -55,15 +55,18 @@ struct SpacerConfig {
     bool mayPobOnLastVisit = false; // also build may-POBs on a pob's final visit
 
     /// What computePredecessor projects on, AFTER taking the model from the full check.
-    /// true  = include the may-summaries: the projection is relative to the frame, so
-    ///         under/over are bound-dependent and require pobDbPerBound.
-    /// false = transition + must-summaries only, valid at every bound.
-    /// Wired: --spacer.mbp-may-summary (also sets pobDbPerBound).
+    /// true  = include the may-summary of the refined source: the projection is relative to
+    ///         the frame, so under/over are bound-dependent.
+    /// false = every other source's summary plus the transition, dropping only the refined
+    ///         source's may-summary. See getEdgeMustOnlySummary.
+    /// Wired: --spacer.mbp-may-summary.
     bool mbpWithMaySummary = true;
 
-    /// Key PobInfo by (vertex, formula, bound) instead of (vertex, formula). Follows
-    /// mbpWithMaySummary: frame-relative evidence must not be merged across bounds.
-    bool pobDbPerBound = mbpWithMaySummary;
+    /// Key PobInfo by (vertex, formula) instead of (vertex, formula, bound), i.e. accumulate
+    /// evidence about a subgoal across bounds and use the global visit counter.
+    /// Off by default and **independent of mbpWithMaySummary**.
+    /// Wired: --spacer.global-pob-db.
+    bool globalPobDb = false;
 
     // tuning parameters (the first two are wired: --spacer.maypo-gas / --spacer.maypo-trigger)
     std::size_t mayPoGas = 20;            // predecessor-chain length allowed from a may-POB
@@ -132,11 +135,11 @@ struct SpacerConfig {
             if (not relind) { cfg.relind = *indgen; }
         }
         if (relind) { cfg.relind = *relind; }
-        // The pob database follows: a frame-relative over-approximation is only valid at the
-        // bound it was produced at, so it must not be merged with one from another bound.
         if (auto const mbpMaySummary = flag(Options::SPACER_MBP_MAY_SUMMARY)) {
             cfg.mbpWithMaySummary = *mbpMaySummary;
-            cfg.pobDbPerBound = *mbpMaySummary;
+        }
+        if (auto const globalPobDb = flag(Options::SPACER_GLOBAL_POB_DB)) {
+            cfg.globalPobDb = *globalPobDb;
         }
         // Numeric knobs: the raw argument is kept by the parser so it can be rejected here
         // with a message naming the flag, rather than silently becoming 0.
@@ -643,9 +646,9 @@ class SpacerContext {
 
     /// `bound` is the bound of the pob that OWNS this info -- its own bound when it
     /// records predecessors, the parent's bound when a child records a blocking lemma.
-    /// With POBDB_PER_BOUND off the bound key collapses to 0 and every bound shares one entry.
+    /// With `globalPobDb` on the bound key collapses to 0 and every bound shares one entry.
     PobInfo & pobInfo(SymRef vid, PTRef formula, std::size_t bound) const {
-        return pobDb[vid][formula][cfg.pobDbPerBound ? bound : 0];
+        return pobDb[vid][formula][cfg.globalPobDb ? 0 : bound];
     }
 
     void addMaySummary(SymRef vid, std::size_t bound, PTRef summary,
@@ -724,12 +727,6 @@ class SpacerContext {
 
     PTRef getEdgeMixedSummary(EId eid, std::size_t bound, std::size_t lastMayIndex) const;
 
-    /// Like getEdgeMixedSummary, but WITHOUT the may-summaries of sources [0, lastMayIndex].
-    /// Used as the MBP argument when computing a predecessor: dropping the may-summary makes
-    /// the projection depend only on the transition (and the must-summaries of the other
-    /// sources), so the under/over pair approximates the weakest precondition of the pob
-    /// itself rather than its frame-restricted version.  For a single-source edge this is
-    /// just the edge label.
     PTRef getEdgeMustOnlySummary(EId eid, std::size_t bound, std::size_t lastMayIndex) const;
 
     bool checkNewLemma(SymRef v, std::size_t bound, PTRef lemma) const;
@@ -1018,7 +1015,7 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
         // otherwise distinct pob objects sharing (vertex, formula, bound) would pool
         // their visits and fire the trigger earlier than the old code did.
         std::size_t const triggerCounter =
-            cfg.pobDbPerBound ? pob.localCounter : info.globalCounter;
+            cfg.globalPobDb ? info.globalCounter : pob.localCounter;
         bool const evidenceReady =
             pob.bound >= info.firstBound and triggerCounter >= cfg.triggerMayPo;
         if (cfg.maypo and
@@ -2384,13 +2381,13 @@ PTRef SpacerContext::getEdgeMustOnlySummary(EId eid, std::size_t bound, std::siz
     auto const & sources = graph.getSources(eid);
     vec<PTRef> components;
     components.capacity(static_cast<int>(sources.size()) + 1);
-    // sources [0, lastMayIndex] are deliberately omitted: their may-summary is what makes the
-    // projection bound-dependent.  The must-summaries are kept, they are needed for the
-    // predecessor of a hyperedge to be meaningful.
-    for (std::size_t i = lastMayIndex + 1; i < sources.size(); ++i) {
-        PTRef mustSummary = getMustSummary(sources[i], bound);
+    // Exactly getEdgeMixedSummary, except that source `lastMayIndex`
+    for (std::size_t i = 0; i < sources.size(); ++i) {
+        if (i == lastMayIndex) { continue; }
+        PTRef summary =
+            i < lastMayIndex ? getMaySummary(sources[i], bound) : getMustSummary(sources[i], bound);
         components.push(VersionManager(logic).baseFormulaToSource(
-            mustSummary, vertexInstances.getInstanceNumber(eid, i)));
+            summary, vertexInstances.getInstanceNumber(eid, i)));
     }
     components.push(graph.getEdgeLabel(eid));
     return logic.mkAnd(std::move(components));
