@@ -415,19 +415,19 @@ PTRef constructTransitionInvariantCandidates(PTRef init, PTRef transition, PTRef
     std::vector<PTRef> checked_states;
     // TODO: correct this if
     if (depth > 1) {
-        vec<PTRef> temp_vars;
-        for (auto var : vars) {
-                temp_vars.push(TimeMachine(logic).sendVarThroughTime(var, depth - 1));
-            }
-        checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(
-            QuantifierElimination(logic).keepOnly(logic.mkAnd(init, trace), temp_vars), 1));
-        // checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(QuantifierElimination(logic).eliminate(logic.mkAnd(init, transition), vars), depth - 1));
+        // vec<PTRef> temp_vars;
+        // for (auto var : vars) {
+        //         temp_vars.push(TimeMachine(logic).sendVarThroughTime(var, depth - 1));
+        // }
+        // checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(
+        //    QuantifierElimination(logic).keepOnly(logic.mkAnd(init, trace), temp_vars), 1));
+        checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(QuantifierElimination(logic).eliminate(logic.mkAnd(init, transition), vars), depth - 1));
     }
-    // else {
-    checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(sink, depth));
-    // }
+    else {
+        checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(sink, depth));
+    }
     // sink is updated, representing states that are guaranteed to reach termination
-    PTRef terminating_states = logic.mkOr(checked_states);
+    PTRef terminating_states = checked_states[0];
     // std::cout << "Constructing invariant candidates for depth " << depth << "   " << logic.pp(init) << std::endl;
     // std::cout << "Constructing invariant candidates for depth " << depth << "   " << logic.pp(TimeMachine(logic).sendFlaThroughTime(sink, depth)) << std::endl;
 
@@ -767,7 +767,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::checkTermina
     // Algorithm checks if reachable states are terminating
     // TODO: I can also extract all covered states from here and use them as terminating (updating tr)
     auto [answer, subinv] =
-        analyzeTS(reached, transition, covered, logic);
+        analyzeTS(reached, transition, sink, logic);
     // TODO: It is possible to do check differently, analyzing <noncoveredStates, tr,
     //   not(noncoveredStates)>
     //   If this terminates, then the whole TS terminates, but if it nonterinates we need to prove
