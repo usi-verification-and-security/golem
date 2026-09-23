@@ -490,7 +490,9 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
             smtSolver.assertProp(logic.mkAnd(init, transition));
             // We check if init states are blocked (it's impossible to make a transition from initial state)
             // When it is the case, TS is terminating
-            if (smtSolver.check() == SMTSolver::Answer::UNSAT) { return {Answer::YES, logic.mkOr(strictCandidates)}; }
+            if (smtSolver.check() == SMTSolver::Answer::UNSAT) {
+                return {Answer::YES, logic.mkOr(strictCandidates)};
+            }
 
             // This is an extension of the approach, constructing TrInv and attempting to prove termination
             // and non-termination using invariants
@@ -570,7 +572,8 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
     std::vector<PTRef> tmp_vars = vars;
     tmp_vars.insert(tmp_vars.end(), aux_vars.begin(), aux_vars.end());
     // Transition relation is well-founded
-    if (!logic.isOr(normalize( enumerativeDNF(transition, logic), logic)) && checkWellFounded(transition, logic, tmp_vars)) { return Answer::YES; }
+    if (!logic.isOr(normalize( enumerativeDNF(transition, logic), logic)) && checkWellFounded(transition, logic, tmp_vars)) {
+        return Answer::YES; }
 
     // In this case query is a set of sink states - states from which transition is not possible.
     // sink /\ transition is UNSAT
@@ -726,7 +729,8 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::checkTermina
     // If states not covered by TrInv are not reachable - then TrInv is transition invariant on all
     // reachable states, therefore it is well-founded transition invariant
     auto res = engine->solve(*graph);
-    if (res.getAnswer() == VerificationAnswer::SAFE) { return {Answer::YES, trInv}; }
+    if (res.getAnswer() == VerificationAnswer::SAFE) {
+        return {Answer::YES, trInv}; }
     // Otherwise, if states not covered by TrInv are reachable, then the following procedure should
     // take place:
     // 1. Detect the states outside of TrInv that are reachable
@@ -767,7 +771,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::checkTermina
     // Algorithm checks if reachable states are terminating
     // TODO: I can also extract all covered states from here and use them as terminating (updating tr)
     auto [answer, subinv] =
-        analyzeTS(reached, logic.mkAnd(transition, logic.mkNot(trInv)), sink, logic);
+        analyzeTS(reached, logic.mkAnd(transition, noncoveredStates), sink, logic);
     // TODO: It is possible to do check differently, analyzing <noncoveredStates, tr,
     //   not(noncoveredStates)>
     //   If this terminates, then the whole TS terminates, but if it nonterinates we need to prove
