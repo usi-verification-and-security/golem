@@ -20,6 +20,25 @@
 
 namespace golem::termination {
 
+ReachabilityNonterm::ReachabilityNonterm(Options const & givenOptions) : options(givenOptions) {
+    options.addOption(options.COMPUTE_WITNESS, "true");
+    MBPOptions mbpOptions;
+    mbpOptions.fm_bound_threshold =
+        static_cast<short>(std::stoi(options.getOrDefault(Options::NONTERM_QE_MBP_FM_BOUND, "3")));
+    mbpOptions.pick_best_side = options.getOrDefault(Options::NONTERM_QE_MBP_BEST_SIDE, "true") == "true";
+    mbpOptions.use_unsat_core = options.getOrDefault(Options::NONTERM_QE_MBP_UNSAT_CORE, "false") == "true";
+    qeOptions = QEOptions(
+        static_cast<short>(std::stoi(options.getOrDefault(Options::NONTERM_QE_MAX_DISJUNCTIONS, "25"))),
+        static_cast<short>(std::stoi(options.getOrDefault(Options::NONTERM_QE_MAX_MBP_PER_POLY, "0"))),
+        options.getOrDefault(Options::NONTERM_QE_OVER, "true") == "true", mbpOptions);
+}
+
+// When over-approximation is disabled, QE computes only the precise `under` result (and sets `over` to true),
+// so the precise result is used instead.
+PTRef overApproximation(QEResult const & result, QEOptions const & qeOptions) {
+    return qeOptions.compute_overapproximation ? result.over : result.under;
+}
+
 // Function to eliminate negations, replacing "not (a = b)" with "a < b \/ a > b"
 PTRef normalize(PTRef input, ArithLogic & logic, bool negated = false) {
     assert(logic.isNot(input) || logic.isAnd(input) || logic.isOr(input) || logic.isNumEq(input) || logic.isLeq(input));
@@ -398,7 +417,7 @@ PTRef getId(const std::vector<PTRef> & vars, Logic & logic) {
 }
 
 PTRef constructTransitionInvariantCandidates(PTRef init, PTRef transition, PTRef sink, int depth, Logic & logic,
-                                             std::vector<PTRef> const & vars) {
+                                             std::vector<PTRef> const & vars, QEOptions const & options) {
     PTRef id = getId(vars, logic);
     PTRef transitionOrId = logic.mkOr(transition, id);
     std::vector deterministic_trace{transition};
@@ -418,7 +437,9 @@ PTRef constructTransitionInvariantCandidates(PTRef init, PTRef transition, PTRef
             temp_vars.push(TimeMachine(logic).sendVarThroughTime(var, depth - 1));
         }
         checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(
-            QuantifierElimination(logic).keepOnly(logic.mkAnd(init, trace), temp_vars), 1));
+            overApproximation(QuantifierElimination(logic).keepOnly(logic.mkAnd(init, trace), temp_vars, options),
+                              options),
+            1));
     }
     checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(sink, depth));
     // sink is updated, representing states that are guaranteed to reach termination
@@ -654,16 +675,17 @@ bool ReachabilityNonterm::generateWellfoundedDisjuncts(PTRef transition, PTRef s
                                                        ArithLogic & logic, vec<PTRef> & strictCandidates,
                                                        std::set<PTRef> & checkedCandidates) {
     SMTSolver SMTsolver(logic, SMTSolver::WitnessProduction::NONE);
+
     // Calculate the states that are guaranteed to terminate within num transitions:
     // Tr^n(x,x') /\ not Sink(x') - is a formula, which can be satisfied by any x which can
     // reach "not Sink(x')" in n transitions:
     PTRef NT = QuantifierElimination(logic).keepOnly(
-        logic.mkAnd(trace, logic.mkNot(TimeMachine(logic).sendFlaThroughTime(sink, num))), vars);
+            logic.mkAnd(trace, logic.mkNot(TimeMachine(logic).sendFlaThroughTime(sink, num))), vars);
     // States that can not reach "not Sink(x')" in n transitions (therefore necesarily reach Sink(x')):
     PTRef T = logic.mkNot(NT);
 
     // The procedure to construct transition invariants is executed
-    PTRef itp = constructTransitionInvariantCandidates(T, transition, sink, num, logic, vars);
+    PTRef itp = constructTransitionInvariantCandidates(T, transition, sink, num, logic, vars, qeOptions);
     // Extract well-founded disjuncts from the transition invariant
     auto newCands = extractWellFoundedCandidates(itp, sink, logic, vars, checkedCandidates);
 

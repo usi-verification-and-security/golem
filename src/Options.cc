@@ -29,6 +29,12 @@ const std::string Options::FORCE_TS = "force-ts";
 const std::string Options::SIMPLIFY_NESTED = "simplify-nested";
 const std::string Options::PROOF_FORMAT = "proof-format";
 const std::string Options::TERMINATION_BACKEND = "termination-backend";
+const std::string Options::NONTERM_QE_OVER = "nonterm.qe.over";
+const std::string Options::NONTERM_QE_MAX_DISJUNCTIONS = "nonterm.qe.max-disjunctions";
+const std::string Options::NONTERM_QE_MAX_MBP_PER_POLY = "nonterm.qe.max-mbp-per-poly";
+const std::string Options::NONTERM_QE_MBP_FM_BOUND = "nonterm.qe.mbp.fm-bound";
+const std::string Options::NONTERM_QE_MBP_BEST_SIDE = "nonterm.qe.mbp.best-side";
+const std::string Options::NONTERM_QE_MBP_UNSAT_CORE = "nonterm.qe.mbp.unsat-core";
 
 namespace {
 
@@ -69,7 +75,17 @@ void printUsage() {
            "--termination-backend <name>    Select backend algorithm for termination problems:\n"
            "                                  lasso-finder - searches for lasso in the system\n"
            "                                  nontermination-via-safety - gradually eliminates terminating traces from the system\n"
-           "                                  step-counter - searches for upper bound on number of steps the system can make\n";
+           "                                  step-counter - searches for upper bound on number of steps the system can make\n"
+           "--nonterm.qe.over <bool>        Compute over-approximating QE in nontermination-via-safety (default: true)\n"
+           "--nonterm.qe.max-disjunctions <n>\n"
+           "                                Max disjuncts in QE over-approximation, 0 = unlimited (default: 25)\n"
+           "--nonterm.qe.max-mbp-per-poly <n>\n"
+           "                                Max MBPs per convex implicant in QE, 0 = unlimited (default: 0)\n"
+           "--nonterm.qe.mbp.fm-bound <n>   Fourier-Motzkin bound threshold for MBP (default: 3)\n"
+           "--nonterm.qe.mbp.best-side <bool>\n"
+           "                                Let MBP pick the best side for bounds (default: true)\n"
+           "--nonterm.qe.mbp.unsat-core <bool>\n"
+           "                                Use unsat cores in MBP (default: false)\n";
     std::cout << std::flush;
 }
 
@@ -113,6 +129,12 @@ Options CommandLineParser::parse(int argc, char ** argv) {
                                     {Options::FORCE_TS.c_str(), no_argument, &forceTS, 1},
                                     {Options::SIMPLIFY_NESTED.c_str(), no_argument, &simplifyNested, 1},
                                     {Options::TERMINATION_BACKEND.c_str(), required_argument, nullptr, 0},
+                                    {Options::NONTERM_QE_OVER.c_str(), required_argument, nullptr, 0},
+                                    {Options::NONTERM_QE_MAX_DISJUNCTIONS.c_str(), required_argument, nullptr, 0},
+                                    {Options::NONTERM_QE_MAX_MBP_PER_POLY.c_str(), required_argument, nullptr, 0},
+                                    {Options::NONTERM_QE_MBP_FM_BOUND.c_str(), required_argument, nullptr, 0},
+                                    {Options::NONTERM_QE_MBP_BEST_SIDE.c_str(), required_argument, nullptr, 0},
+                                    {Options::NONTERM_QE_MBP_UNSAT_CORE.c_str(), required_argument, nullptr, 0},
                                     {0, 0, 0, 0}};
 
     while (true) {
@@ -161,6 +183,14 @@ Options CommandLineParser::parse(int argc, char ** argv) {
                     simplifyNested = 1;
                 } else if (long_options[option_index].name == Options::TERMINATION_BACKEND.c_str()) {
                     res.addOption(Options::TERMINATION_BACKEND, optarg);
+                } else if (long_options[option_index].name == Options::NONTERM_QE_OVER.c_str() or
+                           long_options[option_index].name == Options::NONTERM_QE_MBP_BEST_SIDE.c_str() or
+                           long_options[option_index].name == Options::NONTERM_QE_MBP_UNSAT_CORE.c_str()) {
+                    res.addOption(long_options[option_index].name, isDisableKeyword(optarg) ? "false" : "true");
+                } else if (long_options[option_index].name == Options::NONTERM_QE_MAX_DISJUNCTIONS.c_str() or
+                           long_options[option_index].name == Options::NONTERM_QE_MAX_MBP_PER_POLY.c_str() or
+                           long_options[option_index].name == Options::NONTERM_QE_MBP_FM_BOUND.c_str()) {
+                    res.addOption(long_options[option_index].name, optarg);
                 }
                 break;
             case 'e':

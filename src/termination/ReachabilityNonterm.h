@@ -10,6 +10,7 @@
 #include "osmt_terms.h"
 
 #include "Options.h"
+#include "QuantifierElimination.h"
 #include "TransitionSystem.h"
 
 #include <set>
@@ -18,9 +19,7 @@ namespace golem::termination {
 
 class ReachabilityNonterm {
 public:
-    explicit ReachabilityNonterm(Options const & givenOptions) : options(givenOptions) {
-        options.addOption(options.COMPUTE_WITNESS, "true");
-    }
+    explicit ReachabilityNonterm(Options const & givenOptions);
 
     enum struct Answer { YES, NO, UNKNOWN, ERROR };
 
@@ -30,6 +29,7 @@ private:
     bool DETERMINISTIC_TRANSITION;
     std::vector<PTRef> vars;
     Options options;
+    QEOptions qeOptions;
     PTRef covered;
 
     std::tuple<Answer, PTRef> analyzeTS(PTRef init, PTRef transition, PTRef sink, ArithLogic & logic);
