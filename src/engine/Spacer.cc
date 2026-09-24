@@ -41,7 +41,7 @@ struct SpacerConfig {
     bool bmbp = true;            // may-POBs from bidirectional MBP
     bool cc = true;              // may-POBs from the convex closure of blocking lemmas
     bool generalize = true;      // generalize learnt lemmas (inductively if possible)
-    bool relind = true;          // try to block with relative induction even when there are predecessors
+    bool relind = false;          // try to block with relative induction even when there are predecessors
 
     // not wired to cmd line: change the default here
     bool gdown = true;           // generalize by dropping disjuncts (otherwise, use unsatcore)
@@ -62,7 +62,7 @@ struct SpacerConfig {
     /// false = every other source's summary plus the transition, dropping only the refined
     ///         source's may-summary. See getEdgeMustOnlySummary.
     /// Wired: --spacer.mbp-may-summary.
-    bool mbpWithMaySummary = true;
+    bool mbpWithMaySummary = false;
 
     /// Key PobInfo by (vertex, formula) instead of (vertex, formula, bound), i.e. accumulate
     /// evidence about a subgoal across bounds and use the global visit counter.
@@ -71,10 +71,10 @@ struct SpacerConfig {
     bool globalPobDb = false;
 
     // tuning parameters (wired: --spacer.maypo-gas / --spacer.maypo-trigger / --spacer.max-lemmas-cc)
-    std::size_t mayPoGas = 20;            // predecessor-chain length allowed from a may-POB
+    std::size_t mayPoGas = 5;             // predecessor-chain length allowed from a may-POB
     std::size_t triggerMayPo = 3;         // visits before may-POBs are built
-    std::size_t minLemmasForCc = 1;       // blocking lemmas needed before CC fires
-    std::size_t maxLemmasForCc = 0;       // blocking lemmas kept per child for CC, oldest evicted
+    std::size_t minLemmasForCc = 2;       // blocking lemmas needed before CC fires
+    std::size_t maxLemmasForCc = 7;       // blocking lemmas kept per child for CC, oldest evicted
                                           // first; 0 = no limit
     std::size_t minBmbpOverLits = 1;      // literals needed in a BMBP over-approximation
     std::size_t relindMaxIterations = 20; // budget for the grow-from-init loop
