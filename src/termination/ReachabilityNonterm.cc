@@ -437,8 +437,7 @@ PTRef constructTransitionInvariantCandidates(PTRef init, PTRef transition, PTRef
             temp_vars.push(TimeMachine(logic).sendVarThroughTime(var, depth - 1));
         }
         checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(
-            overApproximation(QuantifierElimination(logic).keepOnly(logic.mkAnd(init, trace), temp_vars, options),
-                              options),
+            QuantifierElimination(logic).keepOnly(logic.mkAnd(init, trace), temp_vars),
             1));
     }
     checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(sink, depth));
