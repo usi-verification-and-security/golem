@@ -186,6 +186,14 @@ public:
 
     PTRef simplifyConjunction(PTRef fla);
     void simplifyConjunction(std::vector<PtAsgn> & disjuncts);
+
+    /**
+     * Negates an integer literal without leaving a negated inequality behind, so the result has
+     * the same shape as the atoms of an interpolant:
+     * not(c <= t) becomes t <= c - 1, and not(s = t) becomes s - t <= -1 \/ s - t >= 1.
+     * A negated literal loses its negation; any other literal (e.g. over reals) is negated with mkNot.
+     */
+    PTRef negateIntLiteral(PTRef literal);
 };
 
 class TimeMachine {

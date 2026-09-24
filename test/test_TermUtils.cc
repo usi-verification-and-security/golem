@@ -116,3 +116,34 @@ TEST_F(TermUtils_Test, test_TopLevelDisjuncts_NestedTwoLevels) {
     EXPECT_TRUE(contains(disjunctions, nb));
     EXPECT_TRUE(contains(disjunctions, nc));
 }
+
+class LATermUtils_Test : public ::testing::Test {
+protected:
+    ArithLogic logic {opensmt::Logic_t::QF_LIA};
+    LATermUtils utils {logic};
+    PTRef x = logic.mkIntVar("x");
+    PTRef y = logic.mkIntVar("y");
+    PTRef two = logic.mkIntConst(2);
+    PTRef twoXMinusY = logic.mkMinus(logic.mkTimes(two, x), y);
+};
+
+TEST_F(LATermUtils_Test, test_NegateIntLeq_IsPlainLeq) {
+    // not(1 <= y - 2x)  <=>  y - 2x <= 0  <=>  0 <= 2x - y
+    PTRef literal = logic.mkLeq(logic.getTerm_IntOne(), logic.mkMinus(y, logic.mkTimes(two, x)));
+    PTRef negated = utils.negateIntLiteral(literal);
+    EXPECT_TRUE(logic.isLeq(negated));
+    EXPECT_EQ(negated, logic.mkLeq(logic.getTerm_IntZero(), twoXMinusY));
+}
+
+TEST_F(LATermUtils_Test, test_NegateIntEquality_IsTwoInequalities) {
+    PTRef negated = utils.negateIntLiteral(logic.mkEq(x, y));
+    ASSERT_TRUE(logic.isOr(negated));
+    PTRef diff = logic.mkMinus(x, y);
+    EXPECT_EQ(negated, logic.mkOr(logic.mkLeq(diff, logic.getTerm_IntMinusOne()),
+                                  logic.mkLeq(logic.getTerm_IntOne(), diff)));
+}
+
+TEST_F(LATermUtils_Test, test_NegateNegatedLiteral_DropsNegation) {
+    PTRef leq = logic.mkLeq(x, y);
+    EXPECT_EQ(utils.negateIntLiteral(logic.mkNot(leq)), leq);
+}

@@ -585,6 +585,28 @@ PTRef LATermUtils::simplifyConjunction(PTRef fla) {
     return logic.mkAnd(std::move(args));
 }
 
+PTRef LATermUtils::negateIntLiteral(PTRef literal) {
+    if (logic.isNot(literal)) { return logic.getPterm(literal)[0]; }
+    if (logic.isLeq(literal)) {
+        auto [constant, term] = logic.leqToConstantAndTerm(literal);
+        if (logic.yieldsSortInt(term)) {
+            // not(c <= t)  <=>  t <= c - 1
+            return logic.mkLeq(term, logic.mkIntConst(logic.getNumConst(constant) - 1));
+        }
+    }
+    if (logic.isNumEq(literal)) {
+        PTRef lhs = logic.getPterm(literal)[0];
+        PTRef rhs = logic.getPterm(literal)[1];
+        if (logic.yieldsSortInt(lhs)) {
+            // not(s = t)  <=>  s - t <= -1 \/ 1 <= s - t
+            PTRef diff = logic.mkMinus(lhs, rhs);
+            return logic.mkOr(logic.mkLeq(diff, logic.getTerm_IntMinusOne()),
+                              logic.mkLeq(logic.getTerm_IntOne(), diff));
+        }
+    }
+    return logic.mkNot(literal);
+}
+
 namespace {
 struct Conjunction {};
 struct Disjunction {};

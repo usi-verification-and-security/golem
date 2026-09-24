@@ -56,6 +56,7 @@ public:
     static const std::string SPACER_GLOBAL_POB_DB;
     static const std::string SPACER_MAYPO_GAS;
     static const std::string SPACER_MAYPO_TRIGGER;
+    static const std::string SPACER_MAX_LEMMAS_CC;
     static const std::string FORCE_TS;
     static const std::string SIMPLIFY_NESTED;
     static const std::string TERMINATION_BACKEND;

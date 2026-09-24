@@ -246,6 +246,12 @@ std::optional<Disjunct> buildDisjunct(ArithLogic & logic, PTRef nnf, bool & hasM
             auto normalized = normalizeArithmeticLiteral(logic, lit, negated);
             // A disequality cannot be part of a convex polyhedron.
             if (not normalized) { continue; }
+            // Neither can a relation over a non-variable term such as `(mod t k)`, which the linear
+            // decomposition would otherwise take for a variable; dropped like the conjuncts above.
+            if (std::any_of(normalized->coefficients.begin(), normalized->coefficients.end(),
+                            [&logic](auto const & entry) { return not logic.isNumVar(entry.first); })) {
+                continue;
+            }
             if (normalized->coefficients.empty()) {
                 // A variable-free atom is either trivially true (drop it) or makes the polyhedron empty.
                 bool const holds = normalized->equality ? normalized->constant.sign() == 0

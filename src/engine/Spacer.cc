@@ -19,6 +19,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <deque>
 #include <exception>
 #include <iostream>
 #include <memory>
@@ -68,10 +69,12 @@ struct SpacerConfig {
     /// Wired: --spacer.global-pob-db.
     bool globalPobDb = false;
 
-    // tuning parameters (the first two are wired: --spacer.maypo-gas / --spacer.maypo-trigger)
+    // tuning parameters (wired: --spacer.maypo-gas / --spacer.maypo-trigger / --spacer.max-lemmas-cc)
     std::size_t mayPoGas = 20;            // predecessor-chain length allowed from a may-POB
     std::size_t triggerMayPo = 3;         // visits before may-POBs are built
     std::size_t minLemmasForCc = 1;       // blocking lemmas needed before CC fires
+    std::size_t maxLemmasForCc = 0;       // blocking lemmas kept per child for CC, oldest evicted
+                                          // first; 0 = no limit
     std::size_t minBmbpOverLits = 1;      // literals needed in a BMBP over-approximation
     std::size_t relindMaxIterations = 20; // budget for the grow-from-init loop
 
@@ -82,6 +85,10 @@ struct SpacerConfig {
         }
         if (triggerMayPo < 1) {
             throw std::logic_error("Spacer: SpacerConfig::triggerMayPo must be at least 1");
+        }
+        if (maxLemmasForCc != 0 and maxLemmasForCc < minLemmasForCc) {
+            throw std::logic_error("Spacer: SpacerConfig::maxLemmasForCc must be 0 (no limit) or at least "
+                                   "minLemmasForCc, otherwise CC never fires");
         }
         if (not interpolation and not indConflict) {
             throw std::logic_error(
@@ -159,6 +166,7 @@ struct SpacerConfig {
         };
         positive(Options::SPACER_MAYPO_GAS, cfg.mayPoGas);
         positive(Options::SPACER_MAYPO_TRIGGER, cfg.triggerMayPo);
+        positive(Options::SPACER_MAX_LEMMAS_CC, cfg.maxLemmasForCc);
 
         cfg.validate();
         return cfg;
@@ -423,7 +431,30 @@ private:
 
 class VidPredCache {
 public:
-    using InnerMap = std::unordered_map<SymRef, std::unordered_set<PTRef, PTRefHash>, SymRefHash>;
+    /// Lemmas collected for one node, without duplicates, in insertion order so the oldest can be
+    /// evicted first.
+    class OrderedLemmas {
+    public:
+        std::size_t size() const { return order.size(); }
+        auto begin() const { return order.begin(); }
+        auto end() const { return order.end(); }
+        /// Adds `lemma` unless already present (a duplicate keeps its original position); then, if
+        /// `maxSize` > 0, evicts the oldest lemmas until at most `maxSize` remain.
+        void insert(PTRef lemma, std::size_t maxSize) {
+            if (not members.insert(lemma).second) { return; }
+            order.push_back(lemma);
+            while (maxSize > 0 and order.size() > maxSize) {
+                members.erase(order.front());
+                order.pop_front();
+            }
+        }
+
+    private:
+        std::deque<PTRef> order;
+        std::unordered_set<PTRef, PTRefHash> members;
+    };
+
+    using InnerMap = std::unordered_map<SymRef, OrderedLemmas, SymRefHash>;
 
     // Iterator that yields (SymRef, set<PTRef>) pairs
     // where the set has at least INSERT_MAY_PO_THRESHOLD elements
@@ -482,8 +513,9 @@ public:
     FilterIterator end() const { return FilterIterator(cache.end(), cache.end()); }
 
     bool empty() const { return cache.empty(); }
-    void insert(SymRef node, PTRef cons) {
-        cache[node].insert(cons);
+    /// `maxSize` > 0 caps the lemmas kept for `node`, first in first out; 0 keeps them all.
+    void insert(SymRef node, PTRef cons, std::size_t maxSize) {
+        cache[node].insert(cons, maxSize);
     }
 
 private:
@@ -990,7 +1022,7 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
                               RelIndVariant | lemmaOriginOfPob(pob));
                 if (pob.parent != nullptr) {
                     pobInfo(pob.parent->vertex, pob.parent->constraint, pob.parent->bound)
-                        .blockingLemmas.insert(pob.vertex, relindLemma);
+                        .blockingLemmas.insert(pob.vertex, relindLemma, cfg.maxLemmasForCc);
                 }
                 if (pob.isMayPO) {
                     TRACE(1, "    $$$$$$$$$$$$ MAY PO WAS BLOCKED $$$$$$$$$$$$");
@@ -1058,8 +1090,8 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
                 TRACE(1, "[CC] Adding a ConvexClosure of " << negatedLemmas.size() << " lemmas"
          << " -> atoms: " << TermUtils(logic).getTopLevelConjuncts(mayConstraint).size()
          << " vars: " << TermUtils(logic).getVars(mayConstraint).size());
-                TRACE(3, "[CC] Added " << logic.pp(mayConstraint));
-                TRACE(3, "[CC] Blocking:" << std::endl;
+                TRACE(2, "[CC] Added " << logic.pp(mayConstraint));
+                TRACE(2, "[CC] Blocking:" << std::endl;
                       for (auto lemma : negatedLemmas) {
                           std::cout << logic.pp(lemma) << std::endl;}
                       std::cout);
@@ -1098,7 +1130,35 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
             PTRef newLemma = PTRef_Undef;
 
             PTRef originalNewLemma = PTRef_Undef;
-            if (cfg.interpolation) {
+
+            if (pob.isMayPO and pob.mayRoot and pob.maySource == LemmaOrigin::MayCc and cfg.generalize) {
+                // do not interpolate something that is already generalized
+                // let inductive generalization handle it.
+                // Only the CC root is a convex closure; its descendants are ordinary MBP
+                // predecessors (possibly with divisibility constraints) and are interpolated.
+                // not(pob) is built facet by facet as plain integer inequalities, the shape of an
+                // interpolant's atoms, so e.g. not(1 <= y - 2x) and 0 <= 2x - y are the same lemma.
+                LATermUtils latUtils(dynamic_cast<ArithLogic &>(logic));
+                vec<PTRef> negatedFacets;
+                for (PTRef facet : TermUtils(logic).getTopLevelConjuncts(pob.constraint)) {
+                    negatedFacets.push(latUtils.negateIntLiteral(facet));
+                }
+                newLemma = VersionManager(logic).targetFormulaToBase(logic.mkOr(std::move(negatedFacets)));
+                newLemma =
+                    cfg.gdown
+                    ? generalize_down(newLemma, maySummary, transitions, inductiveSources)
+                    : generalize(newLemma, maySummary, transitions, inductiveSources);
+                TRACE(1,
+                      "---- [CC] Generalization: " << newLemma.x
+                      << " nr disj: " << TermUtils(logic).getTopLevelDisjuncts(newLemma).size()
+                      << " nr vars: " << TermUtils(logic).getVars(newLemma).size());
+                TRACE(2,
+                      "Lemma for " << pob.vertex.x << " at level " << pob.bound << " - "
+                      << logic.pp(newLemma));
+                addMaySummary(pob.vertex, pob.bound, newLemma,
+                              LemmaOrigin::MayCc);
+
+            } else if (cfg.interpolation) {
                 auto originalRes = interpolatingSat(edgesMaySummary, pob.constraint);
                 originalNewLemma = VersionManager(logic).targetFormulaToBase(originalRes.interpolant);
                 assert(originalRes.answer == QueryAnswer::UNSAT);
@@ -1179,7 +1239,7 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
 
             if (pob.parent != nullptr) {
                 pobInfo(pob.parent->vertex, pob.parent->constraint, pob.parent->bound)
-                    .blockingLemmas.insert(pob.vertex, newLemma);
+                    .blockingLemmas.insert(pob.vertex, newLemma, cfg.maxLemmasForCc);
             }
 
             if (pob.bound < lowestChangedLevel) { lowestChangedLevel = pob.bound; }

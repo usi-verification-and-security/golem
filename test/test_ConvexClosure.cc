@@ -218,6 +218,17 @@ TEST_F(ConvexClosure_IntTest, test_ThreeShiftedQuadrants) {
                   all({leq(x, num(2)), leq(y, num(2)), leq(sum({x, y}), num(0))}));
 }
 
+// The same quadrants restricted by a congruence, as integer MBP produces. A relation over (mod t k)
+// is not a linear constraint: it is dropped from its cube, which only enlarges the cube, so the
+// closure is the hull of the plain quadrants instead of an exception.
+TEST_F(ConvexClosure_IntTest, test_ModuloConjunctIsDropped) {
+    PTRef divisible = eq(logic.mkMod(logic.mkMinus(x, y), num(4)), num(0));
+    expectClosure({all({leq(x, num(0)), leq(y, num(0)), divisible}),
+                   all({leq(x, num(2)), leq(y, num(-2)), divisible}),
+                   all({leq(x, num(-2)), leq(y, num(2)), divisible})},
+                  all({leq(x, num(2)), leq(y, num(2)), leq(sum({x, y}), num(0))}));
+}
+
 // Over the integers a strict bound is tightened rather than relaxed: x < 10 is x <= 9, and
 // not (-4 <= x) is x <= -5. Relaxing the strict bounds instead would yield x <= 10.
 TEST_F(ConvexClosure_IntTest, test_StrictInequalitiesAreTightened) {
