@@ -679,8 +679,8 @@ bool ReachabilityNonterm::generateWellfoundedDisjuncts(PTRef transition, PTRef s
     // Calculate the states that are guaranteed to terminate within num transitions:
     // Tr^n(x,x') /\ not Sink(x') - is a formula, which can be satisfied by any x which can
     // reach "not Sink(x')" in n transitions:
-    PTRef NT = QuantifierElimination(logic).keepOnly(
-            logic.mkAnd(trace, logic.mkNot(TimeMachine(logic).sendFlaThroughTime(sink, num))), vars);
+    PTRef NT = overApproximation(QuantifierElimination(logic).keepOnly(logic.mkAnd(trace, logic.mkNot(TimeMachine(logic).sendFlaThroughTime(sink, num))), vars, qeOptions),
+                      qeOptions);
     // States that can not reach "not Sink(x')" in n transitions (therefore necesarily reach Sink(x')):
     PTRef T = logic.mkNot(NT);
 
