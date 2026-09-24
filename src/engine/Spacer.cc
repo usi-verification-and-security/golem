@@ -23,6 +23,7 @@
 #include <exception>
 #include <iostream>
 #include <memory>
+#include <optional>
 #include <queue>
 #include <stdexcept>
 #include <string>
@@ -1592,6 +1593,32 @@ if (cfg.debug) {
     return newLemma;
 }
 
+namespace { // Helper for SpacerContext::generalize_down
+/// Sum of the absolute values of the variable coefficients of a (possibly negated) linear
+/// inequality; nullopt for any other literal, which ranks it after every linear one.
+std::optional<FastRational> coefficientWeight(Logic & logic, PTRef literal) {
+    auto & arith = dynamic_cast<ArithLogic &>(logic);
+    PTRef atom = arith.isNot(literal) ? arith.getPterm(literal)[0] : literal;
+    if (not arith.isLeq(atom)) { return std::nullopt; }
+    PTRef term = arith.leqToConstantAndTerm(atom).second;
+    if (not arith.isLinearTerm(term)) { return std::nullopt; }
+    vec<PTRef> factors;
+    if (arith.isPlus(term)) {
+        factors = arith.getConstantAndFactors(term).second;
+    } else {
+        factors.push(term);
+    }
+    FastRational weight(0);
+    for (PTRef factor : factors) {
+        auto [var, coeff] = arith.splitTermToVarAndConst(factor);
+        if (var == PTRef_Undef) { continue; }
+        FastRational const & value = arith.getNumConst(coeff);
+        weight += value.sign() < 0 ? -value : value;
+    }
+    return weight;
+}
+} // namespace
+
 PTRef SpacerContext::generalize_down(PTRef lemma, PTRef maySumm, PTRef transitions,
                                      const std::vector<GuardVar>& guardVariables) {
     VersionManager vManager(logic);
@@ -1652,23 +1679,74 @@ PTRef SpacerContext::generalize_down(PTRef lemma, PTRef maySumm, PTRef transitio
         singleton[i] = true;
         preserved[i] = inductiveFor(singleton);
     }
-    // Sort the literals prioritizing the ones that are *not* inductive
-    std::vector<int> order(n);
-    for (int i = 0; i < n; ++i) { order[i] = i; }
-    std::stable_sort(order.begin(), order.end(),
-                     [&](int a, int b) { return not preserved[a] and preserved[b]; });
 
-    // Down pass, with `order` sorting
+    // A literal that is inductive on its own is already the best the down pass can reach: dropping
+    // disjuncts only strengthens the clause, so a single literal is as strong as it gets. The greedy
+    // pass below can miss it -- it tries the non-inductive literals first, while the inductive ones
+    // are still in the clause, and may end on a residue of non-inductive literals that is inductive
+    // together -- so keep such a literal directly.
+    // Among several, rank first those inductive without the frame (from init and the transition
+    // alone): a literal inductive only relative to the frame is often a level-local bound, e.g.
+    // y <= 2x + 111 next to the invariant facet y <= 3x + 10. Then prefer small coefficients, which
+    // keeps the large integer cuts of a convex closure out of the frame, then the stronger literal.
+    SMTSolver frameless(logic, SMTSolver::WitnessProduction::NONE);
+    frameless.assertProp(transitions);
+    frameless.assertProp(logic.mkAnd(allSources));
+    frameless.assertProp(logic.mkAnd(assumedTargets));
+    auto inductiveWithoutFrame = [&](int lit) {
+        frameless.push();
+        for (int i = 0; i < n; ++i) {
+            frameless.assertProp(i == lit ? selectors[i] : logic.mkNot(selectors[i]));
+        }
+        auto res = frameless.check();
+        frameless.pop();
+        return res == SMTSolver::Answer::UNSAT;
+    };
+    int alone = -1;
+    bool aloneAbsolute = false;
+    std::optional<FastRational> aloneWeight;
+    for (int i = 0; i < n; ++i) {
+        if (not preserved[i]) { continue; }
+        bool const absolute = inductiveWithoutFrame(i);
+        auto weight = coefficientWeight(logic, candidates[i]);
+        bool better = alone < 0 or (absolute and not aloneAbsolute);
+        if (not better and absolute == aloneAbsolute) {
+            bool const tie = weight.has_value() == aloneWeight.has_value() and
+                             (not weight or *weight == *aloneWeight);
+            better = (weight and (not aloneWeight or *weight < *aloneWeight)) or
+                     (tie and implies(candidates[i], candidates[alone], logic));
+        }
+        if (better) {
+            alone = i;
+            aloneAbsolute = absolute;
+            aloneWeight = weight;
+        }
+    }
+
     std::vector<bool> keep(n, true);
     int kept = n;
-    for (int i : order) {
-        // try to delete `i`
-        keep[i] = false;
-        if (inductiveFor(keep)) {
-            --kept;
-        } else {
-            // if `i` cannot be removed without breking induction, then restore it
-            keep[i] = true;
+    if (alone >= 0) {
+        std::fill(keep.begin(), keep.end(), false);
+        keep[alone] = true;
+        kept = 1;
+        TRACE(1, "---- [GDW] Kept the literal inductive on its own");
+    } else {
+        // Sort the literals prioritizing the ones that are *not* inductive
+        std::vector<int> order(n);
+        for (int i = 0; i < n; ++i) { order[i] = i; }
+        std::stable_sort(order.begin(), order.end(),
+                         [&](int a, int b) { return not preserved[a] and preserved[b]; });
+
+        // Down pass, with `order` sorting
+        for (int i : order) {
+            // try to delete `i`
+            keep[i] = false;
+            if (inductiveFor(keep)) {
+                --kept;
+            } else {
+                // if `i` cannot be removed without breking induction, then restore it
+                keep[i] = true;
+            }
         }
     }
     if (kept == 0) {
