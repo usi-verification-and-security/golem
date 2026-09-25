@@ -22,7 +22,6 @@
 #include <deque>
 #include <exception>
 #include <iostream>
-#include <limits>
 #include <memory>
 #include <optional>
 #include <queue>
@@ -67,9 +66,10 @@ struct SpacerConfig {
     /// Wired: --spacer.mbp-may-summary.
     bool mbpWithMaySummary = false;
 
-    /// Key the visit counters and the blocking lemmas of a subgoal by (vertex, formula) instead of
-    /// (vertex, formula, bound), i.e. accumulate them across bounds and use the global visit
-    /// counter. The predecessor approximations (BMBP's over, CC-pob's under) stay per bound.
+    /// Key the blocking lemmas of a subgoal by (vertex, formula) instead of (vertex, formula,
+    /// bound), i.e. accumulate them across bounds, and trigger CC-lemma on the visits over every
+    /// bound. The predecessor approximations (BMBP's over, CC-pob's under) are always per bound,
+    /// and BMBP / CC-pob always trigger on the visits at their bound.
     /// Off by default and **independent of mbpWithMaySummary**.
     /// Wired: --spacer.global-pob-db.
    bool globalPobDb = false;
@@ -545,24 +545,30 @@ private:
 };
 
 /// Everything we know about a proof obligation *as a subgoal*, i.e. about the pair
-/// (vertex, formula), independently of the bound it is currently being examined at.
+/// (vertex, formula), over every bound it is examined at.
 /// A pob object lives only inside one boundSafety() call; this survives the whole run,
 /// so the evidence gathered about a subgoal is not thrown away and re-derived each bound.
-/// The fields are split between two entries: the predecessor caches always live in the entry of
-/// the pob's own bound (SpacerContext::pobInfo), the counters and the blocking lemmas in the one
-/// that `globalPobDb` shares across bounds (SpacerContext::sharedPobInfo).
+/// The per-bound fields are indexed by the bound of the pob that OWNS the evidence -- its own
+/// bound when it records predecessors, the parent's bound when a child records a blocking lemma
+/// -- and grow on demand (atBound). Growing invalidates references to their elements, so index
+/// them where they are used instead of holding on to an element across a DB update.
 struct PobInfo {
-    /// total examinations of this (vertex, formula), summed over every bound
+    /// examinations of this (vertex, formula), summed over every bound
     std::size_t globalCounter = 0;
-    /// bound at which this subgoal was first examined
-    std::size_t firstBound = 0;
-    bool seen = false;
-    /// over-approximations of the predecessors, collected by BMBP
-    EdgeVidPredCache overPredCache;
-    /// under-approximations of the predecessors, i.e. the pobs they became, used by CC-pob
-    EdgeVidPredCache underPredCache;
-    /// lemmas that blocked a child of this subgoal, used by CC-lemma
-    VidPredCache blockingLemmas;
+    /// bound -> examinations at that bound, over every pob object and every boundSafety() call
+    std::vector<std::size_t> localCounter;
+    /// bound -> over-approximations of the predecessors, collected by BMBP
+    std::vector<EdgeVidPredCache> overPredCache;
+    /// bound -> under-approximations of the predecessors, i.e. the pobs they became, used by CC-pob
+    std::vector<EdgeVidPredCache> underPredCache;
+    /// bound -> lemmas that blocked a child of this subgoal, used by CC-lemma; with `globalPobDb`
+    /// every bound uses index 0 (SpacerContext::blockingLemmas)
+    std::vector<VidPredCache> blockingLemmas;
+
+    template<typename T> static T & atBound(std::vector<T> & perBound, std::size_t bound) {
+        if (perBound.size() <= bound) { perBound.resize(bound + 1); }
+        return perBound[bound];
+    }
 };
 
 struct ProofObligationCore {
@@ -570,8 +576,6 @@ struct ProofObligationCore {
     std::size_t bound;
     PTRef constraint;
     bool isMayPO = false;
-    /// examinations of THIS occurrence; the cross-bound count lives in PobInfo
-    mutable std::size_t localCounter = 0;
     mutable std::size_t life = 0; ///< set from SpacerConfig::mayPoGas at construction
     mutable const ProofObligationCore* parent = nullptr;
     mutable bool closed = false;
@@ -699,21 +703,14 @@ class SpacerContext {
     /// vertex -> pob formula -> what we know about that subgoal. Never cleared: the point
     /// is that it outlives the per-bound pob objects.  mutable so that computePredecessor,
     /// which is const, can record over-approximations.
-    mutable std::unordered_map<
-        SymRef, std::unordered_map<PTRef, std::unordered_map<std::size_t, PobInfo>, PTRefHash>,
-        SymRefHash> pobDb;
+    mutable std::unordered_map<SymRef, std::unordered_map<PTRef, PobInfo, PTRefHash>, SymRefHash> pobDb;
 
-    /// `bound` is the bound of the pob that OWNS this info -- its own bound when it
-    /// records predecessors, the parent's bound when a child records a blocking lemma.
-    /// The entry of exactly that bound: where the predecessor caches live.
-    PobInfo & pobInfo(SymRef vid, PTRef formula, std::size_t bound) const {
-        return pobDb[vid][formula][bound];
-    }
+    PobInfo & pobInfo(SymRef vid, PTRef formula) const { return pobDb[vid][formula]; }
 
-    /// Where the visit counters and the blocking lemmas live. The same entry as pobInfo, unless
-    /// `globalPobDb` is on: then every bound shares one entry, kept under a key no bound reaches.
-    PobInfo & sharedPobInfo(SymRef vid, PTRef formula, std::size_t bound) const {
-        return pobDb[vid][formula][cfg.globalPobDb ? std::numeric_limits<std::size_t>::max() : bound];
+    /// The lemmas that blocked a child of (`vid`, `formula`) examined at `bound`; with
+    /// `globalPobDb` every bound shares one set.
+    VidPredCache & blockingLemmas(SymRef vid, PTRef formula, std::size_t bound) const {
+        return PobInfo::atBound(pobInfo(vid, formula).blockingLemmas, cfg.globalPobDb ? 0 : bound);
     }
 
     void addMaySummary(SymRef vid, std::size_t bound, PTRef summary,
@@ -966,9 +963,8 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
               << " src=" << lemmaOriginToString(p.maySource)
               << (p.mayRoot ? " root" : " desc")
               << " lvl=" << p.bound << " life=" << p.life
-              << " visits=" << p.localCounter
-              << "/" << sharedPobInfo(p.vertex, p.constraint, p.bound).globalCounter
-              << " firstBound=" << sharedPobInfo(p.vertex, p.constraint, p.bound).firstBound
+              << " visits=" << PobInfo::atBound(pobInfo(p.vertex, p.constraint).localCounter, p.bound)
+              << "/" << pobInfo(p.vertex, p.constraint).globalCounter
               << " atoms=" << TermUtils(logic).getTopLevelConjuncts(p.constraint).size()
               << " fate=" << fate);
     };
@@ -982,14 +978,9 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
             continue;
         }
 
-        pob.localCounter++;
-        PobInfo & info = sharedPobInfo(pob.vertex, pob.constraint, pob.bound);
-        PobInfo & preds = pobInfo(pob.vertex, pob.constraint, pob.bound);
-        if (not info.seen) {
-            info.seen = true;
-            info.firstBound = pob.bound;
-        }
-        info.globalCounter++;
+        PobInfo & info = pobInfo(pob.vertex, pob.constraint);
+        ++info.globalCounter;
+        std::size_t const visits = ++PobInfo::atBound(info.localCounter, pob.bound);
         TRACE(1, "[?] Examining "
               << ((pob.isMayPO) ? "MAY" : "MUST") << " PO " << pob.constraint.x
               << " at level " << pob.bound
@@ -1055,8 +1046,8 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
                 addMaySummary(pob.vertex, pob.bound, relindLemma,
                               RelIndVariant | lemmaOriginOfPob(pob));
                 if (pob.parent != nullptr) {
-                    sharedPobInfo(pob.parent->vertex, pob.parent->constraint, pob.parent->bound)
-                        .blockingLemmas.insert(pob.vertex, relindLemma, cfg.maxLemmasForCc);
+                    blockingLemmas(pob.parent->vertex, pob.parent->constraint, pob.parent->bound)
+                        .insert(pob.vertex, relindLemma, cfg.maxLemmasForCc);
                 }
                 if (pob.isMayPO) {
                     TRACE(1, "    $$$$$$$$$$$$ MAY PO WAS BLOCKED $$$$$$$$$$$$");
@@ -1072,25 +1063,20 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
         // [MayPO] Collect MayPO as a convex over-approximation of the predecessors
         std::vector<ProofObligation> newMayPO;
         ConvexClosure convexClosure(logic);
-        // Evidence is gathered per subgoal across bounds, so the trigger is the cross-bound
-        // counter.  `bound >= firstBound` keeps us from using evidence collected higher up
-        // than where we now are.
-        // Pre-database Spacer triggered on the visit count of THIS pob object. The
-        // cross-bound counter is only meaningful when evidence actually accumulates, so
-        // with a per-bound database we trigger on the per-occurrence counter instead --
-        // otherwise distinct pob objects sharing (vertex, formula, bound) would pool
-        // their visits and fire the trigger earlier than the old code did.
-        std::size_t const triggerCounter =
-            cfg.globalPobDb ? info.globalCounter : pob.localCounter;
-        bool const evidenceReady =
-            pob.bound >= info.firstBound and triggerCounter >= cfg.triggerMayPo;
-        if (cfg.maypo and
-            (evidenceReady or (cfg.mayPobOnLastVisit and newProofObligations.empty()))) {
+        // Two triggers, one per kind of evidence. BMBP and CC-pob read the predecessor caches of
+        // this bound, so they trigger on the visits at this bound. CC-lemma reads the blocking
+        // lemmas, which `globalPobDb` shares across bounds; with it on, it triggers on the visits
+        // over every bound.
+        bool const lastVisit = cfg.mayPobOnLastVisit and newProofObligations.empty();
+        bool const predsReady = lastVisit or visits >= cfg.triggerMayPo;
+        bool const lemmasReady =
+            lastVisit or (cfg.globalPobDb ? info.globalCounter : visits) >= cfg.triggerMayPo;
+        if (cfg.maypo) {
 
-            if (cfg.bmbp) {
+            if (cfg.bmbp and predsReady) {
             // Bidirectional Model based projection
-            for (auto it = preds.overPredCache.begin(cfg.minBmbpOverLits);
-                 it != preds.overPredCache.end(); ++it) {
+            EdgeVidPredCache const & overPreds = PobInfo::atBound(info.overPredCache, pob.bound);
+            for (auto it = overPreds.begin(cfg.minBmbpOverLits); it != overPreds.end(); ++it) {
                 ProofObligation mayPred(new ProofObligationCore{it.getNode(graph),
                                                                 pob.bound - 1,
                                                                 logic.mkAnd(it.getApprox()),
@@ -1106,10 +1092,10 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
             }
             }
 
-            if (cfg.ccLemma) {
+            if (cfg.ccLemma and lemmasReady) {
             // Convex Closure of blocking lemmas
-            for (auto it = info.blockingLemmas.begin(cfg.minLemmasForCc);
-                 it != info.blockingLemmas.end(); ++it) {
+            VidPredCache const & lemmas = blockingLemmas(pob.vertex, pob.constraint, pob.bound);
+            for (auto it = lemmas.begin(cfg.minLemmasForCc); it != lemmas.end(); ++it) {
                 vec<PTRef> negatedLemmas;
                 for (PTRef lemma : it.getApprox()) {
                     negatedLemmas.push(logic.mkNot(lemma));
@@ -1139,11 +1125,11 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
             }
             }
 
-            if (cfg.ccPob) {
+            if (cfg.ccPob and predsReady) {
             // Convex Closure of the under-approximations of the predecessors, i.e. of the pobs
             // they became. These are pob constraints already, so they are target formulas.
-            for (auto it = preds.underPredCache.begin(cfg.minPobsForCc);
-                 it != preds.underPredCache.end(); ++it) {
+            EdgeVidPredCache const & underPreds = PobInfo::atBound(info.underPredCache, pob.bound);
+            for (auto it = underPreds.begin(cfg.minPobsForCc); it != underPreds.end(); ++it) {
                 vec<PTRef> underPobs = it.getApprox();
                 PTRef mayConstraint = convexClosure.getConvexClosure(underPobs);
                 if (logic.isTrue(mayConstraint) or logic.isFalse(mayConstraint)) {
@@ -1304,8 +1290,8 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
             }
 
             if (pob.parent != nullptr) {
-                sharedPobInfo(pob.parent->vertex, pob.parent->constraint, pob.parent->bound)
-                    .blockingLemmas.insert(pob.vertex, newLemma, cfg.maxLemmasForCc);
+                blockingLemmas(pob.parent->vertex, pob.parent->constraint, pob.parent->bound)
+                    .insert(pob.vertex, newLemma, cfg.maxLemmasForCc);
             }
 
             if (pob.bound < lowestChangedLevel) { lowestChangedLevel = pob.bound; }
@@ -2259,12 +2245,12 @@ ProofObligation SpacerContext::computePredecessor(EId eid, ProofObligationCore c
             if (cfg.maypo) {
             PTRef newOverPob = VersionManager(logic).sourceFormulaToTarget(newOverConstraint); // ensure POB is target fla
             if (newOverPob != newPob and newOverPob != logic.getTerm_true()) {
-                pobInfo(pob.vertex, pob.constraint, pob.bound)
-                    .overPredCache.insert(eid, 0, newOverPob, 0);
+                PobInfo::atBound(pobInfo(pob.vertex, pob.constraint).overPredCache, pob.bound)
+                    .insert(eid, 0, newOverPob, 0);
             }
             if (cfg.ccPob and newPob != logic.getTerm_true()) {
-                pobInfo(pob.vertex, pob.constraint, pob.bound)
-                    .underPredCache.insert(eid, 0, newPob, cfg.maxPobsForCc);
+                PobInfo::atBound(pobInfo(pob.vertex, pob.constraint).underPredCache, pob.bound)
+                    .insert(eid, 0, newPob, cfg.maxPobsForCc);
             }
             }
             TRACE(2, "New proof obligation generated");
@@ -2313,12 +2299,12 @@ ProofObligation SpacerContext::computePredecessor(EId eid, ProofObligationCore c
             if (cfg.maypo) {
             PTRef newOverPob = VersionManager(logic).sourceFormulaToTarget(newOverConstraint); // ensure POB is target fla
             if (newOverPob != newPob and newOverPob != logic.getTerm_true()) {
-                pobInfo(pob.vertex, pob.constraint, pob.bound)
-                    .overPredCache.insert(eid, vertexToRefine, newOverPob, 0);
+                PobInfo::atBound(pobInfo(pob.vertex, pob.constraint).overPredCache, pob.bound)
+                    .insert(eid, vertexToRefine, newOverPob, 0);
             }
             if (cfg.ccPob and newPob != logic.getTerm_true()) {
-                pobInfo(pob.vertex, pob.constraint, pob.bound)
-                    .underPredCache.insert(eid, vertexToRefine, newPob, cfg.maxPobsForCc);
+                PobInfo::atBound(pobInfo(pob.vertex, pob.constraint).underPredCache, pob.bound)
+                    .insert(eid, vertexToRefine, newPob, cfg.maxPobsForCc);
             }
             }
             ProofObligation predPob(new ProofObligationCore{sources[vertexToRefine], sourceBound, newPob, pob.isMayPO});
