@@ -7,6 +7,7 @@
 #include "Spacer.h"
 
 #include "ModelBasedProjection.h"
+#include "QuantifierElimination.h"
 #include "TermUtils.h"
 #include "api/MainSolver.h"
 #include "graph/ChcGraph.h"
@@ -89,6 +90,8 @@ struct SpacerConfig {
     std::size_t maxPobsForCc = 7;         // under-approximations kept per edge source for CC-pob,
                                           // oldest evicted first; 0 = no limit
     std::size_t minBmbpOverLits = 1;      // literals needed in a BMBP over-approximation
+
+    std::size_t ccMbpBudget = 10;         // budget for MBP iterations per implicant in ConvexClosure
     std::size_t relindMaxIterations = 20; // budget for the grow-from-init loop
 
     // Make sure we have a way to produce a lemma
@@ -1130,10 +1133,10 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
 
         // [MayPO] Collect MayPO as a convex over-approximation of the predecessors
         std::vector<ProofObligation> newMayPO;
-        ConvexClosure convexClosure(logic);
+        ConvexClosure convexClosure(logic, QEOptions(1, cfg.ccMbpBudget, true));
         // Two triggers, one per kind of evidence. BMBP and CC-pob read the predecessor caches of
         // this bound, so they trigger on the visits at this bound. CC-lemma reads the blocking
-        // lemmas, which `globalPobDb` shares across bounds; with it on, it triggers on the visits
+        // lemmas, which `globaPlobDb` shares across bounds; with it on, it triggers on the visits
         // over every bound.
         bool const lastVisit = cfg.mayPobOnLastVisit and newProofObligations.empty();
         bool const predsReady = lastVisit or visits >= cfg.triggerMayPo;
