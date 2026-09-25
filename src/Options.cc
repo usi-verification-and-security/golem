@@ -28,6 +28,8 @@ const std::string Options::IC3IA_ADD_INITIAL_RESET = "ic3ia.initial-reset";
 const std::string Options::SPACER_MAYPOB = "spacer.maypob";
 const std::string Options::SPACER_BMBP = "spacer.bmbp";
 const std::string Options::SPACER_CC = "spacer.cc";
+const std::string Options::SPACER_CC_LEMMA = "spacer.cc-lemma";
+const std::string Options::SPACER_CC_POB = "spacer.cc-pob";
 const std::string Options::SPACER_INDGEN = "spacer.indgen";
 const std::string Options::SPACER_RELIND = "spacer.relind";
 const std::string Options::SPACER_MBP_MAY_SUMMARY = "spacer.mbp-may-summary";
@@ -35,6 +37,8 @@ const std::string Options::SPACER_GLOBAL_POB_DB = "spacer.global-pob-db";
 const std::string Options::SPACER_MAYPO_GAS = "spacer.maypo-gas";
 const std::string Options::SPACER_MAYPO_TRIGGER = "spacer.maypo-trigger";
 const std::string Options::SPACER_MAX_LEMMAS_CC = "spacer.max-lemmas-cc";
+const std::string Options::SPACER_MIN_POBS_CC = "spacer.min-pobs-cc";
+const std::string Options::SPACER_MAX_POBS_CC = "spacer.max-pobs-cc";
 const std::string Options::FORCE_TS = "force-ts";
 const std::string Options::SIMPLIFY_NESTED = "simplify-nested";
 const std::string Options::PROOF_FORMAT = "proof-format";
@@ -72,10 +76,14 @@ void printUsage() {
            "-v                              Increase verbosity (can be applied multiple times)\n"
            "-i,--input <file>               Input file (option not required)\n"
            "--force-ts                      Always encode linear system into transition system (affects BMC and TPA)\n"
-           "--spacer.maypob[=bool]          Spacer: enable may-proof-obligations from both\n"
+           "--spacer.maypob[=bool]          Spacer: enable may-proof-obligations from all\n"
            "                                  sources (implies --spacer.bmbp --spacer.cc)\n"
            "--spacer.bmbp[=bool]            Spacer: may-POBs from bidirectional MBP\n"
-           "--spacer.cc[=bool]              Spacer: may-POBs from convex closure of lemmas\n"
+           "--spacer.cc[=bool]              Spacer: may-POBs from both convex closures\n"
+           "                                  (implies --spacer.cc-lemma --spacer.cc-pob)\n"
+           "--spacer.cc-lemma[=bool]        Spacer: may-POBs from convex closure of lemmas\n"
+           "--spacer.cc-pob[=bool]          Spacer: may-POBs from convex closure of the\n"
+           "                                  under-approximations of the predecessors\n"
            "--spacer.indgen[=bool]          Spacer: inductive generalization of learnt lemmas;\n"
            "                                  also drives relative induction unless\n"
            "                                  --spacer.relind is given\n"
@@ -88,8 +96,12 @@ void printUsage() {
            "                                  may spawn; n >= 1 (default: 20)\n"
            "--spacer.maypo-trigger <n>      Spacer: visits of a pob before may-POBs are built\n"
            "                                  from it; n >= 1 (default: 3)\n"
-           "--spacer.max-lemmas-cc <n>      Spacer: blocking lemmas kept per pob for the convex\n"
-           "                                  closure, oldest dropped first; n >= 1 (default: no limit)\n"
+           "--spacer.max-lemmas-cc <n>      Spacer: blocking lemmas kept per pob for CC-lemma,\n"
+           "                                  oldest dropped first; n >= 1 (default: 7)\n"
+           "--spacer.min-pobs-cc <n>        Spacer: under-approximations of a predecessor needed\n"
+           "                                  before CC-pob fires; n >= 1 (default: 2)\n"
+           "--spacer.max-pobs-cc <n>        Spacer: under-approximations kept per predecessor for\n"
+           "                                  CC-pob, oldest dropped first; n >= 1 (default: 7)\n"
            "--ic3ia.unsat-core-generalization[=bool]\n"
            "                                Use unsat-core-only cube generalization in IC3IA (default: true)\n"
            "--ic3ia.initial-reset[=bool]\n"
@@ -126,6 +138,8 @@ Options CommandLineParser::parse(int argc, char ** argv) {
     int spacerMayPob = -1;
     int spacerBmbp = -1;
     int spacerCc = -1;
+    int spacerCcLemma = -1;
+    int spacerCcPob = -1;
     int spacerIndGen = -1;
     int spacerRelInd = -1;
     int spacerMbpMaySummary = -1;
@@ -135,6 +149,8 @@ Options CommandLineParser::parse(int argc, char ** argv) {
     int spacerMayPoGas = 0;
     int spacerMayPoTrigger = 0;
     int spacerMaxLemmasCc = 0;
+    int spacerMinPobsCc = 0;
+    int spacerMaxPobsCc = 0;
 
     struct option long_options[] = {{"help", no_argument, nullptr, 'h'},
                                     {"version", no_argument, &printVersion, 1},
@@ -154,6 +170,8 @@ Options CommandLineParser::parse(int argc, char ** argv) {
                                     {Options::SPACER_MAYPOB.c_str(), optional_argument, &spacerMayPob, 1},
                                     {Options::SPACER_BMBP.c_str(), optional_argument, &spacerBmbp, 1},
                                     {Options::SPACER_CC.c_str(), optional_argument, &spacerCc, 1},
+                                    {Options::SPACER_CC_LEMMA.c_str(), optional_argument, &spacerCcLemma, 1},
+                                    {Options::SPACER_CC_POB.c_str(), optional_argument, &spacerCcPob, 1},
                                     {Options::SPACER_INDGEN.c_str(), optional_argument, &spacerIndGen, 1},
                                     {Options::SPACER_RELIND.c_str(), optional_argument, &spacerRelInd, 1},
                                     {Options::SPACER_MBP_MAY_SUMMARY.c_str(), optional_argument, &spacerMbpMaySummary, 1},
@@ -161,6 +179,8 @@ Options CommandLineParser::parse(int argc, char ** argv) {
                                     {Options::SPACER_MAYPO_GAS.c_str(), required_argument, &spacerMayPoGas, 1},
                                     {Options::SPACER_MAYPO_TRIGGER.c_str(), required_argument, &spacerMayPoTrigger, 1},
                                     {Options::SPACER_MAX_LEMMAS_CC.c_str(), required_argument, &spacerMaxLemmasCc, 1},
+                                    {Options::SPACER_MIN_POBS_CC.c_str(), required_argument, &spacerMinPobsCc, 1},
+                                    {Options::SPACER_MAX_POBS_CC.c_str(), required_argument, &spacerMaxPobsCc, 1},
                                     {Options::PROOF_FORMAT.c_str(), required_argument, nullptr, 'p'},
                                     {Options::FORCE_TS.c_str(), no_argument, &forceTS, 1},
                                     {Options::SIMPLIFY_NESTED.c_str(), no_argument, &simplifyNested, 1},
@@ -213,6 +233,10 @@ Options CommandLineParser::parse(int argc, char ** argv) {
                     spacerBmbp = (optarg and isDisableKeyword(optarg)) ? 0 : 1;
                 } else if (long_options[option_index].flag == &spacerCc) {
                     spacerCc = (optarg and isDisableKeyword(optarg)) ? 0 : 1;
+                } else if (long_options[option_index].flag == &spacerCcLemma) {
+                    spacerCcLemma = (optarg and isDisableKeyword(optarg)) ? 0 : 1;
+                } else if (long_options[option_index].flag == &spacerCcPob) {
+                    spacerCcPob = (optarg and isDisableKeyword(optarg)) ? 0 : 1;
                 } else if (long_options[option_index].flag == &spacerIndGen) {
                     spacerIndGen = (optarg and isDisableKeyword(optarg)) ? 0 : 1;
                 } else if (long_options[option_index].flag == &spacerRelInd) {
@@ -230,6 +254,12 @@ Options CommandLineParser::parse(int argc, char ** argv) {
                 } else if (long_options[option_index].flag == &spacerMaxLemmasCc) {
                     assert(optarg);
                     res.addOption(Options::SPACER_MAX_LEMMAS_CC, optarg);
+                } else if (long_options[option_index].flag == &spacerMinPobsCc) {
+                    assert(optarg);
+                    res.addOption(Options::SPACER_MIN_POBS_CC, optarg);
+                } else if (long_options[option_index].flag == &spacerMaxPobsCc) {
+                    assert(optarg);
+                    res.addOption(Options::SPACER_MAX_POBS_CC, optarg);
                 } else if (long_options[option_index].flag == &forceTS) {
                     forceTS = 1;
                 } else if (long_options[option_index].flag == &simplifyNested) {
@@ -275,6 +305,8 @@ Options CommandLineParser::parse(int argc, char ** argv) {
     if (spacerMayPob >= 0) { res.addOption(Options::SPACER_MAYPOB, spacerMayPob ? "true" : "false"); }
     if (spacerBmbp >= 0) { res.addOption(Options::SPACER_BMBP, spacerBmbp ? "true" : "false"); }
     if (spacerCc >= 0) { res.addOption(Options::SPACER_CC, spacerCc ? "true" : "false"); }
+    if (spacerCcLemma >= 0) { res.addOption(Options::SPACER_CC_LEMMA, spacerCcLemma ? "true" : "false"); }
+    if (spacerCcPob >= 0) { res.addOption(Options::SPACER_CC_POB, spacerCcPob ? "true" : "false"); }
     if (spacerIndGen >= 0) { res.addOption(Options::SPACER_INDGEN, spacerIndGen ? "true" : "false"); }
     if (spacerRelInd >= 0) { res.addOption(Options::SPACER_RELIND, spacerRelInd ? "true" : "false"); }
     if (spacerMbpMaySummary >= 0) {
