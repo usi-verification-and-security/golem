@@ -30,6 +30,7 @@ const std::string Options::SPACER_BMBP = "spacer.bmbp";
 const std::string Options::SPACER_CC = "spacer.cc";
 const std::string Options::SPACER_CC_LEMMA = "spacer.cc-lemma";
 const std::string Options::SPACER_CC_POB = "spacer.cc-pob";
+const std::string Options::SPACER_CC_UPDATE = "spacer.cc-update";
 const std::string Options::SPACER_INDGEN = "spacer.indgen";
 const std::string Options::SPACER_RELIND = "spacer.relind";
 const std::string Options::SPACER_MBP_MAY_SUMMARY = "spacer.mbp-may-summary";
@@ -84,6 +85,9 @@ void printUsage() {
            "--spacer.cc-lemma[=bool]        Spacer: may-POBs from convex closure of lemmas\n"
            "--spacer.cc-pob[=bool]          Spacer: may-POBs from convex closure of the\n"
            "                                  under-approximations of the predecessors\n"
+           "--spacer.cc-update[=bool]       Spacer: when a CC may-POB root is reachable or runs out of\n"
+           "                                  gas, keep only the newest of its inputs; when blocked,\n"
+           "                                  replace them by the blocking lemma (default: true)\n"
            "--spacer.indgen[=bool]          Spacer: inductive generalization of learnt lemmas;\n"
            "                                  also drives relative induction unless\n"
            "                                  --spacer.relind is given\n"
@@ -143,6 +147,7 @@ Options CommandLineParser::parse(int argc, char ** argv) {
     int spacerCc = -1;
     int spacerCcLemma = -1;
     int spacerCcPob = -1;
+    int spacerCcUpdate = -1;
     int spacerIndGen = -1;
     int spacerRelInd = -1;
     int spacerMbpMaySummary = -1;
@@ -175,6 +180,7 @@ Options CommandLineParser::parse(int argc, char ** argv) {
                                     {Options::SPACER_CC.c_str(), optional_argument, &spacerCc, 1},
                                     {Options::SPACER_CC_LEMMA.c_str(), optional_argument, &spacerCcLemma, 1},
                                     {Options::SPACER_CC_POB.c_str(), optional_argument, &spacerCcPob, 1},
+                                    {Options::SPACER_CC_UPDATE.c_str(), optional_argument, &spacerCcUpdate, 1},
                                     {Options::SPACER_INDGEN.c_str(), optional_argument, &spacerIndGen, 1},
                                     {Options::SPACER_RELIND.c_str(), optional_argument, &spacerRelInd, 1},
                                     {Options::SPACER_MBP_MAY_SUMMARY.c_str(), optional_argument, &spacerMbpMaySummary, 1},
@@ -240,6 +246,8 @@ Options CommandLineParser::parse(int argc, char ** argv) {
                     spacerCcLemma = (optarg and isDisableKeyword(optarg)) ? 0 : 1;
                 } else if (long_options[option_index].flag == &spacerCcPob) {
                     spacerCcPob = (optarg and isDisableKeyword(optarg)) ? 0 : 1;
+                } else if (long_options[option_index].flag == &spacerCcUpdate) {
+                    spacerCcUpdate = (optarg and isDisableKeyword(optarg)) ? 0 : 1;
                 } else if (long_options[option_index].flag == &spacerIndGen) {
                     spacerIndGen = (optarg and isDisableKeyword(optarg)) ? 0 : 1;
                 } else if (long_options[option_index].flag == &spacerRelInd) {
@@ -310,6 +318,7 @@ Options CommandLineParser::parse(int argc, char ** argv) {
     if (spacerCc >= 0) { res.addOption(Options::SPACER_CC, spacerCc ? "true" : "false"); }
     if (spacerCcLemma >= 0) { res.addOption(Options::SPACER_CC_LEMMA, spacerCcLemma ? "true" : "false"); }
     if (spacerCcPob >= 0) { res.addOption(Options::SPACER_CC_POB, spacerCcPob ? "true" : "false"); }
+    if (spacerCcUpdate >= 0) { res.addOption(Options::SPACER_CC_UPDATE, spacerCcUpdate ? "true" : "false"); }
     if (spacerIndGen >= 0) { res.addOption(Options::SPACER_INDGEN, spacerIndGen ? "true" : "false"); }
     if (spacerRelInd >= 0) { res.addOption(Options::SPACER_RELIND, spacerRelInd ? "true" : "false"); }
     if (spacerMbpMaySummary >= 0) {

@@ -52,6 +52,7 @@ public:
     static const std::string SPACER_CC;
     static const std::string SPACER_CC_LEMMA;
     static const std::string SPACER_CC_POB;
+    static const std::string SPACER_CC_UPDATE;
     static const std::string SPACER_INDGEN;
     static const std::string SPACER_RELIND;
     static const std::string SPACER_MBP_MAY_SUMMARY;

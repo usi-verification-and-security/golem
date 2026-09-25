@@ -42,6 +42,9 @@ struct SpacerConfig {
     bool bmbp = true;            // may-POBs from bidirectional MBP
     bool ccLemma = true;         // may-POBs from the convex closure of blocking lemmas
     bool ccPob = true;           // may-POBs from the convex closure of predecessor under-approximations
+    bool ccUpdate = true;        // a CC root's fate rewrites its inputs: reachable / EOL -> keep the
+                                 // newest, blocked -> replace them by the blocking lemma
+                                 // (SpacerContext::updateCcInputs)
     bool generalize = true;      // generalize learnt lemmas (inductively if possible)
     bool relind = false;          // try to block with relative induction even when there are predecessors
 
@@ -164,6 +167,9 @@ struct SpacerConfig {
         }
         if (auto const globalPobDb = flag(Options::SPACER_GLOBAL_POB_DB)) {
             cfg.globalPobDb = *globalPobDb;
+        }
+        if (auto const ccUpdate = flag(Options::SPACER_CC_UPDATE)) {
+            cfg.ccUpdate = *ccUpdate;
         }
         // Numeric knobs: the raw argument is kept by the parser so it can be rejected here
         // with a message naming the flag, rather than silently becoming 0.
@@ -388,6 +394,15 @@ public:
             order.pop_front();
         }
     }
+    /// Drops every formula but the most recently added one.
+    void keepOnlyNewest() {
+        if (order.size() > 1) { replaceWith(order.back()); }
+    }
+    /// Replaces every formula by `formula`.
+    void replaceWith(PTRef formula) {
+        order.assign(1, formula);
+        members = {formula};
+    }
 
 private:
     std::deque<PTRef> order;
@@ -434,6 +449,8 @@ public:
         SymRef getNode(ChcDirectedHyperGraph const & graph) const {
             return graph.getSources(outer->first)[inner->first];
         }
+        EId getEdge() const { return outer->first; }
+        std::size_t getSourceIndex() const { return inner->first; }
         vec<PTRef> getApprox() const {
             vec<PTRef> approx;
             approx.capacity(inner->second.size());
@@ -469,6 +486,7 @@ public:
     void insert(EId edge, std::size_t node, PTRef cons, std::size_t maxSize) {
         cache[edge][node].insert(cons, maxSize);
     }
+    OrderedFormulas & at(EId edge, std::size_t node) { return cache[edge][node]; }
 
 private:
     OuterMap cache;
@@ -539,6 +557,7 @@ public:
     void insert(SymRef node, PTRef cons, std::size_t maxSize) {
         cache[node].insert(cons, maxSize);
     }
+    OrderedFormulas & at(SymRef node) { return cache[node]; }
 
 private:
     InnerMap cache;
@@ -584,6 +603,17 @@ struct ProofObligationCore {
     mutable LemmaOriginMask maySource = LemmaOrigin::None;
     /// true only for the pob a CC-lemma / BMBP / CC-pob block created directly.
     mutable bool mayRoot = false;
+    /// For a CC root only: the pob whose CC block created it, and for CC-pob the edge source, i.e.
+    /// where the formulas its hull was built from are kept (SpacerContext::updateCcInputs). Keys,
+    /// not a reference: the creator may be gone, and the per-bound vectors of PobInfo may grow.
+    struct CcOrigin {
+        SymRef creatorVertex;
+        PTRef creatorFormula;
+        std::size_t creatorBound;
+        EId edge;
+        std::size_t sourceIndex;
+    };
+    mutable std::optional<CcOrigin> ccOrigin;
 };
 
 /// Full provenance of a lemma learnt while blocking `pob`: pob type, may source, root flag.
@@ -711,6 +741,35 @@ class SpacerContext {
     /// `globalPobDb` every bound shares one set.
     VidPredCache & blockingLemmas(SymRef vid, PTRef formula, std::size_t bound) const {
         return PobInfo::atBound(pobInfo(vid, formula).blockingLemmas, cfg.globalPobDb ? 0 : bound);
+    }
+
+    /// A CC root was found reachable, ran out of gas, or was blocked: rewrite the formulas its hull
+    /// came from. Reachable or EOL (`blockingLemma` undefined): every hull of a superset contains
+    /// this one, so keep only the newest formula and let the list grow again. Blocked: replace them
+    /// by the lemma that blocked the root, whose negation contains the hull with fewer literals, so
+    /// the next hull starts from that region instead of from scratch. Either way one formula is
+    /// left, and both CC loops need at least two, so an unchanged list stops re-creating the root.
+    void updateCcInputs(ProofObligationCore const & root, PTRef blockingLemma, char const * fate) const {
+        if (not cfg.ccUpdate or not root.isMayPO or not root.mayRoot or not root.ccOrigin) { return; }
+        auto const & origin = *root.ccOrigin;
+        bool const fromLemmas = root.maySource == LemmaOrigin::MayCcLemma;
+        OrderedFormulas & inputs =
+            fromLemmas ? blockingLemmas(origin.creatorVertex, origin.creatorFormula, origin.creatorBound)
+                             .at(root.vertex)
+                       : PobInfo::atBound(pobInfo(origin.creatorVertex, origin.creatorFormula).underPredCache,
+                                          origin.creatorBound)
+                             .at(origin.edge, origin.sourceIndex);
+        TRACE(1, (fromLemmas ? "[CC]" : "[CC-POB]") << " Root " << root.constraint.x << " " << fate << ": "
+              << (blockingLemma == PTRef_Undef ? "kept the newest of " : "replaced by the blocking lemma ")
+              << inputs.size() << " inputs");
+        if (blockingLemma == PTRef_Undef) {
+            inputs.keepOnlyNewest();
+            return;
+        }
+        // Lemmas are summaries in base form, and CC-lemma hulls their negations; CC-pob hulls pob
+        // constraints, i.e. target formulas, so it gets the blocked region not(lemma) as a target.
+        inputs.replaceWith(fromLemmas ? blockingLemma
+                                      : VersionManager(logic).baseFormulaToTarget(logic.mkNot(blockingLemma)));
     }
 
     void addMaySummary(SymRef vid, std::size_t bound, PTRef summary,
@@ -998,6 +1057,7 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
                 return BoundedSafetyResult::UNSAFE; // query is reachable
             }
             traceMayFate(pob, "REACHABLE");
+            updateCcInputs(pob, PTRef_Undef, "reachable");
             pqueue.pop();
             continue;
         }
@@ -1019,12 +1079,19 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
             // all predecessors of a may pob had 0 life.
             TRACE(1, "    Removing MayPO branch due to EOL");
             traceMayFate(pob, "EOL");
-            if (pob.parent == nullptr) continue;
-            assert(pob.parent != nullptr);
+            // The chain ran out of gas: its CC root, this pob or one of its may ancestors, resets
+            // the inputs its hull came from.
+            updateCcInputs(pob, PTRef_Undef, "EOL");
+            if (pob.parent == nullptr) {
+                // Without the pop the same pob stays on top of the queue and is re-examined forever.
+                pqueue.pop();
+                continue;
+            }
             const ProofObligationCore* parentPob = pob.parent;
             // close recursively all parents?
             while (parentPob != nullptr and parentPob->isMayPO) {
                 parentPob->closed = true;
+                updateCcInputs(*parentPob, PTRef_Undef, "EOL");
                 parentPob = parentPob->parent;
             }
             pqueue.pop();
@@ -1055,6 +1122,7 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
                 if (pob.bound < lowestChangedLevel) { lowestChangedLevel = pob.bound; }
                 TRACE(1, "[x] Blocked POB with new lemma at level " << pob.bound);
                 traceMayFate(pob, "BLOCKED_RELIND");
+                updateCcInputs(pob, relindLemma, "blocked");
                 pqueue.pop();
                 continue;
             }
@@ -1120,6 +1188,7 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
                 mayPred->life = pob.life - 1;
                 mayPred->maySource = LemmaOrigin::MayCcLemma;
                 mayPred->mayRoot = true;
+                mayPred->ccOrigin = ProofObligationCore::CcOrigin{pob.vertex, pob.constraint, pob.bound, EId{0}, 0};
                 if (mayPred->life > 0)
                     newMayPO.push_back(std::move(mayPred));
             }
@@ -1148,6 +1217,8 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
                 mayPred->life = pob.life - 1;
                 mayPred->maySource = LemmaOrigin::MayCcPob;
                 mayPred->mayRoot = true;
+                mayPred->ccOrigin = ProofObligationCore::CcOrigin{pob.vertex, pob.constraint, pob.bound,
+                                                                  it.getEdge(), it.getSourceIndex()};
                 if (mayPred->life > 0)
                     newMayPO.push_back(std::move(mayPred));
             }
@@ -1301,6 +1372,7 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
             }
             TRACE(1, "[x] Blocked POB with new lemma at level " << pob.bound);
             traceMayFate(pob, "BLOCKED");
+            updateCcInputs(pob, newLemma, "blocked");
             pqueue.pop(); // This POB has been successfully blocked
 
         } else {
