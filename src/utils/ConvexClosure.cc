@@ -225,6 +225,50 @@ struct Disjunct {
 };
 
 /*
+ * A two-literal clause whose literals negate to `sum c_j x_j <= k` and `sum -c_j x_j <= -k` says
+ * `sum c_j x_j != k`: a disequality spelled as a clause. It is what NNF makes of the negation of an
+ * equality written as two inequalities, e.g. `not (and (<= 0 x) (<= 0 (* -1 x)))`, the form in which
+ * interpolants state equalities. Like any disequality it cannot be part of a convex polyhedron.
+ */
+bool isDisequalityClause(ArithLogic & logic, PTRef clause) {
+    if (not logic.isOr(clause) or logic.getPterm(clause).size() != 2) { return false; }
+    std::optional<LinearAtom> negations[2];
+    for (int i = 0; i < 2; ++i) {
+        PTRef lit = logic.getPterm(clause)[i];
+        bool const negated = logic.isNot(lit);
+        PTRef atom = negated ? logic.getPterm(lit)[0] : lit;
+        if (not isArithmeticRelation(logic, atom)) { return false; }
+        negations[i] = normalizeArithmeticLiteral(logic, atom, not negated);
+        if (not negations[i] or negations[i]->equality) { return false; }
+    }
+    LinearAtom const & first = *negations[0];
+    LinearAtom const & second = *negations[1];
+    if (first.coefficients.empty() or first.coefficients.size() != second.coefficients.size() or
+        first.constant != -second.constant) {
+        return false;
+    }
+    return std::all_of(first.coefficients.begin(), first.coefficients.end(), [&second](auto const & entry) {
+        auto it = std::find_if(second.coefficients.begin(), second.coefficients.end(),
+                               [&entry](auto const & other) { return other.first == entry.first; });
+        return it != second.coefficients.end() and it->second == -entry.second;
+    });
+}
+
+/*
+ * Drops the top-level conjuncts of an NNF formula that are disequalities spelled as clauses
+ * (isDisequalityClause). Dropping a conjunct only weakens the formula, so this is sound; and it
+ * keeps each such clause from counting as a mixed conjunct, which would double the number of cubes
+ * the formula is expanded into, only for the hull to relax the split away again.
+ */
+PTRef dropDisequalityClauses(ArithLogic & logic, PTRef nnf) {
+    vec<PTRef> kept;
+    for (PTRef conj : TermUtils(logic).getTopLevelConjuncts(nnf)) {
+        if (not isDisequalityClause(logic, conj)) { kept.push(conj); }
+    }
+    return logic.mkAnd(std::move(kept));
+}
+
+/*
  * Split the top-level conjuncts of an NNF formula. Returns nullopt when the conjunction is already
  * syntactically infeasible. Conjuncts that are dropped are dropped soundly, since removing a
  * conjunct only weakens the formula, and the closure over-approximates: disequalities (not convex),
@@ -390,7 +434,7 @@ PTRef ConvexClosure::getConvexClosure(vec<PTRef> const & formulas) {
     // the Boolean case split becomes several inputs instead of being thrown away.
     std::vector<Disjunct> disjuncts;
     for (PTRef formula : formulas) {
-        PTRef nnf = TermUtils(logic).toNNF(formula);
+        PTRef nnf = dropDisequalityClauses(*arithLogic, TermUtils(logic).toNNF(formula));
         bool hasMixed = false;
         auto disjunct = buildDisjunct(*arithLogic, nnf, hasMixed);
         if (hasMixed) { fprintf(stderr, "@@CC_MIXED@@\n"); }

@@ -164,6 +164,15 @@ TEST_F(ConvexClosure_RealTest, test_FourPointsSpanATetrahedron) {
                   all({leq(num(0), x), leq(num(0), y), leq(num(0), z), leq(sum({x, y, z}), num(4))}));
 }
 
+// The shape that stalled Spacer on tte_synchro: the negation of a lemma `x = 0 \/ y = 1` whose
+// equalities are written as two inequalities. Both conjuncts are disequalities, nothing convex is
+// left of that input, and the closure is unconstrained.
+TEST_F(ConvexClosure_RealTest, test_NegatedLemmaOfEqualitiesIsUnconstrained) {
+    PTRef lemma = any({all({leq(num(0), x), leq(num(0), scale(-1, x))}),
+                       all({leq(num(1), y), leq(num(-1), scale(-1, y))})});
+    expectClosure({neg(lemma), point(3, 3)}, logic.getTerm_true(), /* maxCubesPerFormula */ 8);
+}
+
 /* --------------------------------------------------------------- integers */
 
 // Three disjoint intervals.
@@ -350,6 +359,24 @@ TEST_F(ConvexClosure_IntTest, test_DefaultBudgetExpands) {
     expectCovers(closure, polyhedra);
     EXPECT_TRUE(isEquivalent(closure, all({eq(x, y), leq(num(0), x), leq(x, num(4))}), logic))
         << "got " << logic.pp(closure);
+}
+
+// `z != 0` in the shape interpolants give it: the negation of `0 <= z /\ 0 <= -z`, which NNF turns
+// into a two-literal clause. It is dropped like a disequality instead of counting as a mixed
+// conjunct, so the branches still fit a budget of two cubes and the hull stays exact.
+TEST_F(ConvexClosure_IntTest, test_DisequalityClauseDoesNotCountAgainstTheBudget) {
+    PTRef zNotZero = neg(all({leq(num(0), z), leq(num(0), scale(-1, z))}));
+    PTRef branches = any({point(0, 0), point(1, 1)});
+    expectClosure({all({branches, zNotZero}), point(4, 4)},
+                  all({eq(x, y), leq(num(0), x), leq(x, num(4))}), /* maxCubesPerFormula */ 2);
+}
+
+// Two inequalities that are not complementary, `z < 0 \/ z > 1`, are not a disequality: the clause
+// stays a mixed conjunct, the formula needs four cubes, over the budget, and falls back to dropping.
+TEST_F(ConvexClosure_IntTest, test_NonComplementaryClauseStillCountsAgainstTheBudget) {
+    PTRef gap = any({lt(z, num(0)), lt(num(1), z)});
+    PTRef branches = any({point(0, 0), point(1, 1)});
+    expectClosure({all({branches, gap}), point(4, 4)}, logic.getTerm_true(), /* maxCubesPerFormula */ 2);
 }
 
 /* ---------------------------------------------------------------- options */
