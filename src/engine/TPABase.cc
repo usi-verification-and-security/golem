@@ -220,6 +220,15 @@ PTRef TPABase::eliminateVars(PTRef fla, const vec<PTRef> & vars, Model & model) 
     }
 }
 
+PTRef TPABase::eliminateVars(PTRef fla, const vec<PTRef> & vars, Model & model, PTRef & overapprox) {
+    if (useQE) {
+        overapprox = QuantifierElimination(logic).eliminate(fla, vars);
+        return overapprox;
+    } else {
+        return ModelBasedProjection(logic).project(fla, vars, model, overapprox);
+    }
+}
+
 PTRef TPABase::keepOnlyVars(PTRef fla, const vec<PTRef> & vars, Model & model) {
     if (useQE) {
         return QuantifierElimination(logic).keepOnly(fla, vars);
@@ -238,7 +247,7 @@ void TPABase::resetInitialStates(PTRef fla) {
     assert(isPureStateFormula(fla));
     this->init = fla;
     queryCache.clear();
-    reachedTargets.clear();
+    pobDb.clear();
     resetExplanation();
 }
 
@@ -410,6 +419,28 @@ PTRef TPABase::extractMidPoint(PTRef start, PTRef firstTransition, PTRef secondT
     PTRef midPointFromGoal = eliminateVars(secondStep, toEliminate, model);
     PTRef midPoint = getNextVersion(logic.mkAnd(midPointFromStart, midPointFromGoal), -1);
     assert(isPureStateFormula(midPoint));
+    return midPoint;
+}
+
+PTRef TPABase::extractMidPoint(PTRef start, PTRef firstTransition, PTRef secondTransition, PTRef goal, Model & model,
+                               PTRef & overMidPoint) {
+    assert(isPureStateFormula(start));
+    assert(isPureTransitionFormula(firstTransition));
+    assert(isPureStateFormula(getNextVersion(goal, -2)));
+    assert(isPureTransitionFormula(getNextVersion(secondTransition, -1)));
+    PTRef firstStep = logic.mkAnd(start, firstTransition);
+    PTRef secondStep = logic.mkAnd(goal, secondTransition);
+    assert(model.evaluate(firstStep) == logic.getTerm_true() and model.evaluate(secondStep) == logic.getTerm_true());
+    PTRef overFromStart = PTRef_Undef;
+    PTRef overFromGoal = PTRef_Undef;
+    vec<PTRef> toEliminate = getStateVars(0);
+    PTRef midPointFromStart = eliminateVars(firstStep, toEliminate, model, overFromStart);
+    toEliminate = getStateVars(2);
+    PTRef midPointFromGoal = eliminateVars(secondStep, toEliminate, model, overFromGoal);
+    PTRef midPoint = getNextVersion(logic.mkAnd(midPointFromStart, midPointFromGoal), -1);
+    overMidPoint = getNextVersion(logic.mkAnd(overFromStart, overFromGoal), -1);
+    assert(isPureStateFormula(midPoint));
+    assert(isPureStateFormula(overMidPoint));
     return midPoint;
 }
 

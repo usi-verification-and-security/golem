@@ -46,6 +46,17 @@ public:
     static const std::string VERBOSE;
     static const std::string TPA_USE_QE;
     static const std::string TPA_GENERALIZE;
+    static const std::string TPA_MAYPOB;
+    static const std::string TPA_BMBP;
+    static const std::string TPA_CC;
+    static const std::string TPA_CC_LEMMA;
+    static const std::string TPA_CC_POB;
+    static const std::string TPA_MAX_LEMMAS_CC;
+    static const std::string TPA_CC_UPDATE;
+    static const std::string TPA_MAYPO_GAS;
+    static const std::string TPA_MAYPO_TRIGGER;
+    static const std::string TPA_MIN_POBS_CC;
+    static const std::string TPA_MAX_POBS_CC;
     static const std::string IC3IA_USE_UNSAT_CORE_GENERALIZATION;
     static const std::string IC3IA_ADD_INITIAL_RESET;
     static const std::string SPACER_MAYPOB;

@@ -24,6 +24,17 @@ const std::string Options::FORCED_COVERING = "forced-covering";
 const std::string Options::VERBOSE = "verbose";
 const std::string Options::TPA_USE_QE = "tpa.use-qe";
 const std::string Options::TPA_GENERALIZE = "tpa.generalize";
+const std::string Options::TPA_MAYPOB = "tpa.maypob";
+const std::string Options::TPA_BMBP = "tpa.bmbp";
+const std::string Options::TPA_CC = "tpa.cc";
+const std::string Options::TPA_CC_LEMMA = "tpa.cc-lemma";
+const std::string Options::TPA_CC_POB = "tpa.cc-pob";
+const std::string Options::TPA_MAX_LEMMAS_CC = "tpa.max-lemmas-cc";
+const std::string Options::TPA_CC_UPDATE = "tpa.cc-update";
+const std::string Options::TPA_MAYPO_GAS = "tpa.maypo-gas";
+const std::string Options::TPA_MAYPO_TRIGGER = "tpa.maypo-trigger";
+const std::string Options::TPA_MIN_POBS_CC = "tpa.min-pobs-cc";
+const std::string Options::TPA_MAX_POBS_CC = "tpa.max-pobs-cc";
 const std::string Options::IC3IA_USE_UNSAT_CORE_GENERALIZATION = "ic3ia.unsat-core-generalization";
 const std::string Options::IC3IA_ADD_INITIAL_RESET = "ic3ia.initial-reset";
 const std::string Options::SPACER_MAYPOB = "spacer.maypob";
@@ -79,6 +90,25 @@ void printUsage() {
            "-i,--input <file>               Input file (option not required)\n"
            "--force-ts                      Always encode linear system into transition system (affects BMC and TPA)\n"
            "--tpa.generalize[=bool]         TPA: inductive generalization of learnt lemmas (default: true)\n"
+           "--tpa.maypob[=bool]             TPA: enable may-proof-obligations from all sources\n"
+           "                                  (implies --tpa.bmbp --tpa.cc)\n"
+           "--tpa.bmbp[=bool]               TPA: may-POBs from bidirectional MBP of the midpoints\n"
+           "--tpa.cc[=bool]                 TPA: may-POBs from both convex closures\n"
+           "                                  (implies --tpa.cc-lemma --tpa.cc-pob)\n"
+           "--tpa.cc-lemma[=bool]           TPA: relational may-POBs from the convex closure of the\n"
+           "                                  negated lemmas that blocked the children of a target\n"
+           "--tpa.cc-pob[=bool]             TPA: may-POBs from the convex closure of the midpoints\n"
+           "--tpa.cc-update[=bool]          TPA: when a CC may-POB is reachable or runs out of gas,\n"
+           "                                  keep only the newest of its inputs (default: true)\n"
+           "--tpa.max-lemmas-cc <n>         TPA: blocking lemmas kept per target for CC-lemma,\n"
+           "                                  oldest dropped first; n >= 1 (default: 7)\n"
+           "--tpa.maypo-gas <n>             TPA: halvings a may-POB may spawn; n >= 1 (default: 5)\n"
+           "--tpa.maypo-trigger <n>         TPA: visits of a target at a level before may-POBs are\n"
+           "                                  built from it; n >= 1 (default: 3)\n"
+           "--tpa.min-pobs-cc <n>           TPA: midpoints of a target needed before CC-pob fires;\n"
+           "                                  n >= 1 (default: 2)\n"
+           "--tpa.max-pobs-cc <n>           TPA: midpoints kept per target and level for CC-pob,\n"
+           "                                  oldest dropped first; n >= 1 (default: 7)\n"
            "--spacer.maypob[=bool]          Spacer: enable may-proof-obligations from all\n"
            "                                  sources (implies --spacer.bmbp --spacer.cc)\n"
            "--spacer.bmbp[=bool]            Spacer: may-POBs from bidirectional MBP\n"
@@ -145,6 +175,12 @@ Options CommandLineParser::parse(int argc, char ** argv) {
     // -1 means "not given on the command line"; getopt sets the flag to 1 when it sees the
     // option, and the handler below then resolves it to 0 or 1 according to the argument.
     int tpaGeneralize = -1;
+    int tpaMayPob = -1;
+    int tpaBmbp = -1;
+    int tpaCc = -1;
+    int tpaCcLemma = -1;
+    int tpaCcPob = -1;
+    int tpaCcUpdate = -1;
     int spacerMayPob = -1;
     int spacerBmbp = -1;
     int spacerCc = -1;
@@ -157,6 +193,11 @@ Options CommandLineParser::parse(int argc, char ** argv) {
     int spacerGlobalPobDb = -1;
     // identity tokens only: the raw argument is stored, so it can be validated with a
     // proper message instead of being silently atoi'd to 0
+    int tpaMayPoGas = 0;
+    int tpaMayPoTrigger = 0;
+    int tpaMinPobsCc = 0;
+    int tpaMaxLemmasCc = 0;
+    int tpaMaxPobsCc = 0;
     int spacerMayPoGas = 0;
     int spacerMayPoTrigger = 0;
     int spacerMaxLemmasCc = 0;
@@ -177,6 +218,17 @@ Options CommandLineParser::parse(int argc, char ** argv) {
                                     {Options::VERBOSE.c_str(), optional_argument, &verbose, 1},
                                     {Options::TPA_USE_QE.c_str(), optional_argument, &tpaUseQE, 1},
                                     {Options::TPA_GENERALIZE.c_str(), optional_argument, &tpaGeneralize, 1},
+                                    {Options::TPA_MAYPOB.c_str(), optional_argument, &tpaMayPob, 1},
+                                    {Options::TPA_BMBP.c_str(), optional_argument, &tpaBmbp, 1},
+                                    {Options::TPA_CC.c_str(), optional_argument, &tpaCc, 1},
+                                    {Options::TPA_CC_LEMMA.c_str(), optional_argument, &tpaCcLemma, 1},
+                                    {Options::TPA_CC_POB.c_str(), optional_argument, &tpaCcPob, 1},
+                                    {Options::TPA_MAX_LEMMAS_CC.c_str(), required_argument, &tpaMaxLemmasCc, 1},
+                                    {Options::TPA_CC_UPDATE.c_str(), optional_argument, &tpaCcUpdate, 1},
+                                    {Options::TPA_MAYPO_GAS.c_str(), required_argument, &tpaMayPoGas, 1},
+                                    {Options::TPA_MAYPO_TRIGGER.c_str(), required_argument, &tpaMayPoTrigger, 1},
+                                    {Options::TPA_MIN_POBS_CC.c_str(), required_argument, &tpaMinPobsCc, 1},
+                                    {Options::TPA_MAX_POBS_CC.c_str(), required_argument, &tpaMaxPobsCc, 1},
                                     {Options::IC3IA_USE_UNSAT_CORE_GENERALIZATION.c_str(), optional_argument, &ic3iaUseUnsatCoreGeneralization, 1},
                                     {Options::IC3IA_ADD_INITIAL_RESET.c_str(), optional_argument, &ic3iaAddInitialReset, 1},
                                     {Options::SPACER_MAYPOB.c_str(), optional_argument, &spacerMayPob, 1},
@@ -242,6 +294,33 @@ Options CommandLineParser::parse(int argc, char ** argv) {
                     verbose = std::atoi(optarg);
                 } else if (long_options[option_index].flag == &tpaGeneralize) {
                     tpaGeneralize = (optarg and isDisableKeyword(optarg)) ? 0 : 1;
+                } else if (long_options[option_index].flag == &tpaMayPob) {
+                    tpaMayPob = (optarg and isDisableKeyword(optarg)) ? 0 : 1;
+                } else if (long_options[option_index].flag == &tpaBmbp) {
+                    tpaBmbp = (optarg and isDisableKeyword(optarg)) ? 0 : 1;
+                } else if (long_options[option_index].flag == &tpaCc) {
+                    tpaCc = (optarg and isDisableKeyword(optarg)) ? 0 : 1;
+                } else if (long_options[option_index].flag == &tpaCcLemma) {
+                    tpaCcLemma = (optarg and isDisableKeyword(optarg)) ? 0 : 1;
+                } else if (long_options[option_index].flag == &tpaCcPob) {
+                    tpaCcPob = (optarg and isDisableKeyword(optarg)) ? 0 : 1;
+                } else if (long_options[option_index].flag == &tpaMaxLemmasCc) {
+                    assert(optarg);
+                    res.addOption(Options::TPA_MAX_LEMMAS_CC, optarg);
+                } else if (long_options[option_index].flag == &tpaCcUpdate) {
+                    tpaCcUpdate = (optarg and isDisableKeyword(optarg)) ? 0 : 1;
+                } else if (long_options[option_index].flag == &tpaMayPoGas) {
+                    assert(optarg);
+                    res.addOption(Options::TPA_MAYPO_GAS, optarg);
+                } else if (long_options[option_index].flag == &tpaMayPoTrigger) {
+                    assert(optarg);
+                    res.addOption(Options::TPA_MAYPO_TRIGGER, optarg);
+                } else if (long_options[option_index].flag == &tpaMinPobsCc) {
+                    assert(optarg);
+                    res.addOption(Options::TPA_MIN_POBS_CC, optarg);
+                } else if (long_options[option_index].flag == &tpaMaxPobsCc) {
+                    assert(optarg);
+                    res.addOption(Options::TPA_MAX_POBS_CC, optarg);
                 } else if (long_options[option_index].flag == &spacerMayPob) {
                     spacerMayPob = (optarg and isDisableKeyword(optarg)) ? 0 : 1;
                 } else if (long_options[option_index].flag == &spacerBmbp) {
@@ -320,6 +399,12 @@ Options CommandLineParser::parse(int argc, char ** argv) {
         res.addOption(Options::INPUT_FILE, argv[optind]);
     }
     if (tpaGeneralize >= 0) { res.addOption(Options::TPA_GENERALIZE, tpaGeneralize ? "true" : "false"); }
+    if (tpaMayPob >= 0) { res.addOption(Options::TPA_MAYPOB, tpaMayPob ? "true" : "false"); }
+    if (tpaBmbp >= 0) { res.addOption(Options::TPA_BMBP, tpaBmbp ? "true" : "false"); }
+    if (tpaCc >= 0) { res.addOption(Options::TPA_CC, tpaCc ? "true" : "false"); }
+    if (tpaCcLemma >= 0) { res.addOption(Options::TPA_CC_LEMMA, tpaCcLemma ? "true" : "false"); }
+    if (tpaCcPob >= 0) { res.addOption(Options::TPA_CC_POB, tpaCcPob ? "true" : "false"); }
+    if (tpaCcUpdate >= 0) { res.addOption(Options::TPA_CC_UPDATE, tpaCcUpdate ? "true" : "false"); }
     if (spacerMayPob >= 0) { res.addOption(Options::SPACER_MAYPOB, spacerMayPob ? "true" : "false"); }
     if (spacerBmbp >= 0) { res.addOption(Options::SPACER_BMBP, spacerBmbp ? "true" : "false"); }
     if (spacerCc >= 0) { res.addOption(Options::SPACER_CC, spacerCc ? "true" : "false"); }

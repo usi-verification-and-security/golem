@@ -18,9 +18,13 @@
 #include "unsatcores/UnsatCore.h"
 #include "utils/SmtSolver.h"
 
+#include "utils/ConvexClosure.h"
+
 #include <algorithm>
 #include <optional>
 #include <queue>
+#include <unordered_set>
+#include <vector>
 
 namespace golem {
 
@@ -28,18 +32,39 @@ namespace {
 /// Can `target` be reached from `source` (state formulas) in <=2^{level+1} steps?
 /// A first half remembers in `next` the target of the pob it splits: once its own target is reached,
 /// it is replaced by the second half, from the reached states to `next`.
+/// A may-POB is a first half without `next`: once reachable it is simply removed; once blocked, its lemma
+/// is learnt as usual.
+/// A relational may-POB (CC-lemma) has `relation` instead of `source` and `target`: a transition formula over
+/// (x, x'), the pairs to block from being connected in <=2^{level+1} steps. It is not split: once blocked,
+/// its lemma is learnt; otherwise it is removed, and nothing is cached, as its pairs need not start in
+/// reachable states.
 struct ProofObligation {
     PTRef source;
     PTRef target;
     unsigned short level;
     PTRef next = PTRef_Undef;   ///< PTRef_Undef: not a first half
     unsigned sourceSteps = 0;   ///< steps from the initial states to `source`
+    bool isMayPO = false;
+    std::size_t life = 0;       ///< halvings left below a may-POB; set from TPABasicConfig::mayPoGas
+    std::size_t mayRoot = 0;    ///< may-POBs: their family, closed as a whole when a chain runs out of gas
+    PTRef relation = PTRef_Undef; ///< relational may-POBs only; then `source` and `target` are undefined
+    PTRef parentTarget = PTRef_Undef; ///< target of the pob that created this one; its lemma goes there (CC-lemma)
+    /// For a CC root only: the target and level whose midpoints (CC-pob) or blocking lemmas (CC-lemma) its
+    /// hull was built from (cc-update). Keys, not a reference: the per-level vectors of TPAPobInfo may grow.
+    struct CcOrigin {
+        PTRef creatorTarget;
+        unsigned short creatorLevel;
+        bool fromLemmas;
+    };
+    std::optional<CcOrigin> ccOrigin;
     std::size_t id = 0;         ///< creation order, set by PriorityQueue::push
 };
 
 bool operator>(ProofObligation const & pob1, ProofObligation const & pob2) {
-    // lower levels first; at the same level, the newest pob first
-    return pob1.level > pob2.level or (pob1.level == pob2.level and pob1.id < pob2.id);
+    // lower levels first; at the same level may-POBs first, as in Spacer; then the newest pob first
+    if (pob1.level != pob2.level) { return pob1.level > pob2.level; }
+    if (pob1.isMayPO != pob2.isMayPO) { return pob2.isMayPO; }
+    return pob1.id < pob2.id;
 }
 
 struct PriorityQueue {
@@ -450,24 +475,149 @@ VerificationAnswer TPABasic::checkPower(unsigned short power) {
  * level+1, and the pob is removed. If it is reachable at level 0, the truly reachable part of the target is
  * cached; otherwise the model gives a midpoint, and the first half is queued above the pob.
  * A pob whose target is cached is removed; if it is a first half, its second half takes its place.
+ * With may-POBs on, the midpoints of a target and their over-approximations are collected per level in the
+ * pob database; once the target was examined triggerMayPo times at a level, may-POBs from the source to their
+ * conjunction (BMBP) and to their convex closure (CC-pob) are queued one level below. The lemmas that blocked
+ * the children of a target are collected too; their negations are pairs, and the convex closure of them is
+ * queued, kept together, as a relational may-POB (CC-lemma).
  */
 TPABasic::QueryResult TPABasic::reachabilityQuery(PTRef from, PTRef to, unsigned short power) {
     TRACE(2, "[RQ] Checking LEQ reachability on level " << power << " from " << from.x << " to " << to.x)
     PriorityQueue pqueue;
-    pqueue.push(ProofObligation{from, to, power});
+    ProofObligation goal{from, to, power};
+    goal.life = cfg.mayPoGas;
+    pqueue.push(goal);
+    std::size_t mayRoots = 0;
+    std::unordered_set<std::size_t> closedMayRoots; // families where a chain ran out of gas
+    auto isRelational = [](ProofObligation const & p) { return p.relation != PTRef_Undef; };
+    auto pobId = [&](ProofObligation const & p) { return isRelational(p) ? p.relation.x : p.target.x; };
+    // One line per may-pob exit, so the fate of every may-pob is greppable.
+    auto traceMayFate = [&](ProofObligation const & p, char const * fate) {
+        if (not p.isMayPO) { return; }
+        TRACE(1, "[MAYPO] id=" << pobId(p) << (isRelational(p) ? " rel" : "") << " root=" << p.mayRoot
+              << " lvl=" << p.level << " life=" << p.life << " fate=" << fate);
+    };
+    // May-POBs one level below `pob`, from what the database collected for its target: from its source to the
+    // conjunction (BMBP) or the convex closure (CC-pob) of the midpoints at its level, once the target was
+    // examined `triggerMayPo` times at that level; and the convex closure of the negated lemmas that blocked
+    // its children (CC-lemma), once it was examined `triggerMayPo` times at any level.
+    auto buildMayPobs = [&](ProofObligation const & pob) {
+        std::vector<ProofObligation> mayPobs;
+        if (not cfg.maypo or isRelational(pob) or pob.level == 0 or pob.life <= 1) { return mayPobs; }
+        TPAPobInfo & info = pobDb[pob.target];
+        bool const predsReady = TPAPobInfo::atLevel(info.localCounter, pob.level) >= cfg.triggerMayPo;
+        bool const lemmasReady = info.globalCounter >= cfg.triggerMayPo;
+        auto mayPob = [&](PTRef mayTarget) {
+            ProofObligation mayPred{pob.source, mayTarget, static_cast<unsigned short>(pob.level - 1),
+                                    PTRef_Undef, pob.sourceSteps};
+            mayPred.isMayPO = true;
+            mayPred.life = pob.life - 1;
+            // built by a may-POB: same family, so running out of gas closes all of it
+            mayPred.mayRoot = pob.isMayPO ? pob.mayRoot : ++mayRoots;
+            mayPred.parentTarget = pob.target;
+            return mayPred;
+        };
+        if (cfg.bmbp and predsReady) {
+            // Bidirectional Model based projection
+            OrderedFormulas const & overs = TPAPobInfo::atLevel(info.overPredCache, pob.level);
+            if (overs.size() > 0 and overs.size() >= cfg.minBmbpOverLits) {
+                vec<PTRef> approx;
+                for (PTRef over : overs) { approx.push(over); }
+                PTRef mayTarget = logic.mkAnd(std::move(approx));
+                TRACE(1, "[BMBP] Adding the conjunction of " << overs.size() << " over-approximations: " << mayTarget.x);
+                mayPobs.push_back(mayPob(mayTarget));
+            }
+        }
+        if (cfg.ccLemma and lemmasReady) {
+            // Convex Closure of the negated blocking lemmas: pairs (x, x'), kept together
+            OrderedFormulas const & lemmas = info.blockingLemmas;
+            if (lemmas.size() >= cfg.minLemmasForCc) {
+                vec<PTRef> negatedLemmas;
+                for (PTRef lemma : lemmas) { negatedLemmas.push(logic.mkNot(lemma)); }
+                ConvexClosure convexClosure(logic, QEOptions(1, cfg.ccMbpBudget, true));
+                PTRef hull = convexClosure.getConvexClosure(negatedLemmas);
+                if (not logic.isTrue(hull) and not logic.isFalse(hull)) {
+                    TRACE(1, "[CC] Adding a ConvexClosure of " << lemmas.size() << " lemmas -> atoms: "
+                          << TermUtils(logic).getTopLevelConjuncts(hull).size()
+                          << " vars: " << TermUtils(logic).getVars(hull).size());
+                    TRACE(3, "[CC] Added " << logic.pp(hull));
+                    ProofObligation mayPred = mayPob(PTRef_Undef);
+                    mayPred.source = PTRef_Undef;
+                    mayPred.relation = hull;
+                    mayPred.ccOrigin = ProofObligation::CcOrigin{pob.target, pob.level, true};
+                    mayPobs.push_back(mayPred);
+                }
+            }
+        }
+        if (cfg.ccPob and predsReady) {
+            // Convex Closure of the midpoints
+            OrderedFormulas const & unders = TPAPobInfo::atLevel(info.underPredCache, pob.level);
+            if (unders.size() >= cfg.minPobsForCc) {
+                vec<PTRef> midPoints;
+                for (PTRef under : unders) { midPoints.push(under); }
+                ConvexClosure convexClosure(logic, QEOptions(1, cfg.ccMbpBudget, true));
+                PTRef mayTarget = convexClosure.getConvexClosure(midPoints);
+                if (not logic.isTrue(mayTarget) and not logic.isFalse(mayTarget)) {
+                    TRACE(1, "[CC-POB] Adding a ConvexClosure of " << unders.size() << " midpoints -> atoms: "
+                          << TermUtils(logic).getTopLevelConjuncts(mayTarget).size()
+                          << " vars: " << TermUtils(logic).getVars(mayTarget).size());
+                    TRACE(3, "[CC-POB] Added " << logic.pp(mayTarget));
+                    mayPobs.push_back(mayPob(mayTarget));
+                    mayPobs.back().ccOrigin = ProofObligation::CcOrigin{pob.target, pob.level, false};
+                }
+            }
+        }
+        return mayPobs;
+    };
+    // A CC root was found reachable or ran out of gas: every hull of a superset of its inputs contains this
+    // one, so keep only the newest input and let the list grow again. One input is left, and both CC sources
+    // need at least two, so an unchanged list stops re-creating the root.
+    auto updateCcInputs = [&](ProofObligation const & root, char const * fate) {
+        if (not cfg.ccUpdate or not root.ccOrigin) { return; }
+        TPAPobInfo & creator = pobDb[root.ccOrigin->creatorTarget];
+        OrderedFormulas & inputs = root.ccOrigin->fromLemmas
+                                       ? creator.blockingLemmas
+                                       : TPAPobInfo::atLevel(creator.underPredCache, root.ccOrigin->creatorLevel);
+        TRACE(1, (root.ccOrigin->fromLemmas ? "[CC]" : "[CC-POB]") << " Root " << pobId(root) << " " << fate
+              << ": kept the newest of " << inputs.size() << " inputs");
+        inputs.keepOnlyNewest();
+    };
+    auto pushMayPobs = [&](std::vector<ProofObligation> mayPobs) {
+        for (auto & mayPred : mayPobs) {
+            TRACE(1, "[+] MAY PRED: Adding new " << (isRelational(mayPred) ? "relational " : "") << "MAY PO "
+                  << pobId(mayPred) << " at level " << mayPred.level);
+            pqueue.push(mayPred);
+        }
+    };
+
     while (not pqueue.empty()) {
         ProofObligation const pob = pqueue.peek();
         TPA_INDENT = power - pob.level;
 
-        auto cached = reachedTargets.find(pob.target);
-        if (cached != reachedTargets.end()) {
-            ReachedStates const reached = cached->second;
+        if (pob.isMayPO and closedMayRoots.count(pob.mayRoot) > 0) {
+            traceMayFate(pob, "CLOSED");
+            updateCcInputs(pob, "EOL");
+            pqueue.pop();
+            continue;
+        }
+
+        auto known = isRelational(pob) ? pobDb.end() : pobDb.find(pob.target);
+        if (known != pobDb.end() and known->second.reached) {
+            ReachedStates const reached = *known->second.reached;
             TRACE(2, "[C] Target " << pob.target.x << " is reachable: " << reached.reachedStates.x);
             pqueue.pop();
             if (pob.next != PTRef_Undef) {
                 // the first half is reachable, substitute the pob with its second half
                 TRACE(2, "[Q] Considering MidPoint query as source: " << reached.reachedStates.x);
-                pqueue.push(ProofObligation{reached.reachedStates, pob.next, pob.level, PTRef_Undef, reached.steps});
+                ProofObligation secondHalf = pob; // same level, kind, life and family
+                secondHalf.source = reached.reachedStates;
+                secondHalf.target = pob.next;
+                secondHalf.next = PTRef_Undef;
+                secondHalf.sourceSteps = reached.steps;
+                pqueue.push(secondHalf);
+            } else if (pob.isMayPO) {
+                traceMayFate(pob, "REACHABLE"); // nothing else to do for a reachable may-POB
+                updateCcInputs(pob, "reachable");
             } else if (pob.level == power) {
                 TRACE(2, "[R] Query " << to.x << " was reachable");
                 TPA_INDENT = -1;
@@ -480,13 +630,36 @@ TPABasic::QueryResult TPABasic::reachabilityQuery(PTRef from, PTRef to, unsigned
             continue;
         }
 
-        TRACE(2, "[?] Can " << pob.source.x << " reach " << pob.target.x << " in <=2^" << pob.level + 1 << " steps?")
+        // a relational may-POB has no entry in the database
+        TPAPobInfo * info = isRelational(pob) ? nullptr : &pobDb[pob.target];
+        if (info) {
+            ++info->globalCounter;
+            ++TPAPobInfo::atLevel(info->localCounter, pob.level);
+        }
+        if (isRelational(pob)) {
+            TRACE(2, "[?] (may) Can the pairs of " << pob.relation.x << " be connected in <=2^" << pob.level + 1
+                  << " steps?")
+        } else {
+            TRACE(2, "[?] " << (pob.isMayPO ? "(may) " : "") << "Can " << pob.source.x << " reach " << pob.target.x
+                  << " in <=2^" << pob.level + 1 << " steps?")
+        }
         auto solver = getReachabilitySolver(pob.level + 1);
         assert(solver);
-        PTRef goal = getNextVersion(pob.target, 2);
-        auto res = solver->checkConsistent(logic.mkAnd(pob.source, goal));
+        PTRef goal = isRelational(pob) ? PTRef_Undef : getNextVersion(pob.target, 2);
+        // the relation is over (x, x'), the query over (x, x'')
+        PTRef query = isRelational(pob) ? shiftOnlyNextVars(pob.relation) : logic.mkAnd(pob.source, goal);
+        auto res = solver->checkConsistent(query);
         switch (res) {
             case ReachabilityResult::REACHABLE: {
+                if (isRelational(pob)) {
+                    // not blocked: nothing to learn, and nothing to cache
+                    TRACE(2, "[y] Some pair of " << pob.relation.x << " is connected in <=2^" << pob.level + 1
+                          << " steps.");
+                    traceMayFate(pob, "REACHABLE");
+                    updateCcInputs(pob, "reachable");
+                    pqueue.pop();
+                    continue;
+                }
                 TRACE(2, "[y] " << pob.source.x << " reaches " << pob.target.x << " in <=2^" << pob.level + 1 << " steps.");
                 PTRef previousTransition = getLevelTransition(pob.level);
                 PTRef translatedPreviousTransition = getNextVersion(previousTransition);
@@ -505,29 +678,82 @@ TPABasic::QueryResult TPABasic::reachabilityQuery(PTRef from, PTRef to, unsigned
                     unsigned steps = pob.sourceSteps + firstStepTaken + secondStepTaken;
                     TRACE(2, "[!] Exact: Truly reachable states are " << refinedTarget.x);
                     // The pob stays in the queue: its next examination finds its target in the cache
-                    reachedTargets.emplace(pob.target, ReachedStates{refinedTarget, steps});
+                    info->reached = ReachedStates{refinedTarget, steps};
+                    continue;
+                }
+                if (pob.isMayPO and pob.life <= 1) {
+                    // the chain ran out of gas: close its whole may family
+                    TRACE(1, "    Removing MayPO branch due to EOL");
+                    traceMayFate(pob, "EOL");
+                    updateCcInputs(pob, "EOL");
+                    closedMayRoots.insert(pob.mayRoot);
+                    pqueue.pop();
                     continue;
                 }
                 // Create the three states corresponding to current, next and next-next variables from the query
-                PTRef nextState = extractMidPoint(pob.source, previousTransition, translatedPreviousTransition, goal, *model);
+                PTRef overMidPoint = PTRef_Undef;
+                PTRef nextState = cfg.maypo and cfg.bmbp
+                    ? extractMidPoint(pob.source, previousTransition, translatedPreviousTransition, goal, *model,
+                                      overMidPoint)
+                    : extractMidPoint(pob.source, previousTransition, translatedPreviousTransition, goal, *model);
                 TRACE(2, "[Q] Considering MidPoint query as target: " << nextState.x)
+                if (cfg.maypo) {
+                    if (cfg.bmbp and overMidPoint != PTRef_Undef and overMidPoint != nextState and
+                        overMidPoint != logic.getTerm_true()) {
+                        TPAPobInfo::atLevel(info->overPredCache, pob.level).insert(overMidPoint, 0);
+                    }
+                    if (cfg.ccPob and nextState != logic.getTerm_true()) {
+                        TPAPobInfo::atLevel(info->underPredCache, pob.level).insert(nextState, cfg.maxPobsForCc);
+                    }
+                }
                 // need to find a midpoint: the pob stays in the queue, remember its target for the second half
-                pqueue.push(ProofObligation{pob.source, nextState, static_cast<unsigned short>(pob.level - 1),
-                                            pob.target, pob.sourceSteps});
+                ProofObligation firstHalf{pob.source, nextState, static_cast<unsigned short>(pob.level - 1),
+                                          pob.target, pob.sourceSteps};
+                firstHalf.isMayPO = pob.isMayPO;
+                firstHalf.life = pob.isMayPO ? pob.life - 1 : cfg.mayPoGas;
+                firstHalf.mayRoot = pob.mayRoot;
+                firstHalf.parentTarget = pob.target;
+                pqueue.push(firstHalf);
+                traceMayFate(pob, "SPAWNED");
+                pushMayPobs(buildMayPobs(pob));
                 continue;
             }
             case ReachabilityResult::UNREACHABLE: {
-                TRACE(2, "[x] " << pob.source.x << " cannot reach " << pob.target.x << " in <=2^" << pob.level + 1 << " steps.");
+                if (isRelational(pob)) {
+                    TRACE(2, "[x] No pair of " << pob.relation.x << " is connected in <=2^" << pob.level + 1 << " steps.");
+                } else {
+                    TRACE(2, "[x] " << pob.source.x << " cannot reach " << pob.target.x << " in <=2^" << pob.level + 1
+                          << " steps.");
+                }
 
-                PTRef itp = solver->lastQueryTransitionInterpolant();
-                itp = simplifyInterpolant(itp);
-                itp = cleanInterpolant(itp);
-                TRACE(2,
-                      "---- [ITP] Learnt lemma: " << itp.x
-                      << " nr disj: " << TermUtils(logic).getTopLevelDisjuncts(itp).size()
-                      << " nr vars: " << TermUtils(logic).getVars(itp).size());
+                PTRef itp = PTRef_Undef;
+                if (pob.ccOrigin and cfg.generalize) {
+                    // do not interpolate something that is already generalized: the negated query is itself an
+                    // interpolant, the weakest one; let inductive generalization handle it. It is built facet by
+                    // facet over (x, x'), as integer literals where possible, so its disjuncts are the facets:
+                    // not(H(x, x')) for CC-lemma, not(source(x)) \/ not(hull(x')) for CC-pob.
+                    LATermUtils latUtils(dynamic_cast<ArithLogic &>(logic));
+                    vec<PTRef> facets = isRelational(pob)
+                        ? TermUtils(logic).getTopLevelConjuncts(pob.relation)
+                        : TermUtils(logic).getTopLevelConjuncts(logic.mkAnd(pob.source, getNextVersion(pob.target)));
+                    vec<PTRef> negatedFacets;
+                    for (PTRef facet : facets) { negatedFacets.push(latUtils.negateIntLiteral(facet)); }
+                    itp = logic.mkOr(std::move(negatedFacets));
+                    TRACE(2,
+                          "---- [NEG] Negated CC query: " << itp.x
+                          << " nr disj: " << TermUtils(logic).getTopLevelDisjuncts(itp).size()
+                          << " nr vars: " << TermUtils(logic).getVars(itp).size());
+                } else {
+                    itp = solver->lastQueryTransitionInterpolant();
+                    itp = simplifyInterpolant(itp);
+                    itp = cleanInterpolant(itp);
+                    TRACE(2,
+                          "---- [ITP] Learnt lemma: " << itp.x
+                          << " nr disj: " << TermUtils(logic).getTopLevelDisjuncts(itp).size()
+                          << " nr vars: " << TermUtils(logic).getVars(itp).size());
+                }
                 if (cfg.debug and not checkLemma(pob.level, itp, false)) {
-                    throw std::logic_error("Error in reachabilityQuery: the interpolant is not a valid lemma!");
+                    throw std::logic_error("Error in reachabilityQuery: the learnt lemma is not valid!");
                 }
 
                 if (cfg.generalize) {
@@ -540,11 +766,19 @@ TPABasic::QueryResult TPABasic::reachabilityQuery(PTRef from, PTRef to, unsigned
 
                 TRACE(2, "[+] Learning " << itp.x << " in power: " << pob.level + 1);
                 TRACE(4, "Learning " << logic.pp(itp));
-                TRACE(2, "[U] Query " << pob.target.x << " is NOT reachable");
+                TRACE(2, "[U] Query " << pobId(pob) << " is NOT reachable");
                 // If itp == logic.getTerm_true, then the error states were trivially unreachable
                 if (itp == logic.getTerm_true()) { assert(pob.level == 0); }
                 storeLevelTransition(pob.level + 1, itp);
+                if (cfg.maypo and cfg.ccLemma and pob.parentTarget != PTRef_Undef) {
+                    pobDb[pob.parentTarget].blockingLemmas.insert(itp, cfg.maxLemmasForCc);
+                }
+                if (pob.isMayPO) {
+                    TRACE(1, "    $$$$$$$$$$$$ MAY PO WAS BLOCKED $$$$$$$$$$$$");
+                }
+                traceMayFate(pob, "BLOCKED");
                 pqueue.pop();
+                pushMayPobs(buildMayPobs(pob));
                 continue;
             }
         }
@@ -612,7 +846,7 @@ bool TPABasic::propagateTransitions(unsigned short power) {
 void TPABasic::resetPowers() {
     this->transitionHierarchy.clear();
     this->clearReachabilitySolvers();
-    this->reachedTargets.clear();
+    this->pobDb.clear();
     storeLevelTransition(0, logic.mkOr(identity, transition));
 }
 
