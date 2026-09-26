@@ -45,6 +45,7 @@ public:
     static const std::string FORCED_COVERING;
     static const std::string VERBOSE;
     static const std::string TPA_USE_QE;
+    static const std::string TPA_GENERALIZE;
     static const std::string IC3IA_USE_UNSAT_CORE_GENERALIZATION;
     static const std::string IC3IA_ADD_INITIAL_RESET;
     static const std::string SPACER_MAYPOB;

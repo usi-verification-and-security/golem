@@ -23,6 +23,7 @@ const std::string Options::LRA_ITP_ALG = "lra-itp-algorithm";
 const std::string Options::FORCED_COVERING = "forced-covering";
 const std::string Options::VERBOSE = "verbose";
 const std::string Options::TPA_USE_QE = "tpa.use-qe";
+const std::string Options::TPA_GENERALIZE = "tpa.generalize";
 const std::string Options::IC3IA_USE_UNSAT_CORE_GENERALIZATION = "ic3ia.unsat-core-generalization";
 const std::string Options::IC3IA_ADD_INITIAL_RESET = "ic3ia.initial-reset";
 const std::string Options::SPACER_MAYPOB = "spacer.maypob";
@@ -77,6 +78,7 @@ void printUsage() {
            "-v                              Increase verbosity (can be applied multiple times)\n"
            "-i,--input <file>               Input file (option not required)\n"
            "--force-ts                      Always encode linear system into transition system (affects BMC and TPA)\n"
+           "--tpa.generalize[=bool]         TPA: inductive generalization of learnt lemmas (default: true)\n"
            "--spacer.maypob[=bool]          Spacer: enable may-proof-obligations from all\n"
            "                                  sources (implies --spacer.bmbp --spacer.cc)\n"
            "--spacer.bmbp[=bool]            Spacer: may-POBs from bidirectional MBP\n"
@@ -142,6 +144,7 @@ Options CommandLineParser::parse(int argc, char ** argv) {
     int simplifyNested = 0;
     // -1 means "not given on the command line"; getopt sets the flag to 1 when it sees the
     // option, and the handler below then resolves it to 0 or 1 according to the argument.
+    int tpaGeneralize = -1;
     int spacerMayPob = -1;
     int spacerBmbp = -1;
     int spacerCc = -1;
@@ -173,6 +176,7 @@ Options CommandLineParser::parse(int argc, char ** argv) {
                                     {Options::FORCED_COVERING.c_str(), optional_argument, &forcedCovering, 1},
                                     {Options::VERBOSE.c_str(), optional_argument, &verbose, 1},
                                     {Options::TPA_USE_QE.c_str(), optional_argument, &tpaUseQE, 1},
+                                    {Options::TPA_GENERALIZE.c_str(), optional_argument, &tpaGeneralize, 1},
                                     {Options::IC3IA_USE_UNSAT_CORE_GENERALIZATION.c_str(), optional_argument, &ic3iaUseUnsatCoreGeneralization, 1},
                                     {Options::IC3IA_ADD_INITIAL_RESET.c_str(), optional_argument, &ic3iaAddInitialReset, 1},
                                     {Options::SPACER_MAYPOB.c_str(), optional_argument, &spacerMayPob, 1},
@@ -236,6 +240,8 @@ Options CommandLineParser::parse(int argc, char ** argv) {
                 } else if (long_options[option_index].flag == &verbose) {
                     assert(optarg);
                     verbose = std::atoi(optarg);
+                } else if (long_options[option_index].flag == &tpaGeneralize) {
+                    tpaGeneralize = (optarg and isDisableKeyword(optarg)) ? 0 : 1;
                 } else if (long_options[option_index].flag == &spacerMayPob) {
                     spacerMayPob = (optarg and isDisableKeyword(optarg)) ? 0 : 1;
                 } else if (long_options[option_index].flag == &spacerBmbp) {
@@ -313,6 +319,7 @@ Options CommandLineParser::parse(int argc, char ** argv) {
         // Assume the last argument not assigned to any option is input file
         res.addOption(Options::INPUT_FILE, argv[optind]);
     }
+    if (tpaGeneralize >= 0) { res.addOption(Options::TPA_GENERALIZE, tpaGeneralize ? "true" : "false"); }
     if (spacerMayPob >= 0) { res.addOption(Options::SPACER_MAYPOB, spacerMayPob ? "true" : "false"); }
     if (spacerBmbp >= 0) { res.addOption(Options::SPACER_BMBP, spacerBmbp ? "true" : "false"); }
     if (spacerCc >= 0) { res.addOption(Options::SPACER_CC, spacerCc ? "true" : "false"); }

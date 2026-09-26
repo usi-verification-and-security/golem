@@ -16,13 +16,10 @@
 #include "common/TreeOps.h"
 #include "pterms/PTRef.h"
 #include "unsatcores/UnsatCore.h"
-#include "utils/InductiveInterpolants.h"
 #include "utils/SmtSolver.h"
 
-#define GENERALIZE 1
-#define INDITP 0
-#define PROPAGATE 1
-#define BOTH 0
+#include <algorithm>
+#include <optional>
 
 namespace golem {
 
@@ -85,11 +82,11 @@ bool TPABasic::checkLemma(unsigned short power, PTRef lemma01, bool inductive) c
 }
 
 PTRef TPABasic::generalize(unsigned short power, PTRef lemma) const {
-    SMTSolver solver(logic, SMTSolver::WitnessProduction::ONLY_UNSAT_CORE);
-
-    assert(checkLemma(power, lemma, false));
-
     const auto& candidates = TermUtils(logic).getTopLevelDisjuncts(lemma);
+    // The core is never empty, so a single disjunct is its own generalization
+    if (candidates.size() < 2) { return lemma; }
+
+    SMTSolver solver(logic, SMTSolver::WitnessProduction::ONLY_UNSAT_CORE);
     vec<PTRef> assumedSources1, assumedSources2, assumedTargets;
     std::map<PTRef, PTRef> mapping;
     assumedSources1.capacity(candidates.size());
@@ -128,9 +125,10 @@ PTRef TPABasic::generalize(unsigned short power, PTRef lemma) const {
     }
 
     PTRef absTrans = getLevelTransition(power);
+    PTRef twoSteps = logic.mkAnd(absTrans, getNextVersion(absTrans));
     PTRef inductiveStep = \
         logic.mkAnd({
-                absTrans, getNextVersion(absTrans),
+                twoSteps,
                 logic.mkOr(assumedSources1),
                 logic.mkOr(assumedSources2)
             });
@@ -157,23 +155,165 @@ PTRef TPABasic::generalize(unsigned short power, PTRef lemma) const {
     TRACE(3, "==== [GENERALIZE] Old Lemma: " << logic.pp(lemma));
     TRACE(3, "==== [GENERALIZE] New Lemma: " << logic.pp(newLemma));
 
-    assert(checkLemma(power, newLemma, true));
+    if (cfg.debug) { checkGeneralization(power, lemma, newLemma, "generalize"); }
 
     return newLemma;
 }
 
-PTRef TPABasic::inductiveItp(unsigned short power, PTRef goal) const {
-    PTRef level = getLevelTransition(power);
-    PTRef twoAbsTrans = logic.mkAnd(level, getNextVersion(level));
+PTRef TPABasic::generalize_down(unsigned short power, PTRef lemma) const {
+    const auto& candidates = TermUtils(logic).getTopLevelDisjuncts(lemma);
+    if (candidates.size() < 2) { return lemma; }
+    const int n = candidates.size();
 
-    auto getVarsAt = [this](int level){ return getStateVars(level); };
+    // Declare assumptions. do not assert them yet.
+    static std::size_t freshId = 0;
+    std::vector<PTRef> selectors;
+    selectors.reserve(n);
+    for (int i = 0; i < n; ++i) {
+        std::string name = "_assume#gdown#" + std::to_string(freshId++);
+        selectors.push_back(logic.mkBoolVar(name.c_str()));
+    }
 
-    PTRef lemma = inductiveTransConflict(logic,
-                                         logic.mkOr(identity, transition),
-                                         twoAbsTrans, goal,
-                                         getVarsAt
-                                         );
-    return lemma;
+    vec<PTRef> assumedSources1, assumedSources2, assumedTargets;
+    assumedSources1.capacity(n);
+    assumedSources2.capacity(n);
+    assumedTargets.capacity(n);
+    for (int i = 0; i < n; ++i) {
+        assumedSources1.push(logic.mkAnd(selectors[i], candidates[i]));
+        assumedSources2.push(logic.mkAnd(selectors[i], getNextVersion(candidates[i])));
+        assumedTargets.push(logic.mkImpl(selectors[i], logic.mkNot(shiftOnlyNextVars(candidates[i]))));
+    }
+    PTRef base = shiftOnlyNextVars(logic.mkOr(identity, transition));
+    PTRef hypothesis = logic.mkAnd(logic.mkOr(assumedSources1), logic.mkOr(assumedSources2));
+    PTRef target = logic.mkAnd(assumedTargets);
+    PTRef absTrans = getLevelTransition(power);
+    PTRef twoSteps = logic.mkAnd(absTrans, getNextVersion(absTrans));
+
+    // baseline, without asserting assumption literals:
+    // tau(x, x'') or (T(x, x') and T(x', x'') and lemma(x, x') and lemma(x', x'')), not lemma(x, x'')
+    SMTSolver solver(logic, SMTSolver::WitnessProduction::NONE);
+    solver.assertProp(logic.mkOr(base, logic.mkAnd(twoSteps, hypothesis)));
+    solver.assertProp(target);
+
+    // Is the lemma restricted to `keep` unreachable in `s`, i.e. inductive?
+    auto inductiveFor = [&](SMTSolver & s, std::vector<bool> const & keep) {
+        s.push();
+        for (int i = 0; i < n; ++i) {
+            s.assertProp(keep[i] ? selectors[i] : logic.mkNot(selectors[i]));
+        }
+        auto res = s.check();
+        s.pop();
+        return res == SMTSolver::Answer::UNSAT;
+    };
+    auto singleton = [n](int lit) {
+        std::vector<bool> keep(n, false);
+        keep[lit] = true;
+        return keep;
+    };
+
+    // Check which literals are inductive on their own.
+    std::vector<bool> preserved(n, false);
+    for (int i = 0; i < n; ++i) {
+        preserved[i] = inductiveFor(solver, singleton(i));
+    }
+
+    // A literal that is inductive on its own is already the best the down pass can reach: dropping
+    // disjuncts only strengthens the clause. The greedy pass below can miss it, so keep it directly.
+    // Among several, prefer one inductive without the level transition: tau(x, x'') implies it and
+    // it is transitive, so it holds at every level, e.g. x' >= x rather than the level-local x' <= x + 3.
+    // (Replacing T by tau(x, x') and tau(x', x'') would not discriminate: tau implies T, so every
+    // literal inductive on its own passes.)
+    std::optional<SMTSolver> frameless;
+    int alone = -1;
+    bool aloneTransitive = false;
+    for (int i = 0; i < n and not aloneTransitive; ++i) {
+        if (not preserved[i]) { continue; }
+        if (alone < 0) {
+            alone = i;
+            continue;
+        }
+        // A tie: check whether this literal or the current one is transitive
+        if (not frameless) {
+            frameless.emplace(logic, SMTSolver::WitnessProduction::NONE);
+            frameless->assertProp(logic.mkOr(base, hypothesis));
+            frameless->assertProp(target);
+            if (inductiveFor(*frameless, singleton(alone))) {
+                aloneTransitive = true;
+                break;
+            }
+        }
+        if (inductiveFor(*frameless, singleton(i))) {
+            alone = i;
+            aloneTransitive = true;
+        }
+    }
+
+    std::vector<bool> keep(n, true);
+    int kept = n;
+    if (alone >= 0) {
+        std::fill(keep.begin(), keep.end(), false);
+        keep[alone] = true;
+        kept = 1;
+        TRACE(2, "---- [GDW] Kept the literal inductive on its own" << (aloneTransitive ? " (transitive)" : ""));
+    } else {
+        // Sort the literals prioritizing the ones that are *not* inductive
+        std::vector<int> order(n);
+        for (int i = 0; i < n; ++i) { order[i] = i; }
+        std::stable_sort(order.begin(), order.end(),
+                         [&](int a, int b) { return not preserved[a] and preserved[b]; });
+
+        // Down pass, with `order` sorting
+        for (int i : order) {
+            // try to delete `i`
+            keep[i] = false;
+            if (inductiveFor(solver, keep)) {
+                --kept;
+            } else {
+                // if `i` cannot be removed without breaking induction, then restore it
+                keep[i] = true;
+            }
+        }
+    }
+    // tau(x, x'') is satisfiable, so the empty clause is never inductive
+    assert(kept > 0);
+
+    vec<PTRef> inductiveDisjs;
+    inductiveDisjs.capacity(kept);
+    for (int i = 0; i < n; ++i) {
+        if (keep[i]) { inductiveDisjs.push(candidates[i]); }
+    }
+    PTRef newLemma = logic.mkOr(inductiveDisjs);
+
+    TRACE(3, "==== [GDW] Old Lemma: " << logic.pp(lemma));
+    TRACE(3, "==== [GDW] New Lemma: " << logic.pp(newLemma));
+
+    if (cfg.debug) { checkGeneralization(power, lemma, newLemma, "generalize_down"); }
+
+    return newLemma;
+}
+
+void TPABasic::checkGeneralization(unsigned short power, PTRef lemma, PTRef newLemma, std::string const & where) const {
+    SMTSolver debugSolver(logic, SMTSolver::WitnessProduction::NONE);
+    debugSolver.assertProp(logic.mkNot(shiftOnlyNextVars(newLemma)));
+
+    // newLemma keeps a subset of the disjuncts, so it implies lemma: is it strictly stronger?
+    debugSolver.push();
+    debugSolver.assertProp(shiftOnlyNextVars(lemma));
+    if (debugSolver.check() != SMTSolver::Answer::UNSAT) {
+        TRACE(2, "Generalization applied: newLemma is stronger!");
+    }
+    debugSolver.pop();
+
+    if (not checkLemma(power, newLemma, true)) {
+        throw std::logic_error("Error in " + where + ": newLemma is not inductive!");
+    }
+
+    // Is newLemma implied by two steps of the level transition alone, or did it need induction?
+    PTRef absTrans = getLevelTransition(power);
+    debugSolver.assertProp(logic.mkAnd(absTrans, getNextVersion(absTrans)));
+    if (debugSolver.check() != SMTSolver::Answer::UNSAT) {
+        TRACE(2, "Inductive-generalization applied: newLemma is stronger than min-gen!");
+    }
 }
 
 // Single hierarchy version:
@@ -204,7 +344,6 @@ void TPABasic::storeLevelTransition(unsigned short power, PTRef tr) {
 
     vec<PTRef> allTr = TermUtils(logic).getTopLevelConjuncts(tr);
 
-#if PROPAGATE || INDITP
     for (auto i = 0; i <= power; ++i) {
         auto& level = transitionHierarchy[i];
         for (auto t : allTr) {
@@ -217,31 +356,20 @@ void TPABasic::storeLevelTransition(unsigned short power, PTRef tr) {
             }
         }
     }
-#else
-    for (auto t : allTr) {
-        transitionHierarchy[power].push(t);
-    }
-#endif
 
     reachabilitySolvers.growTo(power + 2, nullptr);
     PTRef nextLevelTransitionStrengthening = logic.mkAnd(tr, getNextVersion(tr));
-#if PROPAGATE || INDITP
     for (auto i = 1; i <= power + 1; ++i) {
-#else
-    {
-    auto i = power + 1;
-#endif
-    if (not reachabilitySolvers[i]) {
-        reachabilitySolvers[i] =
-            new SolverWrapperIncrementalWithRestarts(logic, nextLevelTransitionStrengthening);
-        //        reachabilitySolvers[power + 1] = new SolverWrapperIncremental(logic,
-        //        nextLevelTransitionStrengthening); reachabilitySolvers[power + 1] = new SolverWrapperSingleUse(logic,
-        //        nextLevelTransitionStrengthening);
-    } else {
-        reachabilitySolvers[i]->strengthenTransition(nextLevelTransitionStrengthening);
+        if (not reachabilitySolvers[i]) {
+            reachabilitySolvers[i] =
+                new SolverWrapperIncrementalWithRestarts(logic, nextLevelTransitionStrengthening);
+            //        reachabilitySolvers[power + 1] = new SolverWrapperIncremental(logic,
+            //        nextLevelTransitionStrengthening); reachabilitySolvers[power + 1] = new SolverWrapperSingleUse(logic,
+            //        nextLevelTransitionStrengthening);
+        } else {
+            reachabilitySolvers[i]->strengthenTransition(nextLevelTransitionStrengthening);
+        }
     }
-    }
-
 }
 
 SolverWrapper * TPABasic::getReachabilitySolver(unsigned short power) const {
@@ -260,10 +388,8 @@ VerificationAnswer TPABasic::checkPower(unsigned short power) {
         if (verbose() > 0) { std::cout << "; System is safe up to <=2^" << power + 1 << " steps" << std::endl; }
         TRACE(1, "System is safe up to <=2^" << power + 1 << "steps.");
         // Check if we have not reached fixed point.
-#if PROPAGATE
         bool fixpoint = propagateTransitions(power + 1);
         if (fixpoint) { return VerificationAnswer::SAFE; }
-#endif
         bool fixedPointReached = checkLessThanFixedPoint(power + 1);
         if (fixedPointReached) { return VerificationAnswer::SAFE; }
     }
@@ -364,46 +490,31 @@ TPABasic::QueryResult TPABasic::reachabilityQuery(PTRef from, PTRef to, unsigned
                 TRACE(3, "Top level query was unreachable");
                 TRACE(2, "[x] " << from.x << " cannot reach " << to.x << " in <=2^" << power + 1 << " steps.");
 
-#if INDITP || BOTH
-                PTRef lemma = inductiveItp(power, logic.mkAnd(from, goal));
-#if GENERALIZE
-                lemma = generalize(power, lemma);
-#endif
-#endif
-
-#if !INDITP || BOTH
                 PTRef itp = solver->lastQueryTransitionInterpolant();
                 itp = simplifyInterpolant(itp);
                 itp = cleanInterpolant(itp);
-#if GENERALIZE
-                itp = generalize(power, itp);
-#endif
-#endif
+                TRACE(2,
+                      "---- [ITP] Learnt lemma: " << itp.x
+                      << " nr disj: " << TermUtils(logic).getTopLevelDisjuncts(itp).size()
+                      << " nr vars: " << TermUtils(logic).getVars(itp).size());
+                if (cfg.debug and not checkLemma(power, itp, false)) {
+                    throw std::logic_error("Error in reachabilityQuery: the interpolant is not a valid lemma!");
+                }
 
-#if INDITP || BOTH
-                TRACE(2, "[+] Learning " << lemma.x << " in power: " << power + 1);
-                TRACE(4, "Learning " << logic.pp(lemma));
-                TRACE(2, "[U] Query " << to.x << " is NOT reachable");
-                // If itp == logic.getTerm_true, then the error states were trivially unreachable
-                if (lemma == logic.getTerm_true()) { assert(power == 0); }
-                storeLevelTransition(power + 1, lemma);
-#endif
+                if (cfg.generalize) {
+                    itp = cfg.gdown ? generalize_down(power, itp) : generalize(power, itp);
+                    TRACE(2,
+                          "---- [ITP] Generalization: " << itp.x
+                          << " nr disj: " << TermUtils(logic).getTopLevelDisjuncts(itp).size()
+                          << " nr vars: " << TermUtils(logic).getVars(itp).size());
+                }
 
-#if !INDITP || BOTH
                 TRACE(2, "[+] Learning " << itp.x << " in power: " << power + 1);
                 TRACE(4, "Learning " << logic.pp(itp));
                 TRACE(2, "[U] Query " << to.x << " is NOT reachable");
                 // If itp == logic.getTerm_true, then the error states were trivially unreachable
                 if (itp == logic.getTerm_true()) { assert(power == 0); }
                 storeLevelTransition(power + 1, itp);
-#endif
-
-                // if (not implies(itp, lemma, logic)) {
-                //     TRACE(2, "======== New ITP is stronger!");
-                //     TRACE(2, "New ITP: " << logic.pp(lemma));
-                // //     TRACE(2, "Old ITP: " << logic.pp(itp));
-                //     itp = lemma;
-                // }
 
                 result.result = ReachabilityResult::UNREACHABLE;
                 DECR_INDENT;

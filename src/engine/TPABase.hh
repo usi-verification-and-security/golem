@@ -272,14 +272,34 @@ private:
     void clearReachabilitySolvers();
 };
 
+struct TPABasicConfig {
+    // wired to the command line (--tpa.generalize)
+    bool generalize = true;      // generalize learnt lemmas (inductively)
+
+    // not wired to cmd line: change the default here
+    bool gdown = true;           // generalize by dropping disjuncts (otherwise, use unsatcore)
+    bool debug = true;           // run validity checks of learnt and generalized lemmas
+
+    static TPABasicConfig from(Options const & options) {
+        TPABasicConfig cfg;
+        if (auto const value = options.getOption(Options::TPA_GENERALIZE)) {
+            cfg.generalize = *value == "true";
+        }
+        return cfg;
+    }
+};
+
 class TPABasic : public TPABase {
+
+    TPABasicConfig cfg;
 
     std::vector<vec<PTRef>> transitionHierarchy;
 
     vec<SolverWrapper *> reachabilitySolvers;
 
 public:
-    TPABasic(Logic & logic, Options const & options) : TPABase(logic, options) {}
+    TPABasic(Logic & logic, Options const & options)
+        : TPABase(logic, options), cfg(TPABasicConfig::from(options)) {}
 
     ~TPABasic() override;
 
@@ -298,9 +318,9 @@ private:
 
     void learnInvariant(PTRef invariant, SafetyExplanation::FixedPointType alignment) override;
 
-    PTRef inductiveItp(unsigned short power, PTRef goal) const;
-
     PTRef generalize(unsigned short power, PTRef lemma) const;
+    PTRef generalize_down(unsigned short power, PTRef lemma) const;
+    void checkGeneralization(unsigned short power, PTRef lemma, PTRef newLemma, std::string const & where) const;
 
     bool checkLemma(unsigned short power, PTRef lemma, bool inductive) const;
 
