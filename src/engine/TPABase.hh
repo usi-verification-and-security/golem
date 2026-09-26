@@ -183,6 +183,11 @@ protected:
     using CacheType = std::unordered_map<std::pair<PTRef, PTRef>, QueryResult, PTRefPairHash>;
     std::vector<CacheType> queryCache;
 
+    /// TPABasic: targets of proof obligations found reachable -> their reachable part and its distance
+    /// from the initial states. Reachability does not depend on the levels, so it is kept across powers;
+    /// it depends on the initial states, so it is cleared with them.
+    std::unordered_map<PTRef, ReachedStates, PTRefHash> reachedTargets;
+
     struct VersionHasher {
         std::size_t operator()(std::pair<PTRef, int> val) const {
             return std::hash<uint32_t>()(val.first.x) ^ std::hash<int>()(val.second);
@@ -218,8 +223,6 @@ protected:
     PTRef safeSupersetOfInitialStates(PTRef start, PTRef transitionInvariant, PTRef target) const;
 
     void houdiniCheck(PTRef invCandidates, PTRef transition, SafetyExplanation::FixedPointType alignment);
-
-    virtual void learnInvariant(PTRef invariant, SafetyExplanation::FixedPointType alignment);
 
     bool checkLessThanFixedPoint(unsigned short power);
 
@@ -316,8 +319,7 @@ private:
 
     bool propagateTransitions(unsigned short);
 
-    void learnInvariant(PTRef invariant, SafetyExplanation::FixedPointType alignment) override;
-
+    PTRef generalizationBase() const;
     PTRef generalize(unsigned short power, PTRef lemma) const;
     PTRef generalize_down(unsigned short power, PTRef lemma) const;
     void checkGeneralization(unsigned short power, PTRef lemma, PTRef newLemma, std::string const & where) const;

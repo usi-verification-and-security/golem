@@ -238,6 +238,7 @@ void TPABase::resetInitialStates(PTRef fla) {
     assert(isPureStateFormula(fla));
     this->init = fla;
     queryCache.clear();
+    reachedTargets.clear();
     resetExplanation();
 }
 
@@ -370,8 +371,7 @@ void TPABase::resetTransitionSystem(TransitionSystem const & system) {
         this->stateVariables.push(var);
     }
     for (PTRef var : auxVars) {
-        //this->auxiliaryVariables.push(var);
-        this->stateVariables.push(var);
+        this->auxiliaryVariables.push(var);
     }
     this->init = system.getInit();
     this->init = utils.toNNF(this->init);
@@ -446,21 +446,9 @@ void TPABase::houdiniCheck(PTRef invCandidates, PTRef transition, SafetyExplanat
     solver.push();
     auto candidates = topLevelConjuncts(logic, invCandidates);
     if (alignment == SafetyExplanation::FixedPointType::RIGHT) {
-        //solver.assertProp(init);
         solver.assertProp(getNextVersion(transition));
-        for (PTRef rt : rightInvariants) {
-            solver.assertProp(rt);
-            solver.assertProp(getNextVersion(rt));
-            solver.assertProp(shiftOnlyNextVars(rt));
-        }
-    } else if (alignment == SafetyExplanation::FixedPointType::LEFT) {
-        solver.assertProp(getNextVersion(query, 2));
-        solver.assertProp(transition);
-        for (PTRef lt : leftInvariants) {
-            solver.assertProp(lt);
-            solver.assertProp(getNextVersion(lt));
-            solver.assertProp(shiftOnlyNextVars(lt));
-        }
+    } else {
+        if (alignment == SafetyExplanation::FixedPointType::LEFT) { solver.assertProp(transition); }
     }
 
     solver.push();
@@ -478,8 +466,6 @@ void TPABase::houdiniCheck(PTRef invCandidates, PTRef transition, SafetyExplanat
     } else if (alignment == SafetyExplanation::FixedPointType::LEFT) {
         solver.assertProp(logic.mkAnd(getNextVersion(invCandidates), logic.mkNot(goal)));
     }
-    // ANNA: this can be done in fewer iterations asking for a cti of (candidates & !candidates') and removing
-    // all candidate lemmas thare are violated by the same model.
     while (solver.check() == SMTSolver::Answer::SAT) {
         for (int i = candidates.size() - 1; i >= 0; i--) {
             PTRef cand = candidates[i];
@@ -507,9 +493,14 @@ void TPABase::houdiniCheck(PTRef invCandidates, PTRef transition, SafetyExplanat
             solver.assertProp(logic.mkAnd(getNextVersion(logic.mkAnd(candidates)), logic.mkNot(goal)));
         }
     }
-    // Anna: why not assume existing right/left invariants in the prev check?
     for (auto cand : candidates) {
-        learnInvariant(cand, alignment);
+        if (alignment == SafetyExplanation::FixedPointType::RIGHT) {
+            if (std::find(rightInvariants.begin(), rightInvariants.end(), cand) != rightInvariants.end()) { continue; }
+            rightInvariants.push(cand);
+        } else {
+            if (std::find(leftInvariants.begin(), leftInvariants.end(), cand) != leftInvariants.end()) { continue; }
+            leftInvariants.push(cand);
+        }
     }
 }
 
@@ -646,15 +637,6 @@ bool TPABase::checkLessThanFixedPoint(unsigned short power) {
         }
     }
     return false;
-}
-
-void TPABase::learnInvariant(PTRef invariant, SafetyExplanation::FixedPointType alignment) {
-    bool right = (alignment == SafetyExplanation::FixedPointType::RIGHT);
-    auto& dst = right ? rightInvariants : leftInvariants;
-    if (std::find(dst.begin(), dst.end(), invariant) == dst.end()) {
-        dst.push(invariant);
-    }
-    TRACE(2, "[inf] New lemma in " << ((right) ? "Right" : "Left") << " infinity frame " << invariant.x);
 }
 
 bool TPABase::verifyKinductiveInvariant(PTRef fla, unsigned long k) const {

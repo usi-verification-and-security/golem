@@ -20,8 +20,43 @@
 
 #include <algorithm>
 #include <optional>
+#include <queue>
 
 namespace golem {
+
+namespace {
+/// Can `target` be reached from `source` (state formulas) in <=2^{level+1} steps?
+/// A first half remembers in `next` the target of the pob it splits: once its own target is reached,
+/// it is replaced by the second half, from the reached states to `next`.
+struct ProofObligation {
+    PTRef source;
+    PTRef target;
+    unsigned short level;
+    PTRef next = PTRef_Undef;   ///< PTRef_Undef: not a first half
+    unsigned sourceSteps = 0;   ///< steps from the initial states to `source`
+    std::size_t id = 0;         ///< creation order, set by PriorityQueue::push
+};
+
+bool operator>(ProofObligation const & pob1, ProofObligation const & pob2) {
+    // lower levels first; at the same level, the newest pob first
+    return pob1.level > pob2.level or (pob1.level == pob2.level and pob1.id < pob2.id);
+}
+
+struct PriorityQueue {
+
+    void push(ProofObligation pob) {
+        pob.id = counter++;
+        pqueue.push(pob);
+    }
+    ProofObligation const & peek() const { return pqueue.top(); }
+    void pop() { pqueue.pop(); }
+    [[nodiscard]] bool empty() const { return pqueue.empty(); }
+
+private:
+    std::size_t counter = 0;
+    std::priority_queue<ProofObligation, std::vector<ProofObligation>, std::greater<>> pqueue;
+};
+} // namespace
 
 bool TPABasic::checkLemma(unsigned short power, PTRef lemma01, bool inductive) const {
     SMTSolver solver(logic, SMTSolver::WitnessProduction::NONE);
@@ -81,6 +116,19 @@ bool TPABasic::checkLemma(unsigned short power, PTRef lemma01, bool inductive) c
     return ok;
 }
 
+/// tau(x, x''): the identity or one step of the exact transition relation, from x to x''.
+/// Unlike shiftOnlyNextVars, which requires a pure transition formula, this leaves the auxiliary
+/// variables of the transition in place: they are existentially quantified within this disjunct.
+PTRef TPABasic::generalizationBase() const {
+    auto nextVars = getStateVars(1);
+    auto nextnextVars = getStateVars(2);
+    TermUtils::substitutions_map subst;
+    for (int i = 0; i < nextVars.size(); ++i) {
+        subst.insert({nextVars[i], nextnextVars[i]});
+    }
+    return TermUtils(logic).varSubstitute(logic.mkOr(identity, transition), subst);
+}
+
 PTRef TPABasic::generalize(unsigned short power, PTRef lemma) const {
     const auto& candidates = TermUtils(logic).getTopLevelDisjuncts(lemma);
     // The core is never empty, so a single disjunct is its own generalization
@@ -132,9 +180,8 @@ PTRef TPABasic::generalize(unsigned short power, PTRef lemma) const {
                 logic.mkOr(assumedSources1),
                 logic.mkOr(assumedSources2)
             });
-    PTRef base = logic.mkOr(identity, transition);
     PTRef baseOrindStep = \
-        logic.mkOr(shiftOnlyNextVars(base), inductiveStep);
+        logic.mkOr(generalizationBase(), inductiveStep);
     solver.assertProp(baseOrindStep);
 
     PTRef target = logic.mkAnd(assumedTargets);
@@ -183,7 +230,7 @@ PTRef TPABasic::generalize_down(unsigned short power, PTRef lemma) const {
         assumedSources2.push(logic.mkAnd(selectors[i], getNextVersion(candidates[i])));
         assumedTargets.push(logic.mkImpl(selectors[i], logic.mkNot(shiftOnlyNextVars(candidates[i]))));
     }
-    PTRef base = shiftOnlyNextVars(logic.mkOr(identity, transition));
+    PTRef base = generalizationBase();
     PTRef hypothesis = logic.mkAnd(logic.mkOr(assumedSources1), logic.mkOr(assumedSources2));
     PTRef target = logic.mkAnd(assumedTargets);
     PTRef absTrans = getLevelTransition(power);
@@ -379,7 +426,6 @@ SolverWrapper * TPABasic::getReachabilitySolver(unsigned short power) const {
 
 VerificationAnswer TPABasic::checkPower(unsigned short power) {
     TRACE(1, "\n----------\nChecking power " << power)
-    queryCache.emplace_back();
     auto res = reachabilityQuery(init, query, power);
     if (isReachable(res)) {
         reachedStates = ReachedStates{res.refinedTarget, res.steps};
@@ -398,97 +444,80 @@ VerificationAnswer TPABasic::checkPower(unsigned short power) {
 
 /*
  * Check if 'to' is reachable from 'from' (these are state formulas) in  <=2^{n+1} steps (n is 'power').
- * We do this using the n-th abstraction of the transition relation and check 2-step reachability in this abstraction.
- * If 'to' is unreachable, we interpolate over the 2 step transition to obtain 1-step transition of level n+1.
+ * A proof obligation asks the same for its source and target at its level, using the level-th abstraction
+ * of the transition relation for two steps.
+ * If the target is unreachable, we interpolate over the 2 step transition to obtain 1-step transition of
+ * level+1, and the pob is removed. If it is reachable at level 0, the truly reachable part of the target is
+ * cached; otherwise the model gives a midpoint, and the first half is queued above the pob.
+ * A pob whose target is cached is removed; if it is a first half, its second half takes its place.
  */
 TPABasic::QueryResult TPABasic::reachabilityQuery(PTRef from, PTRef to, unsigned short power) {
-    //        std::cout << "Checking LEQ reachability on level " << power << " from " << logic.printTerm(from) << " to "
-    //        << logic.printTerm(to) << std::endl;
-    INCR_INDENT;
     TRACE(2, "[RQ] Checking LEQ reachability on level " << power << " from " << from.x << " to " << to.x)
-    assert(queryCache.size() > power);
-    auto it = queryCache[power].find({from, to});
-    if (it != queryCache[power].end()) {
-        TRACE(1, "Query found in cache: truly reachable on level " << power);
-        DECR_INDENT;
-        return it->second;
-    }
-    QueryResult result;
-    PTRef goal = getNextVersion(to, 2);
-    unsigned counter = 0;
-    while (true) {
-        TRACE(3, "... Iteration " << ++counter << " on level " << power);
-        TRACE(2, "[?] Can " << from.x << " reach " << to.x << " in <=2^" << power + 1 << " steps?")
-        auto solver = getReachabilitySolver(power + 1);
+    PriorityQueue pqueue;
+    pqueue.push(ProofObligation{from, to, power});
+    while (not pqueue.empty()) {
+        ProofObligation const pob = pqueue.peek();
+        TPA_INDENT = power - pob.level;
+
+        auto cached = reachedTargets.find(pob.target);
+        if (cached != reachedTargets.end()) {
+            ReachedStates const reached = cached->second;
+            TRACE(2, "[C] Target " << pob.target.x << " is reachable: " << reached.reachedStates.x);
+            pqueue.pop();
+            if (pob.next != PTRef_Undef) {
+                // the first half is reachable, substitute the pob with its second half
+                TRACE(2, "[Q] Considering MidPoint query as source: " << reached.reachedStates.x);
+                pqueue.push(ProofObligation{reached.reachedStates, pob.next, pob.level, PTRef_Undef, reached.steps});
+            } else if (pob.level == power) {
+                TRACE(2, "[R] Query " << to.x << " was reachable");
+                TPA_INDENT = -1;
+                QueryResult result;
+                result.result = ReachabilityResult::REACHABLE;
+                result.refinedTarget = reached.reachedStates;
+                result.steps = reached.steps;
+                return result;
+            }
+            continue;
+        }
+
+        TRACE(2, "[?] Can " << pob.source.x << " reach " << pob.target.x << " in <=2^" << pob.level + 1 << " steps?")
+        auto solver = getReachabilitySolver(pob.level + 1);
         assert(solver);
-        auto res = solver->checkConsistent(logic.mkAnd(from, goal));
+        PTRef goal = getNextVersion(pob.target, 2);
+        auto res = solver->checkConsistent(logic.mkAnd(pob.source, goal));
         switch (res) {
             case ReachabilityResult::REACHABLE: {
-                TRACE(2, "[y] " << from.x << " reaches " << to.x << " in <=2^" << power + 1 << " steps.");
-                TRACE(3, "Top level query was reachable")
-                PTRef previousTransition = getLevelTransition(power);
+                TRACE(2, "[y] " << pob.source.x << " reaches " << pob.target.x << " in <=2^" << pob.level + 1 << " steps.");
+                PTRef previousTransition = getLevelTransition(pob.level);
                 PTRef translatedPreviousTransition = getNextVersion(previousTransition);
                 auto model = solver->lastQueryModel();
-                if (power == 0) { // Base case, <=2 steps of the exact transition relation have been used
-                    result.result = ReachabilityResult::REACHABLE;
+                if (pob.level == 0) { // Base case, <=2 steps of the exact transition relation have been used
                     bool firstStepTaken = model->evaluate(identity) == logic.getTerm_false();
                     bool secondStepTaken = model->evaluate(getNextVersion(identity)) == logic.getTerm_false();
                     assert(
                         (not firstStepTaken or model->evaluate(transition) == logic.getTerm_true()) and
                         (not secondStepTaken or model->evaluate(getNextVersion(transition)) == logic.getTerm_true()));
-                    result.refinedTarget = refineTwoStepTarget(
-                           from, logic.mkAnd(previousTransition, translatedPreviousTransition), goal, *model);
-                    result.steps = firstStepTaken + secondStepTaken;
+                    PTRef refinedTarget = refineTwoStepTarget(
+                           pob.source, logic.mkAnd(previousTransition, translatedPreviousTransition), goal, *model);
+                    assert(refinedTarget != logic.getTerm_false());
                     // MB: Refined steps are computed from the whole formula representing 0-2 steps.
                     //     It might be possible that the step count is not correct ?!
-                    TRACE(2, "[!] Exact: Truly reachable states are " << result.refinedTarget.x);
-                    DECR_INDENT;
-                    assert(result.refinedTarget != logic.getTerm_false());
-                    queryCache[power].insert({{from, to}, result});
-                    return result;
+                    unsigned steps = pob.sourceSteps + firstStepTaken + secondStepTaken;
+                    TRACE(2, "[!] Exact: Truly reachable states are " << refinedTarget.x);
+                    // The pob stays in the queue: its next examination finds its target in the cache
+                    reachedTargets.emplace(pob.target, ReachedStates{refinedTarget, steps});
+                    continue;
                 }
                 // Create the three states corresponding to current, next and next-next variables from the query
-                PTRef nextState = extractMidPoint(from, previousTransition, translatedPreviousTransition, goal, *model);
-                //              std::cout << "Midpoint single point: " << logic.printTerm(modelMidpoint) << '\n';
+                PTRef nextState = extractMidPoint(pob.source, previousTransition, translatedPreviousTransition, goal, *model);
                 TRACE(2, "[Q] Considering MidPoint query as target: " << nextState.x)
-                assert(power != 0);
-                // check the reachability using lower level abstraction
-                auto subQueryRes = reachabilityQuery(from, nextState, power - 1);
-                if (isUnreachable(subQueryRes)) {
-                    TRACE(3, "Exact: First half was unreachable, repeating...");
-                    assert(getLevelTransition(power) != previousTransition);
-                    continue; // We need to re-check this level with refined abstraction
-                } else {
-                    assert(isReachable(subQueryRes));
-                    TRACE(3, "Exact: First half was reachable");
-                    nextState = extractReachableTarget(subQueryRes);
-                    TRACE(2, "[Q] Considering MidPoint query as source: " << nextState.x);
-                    TRACE(3, "Midpoint from MBP - part 2: " << nextState.x)
-                    if (nextState == PTRef_Undef) {
-                        throw std::logic_error("Refined reachable target not set in subquery!");
-                    }
-                }
-                unsigned stepsToMidpoint = extractStepsTaken(subQueryRes);
-                // here the first half of the found path is feasible, check the second half
-                subQueryRes = reachabilityQuery(nextState, to, power - 1);
-                if (isUnreachable(subQueryRes)) {
-                    TRACE(3, "Exact: Second half was unreachable, repeating...")
-                    assert(getLevelTransition(power) != previousTransition);
-                    continue; // We need to re-check this level with refined abstraction
-                }
-                assert(isReachable(subQueryRes));
-                TRACE(3, "Exact: Second half was reachable, reachable states are "
-                             << extractReachableTarget(subQueryRes).x)
-                // both halves of the found path are feasible => this path is feasible!
-                subQueryRes.steps += stepsToMidpoint;
-                queryCache[power].insert({{from, to}, subQueryRes});
-                TRACE(2, "[R] Query " << to.x << " was reachable");
-                DECR_INDENT;
-                return subQueryRes;
+                // need to find a midpoint: the pob stays in the queue, remember its target for the second half
+                pqueue.push(ProofObligation{pob.source, nextState, static_cast<unsigned short>(pob.level - 1),
+                                            pob.target, pob.sourceSteps});
+                continue;
             }
             case ReachabilityResult::UNREACHABLE: {
-                TRACE(3, "Top level query was unreachable");
-                TRACE(2, "[x] " << from.x << " cannot reach " << to.x << " in <=2^" << power + 1 << " steps.");
+                TRACE(2, "[x] " << pob.source.x << " cannot reach " << pob.target.x << " in <=2^" << pob.level + 1 << " steps.");
 
                 PTRef itp = solver->lastQueryTransitionInterpolant();
                 itp = simplifyInterpolant(itp);
@@ -497,31 +526,33 @@ TPABasic::QueryResult TPABasic::reachabilityQuery(PTRef from, PTRef to, unsigned
                       "---- [ITP] Learnt lemma: " << itp.x
                       << " nr disj: " << TermUtils(logic).getTopLevelDisjuncts(itp).size()
                       << " nr vars: " << TermUtils(logic).getVars(itp).size());
-                if (cfg.debug and not checkLemma(power, itp, false)) {
+                if (cfg.debug and not checkLemma(pob.level, itp, false)) {
                     throw std::logic_error("Error in reachabilityQuery: the interpolant is not a valid lemma!");
                 }
 
                 if (cfg.generalize) {
-                    itp = cfg.gdown ? generalize_down(power, itp) : generalize(power, itp);
+                    itp = cfg.gdown ? generalize_down(pob.level, itp) : generalize(pob.level, itp);
                     TRACE(2,
                           "---- [ITP] Generalization: " << itp.x
                           << " nr disj: " << TermUtils(logic).getTopLevelDisjuncts(itp).size()
                           << " nr vars: " << TermUtils(logic).getVars(itp).size());
                 }
 
-                TRACE(2, "[+] Learning " << itp.x << " in power: " << power + 1);
+                TRACE(2, "[+] Learning " << itp.x << " in power: " << pob.level + 1);
                 TRACE(4, "Learning " << logic.pp(itp));
-                TRACE(2, "[U] Query " << to.x << " is NOT reachable");
+                TRACE(2, "[U] Query " << pob.target.x << " is NOT reachable");
                 // If itp == logic.getTerm_true, then the error states were trivially unreachable
-                if (itp == logic.getTerm_true()) { assert(power == 0); }
-                storeLevelTransition(power + 1, itp);
-
-                result.result = ReachabilityResult::UNREACHABLE;
-                DECR_INDENT;
-                return result;
+                if (itp == logic.getTerm_true()) { assert(pob.level == 0); }
+                storeLevelTransition(pob.level + 1, itp);
+                pqueue.pop();
+                continue;
             }
         }
     }
+    TPA_INDENT = -1;
+    QueryResult result;
+    result.result = ReachabilityResult::UNREACHABLE;
+    return result;
 }
 
 bool TPABasic::propagateTransitions(unsigned short power) {
@@ -542,6 +573,11 @@ bool TPABasic::propagateTransitions(unsigned short power) {
             bool duplicate = \
                 std::find(nextLemmas.begin(), nextLemmas.end(), candidate) != nextLemmas.end();
             if (duplicate) {
+                continue;
+            }
+            // The exact transition in level 0 has auxiliary variables: it is not a lemma that can move up
+            if (not isPureTransitionFormula(candidate)) {
+                allPropagated = false;
                 continue;
             }
             // Check if AT^i(x,x') & AT^i(x', x'') -> candidate(x, x'')
@@ -576,6 +612,7 @@ bool TPABasic::propagateTransitions(unsigned short power) {
 void TPABasic::resetPowers() {
     this->transitionHierarchy.clear();
     this->clearReachabilitySolvers();
+    this->reachedTargets.clear();
     storeLevelTransition(0, logic.mkOr(identity, transition));
 }
 
@@ -601,13 +638,6 @@ PTRef TPABasic::getPower(unsigned short power, TPAType relationType) const {
     assert(relationType == TPAType::LESS_THAN);
     (void)relationType;
     return getLevelTransition(power);
-}
-
-void TPABasic::learnInvariant(PTRef invariant, SafetyExplanation::FixedPointType alignment) {
-    TPABase::learnInvariant(invariant, alignment);
-    if (alignment == SafetyExplanation::FixedPointType::RIGHT) {
-        storeLevelTransition(transitionHierarchy.size(), invariant);
-    }
 }
 
 } // namespace golem
