@@ -79,10 +79,18 @@ struct SpacerConfig {
     /// Wired: --spacer.global-pob-db.
    bool globalPobDb = false;
 
+    /// Once a pob has been examined `triggerConjecture` times (over every bound), also compute its
+    /// predecessors as with mbpWithMaySummary = true, and examine them before the plain ones. The
+    /// frame literals make the predecessor smaller, and with it the interpolant's B side, which can
+    /// give it a direction the frame-less pob cannot. A no-op when mbpWithMaySummary is on already.
+    /// Wired: --spacer.conjecture.
+    bool conjecture = false;
+
     // tuning parameters (wired: --spacer.maypo-gas / --spacer.maypo-trigger / --spacer.max-lemmas-cc
-    // / --spacer.min-pobs-cc / --spacer.max-pobs-cc)
+    // / --spacer.min-pobs-cc / --spacer.max-pobs-cc / --spacer.conjecture-trigger)
     std::size_t mayPoGas = 5;             // predecessor-chain length allowed from a may-POB
     std::size_t triggerMayPo = 3;         // visits before may-POBs are built
+    std::size_t triggerConjecture = 10;   // visits, summed over every bound, before `conjecture` fires
     std::size_t minLemmasForCc = 2;       // blocking lemmas needed before CC-lemma fires
     std::size_t maxLemmasForCc = 7;       // blocking lemmas kept per child for CC-lemma, oldest evicted
                                           // first; 0 = no limit
@@ -102,6 +110,9 @@ struct SpacerConfig {
         }
         if (triggerMayPo < 1) {
             throw std::logic_error("Spacer: SpacerConfig::triggerMayPo must be at least 1");
+        }
+        if (triggerConjecture < 1) {
+            throw std::logic_error("Spacer: SpacerConfig::triggerConjecture must be at least 1");
         }
         if (maxLemmasForCc != 0 and maxLemmasForCc < minLemmasForCc) {
             throw std::logic_error("Spacer: SpacerConfig::maxLemmasForCc must be 0 (no limit) or at least "
@@ -175,6 +186,9 @@ struct SpacerConfig {
         if (auto const ccUpdate = flag(Options::SPACER_CC_UPDATE)) {
             cfg.ccUpdate = *ccUpdate;
         }
+        if (auto const conjecture = flag(Options::SPACER_CONJECTURE)) {
+            cfg.conjecture = *conjecture;
+        }
         // Numeric knobs: the raw argument is kept by the parser so it can be rejected here
         // with a message naming the flag, rather than silently becoming 0.
         auto positive = [&options](std::string const & key, std::size_t & target) {
@@ -196,6 +210,7 @@ struct SpacerConfig {
         positive(Options::SPACER_MAX_LEMMAS_CC, cfg.maxLemmasForCc);
         positive(Options::SPACER_MIN_POBS_CC, cfg.minPobsForCc);
         positive(Options::SPACER_MAX_POBS_CC, cfg.maxPobsForCc);
+        positive(Options::SPACER_CONJECTURE_TRIGGER, cfg.triggerConjecture);
 
         cfg.validate();
         return cfg;
@@ -586,6 +601,10 @@ struct ProofObligationCore {
         std::size_t sourceIndex;
     };
     mutable std::optional<CcOrigin> ccOrigin;
+    /// true for a predecessor that SpacerConfig::conjecture projected with the frame; it is examined
+    /// before the other pobs of its bound and kind. Not inherited: its own predecessors come after it
+    /// anyway, being one bound lower.
+    bool conjecture = false;
 };
 
 /// Full provenance of a lemma learnt while blocking `pob`: pob type, may source, root flag.
@@ -601,7 +620,9 @@ bool operator<(ProofObligation const & pob1, ProofObligation const & pob2) {
     return pob1->bound < pob2->bound or \
         (pob1->bound == pob2->bound and pob1->isMayPO > pob2->isMayPO) or \
         (pob1->bound == pob2->bound and pob1->isMayPO == pob2->isMayPO \
-         and pob1->vertex.x > pob2->vertex.x);
+         and pob1->conjecture > pob2->conjecture) or \
+        (pob1->bound == pob2->bound and pob1->isMayPO == pob2->isMayPO \
+         and pob1->conjecture == pob2->conjecture and pob1->vertex.x > pob2->vertex.x);
 }
 
 // TODO: why we need both operators??
@@ -609,7 +630,9 @@ bool operator>(ProofObligation const & pob1, ProofObligation const & pob2) {
     return pob1->bound > pob2->bound or \
         (pob1->bound == pob2->bound and pob1->isMayPO < pob2->isMayPO) or \
         (pob1->bound == pob2->bound and pob1->isMayPO == pob2->isMayPO \
-         and pob1->vertex.x < pob2->vertex.x);
+         and pob1->conjecture < pob2->conjecture) or \
+        (pob1->bound == pob2->bound and pob1->isMayPO == pob2->isMayPO \
+         and pob1->conjecture == pob2->conjecture and pob1->vertex.x < pob2->vertex.x);
 }
 
 struct PriorityQueue {
@@ -871,7 +894,11 @@ class SpacerContext {
 
     bool mayReachable(EId eid, PTRef targetConstraint, std::size_t bound) const;
 
-    ProofObligation computePredecessor(EId eid, ProofObligationCore const & pob) const;
+    /// `withMaySummary`: whether the MBP argument keeps the refined source's may-summary (see
+    /// SpacerConfig::mbpWithMaySummary). `recordApproximations`: whether the predecessor's under- and
+    /// over-approximations feed the BMBP / CC-pob caches of `pob`.
+    ProofObligation computePredecessor(EId eid, ProofObligationCore const & pob, bool withMaySummary,
+                                       bool recordApproximations) const;
 
     PTRef projectFormula(PTRef fla, vec<PTRef> const & vars, Model & model) const;
 
@@ -1036,11 +1063,29 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
  
         std::vector<ProofObligation> newProofObligations;
         bool has_predecessors = false;
+        // [Conjecture] A pob examined this often keeps coming back, e.g. a frame-less preimage
+        // rederived at every bound: also project with the frame, and examine that predecessor first.
+        bool const conjectureReady =
+            cfg.conjecture and not cfg.mbpWithMaySummary and info.globalCounter >= cfg.triggerConjecture;
         for (EId edgeId : edges) {
-            ProofObligation npob = computePredecessor(edgeId, pob);
+            ProofObligation npob = computePredecessor(edgeId, pob, cfg.mbpWithMaySummary, true);
             if (npob) {
                 has_predecessors = true;
                 if (npob->life > 0) {
+                    if (conjectureReady) {
+                        // The same satisfiability check as npob's, so it is not blocked either, and the
+                        // solver being deterministic, the same model: only the MBP argument differs. It
+                        // stays out of the may-POB caches, which keep the plain predecessors.
+                        ProofObligation cpob = computePredecessor(edgeId, pob, true, false);
+                        assert(cpob);
+                        if (cpob->constraint != npob->constraint) {
+                            cpob->conjecture = true;
+                            TRACE(1, "[CONJ] PO " << pob.constraint.x << " examined " << info.globalCounter
+                                  << " times: predecessor " << cpob->constraint.x << " with the frame, "
+                                  << npob->constraint.x << " without");
+                            newProofObligations.push_back(std::move(cpob));
+                        }
+                    }
                     newProofObligations.push_back(std::move(npob));
                 }
             }
@@ -1352,7 +1397,8 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
             for (auto & npob : newProofObligations) {
                 TRACE(1, "[+] MUST PRED: Adding new "
                       << (npob->isMayPO ? "MAY" : "MUST") << " PO "
-                      << npob->constraint.x << " at level " << npob->bound);
+                      << npob->constraint.x << " at level " << npob->bound
+                      << (npob->conjecture ? " (conjecture)" : ""));
                 TRACE(3, "Pushing new proof obligation " << logic.pp(npob->constraint) << " for " << npob->vertex.x
                       << " at level " << npob->bound);
                 pqueue.push(std::move(npob));
@@ -2264,7 +2310,8 @@ bool SpacerContext::mayReachable(EId eid, PTRef targetConstraint, std::size_t bo
     return checkRes.answer == SpacerContext::QueryAnswer::SAT;
 }
 
-ProofObligation SpacerContext::computePredecessor(EId eid, ProofObligationCore const & pob) const {
+ProofObligation SpacerContext::computePredecessor(EId eid, ProofObligationCore const & pob, bool withMaySummary,
+                                                  bool recordApproximations) const {
     assert(pob.bound > 0);
     auto sourceBound = pob.bound - 1;
     auto const & sources = graph.getSources(eid);
@@ -2278,15 +2325,15 @@ ProofObligation SpacerContext::computePredecessor(EId eid, ProofObligationCore c
             // When this source is over-approximated and the edge becomes feasible -> extract next proof obligation
             auto source = sources[0];
             auto predicateVars = TermUtils(logic).getVars(graph.getStateVersion(source));
-            // The model always comes from the may-summary check above; MBP_WITH_MAY_SUMMARY
+            // The model always comes from the may-summary check above; `withMaySummary`
             // decides whether the projection itself sees the frame.
-            PTRef mbpArgument = cfg.mbpWithMaySummary
+            PTRef mbpArgument = withMaySummary
                                     ? maySummary
                                     : getEdgeMustOnlySummary(eid, sourceBound, 0);
             auto [newConstraint, newOverConstraint] = \
                 projectFormulaWithOver(logic.mkAnd(mbpArgument, pob.constraint), predicateVars, *res.model);
             PTRef newPob = VersionManager(logic).sourceFormulaToTarget(newConstraint); // ensure POB is target fla
-            if (cfg.maypo) {
+            if (cfg.maypo and recordApproximations) {
             PTRef newOverPob = VersionManager(logic).sourceFormulaToTarget(newOverConstraint); // ensure POB is target fla
             if (newOverPob != newPob and newOverPob != logic.getTerm_true()) {
                 PobInfo::atBound(pobInfo(pob.vertex, pob.constraint).overPredCache, pob.bound)
@@ -2331,16 +2378,16 @@ ProofObligation SpacerContext::computePredecessor(EId eid, ProofObligationCore c
             auto source = sources[vertexToRefine];
             auto predicateVars = TermUtils(logic).getVars(
                 graph.getStateVersion(source, vertexInstances.getInstanceNumber(eid, vertexToRefine)));
-            // As above: model from the mixed summary; MBP_WITH_MAY_SUMMARY decides whether the
+            // As above: model from the mixed summary; `withMaySummary` decides whether the
             // projection keeps the may-summaries of sources [0, vertexToRefine].
-            PTRef mbpArgument = cfg.mbpWithMaySummary
+            PTRef mbpArgument = withMaySummary
                                     ? mixedEdgeSummary
                                     : getEdgeMustOnlySummary(eid, sourceBound, vertexToRefine);
             auto [newConstraint, newOverConstraint] =
                 projectFormulaWithOver(logic.mkAnd(mbpArgument, pob.constraint), predicateVars, *res.model);
             PTRef newPob = VersionManager(logic).sourceFormulaToTarget(newConstraint); // ensure POB is target fla
             TRACE(2, "New proof obligation generated")
-            if (cfg.maypo) {
+            if (cfg.maypo and recordApproximations) {
             PTRef newOverPob = VersionManager(logic).sourceFormulaToTarget(newOverConstraint); // ensure POB is target fla
             if (newOverPob != newPob and newOverPob != logic.getTerm_true()) {
                 PobInfo::atBound(pobInfo(pob.vertex, pob.constraint).overPredCache, pob.bound)

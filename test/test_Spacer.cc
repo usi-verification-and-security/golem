@@ -222,3 +222,34 @@ TEST_F(Spacer_LRA_Test, test_UnsatProof_FactWithNoConstraints)
     solveSystem(clauses, engine, VerificationAnswer::UNSAFE, true);
 }
 
+
+TEST_F(Spacer_LRA_Test, test_Conjecture_QuadraticCounter)
+{
+    // Without the may-summary in the MBP argument (the default) this system diverges: each bound
+    // blocks one more frame-less preimage of the query with a parallel lemma x + y/k >= 0. The
+    // conjecture predecessor keeps the frame literals, whose interpolant is 0 <= x /\ 0 <= y.
+    options.addOption(Options::COMPUTE_WITNESS, "true");
+    options.addOption(Options::SPACER_CONJECTURE, "true");
+    PTRef y = mkRealVar("y");
+    PTRef yp = mkRealVar("yp");
+    SymRef inv_sym = mkPredicateSymbol("Inv", {realSort(), realSort()});
+    PTRef inv = instantiatePredicate(inv_sym, {x, y});
+    PTRef invp = instantiatePredicate(inv_sym, {xp, yp});
+    std::vector<ChClause> clauses{
+        { // x' = 0 & y' = 0 => Inv(x', y')
+            ChcHead{UninterpretedPredicate{invp}},
+            ChcBody{{logic->mkAnd(logic->mkEq(xp, zero), logic->mkEq(yp, zero))}, {}}
+        },
+        { // Inv(x, y) & x' = x + 1 & y' = y + x' => Inv(x', y')
+            ChcHead{UninterpretedPredicate{invp}},
+            ChcBody{{logic->mkAnd(logic->mkEq(xp, logic->mkPlus(x, one)), logic->mkEq(yp, logic->mkPlus(y, xp)))},
+                    {UninterpretedPredicate{inv}}}
+        },
+        { // Inv(x, y) & x > y => false
+            ChcHead{UninterpretedPredicate{logic->getTerm_false()}},
+            ChcBody{{logic->mkGt(x, y)}, {UninterpretedPredicate{inv}}}
+        }
+    };
+    Spacer engine(*logic, options);
+    solveSystem(clauses, engine, VerificationAnswer::SAFE);
+}
