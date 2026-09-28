@@ -103,7 +103,7 @@ std::pair<LinearFactor, PTRef> separateVarFromTerm(PTRef var, PTRef term, ArithL
 }
 
 template<typename TIt> void normalizeEqualities(TIt begin, TIt end, ArithLogic & logic) {
-    // TODO: normalize mod operation as well
+    // mod terms are not touched here: rewriting them needs the model, see purifyModTerms
     std::for_each(begin, end, [&logic](PtAsgn & lit) {
         if (logic.isEquality(lit.tr)) {
             PTRef lhs = logic.getPterm(lit.tr)[0];
@@ -695,18 +695,72 @@ void ModelBasedProjection::dumpImplicant(std::ostream & out, implicant_t const &
     out << std::endl;
 }
 
+namespace {
+/*
+ * Rewrites the literals so that a mod term over a variable to eliminate only occurs in a divisibility constraint
+ * (= (mod t k) 0), the one form the integer projection eliminates: termContainsVar does not look inside a mod term, so
+ * any other literal would be copied to the result with the variable (or MBP_LIA_tmp) still in it.
+ * With r the value of (mod t k) in the model, (mod t k) = r holds exactly when (mod (- t r) |k|) = 0. A literal
+ * L[(mod t k)] is thus replaced by L[r] and (mod (- t r) |k|) = 0: both hold in the model and together they imply L.
+ * Nested mod terms are replaced innermost first; mod terms over the remaining variables only are kept.
+ */
+void purifyModTerms(ModelBasedProjection::implicant_t & implicant, PTRef const * beg, PTRef const * end,
+                    ArithLogic & logic, Model & model) {
+    TermUtils utils(logic);
+    auto containsVarToEliminate = [&](PTRef term) {
+        auto vars = utils.getVars(term);
+        return std::any_of(vars.begin(), vars.end(), [&](PTRef var) { return std::find(beg, end, var) != end; });
+    };
+    PTRef const zero = logic.getTerm_IntZero();
+    ModelBasedProjection::implicant_t purified;
+    std::unordered_set<PTRef, PTRefHash> addedConstraints;
+    for (PtAsgn lit : implicant) {
+        // children before parents, so that an inner mod term is replaced before the one containing it
+        auto isMod = [&](PTRef term) { return logic.isMod(logic.getSymRef(term)); };
+        auto mods = opensmt::matchingSubTerms(logic, lit.tr, isMod);
+        TermUtils::substitutions_map subst;
+        for (PTRef mod : mods) {
+            PTRef current = utils.varSubstitute(mod, subst);
+            PTRef dividend = logic.getPterm(current)[0];
+            PTRef divisor = logic.getPterm(current)[1];
+            if (not containsVarToEliminate(dividend)) { continue; }
+            PTRef value = model.evaluate(current);
+            PTRef shifted = value == zero ? dividend : logic.mkMinus(dividend, value);
+            PTRef modulus = logic.mkIntConst(abs(logic.getNumConst(divisor)));
+            PTRef constraint = logic.mkEq(logic.mkMod(shifted, modulus), zero);
+            if (addedConstraints.insert(constraint).second) { purified.emplace_back(constraint, l_True); }
+            subst.insert({current, value});
+        }
+        if (subst.empty()) {
+            purified.push_back(lit);
+            continue;
+        }
+        PTRef rest = utils.varSubstitute(lit.tr, subst);
+        if (logic.isConstant(rest)) {
+            // the literal only constrained the mod terms
+            assert((rest == logic.getTerm_true()) == (lit.sgn == l_True));
+            continue;
+        }
+        purified.emplace_back(rest, lit.sgn);
+    }
+    implicant = std::move(purified);
+}
+} // namespace
+
 ModelBasedProjection::implicant_t ModelBasedProjection::projectIntegerVars(PTRef * beg, PTRef * end,
                                                                            implicant_t implicant, Model & model) {
     auto & lialogic = dynamic_cast<ArithLogic &>(logic);
     assert(lialogic.hasIntegers());
+    purifyModTerms(implicant, beg, end, lialogic, model);
+    checkImplicant(implicant, logic, model);
     div_constraints_t divConstraints;
     auto isDivisibilityConstraint = [&lialogic](PtAsgn lit) {
         if (lialogic.isNumEq(lit.tr)) {
             PTRef lhs = lialogic.getPterm(lit.tr)[0];
             PTRef rhs = lialogic.getPterm(lit.tr)[1];
-            if (lialogic.isMod(lialogic.getSymRef(lhs)) or lialogic.isMod(lialogic.getSymRef(rhs))) {
-                return lit.sgn == l_True;
-            }
+            PTRef zero = lialogic.getTerm_IntZero();
+            if (lialogic.isMod(lialogic.getSymRef(lhs))) { return lit.sgn == l_True and rhs == zero; }
+            if (lialogic.isMod(lialogic.getSymRef(rhs))) { return lit.sgn == l_True and lhs == zero; }
         }
         return false;
     };
