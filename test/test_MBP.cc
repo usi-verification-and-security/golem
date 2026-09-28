@@ -8,6 +8,7 @@
 
 #include "ModelBasedProjection.h"
 
+#include "TermUtils.h"
 #include "pterms/PTRef.h"
 #include "utils/SmtSolver.h"
 
@@ -928,4 +929,120 @@ TEST_F(MBP_IntTest, test_heuristic_1_overapprox) {
     EXPECT_EQ(res, expected_res);
     std::cout << "Expected over: " << logic.printTerm(expected_over) << std::endl;
     EXPECT_EQ(res_over, expected_over);
+}
+
+// Integer MBP only recognises a divisibility constraint asserted positively with remainder 0, (= (mod t k) 0).
+// - Any other literal on a mod term over an eliminated variable is opaque to LATermUtils::termContainsVar, so it is
+//   copied to the result unchanged, still mentioning the variable -- or MBP_LIA_tmp, if the variable was first
+//   rewritten as u + d * MBP_LIA_tmp because of a positive divisibility constraint on it.
+// - (= (mod t k) c) with c != 0 is taken for a divisibility constraint (isDivisibilityConstraint does not look at c),
+//   which asserts in a debug build and projects to a formula the model falsifies in a release build.
+// Each test checks the MBP contract: the model satisfies the result, and the result mentions no eliminated variable.
+namespace {
+bool mentionsAny(Logic & logic, PTRef fla, vec<PTRef> const & vars) {
+    auto flaVars = TermUtils(logic).getVars(fla);
+    return std::any_of(flaVars.begin(), flaVars.end(), [&](PTRef v) {
+        return std::string(logic.getSymName(v)) == "MBP_LIA_tmp" or
+               std::find(vars.begin(), vars.end(), v) != vars.end();
+    });
+}
+} // namespace
+
+TEST_F(MBP_IntTest, test_NegatedDivisibilityOverEliminatedVar) {
+    // exists x. x mod 3 != 0 /\ y <= x, model x = 1, y = 0
+    PTRef three = logic.mkIntConst(FastRational(3));
+    PTRef fla = logic.mkAnd(logic.mkNot(logic.mkEq(logic.mkMod(x, three), zero)), logic.mkLeq(y, x));
+    auto model = getModel({{x, one}, {y, zero}});
+    PTRef res = ModelBasedProjection(logic).project(fla, {x}, *model);
+    std::cout << "Obtained: " << logic.printTerm(res) << std::endl;
+    EXPECT_EQ(model->evaluate(res), logic.getTerm_true());
+    EXPECT_FALSE(mentionsAny(logic, res, {x}));
+}
+
+TEST_F(MBP_IntTest, test_NonDivisibilityBoundOverEliminatedVar) {
+    // exists x. 1 <= x mod 3 /\ y <= x, model x = 1, y = 0
+    PTRef three = logic.mkIntConst(FastRational(3));
+    PTRef fla = logic.mkAnd(logic.mkLeq(one, logic.mkMod(x, three)), logic.mkLeq(y, x));
+    auto model = getModel({{x, one}, {y, zero}});
+    PTRef res = ModelBasedProjection(logic).project(fla, {x}, *model);
+    std::cout << "Obtained: " << logic.printTerm(res) << std::endl;
+    EXPECT_EQ(model->evaluate(res), logic.getTerm_true());
+    EXPECT_FALSE(mentionsAny(logic, res, {x}));
+}
+
+TEST_F(MBP_IntTest, test_NegatedDivisibilityLeaksTemporary) {
+    // exists x. (x + 1) mod 2 = 0 /\ x mod 3 != 0 /\ y <= x, model x = 1, y = 0
+    // x becomes 1 + 2 * MBP_LIA_tmp, and the disequality keeps (mod (+ 1 (* 2 MBP_LIA_tmp)) 3). The model is chosen so
+    // that the substituted literal still holds with MBP_LIA_tmp = 0: with x = 2, checkImplicant fails in a debug build,
+    // because projectIntegerVars checks the implicant against the model that does not give the temporary its value.
+    PTRef two = logic.mkIntConst(FastRational(2));
+    PTRef three = logic.mkIntConst(FastRational(3));
+    PTRef fla = logic.mkAnd({logic.mkEq(logic.mkMod(logic.mkPlus(x, one), two), zero),
+                             logic.mkNot(logic.mkEq(logic.mkMod(x, three), zero)), logic.mkLeq(y, x)});
+    auto model = getModel({{x, one}, {y, zero}});
+    PTRef res = ModelBasedProjection(logic).project(fla, {x}, *model);
+    std::cout << "Obtained: " << logic.printTerm(res) << std::endl;
+    EXPECT_FALSE(mentionsAny(logic, res, {x}));
+}
+
+TEST_F(MBP_IntTest, test_RemainderEqualityOverEliminatedVar) {
+    // exists x. x mod 3 = 1 /\ y <= x, model x = 1, y = 0
+    PTRef three = logic.mkIntConst(FastRational(3));
+    PTRef fla = logic.mkAnd(logic.mkEq(logic.mkMod(x, three), one), logic.mkLeq(y, x));
+    auto model = getModel({{x, one}, {y, zero}});
+    PTRef res = ModelBasedProjection(logic).project(fla, {x}, *model);
+    std::cout << "Obtained: " << logic.printTerm(res) << std::endl;
+    EXPECT_EQ(model->evaluate(res), logic.getTerm_true());
+    EXPECT_FALSE(mentionsAny(logic, res, {x}));
+}
+
+TEST_F(MBP_IntTest, test_PositiveDivisibilityOverEliminatedVar) {
+    // control: exists x. x mod 3 = 0 /\ y <= x, model x = 3, y = 0 -- the one form MBP handles
+    PTRef three = logic.mkIntConst(FastRational(3));
+    PTRef fla = logic.mkAnd(logic.mkEq(logic.mkMod(x, three), zero), logic.mkLeq(y, x));
+    auto model = getModel({{x, three}, {y, zero}});
+    PTRef res = ModelBasedProjection(logic).project(fla, {x}, *model);
+    std::cout << "Obtained: " << logic.printTerm(res) << std::endl;
+    EXPECT_EQ(model->evaluate(res), logic.getTerm_true());
+    EXPECT_FALSE(mentionsAny(logic, res, {x}));
+}
+
+TEST_F(MBP_IntTest, test_ModTermsOnBothSides) {
+    // exists x. x mod 3 = y mod 2, model x = 1, y = 3: x mod 3 becomes (x - 1) mod 3 = 0, y mod 2 (y is kept) stays
+    PTRef two = logic.mkIntConst(FastRational(2));
+    PTRef three = logic.mkIntConst(FastRational(3));
+    PTRef fla = logic.mkEq(logic.mkMod(x, three), logic.mkMod(y, two));
+    auto model = getModel({{x, one}, {y, three}});
+    PTRef res = ModelBasedProjection(logic).project(fla, {x}, *model);
+    std::cout << "Obtained: " << logic.printTerm(res) << std::endl;
+    EXPECT_EQ(model->evaluate(res), logic.getTerm_true());
+    EXPECT_FALSE(mentionsAny(logic, res, {x}));
+    EXPECT_EQ(res, logic.mkEq(logic.mkMod(y, two), one));
+}
+
+TEST_F(MBP_IntTest, test_ModTermConstrainsKeptVar) {
+    // exists x. x = 2y /\ x mod 3 != 0 is y mod 3 != 0; with model y = 1, x = 2 the projection must imply it
+    PTRef two = logic.mkIntConst(FastRational(2));
+    PTRef three = logic.mkIntConst(FastRational(3));
+    PTRef fla = logic.mkAnd(logic.mkEq(x, logic.mkTimes(two, y)), logic.mkNot(logic.mkEq(logic.mkMod(x, three), zero)));
+    auto model = getModel({{x, two}, {y, one}});
+    PTRef res = ModelBasedProjection(logic).project(fla, {x}, *model);
+    std::cout << "Obtained: " << logic.printTerm(res) << std::endl;
+    EXPECT_EQ(model->evaluate(res), logic.getTerm_true());
+    EXPECT_FALSE(mentionsAny(logic, res, {x}));
+    SMTSolver solver(logic);
+    solver.assertProp(logic.mkAnd(res, logic.mkEq(logic.mkMod(y, three), zero)));
+    EXPECT_EQ(solver.check(), SMTSolver::Answer::UNSAT);
+}
+
+TEST_F(MBP_IntTest, test_NestedModTerms) {
+    // exists x. (x + x mod 2) mod 3 = 1 /\ y <= x, model x = 3, y = 0: the inner mod term is replaced first
+    PTRef two = logic.mkIntConst(FastRational(2));
+    PTRef three = logic.mkIntConst(FastRational(3));
+    PTRef fla = logic.mkAnd(logic.mkEq(logic.mkMod(logic.mkPlus(x, logic.mkMod(x, two)), three), one), logic.mkLeq(y, x));
+    auto model = getModel({{x, three}, {y, zero}});
+    PTRef res = ModelBasedProjection(logic).project(fla, {x}, *model);
+    std::cout << "Obtained: " << logic.printTerm(res) << std::endl;
+    EXPECT_EQ(model->evaluate(res), logic.getTerm_true());
+    EXPECT_FALSE(mentionsAny(logic, res, {x}));
 }
