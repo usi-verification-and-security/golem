@@ -57,6 +57,8 @@ public:
     static const std::string TPA_MAYPO_TRIGGER;
     static const std::string TPA_MIN_POBS_CC;
     static const std::string TPA_MAX_POBS_CC;
+    static const std::string TPA_CONJECTURE;
+    static const std::string TPA_CONJECTURE_TRIGGER;
     static const std::string IC3IA_USE_UNSAT_CORE_GENERALIZATION;
     static const std::string IC3IA_ADD_INITIAL_RESET;
     static const std::string SPACER_MAYPOB;

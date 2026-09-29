@@ -248,6 +248,7 @@ void TPABase::resetInitialStates(PTRef fla) {
     this->init = fla;
     queryCache.clear();
     pobDb.clear();
+    knownReachable.clear();
     resetExplanation();
 }
 

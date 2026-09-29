@@ -823,3 +823,112 @@ TEST_F(TPATest, test_TPA_BeyondTransitionSystemDAG_Branching_Unsafe2)
     TPAEngine engine(*logic, options, TPACore::SPLIT);
     solveSystem(clauses, engine, VerificationAnswer::UNSAFE, true);
 }
+// --tpa.conjecture at trigger 1: a pob that spawns a midpoint from its source also spawns one from another reached set,
+// which carries that set's depth. Counting up to 10 and then down to -3, the conjecture fires (checked on the same
+// system as a .smt2 file); the counterexample must still have the right length, which the witness validation checks.
+TEST_F(TPATest, test_TPA_conjecture_CEX_two_phases) {
+    Options options;
+    options.addOption(Options::LOGIC, "QF_LIA");
+    options.addOption(Options::COMPUTE_WITNESS, "true");
+    options.addOption(Options::ENGINE, TPAEngine::TPA);
+    options.addOption(Options::TPA_CONJECTURE, "true");
+    options.addOption(Options::TPA_CONJECTURE_TRIGGER, "1");
+    SymRef s1 = mkPredicateSymbol("s1", {intSort(), intSort()});
+    PTRef current = instantiatePredicate(s1, {x, y});
+    PTRef next = instantiatePredicate(s1, {xp, yp});
+    PTRef ten = logic->mkIntConst(10);
+    std::vector<ChClause> clauses{{ // x' = 0 and y' = 0 => S1(x', y')
+            ChcHead{UninterpretedPredicate{next}},
+            ChcBody{{logic->mkAnd(logic->mkEq(xp, zero), logic->mkEq(yp, zero))}, {}}
+        },
+        { // S1(x, y) and y = 0 and x < 10 and x' = x + 1 and y' = 0 => S1(x', y'): count up
+            ChcHead{UninterpretedPredicate{next}},
+            ChcBody{{logic->mkAnd({logic->mkEq(y, zero), logic->mkLt(x, ten), logic->mkEq(xp, logic->mkPlus(x, one)),
+                                   logic->mkEq(yp, zero)})}, {UninterpretedPredicate{current}}}
+        },
+        { // S1(x, y) and y = 0 and x >= 10 and x' = x and y' = 1 => S1(x', y'): switch phase
+            ChcHead{UninterpretedPredicate{next}},
+            ChcBody{{logic->mkAnd({logic->mkEq(y, zero), logic->mkGeq(x, ten), logic->mkEq(xp, x),
+                                   logic->mkEq(yp, one)})}, {UninterpretedPredicate{current}}}
+        },
+        { // S1(x, y) and y = 1 and x' = x - 1 and y' = 1 => S1(x', y'): count down
+            ChcHead{UninterpretedPredicate{next}},
+            ChcBody{{logic->mkAnd({logic->mkEq(y, one), logic->mkEq(xp, logic->mkMinus(x, one)),
+                                   logic->mkEq(yp, one)})}, {UninterpretedPredicate{current}}}
+        },
+        { // S1(x, y) and y = 1 and x = -3 => false
+            ChcHead{UninterpretedPredicate{logic->getTerm_false()}},
+            ChcBody{{logic->mkAnd(logic->mkEq(y, one), logic->mkEq(x, logic->mkIntConst(-3)))},
+                    {UninterpretedPredicate{current}}}
+        }};
+    TPAEngine engine(*logic, options, TPACore::BASIC);
+    solveSystem(clauses, engine, VerificationAnswer::UNSAFE, true);
+}
+
+// The same with may-POBs: a may-POB's conjecture joins its family and pays gas.
+TEST_F(TPATest, test_TPA_conjecture_maypob_CEX_two_phases) {
+    Options options;
+    options.addOption(Options::LOGIC, "QF_LIA");
+    options.addOption(Options::COMPUTE_WITNESS, "true");
+    options.addOption(Options::ENGINE, TPAEngine::TPA);
+    options.addOption(Options::TPA_CONJECTURE, "true");
+    options.addOption(Options::TPA_CONJECTURE_TRIGGER, "1");
+    options.addOption(Options::TPA_MAYPOB, "true");
+    options.addOption(Options::TPA_MAYPO_TRIGGER, "1");
+    SymRef s1 = mkPredicateSymbol("s1", {intSort(), intSort()});
+    PTRef current = instantiatePredicate(s1, {x, y});
+    PTRef next = instantiatePredicate(s1, {xp, yp});
+    PTRef ten = logic->mkIntConst(10);
+    std::vector<ChClause> clauses{{ // x' = 0 and y' = 0 => S1(x', y')
+            ChcHead{UninterpretedPredicate{next}},
+            ChcBody{{logic->mkAnd(logic->mkEq(xp, zero), logic->mkEq(yp, zero))}, {}}
+        },
+        { // S1(x, y) and y = 0 and x < 10 and x' = x + 1 and y' = 0 => S1(x', y'): count up
+            ChcHead{UninterpretedPredicate{next}},
+            ChcBody{{logic->mkAnd({logic->mkEq(y, zero), logic->mkLt(x, ten), logic->mkEq(xp, logic->mkPlus(x, one)),
+                                   logic->mkEq(yp, zero)})}, {UninterpretedPredicate{current}}}
+        },
+        { // S1(x, y) and y = 0 and x >= 10 and x' = x and y' = 1 => S1(x', y'): switch phase
+            ChcHead{UninterpretedPredicate{next}},
+            ChcBody{{logic->mkAnd({logic->mkEq(y, zero), logic->mkGeq(x, ten), logic->mkEq(xp, x),
+                                   logic->mkEq(yp, one)})}, {UninterpretedPredicate{current}}}
+        },
+        { // S1(x, y) and y = 1 and x' = x - 1 and y' = 1 => S1(x', y'): count down
+            ChcHead{UninterpretedPredicate{next}},
+            ChcBody{{logic->mkAnd({logic->mkEq(y, one), logic->mkEq(xp, logic->mkMinus(x, one)),
+                                   logic->mkEq(yp, one)})}, {UninterpretedPredicate{current}}}
+        },
+        { // S1(x, y) and y = 1 and x = -3 => false
+            ChcHead{UninterpretedPredicate{logic->getTerm_false()}},
+            ChcBody{{logic->mkAnd(logic->mkEq(y, one), logic->mkEq(x, logic->mkIntConst(-3)))},
+                    {UninterpretedPredicate{current}}}
+        }};
+    TPAEngine engine(*logic, options, TPACore::BASIC);
+    solveSystem(clauses, engine, VerificationAnswer::UNSAFE, true);
+}
+
+TEST_F(TPATest, test_TPA_conjecture_safe) {
+    Options options;
+    options.addOption(Options::LOGIC, "QF_LIA");
+    options.addOption(Options::COMPUTE_WITNESS, "true");
+    options.addOption(Options::ENGINE, TPAEngine::TPA);
+    options.addOption(Options::TPA_CONJECTURE, "true");
+    options.addOption(Options::TPA_CONJECTURE_TRIGGER, "1");
+    SymRef s1 = mkPredicateSymbol("s1", {intSort()});
+    PTRef current = instantiatePredicate(s1, {x});
+    PTRef next = instantiatePredicate(s1, {xp});
+    std::vector<ChClause> clauses{{ // x' = 0 => S1(x')
+            ChcHead{UninterpretedPredicate{next}},
+            ChcBody{{logic->mkEq(xp, zero)}, {}}
+        },
+        { // S1(x) and x' = x + 1 => S1(x')
+            ChcHead{UninterpretedPredicate{next}},
+            ChcBody{{logic->mkEq(xp, logic->mkPlus(x, one))}, {UninterpretedPredicate{current}}}
+        },
+        { // S1(x) and x < 0 => false
+            ChcHead{UninterpretedPredicate{logic->getTerm_false()}},
+            ChcBody{{logic->mkLt(x, zero)}, {UninterpretedPredicate{current}}}
+        }};
+    TPAEngine engine(*logic, options, TPACore::BASIC);
+    solveSystem(clauses, engine, VerificationAnswer::SAFE, true);
+}

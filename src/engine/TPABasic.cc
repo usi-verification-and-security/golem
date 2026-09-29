@@ -769,6 +769,7 @@ TPABasic::QueryResult TPABasic::reachabilityQuery(PTRef from, PTRef to, unsigned
                     TRACE(2, "[!] Exact: Truly reachable states are " << refinedTarget.x);
                     // The pob stays in the queue: its next examination finds its target in the cache
                     info->reached = ReachedStates{refinedTarget, steps};
+                    knownReachable.push_back(*info->reached);
                     if (pob.isMayPO) { families[pob.family].time += std::chrono::steady_clock::now() - visitStart; }
                     continue;
                 }
@@ -805,6 +806,50 @@ TPABasic::QueryResult TPABasic::reachabilityQuery(PTRef from, PTRef to, unsigned
                 firstHalf.family = pob.family;
                 firstHalf.parentTarget = pob.target;
                 pushChild(pob, firstHalf, &MayFamily::firstHalves);
+                // [Conjecture] A target examined this often: also look for a midpoint from another reached set, i.e.
+                // one other than the initial states and this pob's source, the furthest from the initial states among
+                // those the model starts in. Its source is an ordinary reached set, so its lemmas stay local, and
+                // reaching it caches this target, for this pob to find. Skipped if it gives the same midpoint. Pushed
+                // last, it is examined first. It stays out of the midpoint caches, which keep the plain midpoints.
+                if (cfg.conjecture and info->globalCounter >= cfg.triggerConjecture and
+                    (not pob.isMayPO or families[pob.family].gas > 0)) {
+                    vec<PTRef> otherSets;
+                    // a set reached in 0 steps is part of the initial states
+                    auto const other = [&](ReachedStates const & reached) {
+                        return reached.steps > 0 and reached.reachedStates != pob.source;
+                    };
+                    for (ReachedStates const & reached : knownReachable) {
+                        if (other(reached)) { otherSets.push(reached.reachedStates); }
+                    }
+                    if (otherSets.size() > 0 and
+                        solver->checkConsistent(logic.mkAnd(logic.mkOr(std::move(otherSets)), goal)) ==
+                            ReachabilityResult::REACHABLE) {
+                        auto const conjectureModel = solver->lastQueryModel();
+                        ReachedStates const * start = nullptr;
+                        for (ReachedStates const & reached : knownReachable) {
+                            if (other(reached) and (not start or reached.steps > start->steps) and
+                                conjectureModel->evaluate(reached.reachedStates) == logic.getTerm_true()) {
+                                start = &reached;
+                            }
+                        }
+                        assert(start);
+                        PTRef const midPoint = start ? extractMidPoint(start->reachedStates, previousTransition,
+                                                                       translatedPreviousTransition, goal, *conjectureModel)
+                                                     : nextState;
+                        if (midPoint != nextState) {
+                            ProofObligation conjectureHalf{start->reachedStates, midPoint,
+                                                           static_cast<unsigned short>(pob.level - 1), pob.target,
+                                                           start->steps};
+                            conjectureHalf.isMayPO = pob.isMayPO;
+                            conjectureHalf.family = pob.family;
+                            conjectureHalf.parentTarget = pob.target;
+                            TRACE(1, "[CONJ] Target " << pob.target.x << " examined " << info->globalCounter
+                                  << " times: midpoint " << midPoint.x << " from reached set " << start->reachedStates.x
+                                  << " (" << start->steps << " steps), " << nextState.x << " from the source");
+                            pushChild(pob, conjectureHalf, &MayFamily::firstHalves);
+                        }
+                    }
+                }
                 traceMayFate(pob, "SPAWNED");
                 pushMayPobs(pob, buildMayPobs(pob));
                 if (pob.isMayPO) { families[pob.family].time += std::chrono::steady_clock::now() - visitStart; }
@@ -940,6 +985,7 @@ void TPABasic::resetPowers() {
     this->transitionHierarchy.clear();
     this->clearReachabilitySolvers();
     this->pobDb.clear();
+    this->knownReachable.clear();
     storeLevelTransition(0, logic.mkOr(identity, transition));
 }
 

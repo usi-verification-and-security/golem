@@ -35,6 +35,8 @@ const std::string Options::TPA_MAYPO_GAS = "tpa.maypo-gas";
 const std::string Options::TPA_MAYPO_TRIGGER = "tpa.maypo-trigger";
 const std::string Options::TPA_MIN_POBS_CC = "tpa.min-pobs-cc";
 const std::string Options::TPA_MAX_POBS_CC = "tpa.max-pobs-cc";
+const std::string Options::TPA_CONJECTURE = "tpa.conjecture";
+const std::string Options::TPA_CONJECTURE_TRIGGER = "tpa.conjecture-trigger";
 const std::string Options::IC3IA_USE_UNSAT_CORE_GENERALIZATION = "ic3ia.unsat-core-generalization";
 const std::string Options::IC3IA_ADD_INITIAL_RESET = "ic3ia.initial-reset";
 const std::string Options::SPACER_MAYPOB = "spacer.maypob";
@@ -108,6 +110,12 @@ void printUsage() {
            "                                  push, halves and may-POBs alike; n >= 1 (default: 5)\n"
            "--tpa.maypo-trigger <n>         TPA: visits of a target at a level before may-POBs are\n"
            "                                  built from it; n >= 1 (default: 3)\n"
+           "--tpa.conjecture[=bool]         TPA: once a target has been examined often, a pob that\n"
+           "                                  spawns a midpoint from its source also spawns one from\n"
+           "                                  another reached set, the furthest from the initial\n"
+           "                                  states (default: false)\n"
+           "--tpa.conjecture-trigger <n>    TPA: examinations of a target, over every level, before\n"
+           "                                  --tpa.conjecture fires; n >= 1 (default: 10)\n"
            "--tpa.min-pobs-cc <n>           TPA: midpoints of a target needed before CC-pob fires;\n"
            "                                  n >= 1 (default: 2)\n"
            "--tpa.max-pobs-cc <n>           TPA: midpoints kept per target and level for CC-pob,\n"
@@ -209,6 +217,8 @@ Options CommandLineParser::parse(int argc, char ** argv) {
     int tpaMinPobsCc = 0;
     int tpaMaxLemmasCc = 0;
     int tpaMaxPobsCc = 0;
+    int tpaConjecture = -1;
+    int tpaConjectureTrigger = 0;
     int spacerMayPoGas = 0;
     int spacerMayPoTrigger = 0;
     int spacerMaxLemmasCc = 0;
@@ -241,6 +251,8 @@ Options CommandLineParser::parse(int argc, char ** argv) {
                                     {Options::TPA_MAYPO_TRIGGER.c_str(), required_argument, &tpaMayPoTrigger, 1},
                                     {Options::TPA_MIN_POBS_CC.c_str(), required_argument, &tpaMinPobsCc, 1},
                                     {Options::TPA_MAX_POBS_CC.c_str(), required_argument, &tpaMaxPobsCc, 1},
+                                    {Options::TPA_CONJECTURE.c_str(), optional_argument, &tpaConjecture, 1},
+                                    {Options::TPA_CONJECTURE_TRIGGER.c_str(), required_argument, &tpaConjectureTrigger, 1},
                                     {Options::IC3IA_USE_UNSAT_CORE_GENERALIZATION.c_str(), optional_argument, &ic3iaUseUnsatCoreGeneralization, 1},
                                     {Options::IC3IA_ADD_INITIAL_RESET.c_str(), optional_argument, &ic3iaAddInitialReset, 1},
                                     {Options::SPACER_MAYPOB.c_str(), optional_argument, &spacerMayPob, 1},
@@ -335,6 +347,11 @@ Options CommandLineParser::parse(int argc, char ** argv) {
                 } else if (long_options[option_index].flag == &tpaMaxPobsCc) {
                     assert(optarg);
                     res.addOption(Options::TPA_MAX_POBS_CC, optarg);
+                } else if (long_options[option_index].flag == &tpaConjecture) {
+                    tpaConjecture = (optarg and isDisableKeyword(optarg)) ? 0 : 1;
+                } else if (long_options[option_index].flag == &tpaConjectureTrigger) {
+                    assert(optarg);
+                    res.addOption(Options::TPA_CONJECTURE_TRIGGER, optarg);
                 } else if (long_options[option_index].flag == &spacerMayPob) {
                     spacerMayPob = (optarg and isDisableKeyword(optarg)) ? 0 : 1;
                 } else if (long_options[option_index].flag == &spacerBmbp) {
@@ -424,6 +441,7 @@ Options CommandLineParser::parse(int argc, char ** argv) {
     if (tpaCcLemma >= 0) { res.addOption(Options::TPA_CC_LEMMA, tpaCcLemma ? "true" : "false"); }
     if (tpaCcPob >= 0) { res.addOption(Options::TPA_CC_POB, tpaCcPob ? "true" : "false"); }
     if (tpaCcUpdate >= 0) { res.addOption(Options::TPA_CC_UPDATE, tpaCcUpdate ? "true" : "false"); }
+    if (tpaConjecture >= 0) { res.addOption(Options::TPA_CONJECTURE, tpaConjecture ? "true" : "false"); }
     if (spacerMayPob >= 0) { res.addOption(Options::SPACER_MAYPOB, spacerMayPob ? "true" : "false"); }
     if (spacerBmbp >= 0) { res.addOption(Options::SPACER_BMBP, spacerBmbp ? "true" : "false"); }
     if (spacerCc >= 0) { res.addOption(Options::SPACER_CC, spacerCc ? "true" : "false"); }

@@ -217,6 +217,9 @@ protected:
     /// TPABasic: proof-obligation database, by target. Reachability does not depend on the levels, so it is
     /// kept across powers; it depends on the initial states, so it is cleared with them.
     std::unordered_map<PTRef, TPAPobInfo, PTRefHash> pobDb;
+    /// TPABasic: every reached set of pobDb, in the order they were found. They are truly reachable from the
+    /// initial states, so it is cleared with pobDb.
+    std::vector<ReachedStates> knownReachable;
 
     struct VersionHasher {
         std::size_t operator()(std::pair<PTRef, int> val) const {
@@ -318,13 +321,18 @@ struct TPABasicConfig {
     bool ccPob = true;           // may-POBs from the convex closure of the midpoints
     bool ccUpdate = true;        // a CC root found reachable or out of gas keeps only the newest of the
                                  // inputs its hull came from
+    /// Once the target of a pob has been examined `triggerConjecture` times (over every level), a pob that
+    /// spawns a midpoint from its source also spawns one from another reached set (not the initial states, not
+    /// its source; the furthest from the initial states among those that can reach the target), and examines it
+    /// first. Skipped if that gives the same midpoint.
+    bool conjecture = false;
 
     // not wired to cmd line: change the default here
     bool gdown = true;           // generalize by dropping disjuncts (otherwise, use unsatcore)
     bool debug = true;           // run validity checks of learnt and generalized lemmas
 
     // tuning parameters (wired: --tpa.maypo-gas / --tpa.maypo-trigger / --tpa.max-lemmas-cc
-    // / --tpa.min-pobs-cc / --tpa.max-pobs-cc)
+    // / --tpa.min-pobs-cc / --tpa.max-pobs-cc / --tpa.conjecture-trigger)
     std::size_t mayPoGas = 5;             // pobs a may-POB family may push below its root
     std::size_t triggerMayPo = 3;         // visits of a target (at a level, for BMBP and CC-pob; at any
                                           // level, for CC-lemma) before may-POBs are built
@@ -334,6 +342,7 @@ struct TPABasicConfig {
     std::size_t minPobsForCc = 2;         // midpoints needed before CC-pob fires
     std::size_t maxPobsForCc = 7;         // midpoints kept per target and level for CC-pob, oldest
                                           // evicted first; 0 = no limit
+    std::size_t triggerConjecture = 10;   // examinations of a target, over every level, before `conjecture` fires
     // not wired to cmd line
     std::size_t minBmbpOverLits = 1;      // over-approximations of the midpoints needed before BMBP fires
     std::size_t ccMbpBudget = 10;         // budget for MBP iterations per implicant in ConvexClosure
@@ -341,6 +350,9 @@ struct TPABasicConfig {
     void validate() const {
         if (mayPoGas < 1) { throw std::logic_error("TPA: TPABasicConfig::mayPoGas must be at least 1"); }
         if (triggerMayPo < 1) { throw std::logic_error("TPA: TPABasicConfig::triggerMayPo must be at least 1"); }
+        if (triggerConjecture < 1) {
+            throw std::logic_error("TPA: TPABasicConfig::triggerConjecture must be at least 1");
+        }
         if (maxLemmasForCc != 0 and maxLemmasForCc < minLemmasForCc) {
             throw std::logic_error("TPA: TPABasicConfig::maxLemmasForCc must be 0 (no limit) or at least "
                                    "minLemmasForCc, otherwise CC-lemma never fires");
@@ -391,6 +403,7 @@ struct TPABasicConfig {
         }
         if (anySelected) { cfg.maypo = true; }
         if (auto const ccUpdate = flag(Options::TPA_CC_UPDATE)) { cfg.ccUpdate = *ccUpdate; }
+        if (auto const conjecture = flag(Options::TPA_CONJECTURE)) { cfg.conjecture = *conjecture; }
         // Numeric knobs: the raw argument is kept by the parser so it can be rejected here
         // with a message naming the flag, rather than silently becoming 0.
         auto positive = [&options](std::string const & key, std::size_t & target) {
@@ -411,6 +424,7 @@ struct TPABasicConfig {
         positive(Options::TPA_MAX_LEMMAS_CC, cfg.maxLemmasForCc);
         positive(Options::TPA_MIN_POBS_CC, cfg.minPobsForCc);
         positive(Options::TPA_MAX_POBS_CC, cfg.maxPobsForCc);
+        positive(Options::TPA_CONJECTURE_TRIGGER, cfg.triggerConjecture);
 
         cfg.validate();
         return cfg;
