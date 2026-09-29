@@ -20,10 +20,12 @@
 #include "utils/OrderedFormulas.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cstddef>
 #include <deque>
 #include <exception>
 #include <iostream>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <queue>
@@ -34,7 +36,10 @@
 #include <utility>
 #include <vector>
 
+// Overridable from the build, e.g. -DCMAKE_CXX_FLAGS=-DTRACE_LEVEL=1 for sweeps.
+#ifndef TRACE_LEVEL
 #define TRACE_LEVEL 2
+#endif
 
 namespace golem {
 
@@ -88,7 +93,7 @@ struct SpacerConfig {
 
     // tuning parameters (wired: --spacer.maypo-gas / --spacer.maypo-trigger / --spacer.max-lemmas-cc
     // / --spacer.min-pobs-cc / --spacer.max-pobs-cc / --spacer.conjecture-trigger)
-    std::size_t mayPoGas = 5;             // predecessor-chain length allowed from a may-POB
+    std::size_t mayPoGas = 5;             // pobs a may-POB family may push below its root
     std::size_t triggerMayPo = 3;         // visits before may-POBs are built
     std::size_t triggerConjecture = 10;   // visits, summed over every bound, before `conjecture` fires
     std::size_t minLemmasForCc = 2;       // blocking lemmas needed before CC-lemma fires
@@ -577,19 +582,30 @@ struct PobInfo {
     }
 };
 
-struct ProofObligationCore {
+struct ProofObligation {
     SymRef vertex;
     std::size_t bound;
     PTRef constraint;
     bool isMayPO = false;
-    mutable std::size_t life = 0; ///< set from SpacerConfig::mayPoGas at construction
-    mutable const ProofObligationCore* parent = nullptr;
-    mutable bool closed = false;
+    /// may-POBs only: the family, i.e. a may-POB built by a must pob and every pob below it, may-POBs
+    /// built by its may-POBs included. The family shares one gas counter and is closed as a whole
+    /// (SpacerContext::boundSafety). 0 for must pobs.
+    std::size_t family = 0;
+    /// The pob this one is a predecessor or a may-POB of: its lemma goes to that pob's blocking lemmas.
+    /// Keys, not a reference, as for CcOrigin. Unset for the query, and for a may-POB built on the visit
+    /// that blocked its creator.
+    struct ParentKey {
+        SymRef vertex;
+        PTRef constraint;
+        std::size_t bound;
+    };
+    std::optional<ParentKey> parent;
     /// MayCcLemma / MayBmbp / MayCcPob: which mechanism created the root of this pob's may subtree.
     /// Descendants are ordinary MBP predecessors, so they inherit the root's source.
-    mutable LemmaOriginMask maySource = LemmaOrigin::None;
-    /// true only for the pob a CC-lemma / BMBP / CC-pob block created directly.
-    mutable bool mayRoot = false;
+    LemmaOriginMask maySource = LemmaOrigin::None;
+    /// true only for the pob a CC-lemma / BMBP / CC-pob block created directly, also when a may-POB
+    /// created it and it joined that may-POB's family.
+    bool mayRoot = false;
     /// For a CC root only: the pob whose CC block created it, and for CC-pob the edge source, i.e.
     /// where the formulas its hull was built from are kept (SpacerContext::updateCcInputs). Keys,
     /// not a reference: the creator may be gone, and the per-bound vectors of PobInfo may grow.
@@ -600,7 +616,7 @@ struct ProofObligationCore {
         EId edge;
         std::size_t sourceIndex;
     };
-    mutable std::optional<CcOrigin> ccOrigin;
+    std::optional<CcOrigin> ccOrigin;
     /// true for a predecessor that SpacerConfig::conjecture projected with the frame; it is examined
     /// before the other pobs of its bound and kind. Not inherited: its own predecessors come after it
     /// anyway, being one bound lower.
@@ -608,36 +624,34 @@ struct ProofObligationCore {
 };
 
 /// Full provenance of a lemma learnt while blocking `pob`: pob type, may source, root flag.
-inline LemmaOriginMask lemmaOriginOfPob(ProofObligationCore const & pob) {
+inline LemmaOriginMask lemmaOriginOfPob(ProofObligation const & pob) {
     return LemmaOrigin::ofPob(pob.isMayPO) | pob.maySource |
            (pob.mayRoot ? LemmaOrigin::MayRoot : LemmaOrigin::None);
 }
 
-using ProofObligation = std::unique_ptr<ProofObligationCore>;
-
 bool operator<(ProofObligation const & pob1, ProofObligation const & pob2) {
     // TODO: Does it make sense to break ties using vertices?
-    return pob1->bound < pob2->bound or \
-        (pob1->bound == pob2->bound and pob1->isMayPO > pob2->isMayPO) or \
-        (pob1->bound == pob2->bound and pob1->isMayPO == pob2->isMayPO \
-         and pob1->conjecture > pob2->conjecture) or \
-        (pob1->bound == pob2->bound and pob1->isMayPO == pob2->isMayPO \
-         and pob1->conjecture == pob2->conjecture and pob1->vertex.x > pob2->vertex.x);
+    return pob1.bound < pob2.bound or \
+        (pob1.bound == pob2.bound and pob1.isMayPO > pob2.isMayPO) or \
+        (pob1.bound == pob2.bound and pob1.isMayPO == pob2.isMayPO \
+         and pob1.conjecture > pob2.conjecture) or \
+        (pob1.bound == pob2.bound and pob1.isMayPO == pob2.isMayPO \
+         and pob1.conjecture == pob2.conjecture and pob1.vertex.x > pob2.vertex.x);
 }
 
 // TODO: why we need both operators??
 bool operator>(ProofObligation const & pob1, ProofObligation const & pob2) {
-    return pob1->bound > pob2->bound or \
-        (pob1->bound == pob2->bound and pob1->isMayPO < pob2->isMayPO) or \
-        (pob1->bound == pob2->bound and pob1->isMayPO == pob2->isMayPO \
-         and pob1->conjecture < pob2->conjecture) or \
-        (pob1->bound == pob2->bound and pob1->isMayPO == pob2->isMayPO \
-         and pob1->conjecture == pob2->conjecture and pob1->vertex.x < pob2->vertex.x);
+    return pob1.bound > pob2.bound or \
+        (pob1.bound == pob2.bound and pob1.isMayPO < pob2.isMayPO) or \
+        (pob1.bound == pob2.bound and pob1.isMayPO == pob2.isMayPO \
+         and pob1.conjecture < pob2.conjecture) or \
+        (pob1.bound == pob2.bound and pob1.isMayPO == pob2.isMayPO \
+         and pob1.conjecture == pob2.conjecture and pob1.vertex.x < pob2.vertex.x);
 }
 
 struct PriorityQueue {
 
-    void push(ProofObligation&& pob) { pqueue.push(std::move(pob)); }
+    void push(ProofObligation pob) { pqueue.push(std::move(pob)); }
     ProofObligation const & peek() const { return pqueue.top(); }
     void pop() { pqueue.pop(); }
     [[nodiscard]] bool empty() const { return pqueue.empty(); }
@@ -744,7 +758,7 @@ class SpacerContext {
     /// by the lemma that blocked the root, whose negation contains the hull with fewer literals, so
     /// the next hull starts from that region instead of from scratch. Either way one formula is
     /// left, and both CC loops need at least two, so an unchanged list stops re-creating the root.
-    void updateCcInputs(ProofObligationCore const & root, PTRef blockingLemma, char const * fate) const {
+    void updateCcInputs(ProofObligation const & root, PTRef blockingLemma, char const * fate) const {
         if (not cfg.ccUpdate or not root.isMayPO or not root.mayRoot or not root.ccOrigin) { return; }
         auto const & origin = *root.ccOrigin;
         bool const fromLemmas = root.maySource == LemmaOrigin::MayCcLemma;
@@ -886,19 +900,19 @@ class SpacerContext {
     PTRef generalize_down(PTRef lemma, PTRef maySumm, PTRef transitions,
                           const std::vector<GuardVar>& guardVariables);
 
-    PTRef tryBlockWithRelativeInductionBool(ProofObligationCore const & pob) const;
+    PTRef tryBlockWithRelativeInductionBool(ProofObligation const & pob) const;
 
-    PTRef tryBlockWithRelativeInduction(ProofObligationCore const & pob) const;
+    PTRef tryBlockWithRelativeInduction(ProofObligation const & pob) const;
 
-    bool checkMustReachability(std::vector<EId> const & edges, ProofObligationCore const & pob);
+    bool checkMustReachability(std::vector<EId> const & edges, ProofObligation const & pob);
 
     bool mayReachable(EId eid, PTRef targetConstraint, std::size_t bound) const;
 
     /// `withMaySummary`: whether the MBP argument keeps the refined source's may-summary (see
     /// SpacerConfig::mbpWithMaySummary). `recordApproximations`: whether the predecessor's under- and
     /// over-approximations feed the BMBP / CC-pob caches of `pob`.
-    ProofObligation computePredecessor(EId eid, ProofObligationCore const & pob, bool withMaySummary,
-                                       bool recordApproximations) const;
+    std::optional<ProofObligation> computePredecessor(EId eid, ProofObligation const & pob, bool withMaySummary,
+                                                      bool recordApproximations) const;
 
     PTRef projectFormula(PTRef fla, vec<PTRef> const & vars, Model & model) const;
 
@@ -1008,33 +1022,91 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
     TRACE(1, "\n\n++++++++++++++++++++++++++++++++\n\nRunning bounded safety check at level " << currentBound)
     auto query = graph.getExit();
     PriorityQueue pqueue;
-    ProofObligation goal = \
-        ProofObligation(new ProofObligationCore{query, currentBound, logic.getTerm_true(), false});
-    goal->life = cfg.mayPoGas;
-    pqueue.push(std::move(goal));
+    pqueue.push(ProofObligation{query, currentBound, logic.getTerm_true(), false});
     lowestChangedLevel = currentBound;
+    // The may-POB families of this call, by ProofObligation::family; 0 is the must pobs' and unused.
+    // Gas is what the family may still push: every pob a may-POB pushes costs one, its predecessors and
+    // the may-POBs it builds alike. Once a visit needs more than is left, the family is closed, and its
+    // pobs still in the queue are dropped.
+    struct MayFamily {
+        std::size_t gas;
+        bool closed = false;
+        // For the [FAMILY] line, printed once the family's last pob has left the queue.
+        LemmaOriginMask source = LemmaOrigin::None; ///< of the root
+        std::size_t rootBound = 0;                  ///< the only pob of the family at this bound is the root
+        std::size_t queued = 0;                     ///< pobs of the family in the queue
+        std::size_t preds = 0;                      ///< predecessors its pobs pushed, conjectures included
+        std::size_t hulls = 0;                      ///< may-POBs its pobs built
+        std::size_t depth = 0;                      ///< bounds between the root and its deepest pob
+        std::size_t visits = 0;                     ///< examinations of its pobs
+        std::size_t blocked = 0;
+        std::size_t reachable = 0;
+        std::size_t dropped = 0;                    ///< popped unexamined because the family was closed
+        std::size_t level0 = 0;                     ///< popped unexamined at bound 0
+        char const * rootFate = "OPEN";
+        std::chrono::steady_clock::duration time{}; ///< spent examining its pobs
+    };
+    std::vector<MayFamily> families(1, MayFamily{0});
+    // One line per family, the unit gas is charged to. Its size counts the root: 1 + preds + hulls.
+    auto traceFamily = [&](std::size_t id, char const * end) {
+        MayFamily const & fam = families[id];
+        TRACE(1, "[FAMILY] bound=" << currentBound << " id=" << id
+              << " src=" << lemmaOriginToString(fam.source) << " lvl=" << fam.rootBound
+              << " size=" << 1 + fam.preds + fam.hulls << " preds=" << fam.preds << " hulls=" << fam.hulls
+              << " left=" << fam.gas << " depth=" << fam.depth << " visits=" << fam.visits
+              << " blocked=" << fam.blocked << " reachable=" << fam.reachable << " dropped=" << fam.dropped
+              << " level0=" << fam.level0 << " root=" << fam.rootFate << " end=" << end
+              << " ms=" << std::chrono::duration_cast<std::chrono::milliseconds>(fam.time).count());
+    };
+    // Families with pobs still queued when the query turns out reachable.
+    auto traceOpenFamilies = [&]() {
+        for (std::size_t id = 1; id < families.size(); ++id) {
+            if (families[id].queued > 0) { traceFamily(id, "OPEN"); }
+        }
+    };
     // One line per may-pob exit, so the fate of every may-pob is greppable instead of
     // having to be reconstructed from the surrounding trace.
-    auto traceMayFate = [this](ProofObligationCore const & p, char const * fate) {
+    auto traceMayFate = [this, &families](ProofObligation const & p, char const * fate) {
         if (not p.isMayPO) { return; }
         TRACE(1, "[MAYPO] id=" << p.constraint.x
               << " src=" << lemmaOriginToString(p.maySource)
               << (p.mayRoot ? " root" : " desc")
-              << " lvl=" << p.bound << " life=" << p.life
+              << " lvl=" << p.bound << " family=" << p.family << " gas=" << families[p.family].gas
               << " visits=" << PobInfo::atBound(pobInfo(p.vertex, p.constraint).localCounter, p.bound)
               << "/" << pobInfo(p.vertex, p.constraint).globalCounter
               << " atoms=" << TermUtils(logic).getTopLevelConjuncts(p.constraint).size()
               << " fate=" << fate);
     };
+    std::chrono::steady_clock::time_point visitStart;
+    // The pob on top leaves the queue with `fate`. A may-POB is accounted for in its family (`counter`, if
+    // any, is the family's count of that fate), and the family is traced once its last pob has left.
+    auto leaveQueue = [&](ProofObligation const & p, char const * fate, std::size_t MayFamily::* counter) {
+        traceMayFate(p, fate);
+        if (p.isMayPO) {
+            MayFamily & fam = families[p.family];
+            fam.time += std::chrono::steady_clock::now() - visitStart;
+            if (counter) { ++(fam.*counter); }
+            if (p.bound == fam.rootBound) { fam.rootFate = fate; }
+            assert(fam.queued > 0);
+            if (--fam.queued == 0) { traceFamily(p.family, fam.closed ? "CLOSED" : "DONE"); }
+        }
+        pqueue.pop();
+    };
     while (not pqueue.empty()) {
-        assert(pqueue.peek());
-        ProofObligationCore const & pob = *(pqueue.peek());
+        // a copy: pushing may move the queue's elements
+        ProofObligation const pob = pqueue.peek();
+        visitStart = std::chrono::steady_clock::now();
 
-        if (pob.closed or (pob.isMayPO and pob.bound == 0)) {
-            traceMayFate(pob, pob.closed ? "CLOSED" : "LEVEL0");
-            pqueue.pop();
+        if (pob.isMayPO and families[pob.family].closed) {
+            leaveQueue(pob, "CLOSED", &MayFamily::dropped);
+            updateCcInputs(pob, PTRef_Undef, "EOL");
             continue;
         }
+        if (pob.isMayPO and pob.bound == 0) {
+            leaveQueue(pob, "LEVEL0", &MayFamily::level0);
+            continue;
+        }
+        if (pob.isMayPO) { ++families[pob.family].visits; }
 
         PobInfo & info = pobInfo(pob.vertex, pob.constraint);
         ++info.globalCounter;
@@ -1042,76 +1114,60 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
         TRACE(1, "[?] Examining "
               << ((pob.isMayPO) ? "MAY" : "MUST") << " PO " << pob.constraint.x
               << " at level " << pob.bound
-              << " with life " << pob.life);
+              << (pob.isMayPO ? " in family " + std::to_string(pob.family) + " with gas " +
+                                    std::to_string(families[pob.family].gas)
+                              : std::string()));
         TRACE(2, " proof obligation " << logic.printTerm(pob.constraint))
 
         if (pob.vertex == graph.getEntry() and not pob.isMayPO) {
             assert(false); // With the must summaries, we actually never finish here
+            traceOpenFamilies();
             return BoundedSafetyResult::UNSAFE;
         }
         auto const & edges = incomingEdges(pob.vertex);
         bool mustReached = checkMustReachability(edges, pob);
         if (mustReached) {
             if (pob.vertex == query and not pob.isMayPO) {
+                traceOpenFamilies();
                 return BoundedSafetyResult::UNSAFE; // query is reachable
             }
-            traceMayFate(pob, "REACHABLE");
+            leaveQueue(pob, "REACHABLE", &MayFamily::reachable);
             updateCcInputs(pob, PTRef_Undef, "reachable");
-            pqueue.pop();
             continue;
         }
  
         std::vector<ProofObligation> newProofObligations;
-        bool has_predecessors = false;
         // [Conjecture] A pob examined this often keeps coming back, e.g. a frame-less preimage
         // rederived at every bound: also project with the frame, and examine that predecessor first.
         bool const conjectureReady =
             cfg.conjecture and not cfg.mbpWithMaySummary and info.globalCounter >= cfg.triggerConjecture;
         for (EId edgeId : edges) {
-            ProofObligation npob = computePredecessor(edgeId, pob, cfg.mbpWithMaySummary, true);
+            std::optional<ProofObligation> npob = computePredecessor(edgeId, pob, cfg.mbpWithMaySummary, true);
             if (npob) {
-                has_predecessors = true;
-                if (npob->life > 0) {
-                    if (conjectureReady) {
-                        // The same satisfiability check as npob's, so it is not blocked either, and the
-                        // solver being deterministic, the same model: only the MBP argument differs. It
-                        // stays out of the may-POB caches, which keep the plain predecessors.
-                        ProofObligation cpob = computePredecessor(edgeId, pob, true, false);
-                        assert(cpob);
-                        if (cpob->constraint != npob->constraint) {
-                            cpob->conjecture = true;
-                            TRACE(1, "[CONJ] PO " << pob.constraint.x << " examined " << info.globalCounter
-                                  << " times: predecessor " << cpob->constraint.x << " with the frame, "
-                                  << npob->constraint.x << " without");
-                            newProofObligations.push_back(std::move(cpob));
-                        }
+                if (conjectureReady) {
+                    // The same satisfiability check as npob's, so it is not blocked either, and the
+                    // solver being deterministic, the same model: only the MBP argument differs. It
+                    // stays out of the may-POB caches, which keep the plain predecessors.
+                    std::optional<ProofObligation> cpob = computePredecessor(edgeId, pob, true, false);
+                    assert(cpob);
+                    if (cpob->constraint != npob->constraint) {
+                        cpob->conjecture = true;
+                        TRACE(1, "[CONJ] PO " << pob.constraint.x << " examined " << info.globalCounter
+                              << " times: predecessor " << cpob->constraint.x << " with the frame, "
+                              << npob->constraint.x << " without");
+                        newProofObligations.push_back(std::move(*cpob));
                     }
-                    newProofObligations.push_back(std::move(npob));
                 }
+                newProofObligations.push_back(std::move(*npob));
             }
         }
-        if (has_predecessors and newProofObligations.empty()) {
-            assert(pob.isMayPO);
-            assert(pob.parent != &pob);
-            // all predecessors of a may pob had 0 life.
-            TRACE(1, "    Removing MayPO branch due to EOL");
-            traceMayFate(pob, "EOL");
-            // The chain ran out of gas: its CC root, this pob or one of its may ancestors, resets
-            // the inputs its hull came from.
+        if (pob.isMayPO and newProofObligations.size() > families[pob.family].gas) {
+            // The family cannot pay for this visit's predecessors: close it. Its pobs still in the queue,
+            // the ancestors of this one among them, are dropped when they come up.
+            TRACE(1, "    Removing MayPO family " << pob.family << " due to EOL");
+            families[pob.family].closed = true;
+            leaveQueue(pob, "EOL", nullptr);
             updateCcInputs(pob, PTRef_Undef, "EOL");
-            if (pob.parent == nullptr) {
-                // Without the pop the same pob stays on top of the queue and is re-examined forever.
-                pqueue.pop();
-                continue;
-            }
-            const ProofObligationCore* parentPob = pob.parent;
-            // close recursively all parents?
-            while (parentPob != nullptr and parentPob->isMayPO) {
-                parentPob->closed = true;
-                updateCcInputs(*parentPob, PTRef_Undef, "EOL");
-                parentPob = parentPob->parent;
-            }
-            pqueue.pop();
             continue;
         }
 
@@ -1129,7 +1185,7 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
                 TRACE(2, " New lemma : " << logic.pp(relindLemma));
                 addMaySummary(pob.vertex, pob.bound, relindLemma,
                               RelIndVariant | lemmaOriginOfPob(pob));
-                if (pob.parent != nullptr) {
+                if (pob.parent) {
                     blockingLemmas(pob.parent->vertex, pob.parent->constraint, pob.parent->bound)
                         .insert(pob.vertex, relindLemma, cfg.maxLemmasForCc);
                 }
@@ -1138,9 +1194,8 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
                 }
                 if (pob.bound < lowestChangedLevel) { lowestChangedLevel = pob.bound; }
                 TRACE(1, "[x] Blocked POB with new lemma at level " << pob.bound);
-                traceMayFate(pob, "BLOCKED_RELIND");
+                leaveQueue(pob, "BLOCKED_RELIND", &MayFamily::blocked);
                 updateCcInputs(pob, relindLemma, "blocked");
-                pqueue.pop();
                 continue;
             }
         }
@@ -1148,6 +1203,28 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
         // [MayPO] Collect MayPO as a convex over-approximation of the predecessors
         std::vector<ProofObligation> newMayPO;
         ConvexClosure convexClosure(logic, QEOptions(1, cfg.ccMbpBudget, true));
+        // A may-POB pays for its predecessors first, and what is left bounds the may-POBs it builds, which
+        // join its family. A must pob opens a new family for each may-POB it builds.
+        std::size_t const mayPobBudget = pob.isMayPO ? families[pob.family].gas - newProofObligations.size()
+                                                     : std::numeric_limits<std::size_t>::max();
+        auto makeMayPob = [&](SymRef vertex, PTRef constraint, LemmaOriginMask source) {
+            ProofObligation mayPred{vertex, pob.bound - 1, constraint, true};
+            // Built on the visit that blocks this pob: its lemma does not go to this pob's blocking lemmas.
+            if (not newProofObligations.empty()) {
+                mayPred.parent = ProofObligation::ParentKey{pob.vertex, pob.constraint, pob.bound};
+            }
+            mayPred.maySource = source;
+            mayPred.mayRoot = true;
+            if (pob.isMayPO) {
+                mayPred.family = pob.family;
+            } else {
+                mayPred.family = families.size();
+                families.push_back(MayFamily{cfg.mayPoGas});
+                families.back().source = source;
+                families.back().rootBound = mayPred.bound;
+            }
+            return mayPred;
+        };
         // Two triggers, one per kind of evidence. BMBP and CC-pob read the predecessor caches of
         // this bound, so they trigger on the visits at this bound. CC-lemma reads the blocking
         // lemmas, which `globaPlobDb` shares across bounds; with it on, it triggers on the visits
@@ -1161,26 +1238,17 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
             if (cfg.bmbp and predsReady) {
             // Bidirectional Model based projection
             EdgeVidPredCache const & overPreds = PobInfo::atBound(info.overPredCache, pob.bound);
-            for (auto it = overPreds.begin(cfg.minBmbpOverLits); it != overPreds.end(); ++it) {
-                ProofObligation mayPred(new ProofObligationCore{it.getNode(graph),
-                                                                pob.bound - 1,
-                                                                logic.mkAnd(it.getApprox()),
-                                                                true});
-                // do not remember parent if the parent will be removed from the queue
-                // TODO: use shared pointers instead
-                mayPred->parent = (newProofObligations.empty()) ? nullptr : &pob;
-                mayPred->life = pob.life - 1;
-                mayPred->maySource = LemmaOrigin::MayBmbp;
-                mayPred->mayRoot = true;
-                if (mayPred->life > 0)
-                    newMayPO.push_back(std::move(mayPred));
+            for (auto it = overPreds.begin(cfg.minBmbpOverLits);
+                 it != overPreds.end() and newMayPO.size() < mayPobBudget; ++it) {
+                newMayPO.push_back(makeMayPob(it.getNode(graph), logic.mkAnd(it.getApprox()), LemmaOrigin::MayBmbp));
             }
             }
 
             if (cfg.ccLemma and lemmasReady) {
             // Convex Closure of blocking lemmas
             VidPredCache const & lemmas = blockingLemmas(pob.vertex, pob.constraint, pob.bound);
-            for (auto it = lemmas.begin(cfg.minLemmasForCc); it != lemmas.end(); ++it) {
+            for (auto it = lemmas.begin(cfg.minLemmasForCc); it != lemmas.end() and newMayPO.size() < mayPobBudget;
+                 ++it) {
                 vec<PTRef> negatedLemmas;
                 for (PTRef lemma : it.getApprox()) {
                     negatedLemmas.push(logic.mkNot(lemma));
@@ -1200,14 +1268,9 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
                       for (auto lemma : negatedLemmas) {
                           std::cout << logic.pp(lemma) << std::endl;}
                       std::cout);
-                ProofObligation mayPred(new ProofObligationCore{it.getNode(), pob.bound - 1, mayConstraint, true});
-                mayPred->parent = (newProofObligations.empty()) ? nullptr : &pob;
-                mayPred->life = pob.life - 1;
-                mayPred->maySource = LemmaOrigin::MayCcLemma;
-                mayPred->mayRoot = true;
-                mayPred->ccOrigin = ProofObligationCore::CcOrigin{pob.vertex, pob.constraint, pob.bound, EId{0}, 0};
-                if (mayPred->life > 0)
-                    newMayPO.push_back(std::move(mayPred));
+                ProofObligation mayPred = makeMayPob(it.getNode(), mayConstraint, LemmaOrigin::MayCcLemma);
+                mayPred.ccOrigin = ProofObligation::CcOrigin{pob.vertex, pob.constraint, pob.bound, EId{0}, 0};
+                newMayPO.push_back(std::move(mayPred));
             }
             }
 
@@ -1215,7 +1278,8 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
             // Convex Closure of the under-approximations of the predecessors, i.e. of the pobs
             // they became. These are pob constraints already, so they are target formulas.
             EdgeVidPredCache const & underPreds = PobInfo::atBound(info.underPredCache, pob.bound);
-            for (auto it = underPreds.begin(cfg.minPobsForCc); it != underPreds.end(); ++it) {
+            for (auto it = underPreds.begin(cfg.minPobsForCc);
+                 it != underPreds.end() and newMayPO.size() < mayPobBudget; ++it) {
                 vec<PTRef> underPobs = it.getApprox();
                 PTRef mayConstraint = convexClosure.getConvexClosure(underPobs);
                 if (logic.isTrue(mayConstraint) or logic.isFalse(mayConstraint)) {
@@ -1229,16 +1293,27 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
                       for (auto underPob : underPobs) {
                           std::cout << logic.pp(underPob) << std::endl;}
                       std::cout);
-                ProofObligation mayPred(new ProofObligationCore{it.getNode(graph), pob.bound - 1, mayConstraint, true});
-                mayPred->parent = (newProofObligations.empty()) ? nullptr : &pob;
-                mayPred->life = pob.life - 1;
-                mayPred->maySource = LemmaOrigin::MayCcPob;
-                mayPred->mayRoot = true;
-                mayPred->ccOrigin = ProofObligationCore::CcOrigin{pob.vertex, pob.constraint, pob.bound,
-                                                                  it.getEdge(), it.getSourceIndex()};
-                if (mayPred->life > 0)
-                    newMayPO.push_back(std::move(mayPred));
+                ProofObligation mayPred = makeMayPob(it.getNode(graph), mayConstraint, LemmaOrigin::MayCcPob);
+                mayPred.ccOrigin = ProofObligation::CcOrigin{pob.vertex, pob.constraint, pob.bound,
+                                                             it.getEdge(), it.getSourceIndex()};
+                newMayPO.push_back(std::move(mayPred));
             }
+            }
+        }
+        if (pob.isMayPO) {
+            MayFamily & fam = families[pob.family];
+            assert(newProofObligations.size() + newMayPO.size() <= fam.gas);
+            fam.gas -= newProofObligations.size() + newMayPO.size();
+            fam.preds += newProofObligations.size();
+            fam.hulls += newMayPO.size();
+        }
+        // Every may-POB about to be pushed: newProofObligations are pushed below unless empty.
+        for (auto const * pushed : {&newProofObligations, &newMayPO}) {
+            for (ProofObligation const & p : *pushed) {
+                if (not p.isMayPO) { continue; }
+                MayFamily & fam = families[p.family];
+                ++fam.queued;
+                fam.depth = std::max(fam.depth, fam.rootBound - p.bound);
             }
         }
 
@@ -1377,7 +1452,7 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
                 }
             }
 
-            if (pob.parent != nullptr) {
+            if (pob.parent) {
                 blockingLemmas(pob.parent->vertex, pob.parent->constraint, pob.parent->bound)
                     .insert(pob.vertex, newLemma, cfg.maxLemmasForCc);
             }
@@ -1388,24 +1463,26 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
                 TRACE(1, "    $$$$$$$$$$$$ MAY PO WAS BLOCKED $$$$$$$$$$$$");
             }
             TRACE(1, "[x] Blocked POB with new lemma at level " << pob.bound);
-            traceMayFate(pob, "BLOCKED");
+            leaveQueue(pob, "BLOCKED", &MayFamily::blocked); // This POB has been successfully blocked
             updateCcInputs(pob, newLemma, "blocked");
-            pqueue.pop(); // This POB has been successfully blocked
 
         } else {
             traceMayFate(pob, "SPAWNED");
+            if (pob.isMayPO) { families[pob.family].time += std::chrono::steady_clock::now() - visitStart; }
             for (auto & npob : newProofObligations) {
                 TRACE(1, "[+] MUST PRED: Adding new "
-                      << (npob->isMayPO ? "MAY" : "MUST") << " PO "
-                      << npob->constraint.x << " at level " << npob->bound
-                      << (npob->conjecture ? " (conjecture)" : ""));
-                TRACE(3, "Pushing new proof obligation " << logic.pp(npob->constraint) << " for " << npob->vertex.x
-                      << " at level " << npob->bound);
+                      << (npob.isMayPO ? "MAY" : "MUST") << " PO "
+                      << npob.constraint.x << " at level " << npob.bound
+                      << (npob.isMayPO ? " in family " + std::to_string(npob.family) : std::string())
+                      << (npob.conjecture ? " (conjecture)" : ""));
+                TRACE(3, "Pushing new proof obligation " << logic.pp(npob.constraint) << " for " << npob.vertex.x
+                      << " at level " << npob.bound);
                 pqueue.push(std::move(npob));
             }
         }
         for (auto & npob : newMayPO) {
-            TRACE(1, "[+] MAY PRED: Adding new MAY PO " << npob->constraint.x << " at level " << npob->bound);
+            TRACE(1, "[+] MAY PRED: Adding new MAY PO " << npob.constraint.x << " at level " << npob.bound
+                  << " in family " << npob.family);
             pqueue.push(std::move(npob));
         }
     } // end of main cycle
@@ -1931,7 +2008,7 @@ if (cfg.debug) {
     return newLemma;
 }
 
-PTRef SpacerContext::tryBlockWithRelativeInduction(ProofObligationCore const & pob) const {
+PTRef SpacerContext::tryBlockWithRelativeInduction(ProofObligation const & pob) const {
     const auto& edges = incomingEdges(pob.vertex);
     vec<PTRef> edgeRepresentations;
     edgeRepresentations.capacity(edges.size());
@@ -2112,7 +2189,7 @@ if (cfg.debug) {
     return lemma;
 }
 
-PTRef SpacerContext::tryBlockWithRelativeInductionBool(ProofObligationCore const & pob) const {
+PTRef SpacerContext::tryBlockWithRelativeInductionBool(ProofObligation const & pob) const {
     const auto& edges = incomingEdges(pob.vertex);
     vec<PTRef> edgeRepresentations;
     edgeRepresentations.capacity(edges.size());
@@ -2255,7 +2332,7 @@ if (cfg.debug) {
     return newLemma;
 }
 
-bool SpacerContext::checkMustReachability(std::vector<EId> const & edges, ProofObligationCore const & pob) {
+bool SpacerContext::checkMustReachability(std::vector<EId> const & edges, ProofObligation const & pob) {
     assert(pob.bound > 0);
     // test if vertex can be reached using must summaries
     vec<PTRef> summaries;
@@ -2310,8 +2387,9 @@ bool SpacerContext::mayReachable(EId eid, PTRef targetConstraint, std::size_t bo
     return checkRes.answer == SpacerContext::QueryAnswer::SAT;
 }
 
-ProofObligation SpacerContext::computePredecessor(EId eid, ProofObligationCore const & pob, bool withMaySummary,
-                                                  bool recordApproximations) const {
+std::optional<ProofObligation> SpacerContext::computePredecessor(EId eid, ProofObligation const & pob,
+                                                                 bool withMaySummary,
+                                                                 bool recordApproximations) const {
     assert(pob.bound > 0);
     auto sourceBound = pob.bound - 1;
     auto const & sources = graph.getSources(eid);
@@ -2345,14 +2423,14 @@ ProofObligation SpacerContext::computePredecessor(EId eid, ProofObligationCore c
             }
             }
             TRACE(2, "New proof obligation generated");
-            ProofObligation predPob(new ProofObligationCore{source, sourceBound, newPob, pob.isMayPO});
-            predPob->parent = &pob;
-            predPob->maySource = pob.maySource;
-            predPob->life = pob.isMayPO ? pob.life - 1 : cfg.mayPoGas;
-            return std::move(predPob);
+            ProofObligation predPob{source, sourceBound, newPob, pob.isMayPO};
+            predPob.family = pob.family;
+            predPob.parent = ProofObligation::ParentKey{pob.vertex, pob.constraint, pob.bound};
+            predPob.maySource = pob.maySource;
+            return predPob;
         } else if (res.answer == QueryAnswer::UNSAT) {
             TRACE(2, "Edge blocked by current  may-summaries")
-            return nullptr;
+            return std::nullopt;
         }
         assert(false);
         throw std::logic_error("Unreachable!");
@@ -2362,7 +2440,7 @@ ProofObligation SpacerContext::computePredecessor(EId eid, ProofObligationCore c
     bool maybeReachable = mayReachable(eid, pob.constraint, pob.bound - 1);
     if (not maybeReachable) {
         TRACE(2, "Edge blocked by current may-summaries")
-        return nullptr;
+        return std::nullopt;
     }
     // if we got there then it was not possible to prove that the edge can be taken or prove that it cannot be taken
     // examine the sources to generate a new proof obligation for this edge
@@ -2398,11 +2476,11 @@ ProofObligation SpacerContext::computePredecessor(EId eid, ProofObligationCore c
                     .insert(eid, vertexToRefine, newPob, cfg.maxPobsForCc);
             }
             }
-            ProofObligation predPob(new ProofObligationCore{sources[vertexToRefine], sourceBound, newPob, pob.isMayPO});
-            predPob->parent = &pob;
-            predPob->maySource = pob.maySource;
-            predPob->life = pob.isMayPO ? pob.life - 1 : cfg.mayPoGas;
-            return std::move(predPob);
+            ProofObligation predPob{sources[vertexToRefine], sourceBound, newPob, pob.isMayPO};
+            predPob.family = pob.family;
+            predPob.parent = ProofObligation::ParentKey{pob.vertex, pob.constraint, pob.bound};
+            predPob.maySource = pob.maySource;
+            return predPob;
 
         } else if (res.answer == QueryAnswer::UNSAT) {
             // Continue with the next vertex to refine
