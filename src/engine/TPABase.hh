@@ -325,7 +325,7 @@ struct TPABasicConfig {
 
     // tuning parameters (wired: --tpa.maypo-gas / --tpa.maypo-trigger / --tpa.max-lemmas-cc
     // / --tpa.min-pobs-cc / --tpa.max-pobs-cc)
-    std::size_t mayPoGas = 5;             // halvings allowed below a may-POB
+    std::size_t mayPoGas = 5;             // pobs a may-POB family may push below its root
     std::size_t triggerMayPo = 3;         // visits of a target (at a level, for BMBP and CC-pob; at any
                                           // level, for CC-lemma) before may-POBs are built
     std::size_t minLemmasForCc = 2;       // blocking lemmas needed before CC-lemma fires
@@ -460,7 +460,12 @@ private:
     void clearReachabilitySolvers();
 };
 
+// Overridable from the build, e.g. -DCMAKE_CXX_FLAGS=-DGOLEM_TRACE_LEVEL=1 for sweeps (Spacer reads it too).
+#ifdef GOLEM_TRACE_LEVEL
+#define TRACE_LEVEL GOLEM_TRACE_LEVEL
+#else
 #define TRACE_LEVEL 2
+#endif
 
 extern int TPA_INDENT;
 

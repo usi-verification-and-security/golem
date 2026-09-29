@@ -21,9 +21,10 @@
 #include "utils/ConvexClosure.h"
 
 #include <algorithm>
+#include <chrono>
+#include <limits>
 #include <optional>
 #include <queue>
-#include <unordered_set>
 #include <vector>
 
 namespace golem {
@@ -45,8 +46,10 @@ struct ProofObligation {
     PTRef next = PTRef_Undef;   ///< PTRef_Undef: not a first half
     unsigned sourceSteps = 0;   ///< steps from the initial states to `source`
     bool isMayPO = false;
-    std::size_t life = 0;       ///< halvings left below a may-POB; set from TPABasicConfig::mayPoGas
-    std::size_t mayRoot = 0;    ///< may-POBs: their family, closed as a whole when a chain runs out of gas
+    /// may-POBs only: the family, i.e. a may-POB built by a must pob and every pob below it, may-POBs built
+    /// by its may-POBs included. The family shares one gas counter and is closed as a whole
+    /// (TPABasic::reachabilityQuery). 0 for must pobs.
+    std::size_t family = 0;
     PTRef relation = PTRef_Undef; ///< relational may-POBs only; then `source` and `target` are undefined
     PTRef parentTarget = PTRef_Undef; ///< target of the pob that created this one; its lemma goes there (CC-lemma)
     /// For a CC root only: the target and level whose midpoints (CC-pob) or blocking lemmas (CC-lemma) its
@@ -484,40 +487,111 @@ VerificationAnswer TPABasic::checkPower(unsigned short power) {
 TPABasic::QueryResult TPABasic::reachabilityQuery(PTRef from, PTRef to, unsigned short power) {
     TRACE(2, "[RQ] Checking LEQ reachability on level " << power << " from " << from.x << " to " << to.x)
     PriorityQueue pqueue;
-    ProofObligation goal{from, to, power};
-    goal.life = cfg.mayPoGas;
-    pqueue.push(goal);
-    std::size_t mayRoots = 0;
-    std::unordered_set<std::size_t> closedMayRoots; // families where a chain ran out of gas
+    pqueue.push(ProofObligation{from, to, power});
+    // The may-POB families of this query, by ProofObligation::family; 0 is the must pobs' and unused.
+    // Gas is what the family may still push: every pob a may-POB pushes costs one, its first and second
+    // halves and the may-POBs it builds alike. Once a visit needs a pob the family cannot pay for, the family
+    // is closed, and its pobs still in the queue are dropped.
+    struct MayFamily {
+        std::size_t gas;
+        bool closed = false;
+        // For the [FAMILY] line, printed once the family's last pob has left the queue.
+        char const * source = "";                   ///< of the root: BMBP, CC or CCPOB
+        unsigned short rootLevel = 0;               ///< the only pob of the family at this level is the root
+        std::size_t queued = 0;                     ///< pobs of the family in the queue
+        std::size_t firstHalves = 0;                ///< pushed by its pobs
+        std::size_t secondHalves = 0;               ///< pushed by its pobs
+        std::size_t hulls = 0;                      ///< may-POBs its pobs built
+        std::size_t depth = 0;                      ///< levels between the root and its deepest pob
+        std::size_t visits = 0;                     ///< examinations of its pobs
+        std::size_t blocked = 0;
+        std::size_t reachable = 0;                  ///< a first half replaced by its second half included
+        std::size_t dropped = 0;                    ///< popped unexamined because the family was closed
+        char const * rootFate = "OPEN";
+        std::chrono::steady_clock::duration time{}; ///< spent examining its pobs
+    };
+    std::vector<MayFamily> families(1, MayFamily{0});
     auto isRelational = [](ProofObligation const & p) { return p.relation != PTRef_Undef; };
     auto pobId = [&](ProofObligation const & p) { return isRelational(p) ? p.relation.x : p.target.x; };
     // One line per may-pob exit, so the fate of every may-pob is greppable.
     auto traceMayFate = [&](ProofObligation const & p, char const * fate) {
         if (not p.isMayPO) { return; }
-        TRACE(1, "[MAYPO] id=" << pobId(p) << (isRelational(p) ? " rel" : "") << " root=" << p.mayRoot
-              << " lvl=" << p.level << " life=" << p.life << " fate=" << fate);
+        TRACE(1, "[MAYPO] id=" << pobId(p) << (isRelational(p) ? " rel" : "") << " family=" << p.family
+              << " lvl=" << p.level << " gas=" << families[p.family].gas << " fate=" << fate);
+    };
+    // One line per family, the unit gas is charged to, in the format of Spacer's (with `power` for `bound`),
+    // not indented. Its size counts the root: 1 + preds + hulls, where preds are the first and second halves.
+    auto traceFamily = [&](std::size_t id, char const * end) {
+        MayFamily const & fam = families[id];
+        int const indent = TPA_INDENT;
+        TPA_INDENT = 0;
+        TRACE(1, "[FAMILY] power=" << power << " id=" << id << " src=" << fam.source << " lvl=" << fam.rootLevel
+              << " size=" << 1 + fam.firstHalves + fam.secondHalves + fam.hulls
+              << " preds=" << fam.firstHalves + fam.secondHalves << " firsts=" << fam.firstHalves
+              << " seconds=" << fam.secondHalves << " hulls=" << fam.hulls << " left=" << fam.gas
+              << " depth=" << fam.depth << " visits=" << fam.visits << " blocked=" << fam.blocked
+              << " reachable=" << fam.reachable << " dropped=" << fam.dropped << " level0=0"
+              << " root=" << fam.rootFate << " end=" << end
+              << " ms=" << std::chrono::duration_cast<std::chrono::milliseconds>(fam.time).count());
+        TPA_INDENT = indent;
+    };
+    std::chrono::steady_clock::time_point visitStart;
+    // `p` has left the queue with `fate`, and whatever it pushed is queued: account for it in its family
+    // (`counter`, if any, is the family's count of that fate), and trace the family once its last pob has left.
+    auto leftQueue = [&](ProofObligation const & p, char const * fate, std::size_t MayFamily::* counter) {
+        if (not p.isMayPO) { return; }
+        MayFamily & fam = families[p.family];
+        fam.time += std::chrono::steady_clock::now() - visitStart;
+        if (counter) { ++(fam.*counter); }
+        if (p.level == fam.rootLevel) { fam.rootFate = fate; }
+        assert(fam.queued > 0);
+        if (--fam.queued == 0) { traceFamily(p.family, fam.closed ? "CLOSED" : "DONE"); }
+    };
+    // Push a pob `creator` created: a may-POB pays one unit of its family's gas for it, counted as `kind`.
+    auto pushChild = [&](ProofObligation const & creator, ProofObligation const & child,
+                         std::size_t MayFamily::* kind) {
+        if (child.isMayPO) {
+            MayFamily & fam = families[child.family];
+            if (creator.isMayPO) {
+                assert(fam.gas > 0);
+                --fam.gas;
+                ++(fam.*kind);
+            }
+            ++fam.queued;
+            fam.depth = std::max<std::size_t>(fam.depth, fam.rootLevel - child.level);
+        }
+        pqueue.push(child);
     };
     // May-POBs one level below `pob`, from what the database collected for its target: from its source to the
     // conjunction (BMBP) or the convex closure (CC-pob) of the midpoints at its level, once the target was
     // examined `triggerMayPo` times at that level; and the convex closure of the negated lemmas that blocked
     // its children (CC-lemma), once it was examined `triggerMayPo` times at any level.
+    // A may-POB builds at most as many as its family's gas pays for (after its first half, pushed already); they
+    // join its family. A must pob opens a new family for each may-POB it builds.
     auto buildMayPobs = [&](ProofObligation const & pob) {
         std::vector<ProofObligation> mayPobs;
-        if (not cfg.maypo or isRelational(pob) or pob.level == 0 or pob.life <= 1) { return mayPobs; }
+        if (not cfg.maypo or isRelational(pob) or pob.level == 0) { return mayPobs; }
+        std::size_t const budget = pob.isMayPO ? families[pob.family].gas : std::numeric_limits<std::size_t>::max();
+        auto affordable = [&]() { return mayPobs.size() < budget; };
         TPAPobInfo & info = pobDb[pob.target];
         bool const predsReady = TPAPobInfo::atLevel(info.localCounter, pob.level) >= cfg.triggerMayPo;
         bool const lemmasReady = info.globalCounter >= cfg.triggerMayPo;
-        auto mayPob = [&](PTRef mayTarget) {
+        auto mayPob = [&](PTRef mayTarget, char const * source) {
             ProofObligation mayPred{pob.source, mayTarget, static_cast<unsigned short>(pob.level - 1),
                                     PTRef_Undef, pob.sourceSteps};
             mayPred.isMayPO = true;
-            mayPred.life = pob.life - 1;
-            // built by a may-POB: same family, so running out of gas closes all of it
-            mayPred.mayRoot = pob.isMayPO ? pob.mayRoot : ++mayRoots;
+            if (pob.isMayPO) {
+                mayPred.family = pob.family;
+            } else {
+                mayPred.family = families.size();
+                families.push_back(MayFamily{cfg.mayPoGas});
+                families.back().source = source;
+                families.back().rootLevel = mayPred.level;
+            }
             mayPred.parentTarget = pob.target;
             return mayPred;
         };
-        if (cfg.bmbp and predsReady) {
+        if (cfg.bmbp and predsReady and affordable()) {
             // Bidirectional Model based projection
             OrderedFormulas const & overs = TPAPobInfo::atLevel(info.overPredCache, pob.level);
             if (overs.size() > 0 and overs.size() >= cfg.minBmbpOverLits) {
@@ -525,10 +599,10 @@ TPABasic::QueryResult TPABasic::reachabilityQuery(PTRef from, PTRef to, unsigned
                 for (PTRef over : overs) { approx.push(over); }
                 PTRef mayTarget = logic.mkAnd(std::move(approx));
                 TRACE(1, "[BMBP] Adding the conjunction of " << overs.size() << " over-approximations: " << mayTarget.x);
-                mayPobs.push_back(mayPob(mayTarget));
+                mayPobs.push_back(mayPob(mayTarget, "BMBP"));
             }
         }
-        if (cfg.ccLemma and lemmasReady) {
+        if (cfg.ccLemma and lemmasReady and affordable()) {
             // Convex Closure of the negated blocking lemmas: pairs (x, x'), kept together
             OrderedFormulas const & lemmas = info.blockingLemmas;
             if (lemmas.size() >= cfg.minLemmasForCc) {
@@ -541,7 +615,7 @@ TPABasic::QueryResult TPABasic::reachabilityQuery(PTRef from, PTRef to, unsigned
                           << TermUtils(logic).getTopLevelConjuncts(hull).size()
                           << " vars: " << TermUtils(logic).getVars(hull).size());
                     TRACE(3, "[CC] Added " << logic.pp(hull));
-                    ProofObligation mayPred = mayPob(PTRef_Undef);
+                    ProofObligation mayPred = mayPob(PTRef_Undef, "CC");
                     mayPred.source = PTRef_Undef;
                     mayPred.relation = hull;
                     mayPred.ccOrigin = ProofObligation::CcOrigin{pob.target, pob.level, true};
@@ -549,7 +623,7 @@ TPABasic::QueryResult TPABasic::reachabilityQuery(PTRef from, PTRef to, unsigned
                 }
             }
         }
-        if (cfg.ccPob and predsReady) {
+        if (cfg.ccPob and predsReady and affordable()) {
             // Convex Closure of the midpoints
             OrderedFormulas const & unders = TPAPobInfo::atLevel(info.underPredCache, pob.level);
             if (unders.size() >= cfg.minPobsForCc) {
@@ -562,7 +636,7 @@ TPABasic::QueryResult TPABasic::reachabilityQuery(PTRef from, PTRef to, unsigned
                           << TermUtils(logic).getTopLevelConjuncts(mayTarget).size()
                           << " vars: " << TermUtils(logic).getVars(mayTarget).size());
                     TRACE(3, "[CC-POB] Added " << logic.pp(mayTarget));
-                    mayPobs.push_back(mayPob(mayTarget));
+                    mayPobs.push_back(mayPob(mayTarget, "CCPOB"));
                     mayPobs.back().ccOrigin = ProofObligation::CcOrigin{pob.target, pob.level, false};
                 }
             }
@@ -582,22 +656,24 @@ TPABasic::QueryResult TPABasic::reachabilityQuery(PTRef from, PTRef to, unsigned
               << ": kept the newest of " << inputs.size() << " inputs");
         inputs.keepOnlyNewest();
     };
-    auto pushMayPobs = [&](std::vector<ProofObligation> mayPobs) {
+    auto pushMayPobs = [&](ProofObligation const & creator, std::vector<ProofObligation> mayPobs) {
         for (auto & mayPred : mayPobs) {
             TRACE(1, "[+] MAY PRED: Adding new " << (isRelational(mayPred) ? "relational " : "") << "MAY PO "
-                  << pobId(mayPred) << " at level " << mayPred.level);
-            pqueue.push(mayPred);
+                  << pobId(mayPred) << " at level " << mayPred.level << " in family " << mayPred.family);
+            pushChild(creator, mayPred, &MayFamily::hulls);
         }
     };
 
     while (not pqueue.empty()) {
         ProofObligation const pob = pqueue.peek();
         TPA_INDENT = power - pob.level;
+        visitStart = std::chrono::steady_clock::now();
 
-        if (pob.isMayPO and closedMayRoots.count(pob.mayRoot) > 0) {
+        if (pob.isMayPO and families[pob.family].closed) {
             traceMayFate(pob, "CLOSED");
             updateCcInputs(pob, "EOL");
             pqueue.pop();
+            leftQueue(pob, "CLOSED", &MayFamily::dropped);
             continue;
         }
 
@@ -606,20 +682,32 @@ TPABasic::QueryResult TPABasic::reachabilityQuery(PTRef from, PTRef to, unsigned
             ReachedStates const reached = *known->second.reached;
             TRACE(2, "[C] Target " << pob.target.x << " is reachable: " << reached.reachedStates.x);
             pqueue.pop();
-            if (pob.next != PTRef_Undef) {
+            if (pob.next != PTRef_Undef and pob.isMayPO and families[pob.family].gas == 0) {
+                // the first half is reachable, but its family cannot pay for the second half: close it
+                TRACE(1, "    Removing MayPO family " << pob.family << " due to EOL");
+                traceMayFate(pob, "EOL");
+                families[pob.family].closed = true;
+                leftQueue(pob, "EOL", nullptr);
+            } else if (pob.next != PTRef_Undef) {
                 // the first half is reachable, substitute the pob with its second half
                 TRACE(2, "[Q] Considering MidPoint query as source: " << reached.reachedStates.x);
-                ProofObligation secondHalf = pob; // same level, kind, life and family
+                ProofObligation secondHalf = pob; // same level, kind and family
                 secondHalf.source = reached.reachedStates;
                 secondHalf.target = pob.next;
                 secondHalf.next = PTRef_Undef;
                 secondHalf.sourceSteps = reached.steps;
-                pqueue.push(secondHalf);
+                pushChild(pob, secondHalf, &MayFamily::secondHalves);
+                leftQueue(pob, "REACHABLE", &MayFamily::reachable);
             } else if (pob.isMayPO) {
                 traceMayFate(pob, "REACHABLE"); // nothing else to do for a reachable may-POB
                 updateCcInputs(pob, "reachable");
+                leftQueue(pob, "REACHABLE", &MayFamily::reachable);
             } else if (pob.level == power) {
                 TRACE(2, "[R] Query " << to.x << " was reachable");
+                // Families with pobs still queued (none expected: may-POBs sit below the goal's level)
+                for (std::size_t id = 1; id < families.size(); ++id) {
+                    if (families[id].queued > 0) { traceFamily(id, "OPEN"); }
+                }
                 TPA_INDENT = -1;
                 QueryResult result;
                 result.result = ReachabilityResult::REACHABLE;
@@ -636,6 +724,7 @@ TPABasic::QueryResult TPABasic::reachabilityQuery(PTRef from, PTRef to, unsigned
             ++info->globalCounter;
             ++TPAPobInfo::atLevel(info->localCounter, pob.level);
         }
+        if (pob.isMayPO) { ++families[pob.family].visits; }
         if (isRelational(pob)) {
             TRACE(2, "[?] (may) Can the pairs of " << pob.relation.x << " be connected in <=2^" << pob.level + 1
                   << " steps?")
@@ -658,6 +747,7 @@ TPABasic::QueryResult TPABasic::reachabilityQuery(PTRef from, PTRef to, unsigned
                     traceMayFate(pob, "REACHABLE");
                     updateCcInputs(pob, "reachable");
                     pqueue.pop();
+                    leftQueue(pob, "REACHABLE", &MayFamily::reachable);
                     continue;
                 }
                 TRACE(2, "[y] " << pob.source.x << " reaches " << pob.target.x << " in <=2^" << pob.level + 1 << " steps.");
@@ -679,15 +769,17 @@ TPABasic::QueryResult TPABasic::reachabilityQuery(PTRef from, PTRef to, unsigned
                     TRACE(2, "[!] Exact: Truly reachable states are " << refinedTarget.x);
                     // The pob stays in the queue: its next examination finds its target in the cache
                     info->reached = ReachedStates{refinedTarget, steps};
+                    if (pob.isMayPO) { families[pob.family].time += std::chrono::steady_clock::now() - visitStart; }
                     continue;
                 }
-                if (pob.isMayPO and pob.life <= 1) {
-                    // the chain ran out of gas: close its whole may family
-                    TRACE(1, "    Removing MayPO branch due to EOL");
+                if (pob.isMayPO and families[pob.family].gas == 0) {
+                    // the family cannot pay for the first half: close it
+                    TRACE(1, "    Removing MayPO family " << pob.family << " due to EOL");
                     traceMayFate(pob, "EOL");
                     updateCcInputs(pob, "EOL");
-                    closedMayRoots.insert(pob.mayRoot);
+                    families[pob.family].closed = true;
                     pqueue.pop();
+                    leftQueue(pob, "EOL", nullptr);
                     continue;
                 }
                 // Create the three states corresponding to current, next and next-next variables from the query
@@ -710,12 +802,12 @@ TPABasic::QueryResult TPABasic::reachabilityQuery(PTRef from, PTRef to, unsigned
                 ProofObligation firstHalf{pob.source, nextState, static_cast<unsigned short>(pob.level - 1),
                                           pob.target, pob.sourceSteps};
                 firstHalf.isMayPO = pob.isMayPO;
-                firstHalf.life = pob.isMayPO ? pob.life - 1 : cfg.mayPoGas;
-                firstHalf.mayRoot = pob.mayRoot;
+                firstHalf.family = pob.family;
                 firstHalf.parentTarget = pob.target;
-                pqueue.push(firstHalf);
+                pushChild(pob, firstHalf, &MayFamily::firstHalves);
                 traceMayFate(pob, "SPAWNED");
-                pushMayPobs(buildMayPobs(pob));
+                pushMayPobs(pob, buildMayPobs(pob));
+                if (pob.isMayPO) { families[pob.family].time += std::chrono::steady_clock::now() - visitStart; }
                 continue;
             }
             case ReachabilityResult::UNREACHABLE: {
@@ -778,7 +870,8 @@ TPABasic::QueryResult TPABasic::reachabilityQuery(PTRef from, PTRef to, unsigned
                 }
                 traceMayFate(pob, "BLOCKED");
                 pqueue.pop();
-                pushMayPobs(buildMayPobs(pob));
+                pushMayPobs(pob, buildMayPobs(pob));
+                leftQueue(pob, "BLOCKED", &MayFamily::blocked);
                 continue;
             }
         }

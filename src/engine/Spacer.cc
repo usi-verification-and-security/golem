@@ -36,8 +36,10 @@
 #include <utility>
 #include <vector>
 
-// Overridable from the build, e.g. -DCMAKE_CXX_FLAGS=-DTRACE_LEVEL=1 for sweeps.
-#ifndef TRACE_LEVEL
+// Overridable from the build, e.g. -DCMAKE_CXX_FLAGS=-DGOLEM_TRACE_LEVEL=1 for sweeps (TPA reads it too).
+#ifdef GOLEM_TRACE_LEVEL
+#define TRACE_LEVEL GOLEM_TRACE_LEVEL
+#else
 #define TRACE_LEVEL 2
 #endif
 
