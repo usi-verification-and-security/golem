@@ -400,6 +400,15 @@ PTRef getId(const std::vector<PTRef> & vars, Logic & logic) {
 PTRef constructTransitionInvariantCandidates(PTRef init, PTRef transition, PTRef sink, int depth, ArithLogic & logic,
                                              std::vector<PTRef> const & vars) {
     PTRef id = getId(vars, logic);
+    // Sink states are treated as absorbing: no transition is taken out of them. The query below covers paths of
+    // depth..2*depth-1 steps, while init only guarantees reaching Sink in exactly depth steps. Without this, a sink
+    // state that still has successors (e.g. covered states added to sink in checkTermination) makes the query SAT.
+    // When Sink has no successors the conjunct is redundant, so it is skipped to keep the formula small.
+    {
+        SMTSolver sinkChecker(logic, SMTSolver::WitnessProduction::NONE);
+        sinkChecker.assertProp(logic.mkAnd(sink, transition));
+        if (sinkChecker.check() == SMTSolver::Answer::SAT) { transition = logic.mkAnd(logic.mkNot(sink), transition); }
+    }
     PTRef transitionOrId = logic.mkOr(transition, id);
     std::vector overapproximated_trace{transition};
     for (int k = 1; k < depth; k++) {
@@ -412,42 +421,17 @@ PTRef constructTransitionInvariantCandidates(PTRef init, PTRef transition, PTRef
     // States guaranteed to reach termination: Sink at exactly `depth` steps, plus (if depth > 1)
     // states reachable from `init` within 1..depth-1 steps that already satisfy the trace.
     std::vector<PTRef> checked_states;
-    // TODO: correct this if
-    //if (depth > 1) {
-    //     vec<PTRef> temp_vars;
-    //    for (auto var : vars) {
-    //        temp_vars.push(TimeMachine(logic).sendVarThroughTime(var, depth - 1));
-    //    }
-    //    checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(
-    //       QuantifierElimination(logic).keepOnly(logic.mkAnd(init, trace), temp_vars), 1));
-        // checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(QuantifierElimination(logic).eliminate(logic.mkAnd(init, transition), vars), depth - 1));
-    // }
-    // else {
-    // checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(sink, depth));
-    // }
-    // sink is updated, representing states that are guaranteed to reach termination
-    // PTRef terminating_states = logic.mkOr(checked_states);
-    // std::cout << "Constructing invariant candidates for depth " << depth << "   " << logic.pp(init) << std::endl;
-    // std::cout << "Constructing invariant candidates for depth " << depth << "   " << logic.pp(TimeMachine(logic).sendFlaThroughTime(sink, depth)) << std::endl;
-
-    // Itp(Tr /\ ... /\ Tr, Init /\ not TerminatingStates) should be UNSAT: by construction,
-    // `terminating_states` already covers everything reachable from `init` via the trace.
-    // SMTSolver smt_solver(logic, SMTSolver::WitnessProduction::ONLY_INTERPOLANTS);
-    // smt_solver.getConfig().setSimplifyInterpolant(4);
-    // smt_solver.assertProp(trace);
-    // smt_solver.push();
-    // smt_solver.assertProp(logic.mkAnd(init, logic.mkNot(terminating_states)));
     vec<PTRef> nonTerminating{init};                                                                                                                                                                                       
-  for (int k = depth; k < 2 * depth - 1; k++) {                                                                                                                                                                          
-      nonTerminating.push(TimeMachine(logic).sendFlaThroughTime(transition, k));                                                                                                                                         
-  }                                                                                                                                                                                                                      
-  nonTerminating.push(logic.mkNot(TimeMachine(logic).sendFlaThroughTime(sink, 2 * depth - 1)));                                                                                                                          
-                                                                                                                                                                                                                         
-  SMTSolver smt_solver(logic, SMTSolver::WitnessProduction::ONLY_INTERPOLANTS);
-  smt_solver.getConfig().setSimplifyInterpolant(4);
-  smt_solver.assertProp(trace);
-  smt_solver.push();
-  smt_solver.assertProp(logic.mkAnd(nonTerminating));
+    for (int k = depth; k < 2 * depth - 1; k++) {
+         nonTerminating.push(TimeMachine(logic).sendFlaThroughTime(transition, k));
+    }
+    nonTerminating.push(logic.mkNot(TimeMachine(logic).sendFlaThroughTime(sink, 2 * depth - 1)));
+
+    SMTSolver smt_solver(logic, SMTSolver::WitnessProduction::ONLY_INTERPOLANTS);
+    smt_solver.getConfig().setSimplifyInterpolant(4);
+    smt_solver.assertProp(trace);
+    smt_solver.push();
+    smt_solver.assertProp(logic.mkAnd(nonTerminating));
     if (smt_solver.check() != SMTSolver::Answer::UNSAT) {
         assert(false);
         return logic.getTerm_false();
@@ -598,7 +582,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
     covered = logic.getTerm_false();
     // Safety-Based Termination Analysis
     // TODO: Figure out why passing in transition is problematic
-    auto [answer, trInvOrRecurringSet] = analyzeTS(init, normTransition, sink, logic);
+    auto [answer, trInvOrRecurringSet] = analyzeTS(init, transition, sink, logic);
     return answer;
 }
 
