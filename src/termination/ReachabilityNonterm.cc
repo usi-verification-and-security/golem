@@ -598,7 +598,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
     covered = logic.getTerm_false();
     // Safety-Based Termination Analysis
     // TODO: Figure out why passing in transition is problematic
-    auto [answer, trInvOrRecurringSet] = analyzeTS(init, transition, sink, logic);
+    auto [answer, trInvOrRecurringSet] = analyzeTS(init, normTransition, sink, logic);
     return answer;
 }
 
