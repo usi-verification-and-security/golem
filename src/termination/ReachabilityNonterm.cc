@@ -78,8 +78,8 @@ PTRef mkZeroDotProductEqs(ArithLogic & logic, vec<PTRef> const & weights,
 }
 
 bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const & vars) {
-    if (logic.isNot(formula) || logic.isVar(formula)) return false;
-    assert(logic.isAnd(formula) || logic.isLeq(formula) || logic.isEquality(formula));
+    if (logic.isBoolAtom(formula) || (logic.isNot(formula) && logic.isBoolAtom(logic.getPterm(formula)[0]))) return false;
+    assert(logic.isAnd(formula) || logic.isLeq(formula) || logic.isNumEq(formula));
     vec<PTRef> conjuncts = TermUtils(logic).getTopLevelConjuncts(formula);
 
     vec<PTRef> int_vars;
@@ -104,6 +104,11 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
     solver.assertProp(logic.mkAnd(formula, logic.mkAnd(eq_vars)));
     if (solver.check() == SMTSolver::Answer::SAT) return false;
 
+    // If two transitions in a row are UNSAT, formula is well-founded
+    solver.resetSolver();
+    solver.assertProp(logic.mkAnd(formula, TimeMachine(logic).sendFlaThroughTime(formula, 1)));
+    if (solver.check() == SMTSolver::Answer::UNSAT) return true;
+
     vec<PTRef> leq_conjuncts;
     for (auto conj : conjuncts) {
         if (logic.isLeq(conj))
@@ -117,12 +122,6 @@ bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const 
     }
 
     if (leq_conjuncts.size() == 0) return false;
-
-
-    // If two transitions in a row are UNSAT, formula is well-founded
-    solver.resetSolver();
-    solver.assertProp(logic.mkAnd(formula, TimeMachine(logic).sendFlaThroughTime(formula, 1)));
-    if (solver.check() == SMTSolver::Answer::UNSAT) return true;
 
     std::vector<std::vector<PTRef>> A;
     std::vector<std::vector<PTRef>> A_p;
@@ -415,19 +414,19 @@ PTRef constructTransitionInvariantCandidates(PTRef init, PTRef transition, PTRef
     std::vector<PTRef> checked_states;
     // TODO: correct this if
     if (depth > 1) {
-        // vec<PTRef> temp_vars;
-        // for (auto var : vars) {
-        //         temp_vars.push(TimeMachine(logic).sendVarThroughTime(var, depth - 1));
-        // }
-        // checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(
-        //    QuantifierElimination(logic).keepOnly(logic.mkAnd(init, trace), temp_vars), 1));
-        checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(QuantifierElimination(logic).eliminate(logic.mkAnd(init, transition), vars), depth - 1));
+        vec<PTRef> temp_vars;
+        for (auto var : vars) {
+            temp_vars.push(TimeMachine(logic).sendVarThroughTime(var, depth - 1));
+        }
+        checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(
+           QuantifierElimination(logic).keepOnly(logic.mkAnd(init, trace), temp_vars), 1));
+        // checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(QuantifierElimination(logic).eliminate(logic.mkAnd(init, transition), vars), depth - 1));
     }
-    else {
-        checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(sink, depth));
-    }
+    // else {
+    checked_states.push_back(TimeMachine(logic).sendFlaThroughTime(sink, depth));
+    // }
     // sink is updated, representing states that are guaranteed to reach termination
-    PTRef terminating_states = checked_states[0];
+    PTRef terminating_states = logic.mkOr(checked_states);
     // std::cout << "Constructing invariant candidates for depth " << depth << "   " << logic.pp(init) << std::endl;
     // std::cout << "Constructing invariant candidates for depth " << depth << "   " << logic.pp(TimeMachine(logic).sendFlaThroughTime(sink, depth)) << std::endl;
 
@@ -568,11 +567,11 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
     ArithLogic & logic = dynamic_cast<ArithLogic &>(ts.getLogic());
     PTRef init = ts.getInit();
     PTRef transition = ts.getTransition();
-    // transition =normalize( enumerativeDNF(transition, logic), logic);
+    PTRef normTransition = enumerativeDNF(normalize(transition, logic), logic);
     std::vector<PTRef> tmp_vars = vars;
     tmp_vars.insert(tmp_vars.end(), aux_vars.begin(), aux_vars.end());
     // Transition relation is well-founded
-    if (!logic.isOr(normalize( enumerativeDNF(transition, logic), logic)) && checkWellFounded(transition, logic, tmp_vars)) {
+    if (!logic.isOr(normTransition) && checkWellFounded(normTransition, logic, tmp_vars)) {
         return Answer::YES; }
 
     // In this case query is a set of sink states - states from which transition is not possible.
@@ -669,7 +668,7 @@ bool ReachabilityNonterm::generateWellfoundedDisjuncts(PTRef transition, PTRef s
     // Tr^n(x,x') /\ not Sink(x') - is a formula, which can be satisfied by any x which can
     // reach "not Sink(x')" in n transitions:
     PTRef NT = QuantifierElimination(logic).keepOnly(
-        logic.mkAnd({logic.mkNot(sink), trace, logic.mkNot(TimeMachine(logic).sendFlaThroughTime(sink, num))}), vars);
+        logic.mkAnd({trace, logic.mkNot(TimeMachine(logic).sendFlaThroughTime(sink, num))}), vars);
     // std::cout << "NT: " << logic.pp(NT) << std::endl;
     // States that can not reach "not Sink(x')" in n transitions (therefore necesarily reach Sink(x')):
     // TODO: Can underapproximate
@@ -771,7 +770,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::checkTermina
     // Algorithm checks if reachable states are terminating
     // TODO: I can also extract all covered states from here and use them as terminating (updating tr)
     auto [answer, subinv] =
-        analyzeTS(reached, logic.mkAnd(transition, noncoveredStates), sink, logic);
+        analyzeTS(reached, transition, TermUtils(logic).simplifyMax(logic.mkNot(noncoveredStates)), logic);
     // TODO: It is possible to do check differently, analyzing <noncoveredStates, tr,
     //   not(noncoveredStates)>
     //   If this terminates, then the whole TS terminates, but if it nonterinates we need to prove
