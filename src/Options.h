@@ -71,6 +71,7 @@ public:
     static const std::string SPACER_RELIND;
     static const std::string SPACER_MBP_MAY_SUMMARY;
     static const std::string SPACER_GLOBAL_POB_DB;
+    static const std::string SPACER_CC_CHAIN_LEMMA;
     static const std::string SPACER_CONJECTURE;
     static const std::string SPACER_CONJECTURE_TRIGGER;
     static const std::string SPACER_MAYPO_GAS;

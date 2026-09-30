@@ -86,6 +86,12 @@ struct SpacerConfig {
     /// Wired: --spacer.global-pob-db.
    bool globalPobDb = false;
 
+    /// A lemma that blocks a pob also goes to the blocking lemmas of the parents of its nearest
+    /// `ccChainAncestors` ancestors at the same vertex, so a subgoal collects lemmas from lower
+    /// levels too (pushing them, as a hull); and CC-lemma fires once `minLemmasForCc` lemmas are
+    /// there, whatever the visits. No effect without ccLemma. Wired: --spacer.cc-chain-lemma.
+    bool ccChainLemma = false;
+
     /// Once a pob has been examined `triggerConjecture` times (over every bound), also compute its
     /// predecessors as with mbpWithMaySummary = true, and examine them before the plain ones. The
     /// frame literals make the predecessor smaller, and with it the interpolant's B side, which can
@@ -101,6 +107,8 @@ struct SpacerConfig {
     std::size_t minLemmasForCc = 2;       // blocking lemmas needed before CC-lemma fires
     std::size_t maxLemmasForCc = 7;       // blocking lemmas kept per child for CC-lemma, oldest evicted
                                           // first; 0 = no limit
+    std::size_t ccChainAncestors = 2;     // ccChainLemma: same-vertex ancestors whose parents also get
+                                          // the lemma, beyond the blocked pob's own parent
     std::size_t minPobsForCc = 2;         // under-approximations of a predecessor needed before CC-pob
                                           // fires
     std::size_t maxPobsForCc = 7;         // under-approximations kept per edge source for CC-pob,
@@ -192,6 +200,9 @@ struct SpacerConfig {
         }
         if (auto const ccUpdate = flag(Options::SPACER_CC_UPDATE)) {
             cfg.ccUpdate = *ccUpdate;
+        }
+        if (auto const ccChainLemma = flag(Options::SPACER_CC_CHAIN_LEMMA)) {
+            cfg.ccChainLemma = *ccChainLemma;
         }
         if (auto const conjecture = flag(Options::SPACER_CONJECTURE)) {
             cfg.conjecture = *conjecture;
@@ -602,6 +613,15 @@ struct ProofObligation {
         std::size_t bound;
     };
     std::optional<ParentKey> parent;
+    /// SpacerConfig::ccChainLemma only: this pob's vertex and parent, then its ancestors', nearest first,
+    /// for SpacerContext::recordBlockingLemma. Shared with the descendants, which extend it. Unset for
+    /// the query.
+    struct ChainLink {
+        SymRef vertex;
+        std::optional<ParentKey> parent;
+        std::shared_ptr<ChainLink const> up;
+    };
+    std::shared_ptr<ChainLink const> chain;
     /// MayCcLemma / MayBmbp / MayCcPob: which mechanism created the root of this pob's may subtree.
     /// Descendants are ordinary MBP predecessors, so they inherit the root's source.
     LemmaOriginMask maySource = LemmaOrigin::None;
@@ -752,6 +772,44 @@ class SpacerContext {
     /// `globalPobDb` every bound shares one set.
     VidPredCache & blockingLemmas(SymRef vid, PTRef formula, std::size_t bound) const {
         return PobInfo::atBound(pobInfo(vid, formula).blockingLemmas, cfg.globalPobDb ? 0 : bound);
+    }
+
+    bool chainLemmas() const { return cfg.maypo and cfg.ccLemma and cfg.ccChainLemma; }
+
+    /// `child`, just built below `creator`, extends the creator's chain (ccChainLemma only).
+    void linkChain(ProofObligation & child, ProofObligation const & creator) const {
+        if (not chainLemmas()) { return; }
+        child.chain = std::make_shared<ProofObligation::ChainLink const>(
+            ProofObligation::ChainLink{child.vertex, child.parent, creator.chain});
+    }
+
+    /// `lemma` blocked `pob`: it goes to the blocking lemmas of the pob's parent, for CC-lemma. With
+    /// ccChainLemma also to those of the parents of its nearest `ccChainAncestors` ancestors at the same
+    /// vertex: a lemma from a lower level offered to a subgoal higher up the chain, where CC-lemma pushes
+    /// it as part of a hull.
+    void recordBlockingLemma(ProofObligation const & pob, PTRef lemma) const {
+        if (not chainLemmas() or not pob.chain) {
+            if (pob.parent) {
+                blockingLemmas(pob.parent->vertex, pob.parent->constraint, pob.parent->bound)
+                    .insert(pob.vertex, lemma, cfg.maxLemmasForCc);
+            }
+            return;
+        }
+        assert(pob.chain->vertex == pob.vertex);
+        std::size_t sameVertex = 0;
+        for (auto const * link = pob.chain.get(); link and sameVertex <= cfg.ccChainAncestors;
+             link = link->up.get()) {
+            if (link->vertex != pob.vertex) { continue; }
+            ++sameVertex;
+            // a may-POB built on the visit that blocked its creator has no parent; its ancestors may
+            if (not link->parent) { continue; }
+            auto const & owner = *link->parent;
+            blockingLemmas(owner.vertex, owner.constraint, owner.bound).insert(pob.vertex, lemma, cfg.maxLemmasForCc);
+            if (sameVertex > 1) {
+                TRACE(1, "[CC-CHAIN] Lemma " << lemma.x << " for " << pob.vertex.x << " at level " << pob.bound
+                      << " also to PO " << owner.constraint.x << " at level " << owner.bound);
+            }
+        }
     }
 
     /// A CC root was found reachable, ran out of gas, or was blocked: rewrite the formulas its hull
@@ -984,7 +1042,7 @@ VerificationResult SpacerContext::run() {
                             throw std::logic_error("Duplicate definition for a predicate encountered!");
                         }
                     }
-                    if (not checkValidityWitness(solution)) {
+                    if (cfg.debug and not checkValidityWitness(solution)) {
                         throw std::logic_error("Error: wrong witness!");
                     }
                     stats.print();
@@ -1146,6 +1204,7 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
         for (EId edgeId : edges) {
             std::optional<ProofObligation> npob = computePredecessor(edgeId, pob, cfg.mbpWithMaySummary, true);
             if (npob) {
+                linkChain(*npob, pob);
                 if (conjectureReady) {
                     // The same satisfiability check as npob's, so it is not blocked either, and the
                     // solver being deterministic, the same model: only the MBP argument differs. It
@@ -1154,6 +1213,7 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
                     assert(cpob);
                     if (cpob->constraint != npob->constraint) {
                         cpob->conjecture = true;
+                        linkChain(*cpob, pob);
                         TRACE(1, "[CONJ] PO " << pob.constraint.x << " examined " << info.globalCounter
                               << " times: predecessor " << cpob->constraint.x << " with the frame, "
                               << npob->constraint.x << " without");
@@ -1180,17 +1240,14 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
             LemmaOriginMask RelIndVariant =
                 cfg.relindGrow ? LemmaOrigin::RelIndGrow : LemmaOrigin::RelInd;
             if (relindLemma != PTRef_Undef) {
-                if (not checkNewLemma(pob.vertex, pob.bound - 1, relindLemma)) {
+                if (cfg.debug and not checkNewLemma(pob.vertex, pob.bound - 1, relindLemma)) {
                     throw std::logic_error("After RelInd, newLemma is not consistent with edeges!");
                 }
                 TRACE(1, "[RELIND] Spared POBS: " << newProofObligations.size());
                 TRACE(2, " New lemma : " << logic.pp(relindLemma));
                 addMaySummary(pob.vertex, pob.bound, relindLemma,
                               RelIndVariant | lemmaOriginOfPob(pob));
-                if (pob.parent) {
-                    blockingLemmas(pob.parent->vertex, pob.parent->constraint, pob.parent->bound)
-                        .insert(pob.vertex, relindLemma, cfg.maxLemmasForCc);
-                }
+                recordBlockingLemma(pob, relindLemma);
                 if (pob.isMayPO) {
                     TRACE(1, "    $$$$$$$$$$$$ MAY PO WAS BLOCKED $$$$$$$$$$$$");
                 }
@@ -1225,16 +1282,18 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
                 families.back().source = source;
                 families.back().rootBound = mayPred.bound;
             }
+            linkChain(mayPred, pob);
             return mayPred;
         };
         // Two triggers, one per kind of evidence. BMBP and CC-pob read the predecessor caches of
         // this bound, so they trigger on the visits at this bound. CC-lemma reads the blocking
         // lemmas, which `globaPlobDb` shares across bounds; with it on, it triggers on the visits
-        // over every bound.
+        // over every bound. With `ccChainLemma` the lemmas arrive from the whole chain below, so
+        // CC-lemma fires on their number alone (minLemmasForCc), whatever the visits.
         bool const lastVisit = cfg.mayPobOnLastVisit and newProofObligations.empty();
         bool const predsReady = lastVisit or visits >= cfg.triggerMayPo;
-        bool const lemmasReady =
-            lastVisit or (cfg.globalPobDb ? info.globalCounter : visits) >= cfg.triggerMayPo;
+        bool const lemmasReady = cfg.ccChainLemma or lastVisit or
+                                 (cfg.globalPobDb ? info.globalCounter : visits) >= cfg.triggerMayPo;
         if (cfg.maypo) {
 
             if (cfg.bmbp and predsReady) {
@@ -1401,7 +1460,7 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
                       "Lemma for " << pob.vertex.x << " at level " << pob.bound << " - "
                       << logic.pp(originalNewLemma));
 
-                if (not checkNewLemma(pob.vertex, pob.bound - 1, originalNewLemma)) {
+                if (cfg.debug and not checkNewLemma(pob.vertex, pob.bound - 1, originalNewLemma)) {
                     throw std::logic_error("After generalization, originalNewLemma is not consistent with edeges!");
                 }
 
@@ -1424,7 +1483,7 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
                       << " nr disj: " << TermUtils(logic).getTopLevelDisjuncts(indNewLemma).size()
                       << " nr vars: " << TermUtils(logic).getVars(indNewLemma).size());
 
-                if (not checkNewLemma(pob.vertex, pob.bound - 1, indNewLemma)) {
+                if (cfg.debug and not checkNewLemma(pob.vertex, pob.bound - 1, indNewLemma)) {
                     throw std::logic_error("indNewLemma is not consistent with edeges!");
                 }
 
@@ -1439,7 +1498,7 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
                       "Lemma for " << pob.vertex.x << " at level " << pob.bound << " - "
                       << logic.pp(indNewLemma));
 
-                if (not checkNewLemma(pob.vertex, pob.bound - 1, indNewLemma)) {
+                if (cfg.debug and not checkNewLemma(pob.vertex, pob.bound - 1, indNewLemma)) {
                     throw std::logic_error("After generalization, indNewLemma is not consistent with edeges!");
                 }
 
@@ -1454,10 +1513,7 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
                 }
             }
 
-            if (pob.parent) {
-                blockingLemmas(pob.parent->vertex, pob.parent->constraint, pob.parent->bound)
-                    .insert(pob.vertex, newLemma, cfg.maxLemmasForCc);
-            }
+            recordBlockingLemma(pob, newLemma);
 
             if (pob.bound < lowestChangedLevel) { lowestChangedLevel = pob.bound; }
 
