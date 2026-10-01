@@ -14,7 +14,7 @@
 #include <string>
 
 namespace golem {
-std::string Term::printTerm() {
+std::string Term::termToSMT2String() {
     PrintVisitor printVisitor;
     this->accept(&printVisitor);
     return printVisitor.getString();

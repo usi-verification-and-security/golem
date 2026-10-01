@@ -59,7 +59,7 @@ std::string printConstant(PTRef constant, ArithLogic const & logic) {
         FastRational number = logic.getNumConst(constant);
         return numberToString(std::move(number), Term::terminalType::REAL);
     }
-    return logic.printTerm(constant);
+    return logic.termToSMT2String(constant);
 }
 } // namespace
 
@@ -82,7 +82,7 @@ std::string Step::printStepAlethe() const {
     if (not clause.empty()) {
         ss << " ";
         for (std::size_t i = 0; i < clause.size(); i++) {
-            ss << clause[i]->printTerm();
+            ss << clause[i]->termToSMT2String();
             if (i != clause.size() - 1) { ss << " "; }
         }
     }
@@ -125,7 +125,7 @@ std::string Step::printStepIntermediate() const {
     if (not clause.empty()) {
         ss << " ";
         for (auto const & arg : clause) {
-            ss << arg->printTerm();
+            ss << arg->termToSMT2String();
             ss << " ";
         }
     }
@@ -181,8 +181,8 @@ void StepHandler::buildIntermediateProof() {
             auto quantifiedTerm = std::dynamic_pointer_cast<Quant>(clause);
             std::vector<std::string> args;
             for (auto const & varTerm : quantifiedTerm->getVars()) {
-                assert(instPairs.contains(varTerm->printTerm()));
-                args.push_back(instPairs.at(varTerm->printTerm()));
+                assert(instPairs.contains(varTerm->termToSMT2String()));
+                args.push_back(instPairs.at(varTerm->termToSMT2String()));
             }
             notifyObservers(Step(currentStep, Step::StepType::STEP, literals(clause), "forall_inst", std::move(args)));
             currentStep++;
@@ -194,7 +194,7 @@ void StepHandler::buildIntermediateProof() {
 
         std::stringstream premises;
         for (std::size_t j = 0; j < step.premises.size(); j++) {
-            premises << logic.printTerm(derivation[step.premises[j]].derivedFact);
+            premises << logic.termToSMT2String(derivation[step.premises[j]].derivedFact);
             if (j < step.premises.size() - 1) { premises << ' '; }
         }
 
@@ -202,7 +202,7 @@ void StepHandler::buildIntermediateProof() {
             Step(currentStep, Step::StepType::STEP,
                  literals(std::make_shared<Op>(
                      "=>", literals(std::make_shared<Terminal>(premises.str(), Term::VAR),
-                                    std::make_shared<Terminal>(logic.printTerm(step.derivedFact), Term::VAR))))));
+                                    std::make_shared<Terminal>(logic.termToSMT2String(step.derivedFact), Term::VAR))))));
         currentStep++;
 
         std::vector<std::size_t> requiredMP;
@@ -213,7 +213,7 @@ void StepHandler::buildIntermediateProof() {
         }
 
         notifyObservers(Step(currentStep, Step::StepType::STEP,
-                             literals(std::make_shared<Terminal>(logic.printTerm(step.derivedFact), Term::VAR)),
+                             literals(std::make_shared<Terminal>(logic.termToSMT2String(step.derivedFact), Term::VAR)),
                              "resolution", Step::Premises{std::move(requiredMP)}));
 
         coarseStepToIntermediateStep.insert({i, currentStep});
@@ -268,7 +268,7 @@ void StepHandler::buildAletheProof() {
         auto predicateSimplificationResult = simplify(instantiatedPredicate);
         if (predicateSimplificationResult) {
             auto simplifiedPredicate = predicateSimplificationResult->first;
-            assert(simplifiedPredicate->printTerm() == logic.printTerm(step.derivedFact));
+            assert(simplifiedPredicate->termToSMT2String() == logic.termToSMT2String(step.derivedFact));
             recordStep(literals(negate(instantiatedPredicate), simplifiedPredicate), "equiv1",
                        Step::Premises{lastStep()});
             recordStep(literals(simplifiedPredicate), "resolution",
@@ -500,7 +500,7 @@ StepHandler::TermPtr StepHandler::simplifyOpDirect(std::shared_ptr<Op> const & o
     if (op == "=") {
         assert(args[0]->getTermType() == Term::TERMINAL and args[0]->getTerminalType() != Term::VAR);
         assert(args[1]->getTermType() == Term::TERMINAL and args[1]->getTerminalType() != Term::VAR);
-        bool equal = args[0]->printTerm() == args[1]->printTerm();
+        bool equal = args[0]->termToSMT2String() == args[1]->termToSMT2String();
         simplified = std::make_shared<Terminal>(boolToString(equal), Term::BOOL);
         rule = args[0]->getTerminalType() == Term::BOOL ? "equiv_simplify" : "eq_simplify";
     } else if (op == "<" or op == "<=") {
@@ -628,7 +628,7 @@ public:
 
     void visit(Terminal * term) override {
         if (term->getTerminalType() == Term::VAR) {
-            auto termStr = term->printTerm();
+            auto termStr = term->termToSMT2String();
             varsInUse.insert(termStr);
         }
     }
@@ -660,7 +660,7 @@ std::pair<std::shared_ptr<Term>, bool> removeUnusedQuantifiers(std::shared_ptr<T
     auto const & vars = quantifiedTerm->getVars();
     auto const & sorts = quantifiedTerm->getSorts();
     for (std::size_t i = 0; i < vars.size(); ++i) {
-        auto varStr = vars[i]->printTerm();
+        auto varStr = vars[i]->termToSMT2String();
         auto it = varsInUse.find(varStr);
         if (it != varsInUse.end()) {
             newVars.push_back(vars[i]);
@@ -705,8 +705,8 @@ std::pair<StepHandler::TermPtr, std::size_t> StepHandler::instantiationSteps(std
     assert(clearedTerm->getTermType() == Term::QUANT);
     auto const asQuantifiedTerm = std::dynamic_pointer_cast<Quant>(clearedTerm);
     for (auto const & varTerm : asQuantifiedTerm->getVars()) {
-        assert(instPairs.contains(varTerm->printTerm()));
-        args.push_back(instPairs.at(varTerm->printTerm()));
+        assert(instPairs.contains(varTerm->termToSMT2String()));
+        args.push_back(instPairs.at(varTerm->termToSMT2String()));
     }
     InstantiateVisitor instantiateVisitor(instPairs);
     auto instantiatedTerm = clearedTerm->accept(&instantiateVisitor);
@@ -715,7 +715,7 @@ std::pair<StepHandler::TermPtr, std::size_t> StepHandler::instantiationSteps(std
             "or", literals(negate(namedAssumption),
                            std::make_shared<Op>(
                                "!", literals(instantiatedTerm,
-                                             makeName(":named " + instantiationReNamedTerm->printTerm())))))),
+                                             makeName(":named " + instantiationReNamedTerm->termToSMT2String())))))),
         std::move(args));
 
     recordStep(literals(negate(namedAssumption), instantiationReNamedTerm), "or", Step::Premises{lastStep()});
@@ -766,7 +766,7 @@ std::size_t StepHandler::deriveLHSWithoutConstraint(std::shared_ptr<Term> const 
         return predicatePremises[0];
     } else if (simplifiedLHS->getTermType() == Term::TERMINAL and simplifiedLHS->getTerminalType() == Term::BOOL) {
         // no predicate => constant true
-        assert(simplifiedLHS->printTerm() == "true");
+        assert(simplifiedLHS->termToSMT2String() == "true");
         return getOrCreateTrueStep();
     } else {
         assert(false);

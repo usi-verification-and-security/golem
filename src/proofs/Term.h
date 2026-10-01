@@ -25,7 +25,7 @@ public:
     virtual void accept(class VoidVisitor *) = 0;
     virtual std::shared_ptr<Term> accept(class LogicVisitor *) = 0;
     virtual Term * accept(class PointerVisitor *) = 0;
-    virtual std::string printTerm();
+    virtual std::string termToSMT2String();
     std::shared_ptr<Term> asSharedPtr() { return shared_from_this(); }
     virtual ~Term() = default;
 };

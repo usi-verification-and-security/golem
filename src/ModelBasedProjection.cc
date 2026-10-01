@@ -7,11 +7,8 @@
 #include "ModelBasedProjection.h"
 
 #include "TermUtils.h"
-#include "utils/SmtSolver.h"
 
-#include <iterator>
 #include <memory>
-#include <queue>
 
 namespace {
 enum class BoundType { LOWER, UPPER };
@@ -24,11 +21,7 @@ struct Bound {
 
 PTRef substituteBound(Bound const & what, Bound const & where, ArithLogic & logic) {
     if (what.type == BoundType::UPPER and where.type == BoundType::UPPER) {
-        if (where.strict and not what.strict) {
-            return logic.mkLt(what.val, where.val);
-        } else {
-            return logic.mkLeq(what.val, where.val);
-        }
+        throw std::invalid_argument("Not implemented yet for two upper bounds");
     }
     if (where.type == BoundType::LOWER and what.type == BoundType::LOWER) {
         if (where.strict and not what.strict) {
@@ -408,7 +401,7 @@ void collectImplicant(Logic & logic, PTRef fla, Model & model, std::vector<char>
     if (id >= processed.size()) { throw std::logic_error("Should not happen!"); }
     if (processed[id]) { return; }
     processed[id] = 1;
-    
+
     PTRef trueTerm = logic.getTerm_true();
     assert(model.evaluate(fla) == trueTerm);
     if (logic.isAtom(fla)) {
@@ -691,7 +684,7 @@ PTRef ModelBasedProjection::project_aux(PTRef fla,
 void ModelBasedProjection::dumpImplicant(std::ostream & out, implicant_t const & implicant) {
     out << "Implicant:\n";
     std::for_each(implicant.begin(), implicant.end(),
-                  [&](PtAsgn i) { out << logic.printTerm(i.tr) << ' ' << toInt(i.sgn) << '\n'; });
+                  [&](PtAsgn i) { out << logic.termToSMT2String(i.tr) << ' ' << toInt(i.sgn) << '\n'; });
     out << std::endl;
 }
 

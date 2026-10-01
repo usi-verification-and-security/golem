@@ -45,7 +45,7 @@ Validator::Result Validator::validateValidityWitness(ChcDirectedHyperGraph const
     auto getInterpretation = [&](SymRef symbol) -> PTRef {
         auto const it = definitions.find(symbol);
         if (it == definitions.end()) {
-            std::cerr << ";Missing definition of a predicate " << logic.printSym(symbol) << std::endl;
+            std::cerr << ";Missing definition of a predicate " << logic.symToString(symbol) << std::endl;
             return PTRef_Undef;
         }
         return it->second;
