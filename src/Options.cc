@@ -50,6 +50,8 @@ const std::string Options::SPACER_RELIND = "spacer.relind";
 const std::string Options::SPACER_MBP_MAY_SUMMARY = "spacer.mbp-may-summary";
 const std::string Options::SPACER_GLOBAL_POB_DB = "spacer.global-pob-db";
 const std::string Options::SPACER_CC_CHAIN_LEMMA = "spacer.cc-chain-lemma";
+const std::string Options::SPACER_CC_CHAIN_POB = "spacer.cc-chain-pob";
+const std::string Options::SPACER_CC_CHAIN_ANCESTORS = "spacer.cc-chain-ancestors";
 const std::string Options::SPACER_CONJECTURE = "spacer.conjecture";
 const std::string Options::SPACER_CONJECTURE_TRIGGER = "spacer.conjecture-trigger";
 const std::string Options::SPACER_MAYPO_GAS = "spacer.maypo-gas";
@@ -145,8 +147,14 @@ void printUsage() {
            "                                  per bound (default: false)\n"
            "--spacer.cc-chain-lemma[=bool]  Spacer: a blocking lemma also goes to the parents of the\n"
            "                                  pob's nearest 2 ancestors at the same vertex, and CC-lemma\n"
-           "                                  fires on the lemmas collected, whatever the visits; takes\n"
-           "                                  effect only with CC-lemma on (default: false)\n"
+           "                                  fires on the lemmas collected once the pob has been examined\n"
+           "                                  --spacer.maypo-trigger times over every bound; takes effect\n"
+           "                                  only with CC-lemma on (default: false)\n"
+           "--spacer.cc-chain-pob[=bool]    Spacer: as --spacer.cc-chain-lemma, for the predecessors\n"
+           "                                  CC-pob hulls; takes effect only with CC-pob on\n"
+           "                                  (default: false)\n"
+           "--spacer.cc-chain-ancestors <n> Spacer: same-vertex ancestors whose parents also get a\n"
+           "                                  chained lemma / predecessor; n >= 1 (default: 2)\n"
            "--spacer.conjecture[=bool]      Spacer: once a pob has been examined often, also compute\n"
            "                                  its predecessors with the may-summary in the MBP argument,\n"
            "                                  and examine those first; no effect with\n"
@@ -215,6 +223,8 @@ Options CommandLineParser::parse(int argc, char ** argv) {
     int spacerMbpMaySummary = -1;
     int spacerGlobalPobDb = -1;
     int spacerCcChainLemma = -1;
+    int spacerCcChainPob = -1;
+    int spacerCcChainAncestors = 0;
     int spacerConjecture = -1;
     // identity tokens only: the raw argument is stored, so it can be validated with a
     // proper message instead of being silently atoi'd to 0
@@ -272,6 +282,8 @@ Options CommandLineParser::parse(int argc, char ** argv) {
                                     {Options::SPACER_MBP_MAY_SUMMARY.c_str(), optional_argument, &spacerMbpMaySummary, 1},
                                     {Options::SPACER_GLOBAL_POB_DB.c_str(), optional_argument, &spacerGlobalPobDb, 1},
                                     {Options::SPACER_CC_CHAIN_LEMMA.c_str(), optional_argument, &spacerCcChainLemma, 1},
+                                    {Options::SPACER_CC_CHAIN_POB.c_str(), optional_argument, &spacerCcChainPob, 1},
+                                    {Options::SPACER_CC_CHAIN_ANCESTORS.c_str(), required_argument, &spacerCcChainAncestors, 1},
                                     {Options::SPACER_CONJECTURE.c_str(), optional_argument, &spacerConjecture, 1},
                                     {Options::SPACER_CONJECTURE_TRIGGER.c_str(), required_argument, &spacerConjectureTrigger, 1},
                                     {Options::SPACER_MAYPO_GAS.c_str(), required_argument, &spacerMayPoGas, 1},
@@ -381,6 +393,11 @@ Options CommandLineParser::parse(int argc, char ** argv) {
                     spacerGlobalPobDb = (optarg and isDisableKeyword(optarg)) ? 0 : 1;
                 } else if (long_options[option_index].flag == &spacerCcChainLemma) {
                     spacerCcChainLemma = (optarg and isDisableKeyword(optarg)) ? 0 : 1;
+                } else if (long_options[option_index].flag == &spacerCcChainPob) {
+                    spacerCcChainPob = (optarg and isDisableKeyword(optarg)) ? 0 : 1;
+                } else if (long_options[option_index].flag == &spacerCcChainAncestors) {
+                    assert(optarg);
+                    res.addOption(Options::SPACER_CC_CHAIN_ANCESTORS, optarg);
                 } else if (long_options[option_index].flag == &spacerConjecture) {
                     spacerConjecture = (optarg and isDisableKeyword(optarg)) ? 0 : 1;
                 } else if (long_options[option_index].flag == &spacerConjectureTrigger) {
@@ -467,6 +484,9 @@ Options CommandLineParser::parse(int argc, char ** argv) {
     }
     if (spacerCcChainLemma >= 0) {
         res.addOption(Options::SPACER_CC_CHAIN_LEMMA, spacerCcChainLemma ? "true" : "false");
+    }
+    if (spacerCcChainPob >= 0) {
+        res.addOption(Options::SPACER_CC_CHAIN_POB, spacerCcChainPob ? "true" : "false");
     }
     if (spacerConjecture >= 0) {
         res.addOption(Options::SPACER_CONJECTURE, spacerConjecture ? "true" : "false");

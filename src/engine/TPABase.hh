@@ -478,7 +478,7 @@ private:
 #ifdef GOLEM_TRACE_LEVEL
 #define TRACE_LEVEL GOLEM_TRACE_LEVEL
 #else
-#define TRACE_LEVEL 2
+#define TRACE_LEVEL 1
 #endif
 
 extern int TPA_INDENT;

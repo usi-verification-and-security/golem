@@ -40,7 +40,7 @@
 #ifdef GOLEM_TRACE_LEVEL
 #define TRACE_LEVEL GOLEM_TRACE_LEVEL
 #else
-#define TRACE_LEVEL 2
+#define TRACE_LEVEL 1
 #endif
 
 namespace golem {
@@ -89,8 +89,16 @@ struct SpacerConfig {
     /// A lemma that blocks a pob also goes to the blocking lemmas of the parents of its nearest
     /// `ccChainAncestors` ancestors at the same vertex, so a subgoal collects lemmas from lower
     /// levels too (pushing them, as a hull); and CC-lemma fires once `minLemmasForCc` lemmas are
-    /// there, whatever the visits. No effect without ccLemma. Wired: --spacer.cc-chain-lemma.
+    /// there and the pob has been examined `triggerMayPo` times over every bound (its global counter),
+    /// whatever the visits at this bound. No effect without ccLemma. Wired: --spacer.cc-chain-lemma.
     bool ccChainLemma = false;
+
+    /// As ccChainLemma, for CC-pob: a predecessor also goes to the under-approximations of the parents of
+    /// its nearest `ccChainAncestors` ancestors at the same vertex, each at the edge source that ancestor
+    /// came through; and CC-pob fires once `minPobsForCc` are there and the pob's global counter has
+    /// reached `triggerMayPo`, whatever the visits at this bound. No effect without ccPob.
+    /// Wired: --spacer.cc-chain-pob.
+    bool ccChainPob = false;
 
     /// Once a pob has been examined `triggerConjecture` times (over every bound), also compute its
     /// predecessors as with mbpWithMaySummary = true, and examine them before the plain ones. The
@@ -100,18 +108,19 @@ struct SpacerConfig {
     bool conjecture = false;
 
     // tuning parameters (wired: --spacer.maypo-gas / --spacer.maypo-trigger / --spacer.max-lemmas-cc
-    // / --spacer.min-pobs-cc / --spacer.max-pobs-cc / --spacer.conjecture-trigger)
+    // / --spacer.min-pobs-cc / --spacer.max-pobs-cc / --spacer.conjecture-trigger
+    // / --spacer.cc-chain-ancestors)
     std::size_t mayPoGas = 5;             // pobs a may-POB family may push below its root
     std::size_t triggerMayPo = 3;         // visits before may-POBs are built
-    std::size_t triggerConjecture = 10;   // visits, summed over every bound, before `conjecture` fires
+    std::size_t triggerConjecture = 5;    // visits, summed over every bound, before `conjecture` fires
     std::size_t minLemmasForCc = 2;       // blocking lemmas needed before CC-lemma fires
-    std::size_t maxLemmasForCc = 7;       // blocking lemmas kept per child for CC-lemma, oldest evicted
+    std::size_t maxLemmasForCc = 5;       // blocking lemmas kept per child for CC-lemma, oldest evicted
                                           // first; 0 = no limit
-    std::size_t ccChainAncestors = 2;     // ccChainLemma: same-vertex ancestors whose parents also get
-                                          // the lemma, beyond the blocked pob's own parent
+    std::size_t ccChainAncestors = 2;     // ccChainLemma / ccChainPob: same-vertex ancestors whose parents
+                                          // also get the lemma / predecessor, beyond the pob's own parent
     std::size_t minPobsForCc = 2;         // under-approximations of a predecessor needed before CC-pob
                                           // fires
-    std::size_t maxPobsForCc = 7;         // under-approximations kept per edge source for CC-pob,
+    std::size_t maxPobsForCc = 5;         // under-approximations kept per edge source for CC-pob,
                                           // oldest evicted first; 0 = no limit
     std::size_t minBmbpOverLits = 1;      // literals needed in a BMBP over-approximation
 
@@ -204,6 +213,9 @@ struct SpacerConfig {
         if (auto const ccChainLemma = flag(Options::SPACER_CC_CHAIN_LEMMA)) {
             cfg.ccChainLemma = *ccChainLemma;
         }
+        if (auto const ccChainPob = flag(Options::SPACER_CC_CHAIN_POB)) {
+            cfg.ccChainPob = *ccChainPob;
+        }
         if (auto const conjecture = flag(Options::SPACER_CONJECTURE)) {
             cfg.conjecture = *conjecture;
         }
@@ -229,6 +241,7 @@ struct SpacerConfig {
         positive(Options::SPACER_MIN_POBS_CC, cfg.minPobsForCc);
         positive(Options::SPACER_MAX_POBS_CC, cfg.maxPobsForCc);
         positive(Options::SPACER_CONJECTURE_TRIGGER, cfg.triggerConjecture);
+        positive(Options::SPACER_CC_CHAIN_ANCESTORS, cfg.ccChainAncestors);
 
         cfg.validate();
         return cfg;
@@ -613,12 +626,20 @@ struct ProofObligation {
         std::size_t bound;
     };
     std::optional<ParentKey> parent;
-    /// SpacerConfig::ccChainLemma only: this pob's vertex and parent, then its ancestors', nearest first,
-    /// for SpacerContext::recordBlockingLemma. Shared with the descendants, which extend it. Unset for
-    /// the query.
+    /// The edge and source position a pob came through from its parent: the key of the parent's
+    /// predecessor caches (EdgeVidPredCache).
+    struct Via {
+        EId edge;
+        std::size_t sourceIndex;
+    };
+    /// SpacerConfig::ccChainLemma / ccChainPob only: this pob's vertex, parent and edge source, then its
+    /// ancestors', nearest first, for SpacerContext::recordBlockingLemma / recordUnderApprox. Shared with
+    /// the descendants, which extend it. Unset for the query.
     struct ChainLink {
         SymRef vertex;
         std::optional<ParentKey> parent;
+        /// unset for a CC-lemma root at a vertex that several edge sources of its creator share
+        std::optional<Via> via;
         std::shared_ptr<ChainLink const> up;
     };
     std::shared_ptr<ChainLink const> chain;
@@ -775,12 +796,45 @@ class SpacerContext {
     }
 
     bool chainLemmas() const { return cfg.maypo and cfg.ccLemma and cfg.ccChainLemma; }
+    bool chainPobs() const { return cfg.maypo and cfg.ccPob and cfg.ccChainPob; }
 
-    /// `child`, just built below `creator`, extends the creator's chain (ccChainLemma only).
-    void linkChain(ProofObligation & child, ProofObligation const & creator) const {
-        if (not chainLemmas()) { return; }
+    /// `child`, just built below `creator` through edge source `via`, extends the creator's chain
+    /// (ccChainLemma / ccChainPob only).
+    void linkChain(ProofObligation & child, ProofObligation const & creator,
+                   std::optional<ProofObligation::Via> via) const {
+        if (not chainLemmas() and not chainPobs()) { return; }
         child.chain = std::make_shared<ProofObligation::ChainLink const>(
-            ProofObligation::ChainLink{child.vertex, child.parent, creator.chain});
+            ProofObligation::ChainLink{child.vertex, child.parent, via, creator.chain});
+    }
+
+    /// The only edge source through which `source` is a predecessor of `target`, if there is exactly one.
+    std::optional<ProofObligation::Via> onlyVia(SymRef target, SymRef source) const {
+        std::optional<ProofObligation::Via> found;
+        for (EId eid : incomingEdges(target)) {
+            auto const & sources = graph.getSources(eid);
+            for (std::size_t i = 0; i < sources.size(); ++i) {
+                if (sources[i] != source) { continue; }
+                if (found) { return std::nullopt; }
+                found = ProofObligation::Via{eid, i};
+            }
+        }
+        return found;
+    }
+
+    /// Calls `f(link, sameVertex)` on the links of `pob`'s chain whose parent gets what `pob` records,
+    /// nearest first: the pob's own (sameVertex = 1), then those of its nearest `ccChainAncestors`
+    /// ancestors at the same vertex.
+    template<typename F> void forEachChainOwner(ProofObligation const & pob, F && f) const {
+        assert(pob.chain and pob.chain->vertex == pob.vertex);
+        std::size_t sameVertex = 0;
+        for (auto const * link = pob.chain.get(); link and sameVertex <= cfg.ccChainAncestors;
+             link = link->up.get()) {
+            if (link->vertex != pob.vertex) { continue; }
+            ++sameVertex;
+            // a may-POB built on the visit that blocked its creator has no parent; its ancestors may
+            if (not link->parent) { continue; }
+            f(*link, sameVertex);
+        }
     }
 
     /// `lemma` blocked `pob`: it goes to the blocking lemmas of the pob's parent, for CC-lemma. With
@@ -795,21 +849,39 @@ class SpacerContext {
             }
             return;
         }
-        assert(pob.chain->vertex == pob.vertex);
-        std::size_t sameVertex = 0;
-        for (auto const * link = pob.chain.get(); link and sameVertex <= cfg.ccChainAncestors;
-             link = link->up.get()) {
-            if (link->vertex != pob.vertex) { continue; }
-            ++sameVertex;
-            // a may-POB built on the visit that blocked its creator has no parent; its ancestors may
-            if (not link->parent) { continue; }
-            auto const & owner = *link->parent;
+        forEachChainOwner(pob, [&](ProofObligation::ChainLink const & link, std::size_t sameVertex) {
+            auto const & owner = *link.parent;
             blockingLemmas(owner.vertex, owner.constraint, owner.bound).insert(pob.vertex, lemma, cfg.maxLemmasForCc);
             if (sameVertex > 1) {
                 TRACE(1, "[CC-CHAIN] Lemma " << lemma.x << " for " << pob.vertex.x << " at level " << pob.bound
                       << " also to PO " << owner.constraint.x << " at level " << owner.bound);
             }
+        });
+    }
+
+    /// `pred`, a predecessor that came through edge source `via`, goes to its parent's under-approximations
+    /// at `via`, for CC-pob. With ccChainPob also to those of the parents of its nearest `ccChainAncestors`
+    /// ancestors at the same vertex, each at the edge source that ancestor came through: as for the
+    /// blocking lemmas, a pob from a lower level offered to a subgoal higher up the chain.
+    void recordUnderApprox(ProofObligation const & pred, ProofObligation::Via via) const {
+        auto insert = [&](ProofObligation::ParentKey const & owner, ProofObligation::Via at) {
+            PobInfo::atBound(pobInfo(owner.vertex, owner.constraint).underPredCache, owner.bound)
+                .insert(at.edge, at.sourceIndex, pred.constraint, cfg.maxPobsForCc);
+        };
+        if (not chainPobs() or not pred.chain) {
+            insert(*pred.parent, via);
+            return;
         }
+        forEachChainOwner(pred, [&](ProofObligation::ChainLink const & link, std::size_t sameVertex) {
+            // a CC-lemma root whose edge source is ambiguous has none; its ancestors may
+            if (not link.via) { return; }
+            auto const & owner = *link.parent;
+            insert(owner, *link.via);
+            if (sameVertex > 1) {
+                TRACE(1, "[CC-CHAIN-POB] Pob " << pred.constraint.x << " for " << pred.vertex.x << " at level "
+                      << pred.bound << " also to PO " << owner.constraint.x << " at level " << owner.bound);
+            }
+        });
     }
 
     /// A CC root was found reachable, ran out of gas, or was blocked: rewrite the formulas its hull
@@ -970,7 +1042,7 @@ class SpacerContext {
 
     /// `withMaySummary`: whether the MBP argument keeps the refined source's may-summary (see
     /// SpacerConfig::mbpWithMaySummary). `recordApproximations`: whether the predecessor's under- and
-    /// over-approximations feed the BMBP / CC-pob caches of `pob`.
+    /// over-approximations feed the BMBP / CC-pob caches of `pob`. The predecessor extends `pob`'s chain.
     std::optional<ProofObligation> computePredecessor(EId eid, ProofObligation const & pob, bool withMaySummary,
                                                       bool recordApproximations) const;
 
@@ -1204,7 +1276,6 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
         for (EId edgeId : edges) {
             std::optional<ProofObligation> npob = computePredecessor(edgeId, pob, cfg.mbpWithMaySummary, true);
             if (npob) {
-                linkChain(*npob, pob);
                 if (conjectureReady) {
                     // The same satisfiability check as npob's, so it is not blocked either, and the
                     // solver being deterministic, the same model: only the MBP argument differs. It
@@ -1213,7 +1284,6 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
                     assert(cpob);
                     if (cpob->constraint != npob->constraint) {
                         cpob->conjecture = true;
-                        linkChain(*cpob, pob);
                         TRACE(1, "[CONJ] PO " << pob.constraint.x << " examined " << info.globalCounter
                               << " times: predecessor " << cpob->constraint.x << " with the frame, "
                               << npob->constraint.x << " without");
@@ -1266,7 +1336,8 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
         // join its family. A must pob opens a new family for each may-POB it builds.
         std::size_t const mayPobBudget = pob.isMayPO ? families[pob.family].gas - newProofObligations.size()
                                                      : std::numeric_limits<std::size_t>::max();
-        auto makeMayPob = [&](SymRef vertex, PTRef constraint, LemmaOriginMask source) {
+        auto makeMayPob = [&](SymRef vertex, PTRef constraint, LemmaOriginMask source,
+                              std::optional<ProofObligation::Via> via) {
             ProofObligation mayPred{vertex, pob.bound - 1, constraint, true};
             // Built on the visit that blocks this pob: its lemma does not go to this pob's blocking lemmas.
             if (not newProofObligations.empty()) {
@@ -1282,18 +1353,23 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
                 families.back().source = source;
                 families.back().rootBound = mayPred.bound;
             }
-            linkChain(mayPred, pob);
+            linkChain(mayPred, pob, via);
             return mayPred;
         };
         // Two triggers, one per kind of evidence. BMBP and CC-pob read the predecessor caches of
         // this bound, so they trigger on the visits at this bound. CC-lemma reads the blocking
         // lemmas, which `globaPlobDb` shares across bounds; with it on, it triggers on the visits
         // over every bound. With `ccChainLemma` the lemmas arrive from the whole chain below, so
-        // CC-lemma fires on their number alone (minLemmasForCc), whatever the visits.
+        // CC-lemma fires on their number (minLemmasForCc) once the pob has been examined often enough
+        // over every bound, whatever the visits at this bound; with `ccChainPob` the same holds for
+        // CC-pob's predecessors (minPobsForCc). Without that wait the chain fills a slot at once, and
+        // the hull mixes levels at pobs examined only once or twice.
         bool const lastVisit = cfg.mayPobOnLastVisit and newProofObligations.empty();
         bool const predsReady = lastVisit or visits >= cfg.triggerMayPo;
-        bool const lemmasReady = cfg.ccChainLemma or lastVisit or
+        bool const chainReady = info.globalCounter >= cfg.triggerMayPo;
+        bool const lemmasReady = (cfg.ccChainLemma and chainReady) or lastVisit or
                                  (cfg.globalPobDb ? info.globalCounter : visits) >= cfg.triggerMayPo;
+        bool const pobsReady = (cfg.ccChainPob and chainReady) or predsReady;
         if (cfg.maypo) {
 
             if (cfg.bmbp and predsReady) {
@@ -1301,7 +1377,8 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
             EdgeVidPredCache const & overPreds = PobInfo::atBound(info.overPredCache, pob.bound);
             for (auto it = overPreds.begin(cfg.minBmbpOverLits);
                  it != overPreds.end() and newMayPO.size() < mayPobBudget; ++it) {
-                newMayPO.push_back(makeMayPob(it.getNode(graph), logic.mkAnd(it.getApprox()), LemmaOrigin::MayBmbp));
+                newMayPO.push_back(makeMayPob(it.getNode(graph), logic.mkAnd(it.getApprox()), LemmaOrigin::MayBmbp,
+                                              ProofObligation::Via{it.getEdge(), it.getSourceIndex()}));
             }
             }
 
@@ -1329,13 +1406,15 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
                       for (auto lemma : negatedLemmas) {
                           std::cout << logic.pp(lemma) << std::endl;}
                       std::cout);
-                ProofObligation mayPred = makeMayPob(it.getNode(), mayConstraint, LemmaOrigin::MayCcLemma);
+                // Keyed by vertex, not edge source: the chain of CC-pob needs the edge source it stands for.
+                ProofObligation mayPred = makeMayPob(it.getNode(), mayConstraint, LemmaOrigin::MayCcLemma,
+                                                     chainPobs() ? onlyVia(pob.vertex, it.getNode()) : std::nullopt);
                 mayPred.ccOrigin = ProofObligation::CcOrigin{pob.vertex, pob.constraint, pob.bound, EId{0}, 0};
                 newMayPO.push_back(std::move(mayPred));
             }
             }
 
-            if (cfg.ccPob and predsReady) {
+            if (cfg.ccPob and pobsReady) {
             // Convex Closure of the under-approximations of the predecessors, i.e. of the pobs
             // they became. These are pob constraints already, so they are target formulas.
             EdgeVidPredCache const & underPreds = PobInfo::atBound(info.underPredCache, pob.bound);
@@ -1354,7 +1433,8 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
                       for (auto underPob : underPobs) {
                           std::cout << logic.pp(underPob) << std::endl;}
                       std::cout);
-                ProofObligation mayPred = makeMayPob(it.getNode(graph), mayConstraint, LemmaOrigin::MayCcPob);
+                ProofObligation mayPred = makeMayPob(it.getNode(graph), mayConstraint, LemmaOrigin::MayCcPob,
+                                                     ProofObligation::Via{it.getEdge(), it.getSourceIndex()});
                 mayPred.ccOrigin = ProofObligation::CcOrigin{pob.vertex, pob.constraint, pob.bound,
                                                              it.getEdge(), it.getSourceIndex()};
                 newMayPO.push_back(std::move(mayPred));
@@ -2469,6 +2549,11 @@ std::optional<ProofObligation> SpacerContext::computePredecessor(EId eid, ProofO
             auto [newConstraint, newOverConstraint] = \
                 projectFormulaWithOver(logic.mkAnd(mbpArgument, pob.constraint), predicateVars, *res.model);
             PTRef newPob = VersionManager(logic).sourceFormulaToTarget(newConstraint); // ensure POB is target fla
+            ProofObligation predPob{source, sourceBound, newPob, pob.isMayPO};
+            predPob.family = pob.family;
+            predPob.parent = ProofObligation::ParentKey{pob.vertex, pob.constraint, pob.bound};
+            predPob.maySource = pob.maySource;
+            linkChain(predPob, pob, ProofObligation::Via{eid, 0});
             if (cfg.maypo and recordApproximations) {
             PTRef newOverPob = VersionManager(logic).sourceFormulaToTarget(newOverConstraint); // ensure POB is target fla
             if (newOverPob != newPob and newOverPob != logic.getTerm_true()) {
@@ -2476,15 +2561,10 @@ std::optional<ProofObligation> SpacerContext::computePredecessor(EId eid, ProofO
                     .insert(eid, 0, newOverPob, 0);
             }
             if (cfg.ccPob and newPob != logic.getTerm_true()) {
-                PobInfo::atBound(pobInfo(pob.vertex, pob.constraint).underPredCache, pob.bound)
-                    .insert(eid, 0, newPob, cfg.maxPobsForCc);
+                recordUnderApprox(predPob, ProofObligation::Via{eid, 0});
             }
             }
             TRACE(2, "New proof obligation generated");
-            ProofObligation predPob{source, sourceBound, newPob, pob.isMayPO};
-            predPob.family = pob.family;
-            predPob.parent = ProofObligation::ParentKey{pob.vertex, pob.constraint, pob.bound};
-            predPob.maySource = pob.maySource;
             return predPob;
         } else if (res.answer == QueryAnswer::UNSAT) {
             TRACE(2, "Edge blocked by current  may-summaries")
@@ -2523,6 +2603,11 @@ std::optional<ProofObligation> SpacerContext::computePredecessor(EId eid, ProofO
                 projectFormulaWithOver(logic.mkAnd(mbpArgument, pob.constraint), predicateVars, *res.model);
             PTRef newPob = VersionManager(logic).sourceFormulaToTarget(newConstraint); // ensure POB is target fla
             TRACE(2, "New proof obligation generated")
+            ProofObligation predPob{sources[vertexToRefine], sourceBound, newPob, pob.isMayPO};
+            predPob.family = pob.family;
+            predPob.parent = ProofObligation::ParentKey{pob.vertex, pob.constraint, pob.bound};
+            predPob.maySource = pob.maySource;
+            linkChain(predPob, pob, ProofObligation::Via{eid, vertexToRefine});
             if (cfg.maypo and recordApproximations) {
             PTRef newOverPob = VersionManager(logic).sourceFormulaToTarget(newOverConstraint); // ensure POB is target fla
             if (newOverPob != newPob and newOverPob != logic.getTerm_true()) {
@@ -2530,14 +2615,9 @@ std::optional<ProofObligation> SpacerContext::computePredecessor(EId eid, ProofO
                     .insert(eid, vertexToRefine, newOverPob, 0);
             }
             if (cfg.ccPob and newPob != logic.getTerm_true()) {
-                PobInfo::atBound(pobInfo(pob.vertex, pob.constraint).underPredCache, pob.bound)
-                    .insert(eid, vertexToRefine, newPob, cfg.maxPobsForCc);
+                recordUnderApprox(predPob, ProofObligation::Via{eid, vertexToRefine});
             }
             }
-            ProofObligation predPob{sources[vertexToRefine], sourceBound, newPob, pob.isMayPO};
-            predPob.family = pob.family;
-            predPob.parent = ProofObligation::ParentKey{pob.vertex, pob.constraint, pob.bound};
-            predPob.maySource = pob.maySource;
             return predPob;
 
         } else if (res.answer == QueryAnswer::UNSAT) {
