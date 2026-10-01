@@ -366,8 +366,9 @@ vec<PTRef> extractWellFoundedCandidates(PTRef itp, PTRef sink, ArithLogic & logi
     return strictCandidates;
 }
 
-// Function evaluates if Tr(x,x') determenistic
-bool determinismCheck(PTRef const transition, Logic & logic, std::vector<PTRef> const & vars) {
+// Function evaluates if Tr(x,x',a) determenistic, where a are auxiliary variables
+bool determinismCheck(PTRef const transition, Logic & logic, std::vector<PTRef> const & vars,
+                      std::vector<PTRef> const & auxVars) {
     SMTSolver detChecker(logic, SMTSolver::WitnessProduction::NONE);
     TermUtils::substitutions_map detSubstitutions;
     vec<PTRef> neq;
@@ -378,8 +379,13 @@ bool determinismCheck(PTRef const transition, Logic & logic, std::vector<PTRef> 
         detSubstitutions.insert({next, nextNext});
         neq.push(logic.mkNot(logic.mkEq(next, nextNext)));
     }
+    // Auxiliary variables must be fresh in the second copy, otherwise nondeterminism introduced through them is missed
+    for (auto auxVar : auxVars) {
+        std::string freshName = "det_" + std::string(logic.getSymName(auxVar));
+        detSubstitutions.insert({auxVar, logic.mkVar(logic.getSortRef(auxVar), freshName.c_str())});
+    }
     PTRef newTransition = TermUtils(logic).varSubstitute(transition, detSubstitutions);
-    // Tr(x,x') /\ Tr(x, x'') /\ ! x' = x''
+    // Tr(x,x',a) /\ Tr(x,x'',a') /\ ! x' = x''
     detChecker.assertProp(logic.mkAnd({transition, newTransition, logic.mkOr(neq)}));
 
     return detChecker.check() == SMTSolver::Answer::UNSAT;
@@ -578,11 +584,11 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
 
     // Witness computation is required, as we need to use both counterexample traces to limit terminating states
     // and inductive invariants to prove nontermination
-    DETERMINISTIC_TRANSITION = determinismCheck(transition, logic, vars);
+    DETERMINISTIC_TRANSITION = determinismCheck(transition, logic, vars, aux_vars);
     covered = logic.getTerm_false();
     // Safety-Based Termination Analysis
     // TODO: Figure out why passing in transition is problematic
-    auto [answer, trInvOrRecurringSet] = analyzeTS(init, transition, sink, logic);
+    auto [answer, trInvOrRecurringSet] = analyzeTS(init, normTransition, sink, logic);
     return answer;
 }
 
@@ -779,7 +785,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::checkTermina
         PTRef newCov = TimeMachine(logic).sendFlaThroughTime(QuantifierElimination(logic).eliminate(
             logic.mkAnd({reached, subinv}),vars), -1);
         // TODO: Think if maybe sink can be even more restricted...
-        sink = TermUtils(logic).simplifyMax(logic.mkOr({sink, newCov, reached}));
+        sink = TermUtils(logic).simplifyMax(logic.mkOr({sink, reached}));
         // transition = TermUtils(logic).simplifyMax(logic.mkAnd({transition,
         //     TimeMachine(logic).sendFlaThroughTime(logic.mkNot(logic.mkOr(newCov, reached)),1)}));
         smt_checker.resetSolver();
