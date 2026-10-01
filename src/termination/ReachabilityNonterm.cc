@@ -771,7 +771,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::checkTermina
     // Algorithm checks if reachable states are terminating
     // TODO: I can also extract all covered states from here and use them as terminating (updating tr)
     auto [answer, subinv] =
-        analyzeTS(reached, transition, TermUtils(logic).simplifyMax(sink), logic);
+        analyzeTS(reached, transition, TermUtils(logic).simplifyMax(covered), logic);
     // TODO: It is possible to do check differently, analyzing <noncoveredStates, tr,
     //   not(noncoveredStates)>
     //   If this terminates, then the whole TS terminates, but if it nonterinates we need to prove
@@ -785,7 +785,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::checkTermina
         PTRef newCov = TimeMachine(logic).sendFlaThroughTime(QuantifierElimination(logic).eliminate(
             logic.mkAnd({reached, subinv}),vars), -1);
         // TODO: Think if maybe sink can be even more restricted...
-        sink = TermUtils(logic).simplifyMax(logic.mkOr({sink, newCov, reached}));
+        // sink = TermUtils(logic).simplifyMax(logic.mkOr({sink, newCov, reached}));
         // transition = TermUtils(logic).simplifyMax(logic.mkAnd({transition,
         //     TimeMachine(logic).sendFlaThroughTime(logic.mkNot(logic.mkOr(newCov, reached)),1)}));
         smt_checker.resetSolver();
