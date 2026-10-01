@@ -97,17 +97,17 @@ std::unique_ptr<TransitionSystem> toTransitionSystem(ChcDirectedGraph const & gr
                            systemVariables.stateVars.begin(), std::inserter(subMap, subMap.end()),
                            [](PTRef key, PTRef value) { return std::make_pair(key, value); });
             init = utils.varSubstitute(init, subMap);
-            // std::cout << logic.printTerm(init) << std::endl;
+            // std::cout << logic.termToSMT2String(init) << std::endl;
         }
         if (isLoop) {
             assert(transitionRelation == PTRef_Undef);
             transitionRelation = fla;
-            // std::cout << logic.printTerm(transitionRelation) << std::endl;
+            // std::cout << logic.termToSMT2String(transitionRelation) << std::endl;
         }
         if (isEnd) {
             assert(bad == PTRef_Undef);
             bad = TrivialQuantifierElimination(logic).tryEliminateVarsExcept(systemVariables.stateVars, fla);
-            // std::cout << logic.printTerm(bad) << std::endl;
+            // std::cout << logic.termToSMT2String(bad) << std::endl;
         }
     });
     assert(init != PTRef_Undef);

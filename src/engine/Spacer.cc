@@ -118,7 +118,7 @@ public:
     // DEBUG
     void print(Logic & logic) const {
         for (auto const & entry : *this) {
-            std::cout << logic.printSym(entry.derivedFact.node) << " " << logic.pp(entry.derivedFact.fact) << " "
+            std::cout << logic.symToString(entry.derivedFact.node) << " " << logic.pp(entry.derivedFact.fact) << " "
                       << entry.incomingEdge.id << " | ";
             for (auto premise : entry.premises) {
                 std::cout << premise << " ";
@@ -529,10 +529,10 @@ SpacerContext::InductiveCheckResult SpacerContext::isInductive(std::size_t maxLe
             vec<PTRef> edgeRepresentations;
             for (EId eid : incomingEdges(vid)) {
                 edgeRepresentations.push(getEdgeMaySummary(eid, level));
-                //                std::cout << "Representation of edge " << eid.id << " at level " << level << " is " << logic.printTerm(edgeRepresentations.last()) << std::endl;
+                //                std::cout << "Representation of edge " << eid.id << " at level " << level << " is " << logic.termToSMT2String(edgeRepresentations.last()) << std::endl;
             }
             PTRef body = logic.mkOr(edgeRepresentations);
-            //            std::cout << "Body representation of " << vid.id << " at level " << level << " is " << logic.printTerm(body) << std::endl;
+            //            std::cout << "Body representation of " << vid.id << " at level " << level << " is " << logic.termToSMT2String(body) << std::endl;
             // Figure out which components of the may summary are implied by body at level n and so can be pushed to level n+1
             //            std::cout << "Need to check " << maySummaryComponents.size() << " components for vertex " << vid.id << std::endl;
             bool allPushed = tryPushComponents(vid, level, body);
@@ -560,7 +560,7 @@ bool SpacerContext::tryPushComponents(SymRef vid, std::size_t level, PTRef body)
             continue;
         }
         PTRef nextStateComponent = VersionManager(logic).baseFormulaToTarget(component);
-        //        std::cout << " Checking component " << logic.printTerm(nextStateComponent) << std::endl;
+        //        std::cout << " Checking component " << logic.termToSMT2String(nextStateComponent) << std::endl;
         solver.push();
         solver.insertFormula(logic.mkNot(nextStateComponent));
         auto res = solver.check();
@@ -596,8 +596,8 @@ bool SpacerContext::tryPushComponents(SymRef vid, std::size_t level, PTRef body)
 
 PTRef SpacerContext::projectFormula(PTRef fla, const vec<PTRef> & toVars, Model & model) const {
     assert(std::all_of(toVars.begin(), toVars.end(), [this](PTRef var) { return logic.isVar(var); }));
-    //    std::cout << "Projecting " << logic.printTerm(fla) << " to variables ";
-    //    std::for_each(toVars.begin(), toVars.end(), [&](PTRef var) { std::cout << logic.printTerm(var) << ' '; });
+    //    std::cout << "Projecting " << logic.termToSMT2String(fla) << " to variables ";
+    //    std::for_each(toVars.begin(), toVars.end(), [&](PTRef var) { std::cout << logic.termToSMT2String(var) << ' '; });
     //    std::cout << std::endl;
     auto varsInFla = TermUtils(logic).getVars(fla);
 
@@ -608,7 +608,7 @@ PTRef SpacerContext::projectFormula(PTRef fla, const vec<PTRef> & toVars, Model 
     }
     ModelBasedProjection mbp(logic);
     PTRef res = mbp.project(fla, toEliminate, model);
-    //    std::cout << "\nResult is " << logic.printTerm(res) << std::endl;
+    //    std::cout << "\nResult is " << logic.termToSMT2String(res) << std::endl;
     return res;
 }
 

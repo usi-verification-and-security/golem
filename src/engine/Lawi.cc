@@ -211,7 +211,7 @@ public:
         if (it != cache.end()) { return it->second; }
         SMTSolver solver(logic, SMTSolver::WitnessProduction::NONE);
         PTRef negImpl = logic.mkAnd(antecedent, logic.mkNot(consequent)); // not(A->B) iff A and (not B)
-        //        std::cout << logic.printTerm(negImpl) << std::endl;
+        //        std::cout << logic.termToSMT2String(negImpl) << std::endl;
         solver.assertProp(negImpl);
         auto res = solver.check();
         switch (res) {
@@ -247,7 +247,7 @@ public:
         }
         SMTSolver solver(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
         PTRef negImpl = logic.mkAnd(antecedent, logic.mkNot(consequent)); // not(A->B) iff A and (not B)
-        //        std::cout << logic.printTerm(negImpl) << std::endl;
+        //        std::cout << logic.termToSMT2String(negImpl) << std::endl;
         solver.assertProp(negImpl);
         auto res = solver.check();
         switch (res) {
@@ -472,16 +472,16 @@ void LawiContext::applyForcedCovering(VId vertex) {
         auto edgeFormulas = path.getEdgeFormulas();
         auto solver = createInterpolatingSolver();
         solver->assertProp(labels.getLabel(nca));
-        //        std::cout << logic.printTerm(labels.getLabel(nca)) << std::endl;
+        //        std::cout << logic.termToSMT2String(labels.getLabel(nca)) << std::endl;
         for (PTRef edge : edgeFormulas) {
             solver->assertProp(edge);
-            //            std::cout << logic.printTerm(edge) << std::endl;
+            //            std::cout << logic.termToSMT2String(edge) << std::endl;
         }
         PTRef labelToTest = TimeMachine(logic).sendFlaThroughTime(labels.getLabel(candidate), edgeFormulas.size());
-        //        std::cout << logic.printTerm(labelToTest) << std::endl;
+        //        std::cout << logic.termToSMT2String(labelToTest) << std::endl;
         solver->assertProp(logic.mkNot(labelToTest));
         //        PTRef fla = logic.mkAnd({labels.getLabel(nca), logic.mkAnd(edgeFormulas), logic.mkNot(labelToTest)});
-        //        std::cout << logic.printTerm(fla) << std::endl;
+        //        std::cout << logic.termToSMT2String(fla) << std::endl;
         auto res = solver->check();
         if (res == SMTSolver::Answer::UNSAT) {
             // this vertex is covered by the candidate
@@ -521,11 +521,11 @@ LawiContext::RefinementResult LawiContext::refine(VId errVertex) {
      * 4. normalize to current state formulas
      * 5. if not implied by current label -> strengthen label and potentially uncover vertices
      */
-    //    std::cout << "\nChecking path: " << logic.printTerm(logic.mkAnd(edgeFormulas)) << std::endl;
+    //    std::cout << "\nChecking path: " << logic.termToSMT2String(logic.mkAnd(edgeFormulas)) << std::endl;
     //    std::cout << "\nChecking path of length " << edgeFormulas.size() << std::endl;
     auto solver = createInterpolatingSolver();
     for (PTRef segment : edgeFormulas) {
-        //    	std::cout << logic.printTerm(segment) << std::endl;
+        //    	std::cout << logic.termToSMT2String(segment) << std::endl;
         solver->assertProp(segment);
     }
     auto res = solver->check();
@@ -805,7 +805,7 @@ std::vector<VId> LawiContext::strengthenLabelsAlongPath(const ArtPath & path, co
         VId vertex = vertices[i + 1];
         PTRef itp = itps[i];
         PTRef currentLabel = labels.getLabel(vertex);
-        //        std::cout << "Old label of " << vertex.id << " is " << logic.printTerm(currentLabel) << std::endl;
+        //        std::cout << "Old label of " << vertex.id << " is " << logic.termToSMT2String(currentLabel) << std::endl;
         auto implCheckRes = checkImplication(currentLabel, itp);
         if (implCheckRes != decltype(implCheckRes)::VALID) {
             refinedVertices.push_back(vertex);
@@ -813,7 +813,7 @@ std::vector<VId> LawiContext::strengthenLabelsAlongPath(const ArtPath & path, co
             // label of 'vertex' has been strengthened, it might not cover other vertices anymore
             coveringRelation.vertexStrengthened(vertex);
         }
-        //        std::cout << "New label of " << vertex.id << " is " << logic.printTerm(labels.getLabel(vertex)) << std::endl;
+        //        std::cout << "New label of " << vertex.id << " is " << logic.termToSMT2String(labels.getLabel(vertex)) << std::endl;
     }
     return refinedVertices;
 }

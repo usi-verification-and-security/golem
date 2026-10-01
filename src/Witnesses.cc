@@ -126,7 +126,7 @@ void InvalidityWitness::print(std::ostream & out, Logic & logic) const {
     for (std::size_t i = 0; i < derivationSize; ++i) {
         auto const & step = derivation[i];
         out << i << ":\t";
-        out << logic.printTerm(step.derivedFact);
+        out << logic.termToSMT2String(step.derivedFact);
         if (not step.premises.empty()) {
             out << " -> ";
             for (auto index : step.premises) {
@@ -148,13 +148,13 @@ void ValidityWitness::print(std::ostream & out, ChcDirectedHyperGraph const & gr
         PTRef const predicate = logic.getSym(symbol).nargs() == 0 ? stateVersion : VersionManager(logic).sourceFormulaToBase(stateVersion);
         const auto & args = TermUtils(logic).predicateArgsInOrder(predicate);
         for (std::size_t i = 0; i < args.size(); ++i) {
-            auto sortString = logic.printSort(logic.getSortRef(args[i]));
+            auto sortString = logic.sortToString(logic.getSortRef(args[i]));
             out << "(" << logic.protectName(logic.getSymRef(args[i])) << " " << sortString << ")" << (i == args.size()-1 ? "" : " ");
         }
         assert(logic.getSortRef(symbol) == logic.getSort_bool());
-        out << ")" << " " << logic.printSort(logic.getSortRef(symbol)) << "\n";
+        out << ")" << " " << logic.sortToString(logic.getSortRef(symbol)) << "\n";
         out << "    ";
-        TermUtils(logic).printTermWithLets(out, definition);
+        TermUtils(logic).termToSMT2StringWithLets(out, definition);
         out << ")\n";
     }
     out << ")\n";
@@ -202,7 +202,7 @@ ValidityWitness::fromTransitionSystem(Logic & logic, ChcDirectedGraph const & gr
         subs.insert({systemVars[i], unversionedVars.last()});
     }
     PTRef graphInvariant = utils.varSubstitute(inductiveInvariant, subs);
-    //    std::cout << "Graph invariant: " << logic.printTerm(graphInvariant) << std::endl;
+    //    std::cout << "Graph invariant: " << logic.termToSMT2String(graphInvariant) << std::endl;
     auto definitions = trivialDefinitions(graph);
     definitions.insert({vertex, graphInvariant});
     return ValidityWitness(std::move(definitions));

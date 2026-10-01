@@ -18,12 +18,12 @@ void ChcPrinter::print(const ChcSystem & system, std::ostream & out) const {
 
 void ChcPrinter::print(const ChClause & clause, std::ostream & out) const {
     auto const & head = clause.head;
-    std::string headStr = logic.printTerm(head.predicate.predicate);
+    std::string headStr = logic.termToSMT2String(head.predicate.predicate);
     out << headStr << " :- " << '\n';
     auto const & body = clause.body;
     for (auto const& predicate : body.uninterpretedPart) {
-        out << '\t' << logic.printTerm(predicate.predicate) << ",\n";
+        out << '\t' << logic.termToSMT2String(predicate.predicate) << ",\n";
     }
-    out << '\t' << logic.printTerm(body.interpretedPart.fla) << std::endl;
+    out << '\t' << logic.termToSMT2String(body.interpretedPart.fla) << std::endl;
 }
 } // namespace golem

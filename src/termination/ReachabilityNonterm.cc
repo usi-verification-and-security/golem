@@ -22,7 +22,7 @@ namespace golem::termination {
 
 // Function to eliminate negations, replacing "not (a = b)" with "a < b \/ a > b"
 PTRef normalize(PTRef input, ArithLogic & logic, bool negated = false) {
-    assert(logic.isNot(input) || logic.isAnd(input) || logic.isOr(input) || logic.isNumEq(input) || logic.isLeq(input) || logic.isBoolAtom(input));
+    assert(logic.isNot(input) || logic.isAnd(input) || logic.isOr(input) || logic.isNumEq(input) || logic.isLeq(input) || logic.isBoolVar(input));
     if (logic.isAnd(input) || logic.isOr(input)) {
         // Check every junct
         auto juncts = logic.isAnd(input) ? TermUtils(logic).getTopLevelConjuncts(input)
@@ -78,7 +78,7 @@ PTRef mkZeroDotProductEqs(ArithLogic & logic, vec<PTRef> const & weights,
 }
 
 bool checkWellFounded(PTRef const formula, ArithLogic & logic, vec<PTRef> const & vars) {
-    if (logic.isBoolAtom(formula) || (logic.isNot(formula) && logic.isBoolAtom(logic.getPterm(formula)[0]))) return false;
+    if (logic.isBoolVar(formula) || (logic.isNot(formula) && logic.isBoolVar(logic.getPterm(formula)[0]))) return false;
     assert(logic.isAnd(formula) || logic.isLeq(formula) || logic.isNumEq(formula));
     vec<PTRef> conjuncts = TermUtils(logic).getTopLevelConjuncts(formula);
 

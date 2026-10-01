@@ -51,7 +51,7 @@ VerificationResult TPAEngine::solve(const ChcDirectedGraph & graph) {
             case VerificationAnswer::SAFE: {
                 PTRef inductiveInvariant = solver->getInductiveInvariant();
                 if (inductiveInvariant == PTRef_Undef) { return VerificationResult(res); }
-                // std::cout << "TS invariant: " << logic.printTerm(inductiveInvariant) << std::endl;
+                // std::cout << "TS invariant: " << logic.termToSMT2String(inductiveInvariant) << std::endl;
                 return VerificationResult(res, computeValidityWitness(graph, *ts, inductiveInvariant));
             }
             case VerificationAnswer::UNKNOWN:
@@ -156,7 +156,7 @@ protected:
 public:
     SolverWrapperIncremental(Logic & logic, PTRef transition)
         : logic(logic), solver(logic, SMTSolver::WitnessProduction::MODEL_AND_INTERPOLANTS) {
-        //        std::cout << "Transition: " << logic.printTerm(transition) << std::endl;
+        //        std::cout << "Transition: " << logic.termToSMT2String(transition) << std::endl;
         this->transition = transition;
         solver.getConfig().setSimplifyInterpolant(4);
         solver.getConfig().setLRAInterpolationAlgorithm(itp_lra_alg_decomposing_strong);
@@ -165,7 +165,7 @@ public:
     }
 
     ReachabilityResult checkConsistent(PTRef query) override {
-        //        std::cout << "Query: " << logic.printTerm(query) << std::endl;
+        //        std::cout << "Query: " << logic.termToSMT2String(query) << std::endl;
         assert(not pushed);
         solver.push();
         pushed = true;
@@ -211,7 +211,7 @@ public:
         PTRef itp = itps[0];
         solver.pop();
         pushed = false;
-        //        std::cout << logic.printTerm(itp) << std::endl;
+        //        std::cout << logic.termToSMT2String(itp) << std::endl;
         return itp;
     }
 };
@@ -355,7 +355,7 @@ PTRef TPASplit::getExactPower(unsigned short power) const {
 }
 
 void TPASplit::storeExactPower(unsigned short power, PTRef tr) {
-    //    std::cout << "Strengthening exact reachability on level " << power << " with " << logic.printTerm(tr) <<
+    //    std::cout << "Strengthening exact reachability on level " << power << " with " << logic.termToSMT2String(tr) <<
     //    std::endl;
     if (power != 0 and not isPureTransitionFormula(tr)) {
         throw std::logic_error("Transition relation has some auxiliary variables!");
@@ -384,7 +384,7 @@ PTRef TPASplit::getLessThanPower(unsigned short power) const {
 }
 
 void TPASplit::storeLessThanPower(unsigned short power, PTRef tr) {
-    //    std::cout << "Strengthening less-than reachability on level " << power << " with " << logic.printTerm(tr) <<
+    //    std::cout << "Strengthening less-than reachability on level " << power << " with " << logic.termToSMT2String(tr) <<
     //    std::endl;
     if (power >= 2 and not isPureTransitionFormula(tr)) {
         throw std::logic_error("Transition relation has some auxiliary variables!");
@@ -482,8 +482,8 @@ VerificationAnswer TPASplit::checkPower(unsigned short power) {
  * If 'to' is unreachable, we interpolate over the 2 step transition to obtain 1-step transition of level n+1.
  */
 TPASplit::QueryResult TPASplit::reachabilityQueryExact(PTRef from, PTRef to, unsigned short power) {
-    //        std::cout << "Checking exact reachability on level " << power << " from " << logic.printTerm(from) << " to
-    //        " << logic.printTerm(to) << std::endl;
+    //        std::cout << "Checking exact reachability on level " << power << " from " << logic.termToSMT2String(from) << " to
+    //        " << logic.termToSMT2String(to) << std::endl;
     TRACE(2, "Checking exact reachability on level " << power << " from " << from.x << " to " << to.x)
     assert(queryCache.size() > power);
     auto it = queryCache[power].find({from, to});
@@ -521,7 +521,7 @@ TPASplit::QueryResult TPASplit::reachabilityQueryExact(PTRef from, PTRef to, uns
                 //              PTRef modelMidpoint = getNextVersion(extractStateFromModel(getStateVars(1), *model),
                 //              -1);
                 PTRef nextState = extractMidPoint(from, previousTransition, translatedPreviousTransition, goal, *model);
-                //              std::cout << "Midpoint single point: " << logic.printTerm(modelMidpoint) << '\n';
+                //              std::cout << "Midpoint single point: " << logic.termToSMT2String(modelMidpoint) << '\n';
                 TRACE(3, "Midpoint from MBP: " << nextState.x)
                 // check the reachability using lower level abstraction
                 assert(power > 0);
@@ -562,7 +562,7 @@ TPASplit::QueryResult TPASplit::reachabilityQueryExact(PTRef from, PTRef to, uns
                 itp = simplifyInterpolant(itp);
                 itp = cleanInterpolant(itp);
                 //                std::cout << "Strenghtening representation of exact reachability on level " << power
-                //                << " :"; TermUtils(logic).printTermWithLets(std::cout, itp); std::cout << std::endl;
+                //                << " :"; TermUtils(logic).termToSMT2StringWithLets(std::cout, itp); std::cout << std::endl;
                 TRACE(3, "Learning " << itp.x)
                 TRACE(4, "Learning " << logic.pp(itp))
                 assert(itp != logic.getTerm_true());
@@ -581,8 +581,8 @@ TPASplit::QueryResult TPASplit::reachabilityQueryExact(PTRef from, PTRef to, uns
  * If 'to' is unreachable, we interpolate over the 2 step transition to obtain 1-step transition of level n+1.
  */
 TPASplit::QueryResult TPASplit::reachabilityQueryLessThan(PTRef from, PTRef to, unsigned short power) {
-    //        std::cout << "Checking less-than reachability on level " << power << " from " << logic.printTerm(from) <<
-    //        " to " << logic.printTerm(to) << std::endl;
+    //        std::cout << "Checking less-than reachability on level " << power << " from " << logic.termToSMT2String(from) <<
+    //        " to " << logic.termToSMT2String(to) << std::endl;
     TRACE(2, "Checking less-than reachability on level " << power << " from " << from.x << " to " << to.x)
     if (from == to) {
         QueryResult result;
@@ -810,10 +810,10 @@ void TPABase::resetTransitionSystem(TransitionSystem const & system) {
     }
     this->identity = computeIdentity();
     resetPowers();
-    //    std::cout << "Init: " << logic.printTerm(init) << std::endl;
-    //    std::cout << "Transition: " << logic.printTerm(transition) << std::endl;
-    //    std::cout << "Transition: "; TermUtils(logic).printTermWithLets(std::cout, transition); std::cout <<
-    //    std::endl; std::cout << "Query: " << logic.printTerm(query) << std::endl;
+    //    std::cout << "Init: " << logic.termToSMT2String(init) << std::endl;
+    //    std::cout << "Transition: " << logic.termToSMT2String(transition) << std::endl;
+    //    std::cout << "Transition: "; TermUtils(logic).termToSMT2StringWithLets(std::cout, transition); std::cout <<
+    //    std::endl; std::cout << "Query: " << logic.termToSMT2String(query) << std::endl;
 }
 
 PTRef TPABase::extractMidPoint(PTRef start, PTRef firstTransition, PTRef secondTransition, PTRef goal, Model & model) {
@@ -865,7 +865,7 @@ bool TPASplit::verifyLessThanPower(unsigned short power) const {
     PTRef current = getLessThanPower(power);
     PTRef previous = getLessThanPower(power - 1);
     PTRef previousExact = getExactPower(power - 1);
-    //    std::cout << "Previous exact: " << logic.printTerm(previousExact) << std::endl;
+    //    std::cout << "Previous exact: " << logic.termToSMT2String(previousExact) << std::endl;
     // check that previous or previousExact concatenated with previous implies current
     solver.assertProp(logic.mkOr(shiftOnlyNextVars(previous), logic.mkAnd(previous, getNextVersion(previousExact))));
     solver.assertProp(logic.mkNot(shiftOnlyNextVars(current)));
@@ -882,8 +882,8 @@ bool TPASplit::verifyExactPower(unsigned short power) const {
     SMTSolver solver(logic, SMTSolver::WitnessProduction::NONE);
     PTRef current = getExactPower(power);
     PTRef previous = getExactPower(power - 1);
-    //    std::cout << "Exact on level " << power << " : " << logic.printTerm(current) << std::endl;
-    //    std::cout << "Exact on level " << power - 1 << " : " << logic.printTerm(previous) << std::endl;
+    //    std::cout << "Exact on level " << power << " : " << logic.termToSMT2String(current) << std::endl;
+    //    std::cout << "Exact on level " << power - 1 << " : " << logic.termToSMT2String(previous) << std::endl;
     // check that previous or previousExact concatenated with previous implies current
     solver.assertProp(logic.mkAnd(previous, getNextVersion(previous)));
     solver.assertProp(logic.mkNot(shiftOnlyNextVars(current)));
@@ -1192,7 +1192,7 @@ PTRef TPABasic::getLevelTransition(unsigned short power) const {
 }
 
 void TPABasic::storeLevelTransition(unsigned short power, PTRef tr) {
-    //    std::cout << "Strengthening exact reachability on level " << power << " with " << logic.printTerm(tr) <<
+    //    std::cout << "Strengthening exact reachability on level " << power << " with " << logic.termToSMT2String(tr) <<
     //    std::endl;
     if (power != 0 and not isPureTransitionFormula(tr)) {
         throw std::logic_error("Transition relation has some auxiliary variables!");
@@ -1242,8 +1242,8 @@ VerificationAnswer TPABasic::checkPower(unsigned short power) {
  * If 'to' is unreachable, we interpolate over the 2 step transition to obtain 1-step transition of level n+1.
  */
 TPABasic::QueryResult TPABasic::reachabilityQuery(PTRef from, PTRef to, unsigned short power) {
-    //        std::cout << "Checking LEQ reachability on level " << power << " from " << logic.printTerm(from) << " to "
-    //        << logic.printTerm(to) << std::endl;
+    //        std::cout << "Checking LEQ reachability on level " << power << " from " << logic.termToSMT2String(from) << " to "
+    //        << logic.termToSMT2String(to) << std::endl;
     TRACE(2, "Checking LEQ reachability on level " << power << " from " << from.x << " to " << to.x)
     assert(queryCache.size() > power);
     auto it = queryCache[power].find({from, to});
@@ -1284,7 +1284,7 @@ TPABasic::QueryResult TPABasic::reachabilityQuery(PTRef from, PTRef to, unsigned
                 }
                 // Create the three states corresponding to current, next and next-next variables from the query
                 PTRef nextState = extractMidPoint(from, previousTransition, translatedPreviousTransition, goal, *model);
-                //              std::cout << "Midpoint single point: " << logic.printTerm(modelMidpoint) << '\n';
+                //              std::cout << "Midpoint single point: " << logic.termToSMT2String(modelMidpoint) << '\n';
                 TRACE(3, "Midpoint from MBP: " << nextState.x)
                 assert(power != 0);
                 // check the reachability using lower level abstraction
@@ -1324,7 +1324,7 @@ TPABasic::QueryResult TPABasic::reachabilityQuery(PTRef from, PTRef to, unsigned
                 itp = simplifyInterpolant(itp);
                 itp = cleanInterpolant(itp);
                 //                std::cout << "Strenghtening representation of exact reachability on level " << power
-                //                << " :"; TermUtils(logic).printTermWithLets(std::cout, itp); std::cout << std::endl;
+                //                << " :"; TermUtils(logic).termToSMT2StringWithLets(std::cout, itp); std::cout << std::endl;
                 TRACE(3, "Learning " << itp.x)
                 TRACE(4, "Learning " << logic.pp(itp))
                 // If itp == logic.getTerm_true, then the error states were trivially unreachable
@@ -1742,17 +1742,17 @@ PTRef TPASplit::inductiveInvariantFromEqualsTransitionInvariant() const {
     unsigned short power = explanation.inductivnessPowerExponent;
     assert(verifyLessThanPower(power));
     assert(verifyExactPower(power));
-    //    std::cout << "Less-than transition: " << logic.printTerm(getLessThanPower(power)) << '\n';
-    //    std::cout << "Exact transition: " << logic.printTerm(getExactPower(power)) << std::endl;
+    //    std::cout << "Less-than transition: " << logic.termToSMT2String(getLessThanPower(power)) << '\n';
+    //    std::cout << "Exact transition: " << logic.termToSMT2String(getExactPower(power)) << std::endl;
     PTRef transitionInvariant = logic.mkOr(shiftOnlyNextVars(getLessThanPower(power)),
                                            logic.mkAnd(getLessThanPower(power), getNextVersion(getExactPower(power))));
-    //    std::cout << "Transition invariant: " << logic.printTerm(transitionInvariant) << std::endl;
+    //    std::cout << "Transition invariant: " << logic.termToSMT2String(transitionInvariant) << std::endl;
     PTRef stateInvariant =
         QuantifierElimination(logic).eliminate(logic.mkAnd(init, transitionInvariant), getStateVars(0));
-    //    std::cout << "After eliminating current state vars: " << logic.printTerm(stateInvariant) << std::endl;
+    //    std::cout << "After eliminating current state vars: " << logic.termToSMT2String(stateInvariant) << std::endl;
     stateInvariant = QuantifierElimination(logic).eliminate(stateInvariant, getStateVars(1));
     stateInvariant = getNextVersion(stateInvariant, -2);
-    //    std::cout << "State invariant: " << logic.printTerm(stateInvariant) << std::endl;
+    //    std::cout << "State invariant: " << logic.termToSMT2String(stateInvariant) << std::endl;
     if (power >= 64) { return PTRef_Undef; } // MB: Cannot shift more than 63 bits
     unsigned long k = 1ul << power;
     assert(verifyKinductiveInvariant(stateInvariant, k));
@@ -1760,7 +1760,7 @@ PTRef TPASplit::inductiveInvariantFromEqualsTransitionInvariant() const {
     TransitionSystem transitionSystem(logic, std::make_unique<SystemType>(stateVariables, auxiliaryVariables, logic),
                                       init, transition, query);
     PTRef inductiveInvariant = kinductiveToInductive(stateInvariant, k, transitionSystem);
-    //    std::cout << "Inductive invariant: " << logic.printTerm(inductiveInvariant) << std::endl;
+    //    std::cout << "Inductive invariant: " << logic.termToSMT2String(inductiveInvariant) << std::endl;
     //    std::cout << "Inductive invariant computed!" << std::endl;
     assert(verifyKinductiveInvariant(inductiveInvariant, 1));
     return inductiveInvariant;

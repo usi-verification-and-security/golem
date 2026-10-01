@@ -17,21 +17,21 @@ bool TransitionSystem::isWellFormed() const {
     bool ok = systemType->isStateFormula(init);
     if (not ok) {
         std::stringstream ss;
-        TermUtils(logic).printTermWithLets(ss, init);
+        TermUtils(logic).termToSMT2StringWithLets(ss, init);
         std::cerr << "Problem in init:" << ss.str() << std::endl;
         return false;
     }
     ok = systemType->isStateFormula(query);
     if (not ok) {
         std::stringstream ss;
-        TermUtils(logic).printTermWithLets(ss, query);
+        TermUtils(logic).termToSMT2StringWithLets(ss, query);
         std::cerr << "Problem in query: " << ss.str() << std::endl;
         return false;
     }
     ok = systemType->isTransitionFormula(transition);
     if (not ok) {
         std::stringstream ss;
-        TermUtils(logic).printTermWithLets(ss, transition);
+        TermUtils(logic).termToSMT2StringWithLets(ss, transition);
         std::cerr << "Problem in transition: " << ss.str() << std::endl;
         return false;
     }

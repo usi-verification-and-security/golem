@@ -138,7 +138,7 @@ public:
         bool covered = it != existingInstances.end();
         auto id = nodes.size();
         nodes.push_back(std::move(node));
-        TRACE(1, "Creating new node " + std::to_string(id) + " for symbol " + clauses.getLogic().printSym(symbol))
+        TRACE(1, "Creating new node " + std::to_string(id) + " for symbol " + clauses.getLogic().symToString(symbol))
         if (covered) { coveredNodes.emplace(id, *it); }
         existingInstances.push_back(id);
         return {id, covered};
