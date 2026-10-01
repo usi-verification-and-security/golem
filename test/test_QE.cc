@@ -40,7 +40,7 @@ TEST_F(QE_RealTest, test_singleVar_Equality) {
     EXPECT_EQ(res, logic.getTerm_true());
     fla = logic.mkAnd(fla, logic.mkEq(x, zero));
     res = qe.eliminate(fla, x);
-    std::cout << logic.printTerm(res) << std::endl;
+    std::cout << logic.termToSMT2String(res) << std::endl;
     EXPECT_TRUE(res == logic.mkEq(y, zero) or res == logic.mkAnd(logic.mkLeq(y, zero), logic.mkGeq(y, zero)));
 }
 
@@ -55,7 +55,7 @@ TEST_F(QE_RealTest, test_singleBoolVar) {
     );
     QuantifierElimination qe(logic);
     PTRef res = qe.eliminate(fla, a);
-//    std::cout << logic.printTerm(res) << std::endl;
+//    std::cout << logic.termToSMT2String(res) << std::endl;
     EXPECT_EQ(res, logic.mkOr(b,c));
 }
 
@@ -66,7 +66,7 @@ TEST_F(QE_RealTest, test_strictInequalities) {
     PTRef lit4 = logic.mkNot(logic.mkEq(y, one));
     PTRef fla = logic.mkAnd({lit1, lit2, lit3, lit4});
     PTRef res = QuantifierElimination(logic).eliminate(fla, y);
-    std::cout << logic.printTerm(res) << std::endl;
+    std::cout << logic.termToSMT2String(res) << std::endl;
 //    EXPECT_EQ(res, logic.mkNumLt(zero, x));
     // The result is equivalent to x > 0, but we are missing arithmetic simplifications to get it to that form
     // Current result is x >= 0 and x > 0 which is equivalent to x > 0;
@@ -98,7 +98,7 @@ TEST_F(TrivialQE_IntTest, test_TwoIncrementedVariables) {
     PTRef inc2 = logic.mkEq(yp, logic.mkPlus(y, one));
     PTRef fla = logic.mkAnd({base, inc1, inc2});
     PTRef res = TrivialQuantifierElimination(logic).tryEliminateVarsExcept(vec{xp, yp}, fla);
-    // std::cout << logic.printTerm(res) << std::endl;
+    // std::cout << logic.termToSMT2String(res) << std::endl;
     EXPECT_EQ(res, logic.mkEq(xp, yp));
 }
 
@@ -108,7 +108,7 @@ TEST_F(TrivialQE_IntTest, test_TwoDecrementedVariables) {
     PTRef dec2 = logic.mkEq(yp, logic.mkMinus(y, one));
     PTRef fla = logic.mkAnd({base, dec1, dec2});
     PTRef res = TrivialQuantifierElimination(logic).tryEliminateVarsExcept(vec{xp, yp}, fla);
-    // std::cout << logic.printTerm(res) << std::endl;
+    // std::cout << logic.termToSMT2String(res) << std::endl;
     EXPECT_EQ(res, logic.mkEq(xp, yp));
 }
 

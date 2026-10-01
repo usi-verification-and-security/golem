@@ -67,7 +67,7 @@ TEST_F(MBP_RealTest, test_AllEqualBounds) {
     auto model = getModel({{x0, zero}, {x1, one}});
     PTRef result = mbp.project(logic.mkAnd({lit1, lit2, lit3, lit4}), {x0}, *model);
     // result should be equivalent to "x1 = 1"
-    std::cout << logic.printTerm(result) << std::endl;
+    std::cout << logic.termToSMT2String(result) << std::endl;
     ASSERT_EQ(result, logic.mkAnd(logic.mkLeq(one, x1), logic.mkLeq(x1, one)));
 }
 
@@ -78,7 +78,7 @@ TEST_F(MBP_RealTest, test_AllEqualBoundsTwoVars) {
     auto model = getModel({{x,zero}, {y,zero}, {z,zero}});
     PTRef result = mbp.project(logic.mkAnd(eq1, eq2), {x,y}, *model);
     // result should be equivalent to true
-    std::cout << logic.printTerm(result) << std::endl;
+    std::cout << logic.termToSMT2String(result) << std::endl;
     ASSERT_EQ(result, logic.getTerm_true());
 }
 
@@ -93,7 +93,7 @@ TEST_F(MBP_RealTest, test_SimpleDisjunction) {
     PTRef result = mbp.project(logic.mkAnd({part1, part2, part3}), {x0}, *model);
     // NOTE: Check that the result is not unnecessary strict.
     // Ideally the result should be "(a or b) and (x1 <= 0)"
-    std::cout << logic.printTerm(result) << std::endl;
+    std::cout << logic.termToSMT2String(result) << std::endl;
     ASSERT_TRUE(logic.isAnd(result));
     PTRef expectedConjunct = logic.mkLeq(x1, zero);
     bool found = false;
@@ -150,7 +150,7 @@ TEST_F(MBP_RealTest, test_strictInequalitiesProblem) {
     PTRef fla = logic.mkAnd({lit1, lit2, lit3});
     auto model = getModel({{x,one}, {y,logic.mkRealConst(FastRational(2))}});
     PTRef res = mbp.project(fla, {y}, *model);
-    std::cout << logic.printTerm(res) << std::endl;
+    std::cout << logic.termToSMT2String(res) << std::endl;
     EXPECT_EQ(res, logic.mkLt(zero, x));
 }
 
@@ -162,7 +162,7 @@ TEST_F(MBP_RealTest, test_strictNonStrictEqualitiesSameBound_1) {
     PTRef fla = logic.mkAnd({lit1, lit2, lit3});
     auto model = getModel({{x,one}, {y,logic.mkRealConst(FastRational(2))}});
     PTRef res = mbp.project(fla, {x}, *model);
-    std::cout << logic.printTerm(res) << std::endl;
+    std::cout << logic.termToSMT2String(res) << std::endl;
     EXPECT_EQ(res, logic.mkLt(zero, y));
 }
 
@@ -174,7 +174,7 @@ TEST_F(MBP_RealTest, test_strictNonStrictEqualitiesSameBound_2) {
     PTRef fla = logic.mkAnd({lit1, lit2, lit3});
     auto model = getModel({{x,one}, {y,logic.mkRealConst(FastRational(2))}});
     PTRef res = mbp.project(fla, {x}, *model);
-    std::cout << logic.printTerm(res) << std::endl;
+    std::cout << logic.termToSMT2String(res) << std::endl;
 //    EXPECT_EQ(res, logic.mkLt(zero, y));
     // Currently contains redundant conjuncts
     PTRef expected = logic.mkLt(zero, y);
@@ -221,7 +221,7 @@ TEST_F(MBP_RealTest, test_RegressionTest) {
                           });
     ASSERT_EQ(model->evaluate(fla), logic.getTerm_true());
     PTRef midpoint = mbp.project(fla, {xp,yp}, *model);
-    std::cout << logic.printTerm(midpoint) << std::endl;
+    std::cout << logic.termToSMT2String(midpoint) << std::endl;
     auto checker = getModel({{x,zero}, {y, logic.mkRealConst(FastRational(256))}});
     ASSERT_NE(checker->evaluate(midpoint), logic.getTerm_true());
 }
@@ -239,7 +239,7 @@ TEST_F(MBP_RealTest, test_strictNonStrict_1) {
     auto model = getModel({{x, one}, {y, zero}, {z, one}});
     ASSERT_EQ(model->evaluate(fla), logic.getTerm_true());
     PTRef res = mbp.project(fla, {x}, *model);
-    std::cout << logic.printTerm(res) << std::endl;
+    std::cout << logic.termToSMT2String(res) << std::endl;
     EXPECT_EQ(res, logic.mkAnd({logic.mkLeq(zero, y), logic.mkLt(y, two), logic.mkLt(y, z)}));
 }
 
@@ -257,7 +257,7 @@ TEST_F(MBP_RealTest, test_strictNonStrict_2) {
     auto model = getModel({{x, one}, {y, half}, {z, one}});
     ASSERT_EQ(model->evaluate(fla), logic.getTerm_true());
     PTRef res = mbp.project(fla, {x}, *model);
-    std::cout << logic.printTerm(res) << std::endl;
+    std::cout << logic.termToSMT2String(res) << std::endl;
     EXPECT_EQ(res, logic.mkAnd({logic.mkLeq(zero, y), logic.mkLt(y, two), logic.mkLt(y, z)}));
 }
 
@@ -275,7 +275,7 @@ TEST_F(MBP_RealTest, test_strictNonStrict_3) {
     auto model = getModel({{x, one}, {y, half}, {z, one}});
     ASSERT_EQ(model->evaluate(fla), logic.getTerm_true());
     PTRef res = mbp.project(fla, {x}, *model);
-    std::cout << logic.printTerm(res) << std::endl;
+    std::cout << logic.termToSMT2String(res) << std::endl;
     EXPECT_EQ(res, logic.mkAnd({logic.mkLt(zero, y), logic.mkLeq(y, two), logic.mkLeq(y,z)}));
 }
 
@@ -293,7 +293,7 @@ TEST_F(MBP_RealTest, test_strictNonStrict_4) {
     auto model = getModel({{x, one}, {y, half}, {z, one}});
     ASSERT_EQ(model->evaluate(fla), logic.getTerm_true());
     PTRef res = mbp.project(fla, {x}, *model);
-    std::cout << logic.printTerm(res) << std::endl;
+    std::cout << logic.termToSMT2String(res) << std::endl;
     EXPECT_EQ(res, logic.mkAnd({logic.mkLeq(zero, y), logic.mkLt(y, two), logic.mkLt(y,z)}));
 }
 
@@ -305,7 +305,7 @@ TEST_F(MBP_RealTest, test_avoidRedundantBounds) {
     PTRef fla = logic.mkAnd({lit1, lit2, lit3});
     auto model = getModel({{x, logic.getTerm_RealMinusOne()}, {y, zero}});
     PTRef res = mbp.project(fla, {y}, *model);
-    std::cout << logic.printTerm(res) << std::endl;
+    std::cout << logic.termToSMT2String(res) << std::endl;
     EXPECT_EQ(res, logic.mkLeq(x, zero)); // The redundant bound x <= 1 should not appear in the projection
 }
 
@@ -316,7 +316,7 @@ TEST_F(MBP_RealTest, test_EqualityNotNormalized) {
     PTRef lit = logic.mkEq(lhs, rhs);
     auto model = getModel({{x,one}, {y,one}});
     PTRef res = mbp.project(lit, {x}, *model);
-    std::cout << logic.printTerm(res) << std::endl;
+    std::cout << logic.termToSMT2String(res) << std::endl;
     // EXPECT_EQ(res, logic.mkEq(y,one));
      EXPECT_EQ(res, logic.mkEq(logic.mkPlus(y, logic.getTerm_RealMinusOne()), zero));
 }
@@ -331,7 +331,7 @@ TEST_F(MBP_RealTest, test_singleUpperBound) {
     PTRef fla = logic.mkAnd({lit1, lit2, lit3, lit4});
     auto model = getModel({{x,zero}, {y,zero}, {z,zero}});
     PTRef res = mbp.project(fla, {x}, *model);
-    std::cout << logic.printTerm(res) << std::endl;
+    std::cout << logic.termToSMT2String(res) << std::endl;
     EXPECT_EQ(res, logic.mkAnd(logic.mkLeq(y, one), logic.mkLeq(z, one)));
 }
 
@@ -345,7 +345,7 @@ TEST_F(MBP_RealTest, test_avoidRedundantBounds_2) {
     PTRef fla = logic.mkAnd({lit1, lit2, lit3, lit4});
     auto model = getModel({{x,zero}, {y,zero}, {z,zero}});
     PTRef res = mbp.project(fla, {x,z}, *model);
-    std::cout << logic.printTerm(res) << std::endl;
+    std::cout << logic.termToSMT2String(res) << std::endl;
     EXPECT_EQ(res, logic.mkAnd({logic.mkLeq(y, zero)}));
 }
 
@@ -357,7 +357,7 @@ TEST_F(MBP_RealTest, test_avoidRedundantBounds_3) {
     PTRef fla = logic.mkAnd({lit1, lit2, lit3});
     auto model = getModel({{x,zero}, {y,zero}});
     PTRef res = mbp.project(fla, {x}, *model);
-    std::cout << logic.printTerm(res) << std::endl;
+    std::cout << logic.termToSMT2String(res) << std::endl;
     EXPECT_EQ(res, logic.mkAnd({logic.mkLeq(y, zero)}));
 }
 
@@ -370,7 +370,7 @@ TEST_F(MBP_RealTest, test_hiddenEquality) {
     PTRef fla = logic.mkAnd({lit1, lit2, lit3, lit4});
     auto model = getModel({{x,zero}, {y,zero}, {z,zero}});
     PTRef res = mbp.project(fla, {x}, *model);
-    std::cout << logic.printTerm(res) << std::endl;
+    std::cout << logic.termToSMT2String(res) << std::endl;
     EXPECT_EQ(res, logic.mkAnd({logic.mkLeq(z, y), logic.mkLeq(y, one)}));
 }
 
