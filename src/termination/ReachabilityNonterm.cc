@@ -403,6 +403,43 @@ PTRef getId(const std::vector<PTRef> & vars, Logic & logic) {
     return logic.mkAnd(eq_vars);
 }
 
+// This function extends covered states with newly covered states.
+// If newly covered states are already contained in covered, covered is returned unchanged.
+// Otherwise, disjuncts that are implied by the remaining disjuncts are dropped, to keep covered minimal.
+PTRef extendCovered(PTRef covered, PTRef newlyCovered, ArithLogic & logic) {
+    SMTSolver checker(logic, SMTSolver::WitnessProduction::NONE);
+    // Covered states grow only if NewlyCovered /\ not Covered is SAT
+    checker.assertProp(logic.mkAnd(newlyCovered, logic.mkNot(covered)));
+    if (checker.check() == SMTSolver::Answer::UNSAT) { return covered; }
+
+    TermUtils utils(logic);
+    // Old disjuncts go first, so that the ones subsumed by newly covered states are dropped
+    vec<PTRef> disjuncts = utils.getTopLevelDisjuncts(covered);
+    for (PTRef disjunct : utils.getTopLevelDisjuncts(normalize(newlyCovered, logic))) {
+        disjuncts.push(disjunct);
+    }
+    std::vector<bool> kept(disjuncts.size(), true);
+    for (int i = 0; i < disjuncts.size(); ++i) {
+        if (disjuncts[i] == logic.getTerm_false()) {
+            kept[i] = false;
+            continue;
+        }
+        // Disjunct is not useful if D_i /\ not (remaining disjuncts) is UNSAT
+        checker.resetSolver();
+        checker.assertProp(disjuncts[i]);
+        for (int j = 0; j < disjuncts.size(); ++j) {
+            if (j != i && kept[j]) { checker.assertProp(logic.mkNot(disjuncts[j])); }
+        }
+        if (checker.check() == SMTSolver::Answer::UNSAT) { kept[i] = false; }
+    }
+
+    vec<PTRef> minimized;
+    for (int i = 0; i < disjuncts.size(); ++i) {
+        if (kept[i]) { minimized.push(disjuncts[i]); }
+    }
+    return utils.simplifyMax(logic.mkOr(minimized));
+}
+
 PTRef constructTransitionInvariantCandidates(PTRef init, PTRef transition, PTRef sink, int depth, ArithLogic & logic,
                                              std::vector<PTRef> const & vars) {
     PTRef id = getId(vars, logic);
@@ -719,7 +756,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::checkTermina
         vars);
     // TODO: try adding covered to sink (new noncovered)
     // std::cout << "Noncovered: " << logic.pp(noncoveredStates) << '\n';
-    covered = TermUtils(logic).simplifyMax(logic.mkOr(covered, normalize(logic.mkNot(noncoveredStates), logic)));
+    covered = extendCovered(covered, logic.mkNot(noncoveredStates), logic);
 
     // We check if the states that are not covered by TrInv are reachable
     auto graph =
@@ -785,6 +822,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::checkTermina
         PTRef newCov = TimeMachine(logic).sendFlaThroughTime(QuantifierElimination(logic).eliminate(
             logic.mkAnd({reached, subinv}),vars), -1);
         // TODO: Think if maybe sink can be even more restricted...
+        sink = TermUtils(logic).simplifyMax(logic.mkOr({sink, reached}));
         // sink = TermUtils(logic).simplifyMax(logic.mkOr({sink, newCov, reached}));
         // transition = TermUtils(logic).simplifyMax(logic.mkAnd({transition,
         //     TimeMachine(logic).sendFlaThroughTime(logic.mkNot(logic.mkOr(newCov, reached)),1)}));
