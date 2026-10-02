@@ -381,8 +381,8 @@ bool determinismCheck(PTRef const transition, Logic & logic, std::vector<PTRef> 
     }
     // Auxiliary variables must be fresh in the second copy, otherwise nondeterminism introduced through them is missed
     for (auto auxVar : auxVars) {
-        std::string freshName = "det_" + std::string(logic.getSymName(auxVar));
-        detSubstitutions.insert({auxVar, logic.mkVar(logic.getSortRef(auxVar), freshName.c_str())});
+        PTRef substitute = TimeMachine(logic).sendVarThroughTime(auxVar,1);
+        detSubstitutions.insert({auxVar, substitute});
     }
     PTRef newTransition = TermUtils(logic).varSubstitute(transition, detSubstitutions);
     // Tr(x,x',a) /\ Tr(x,x'',a') /\ ! x' = x''
@@ -403,9 +403,8 @@ PTRef getId(const std::vector<PTRef> & vars, Logic & logic) {
     return logic.mkAnd(eq_vars);
 }
 
-// This function extends covered states with newly covered states.
+// Function extends covered states with newly covered states.
 // If newly covered states are already contained in covered, covered is returned unchanged.
-// Otherwise, disjuncts that are implied by the remaining disjuncts are dropped, to keep covered minimal.
 PTRef extendCovered(PTRef covered, PTRef newlyCovered, ArithLogic & logic) {
     SMTSolver checker(logic, SMTSolver::WitnessProduction::NONE);
     // Covered states grow only if NewlyCovered /\ not Covered is SAT
@@ -637,7 +636,7 @@ std::tuple<PTRef, PTRef> ReachabilityNonterm::blockDeterministicPrefix(PTRef ini
     PTRef sinkAtNum = TimeMachine(logic).sendFlaThroughTime(sink, num);
     PTRef transitions = logic.mkAnd({init, trace, sinkAtNum});
 
-    SMTSolver SMTsolver(logic, SMTSolver::WitnessProduction::NONE);
+    SMTSolver SMTsolver(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
     SMTsolver.assertProp(transitions);
     // Check that sink is reachable in num transitions
     assert(SMTsolver.check() == SMTSolver::Answer::SAT);
@@ -663,7 +662,11 @@ std::tuple<PTRef, PTRef> ReachabilityNonterm::blockDeterministicPrefix(PTRef ini
             // Base is a formula, depicting all states reachable in j-1 transitions, which can reach
             // termination in n-j+1 transitions
             // TODO: Maybe overapproximating QE can be used here.
-            PTRef Base = QuantifierElimination(logic).keepOnly(transitions, prev_vars);
+            SMTsolver.resetSolver();
+            SMTsolver.assertProp(transitions);
+            SMTsolver.check();
+            auto model = SMTsolver.getModel();
+            PTRef Base = ModelBasedProjection(logic).keepOnly(transitions, prev_vars, *model);
             SMTsolver.resetSolver();
             // Checking if it is possible to reach states which would not lead to termination in n-j states
             // (if j = n) it checks if it is possible to reach nontermination states from trace
@@ -757,7 +760,6 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::checkTermina
                      logic.mkNot(shiftOnlyNextVars(trInv, vars, logic))}),
         vars);
     // TODO: try adding covered to sink (new noncovered)
-    // std::cout << "Noncovered: " << logic.pp(noncoveredStates) << '\n';
     covered = extendCovered(covered, logic.mkNot(noncoveredStates), logic);
 
     // We check if the states that are not covered by TrInv are reachable
@@ -810,7 +812,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::checkTermina
     // Algorithm checks if reachable states are terminating
     // TODO: I can also extract all covered states from here and use them as terminating (updating tr)
     auto [answer, subinv] =
-        analyzeTS(reached, transition, TermUtils(logic).simplifyMax(covered), logic);
+        analyzeTS(reached, transition, covered, logic);
     // TODO: It is possible to do check differently, analyzing <noncoveredStates, tr,
     //   not(noncoveredStates)>
     //   If this terminates, then the whole TS terminates, but if it nonterinates we need to prove
