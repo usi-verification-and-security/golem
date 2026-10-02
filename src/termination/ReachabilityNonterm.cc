@@ -527,7 +527,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
             // We check if init states are blocked (it's impossible to make a transition from initial state)
             // When it is the case, TS is terminating
             if (smtSolver.check() == SMTSolver::Answer::UNSAT) {
-                return {Answer::YES, logic.mkOr(strictCandidates)};
+                return {Answer::YES, logic.getTerm_false()};
             }
 
             // This is an extension of the approach, constructing TrInv and attempting to prove termination
