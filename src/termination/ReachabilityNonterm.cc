@@ -645,9 +645,11 @@ std::tuple<PTRef, PTRef> ReachabilityNonterm::blockDeterministicPrefix(PTRef ini
     SMTsolver.resetSolver();
     SMTsolver.assertProp(logic.mkAnd({init, trace, logic.mkNot(sinkAtNum)}));
     PTRef guaranteedTerminating = sinkAtNum;
-    // TODO: if SMTsolver check is UNSAT, then TS is terminating
+    // Every run of length num from init ends in sink (or gets stuck earlier), so all initial states are
+    // guaranteed to terminate. Blocking the whole init lets the caller report termination.
+    if (SMTsolver.check() == SMTSolver::Answer::UNSAT) { return {logic.getTerm_false(), transition}; }
     uint j = 0;
-    bool nondet_trace = !DETERMINISTIC_TRANSITION && SMTsolver.check() == SMTSolver::Answer::SAT;
+    bool nondet_trace = !DETERMINISTIC_TRANSITION;
     // Traversing trace from the Bad to Init, detecting the last transition where some variables
     // were assigned nondetermenistically (Only if it is possible to reach some states other then sink in n trs)
     if (nondet_trace) {
