@@ -757,7 +757,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::checkTermina
     // TODO: Check QE /\ not covered
     PTRef noncoveredStates = QuantifierElimination(logic).keepOnly(
         logic.mkAnd({logic.mkOr(trInv, id), TimeMachine(logic).sendFlaThroughTime(transition, 1),
-                     logic.mkNot(shiftOnlyNextVars(trInv, vars, logic))}),
+                     logic.mkNot(shiftOnlyNextVars(trInv, vars, logic)), logic.mkNot(covered)}),
         vars);
     // TODO: try adding covered to sink (new noncovered)
     covered = extendCovered(covered, logic.mkNot(noncoveredStates), logic);
