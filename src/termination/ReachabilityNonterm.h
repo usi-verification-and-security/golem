@@ -31,10 +31,6 @@ private:
     std::vector<PTRef> vars;
     Options options;
     PTRef covered;
-    // Well-founded disjuncts of the transition invariant candidate, shared across all (recursive) analyzeTS invocations
-    vec<PTRef> strictCandidates;
-    // Number of candidate generations that extended strictCandidates since the last shrinking
-    uint strictCandidatesUpdates = 0;
 
     std::tuple<Answer, PTRef> analyzeTS(PTRef init, PTRef transition, PTRef sink, ArithLogic & logic);
 
@@ -42,11 +38,10 @@ private:
                                                       ArithLogic & logic);
 
     bool generateWellfoundedDisjuncts(PTRef transition, PTRef sink, PTRef trace, uint num, ArithLogic & logic,
-                                      std::set<PTRef> & checkedCandidates);
+                                      vec<PTRef> & strictCandidates, std::set<PTRef> & checkedCandidates);
 
-    void shrinkStrictCandidates(PTRef transition, ArithLogic & logic);
-
-    std::tuple<Answer, PTRef> checkTermination(PTRef init, PTRef transition, PTRef & sink, ArithLogic & logic);
+    std::tuple<Answer, PTRef> checkTermination(PTRef init, PTRef transition, PTRef & sink, ArithLogic & logic,
+                                               vec<PTRef> & strictCandidates);
 };
 } // namespace golem::termination
 
