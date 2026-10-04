@@ -499,6 +499,7 @@ PTRef constructTransitionInvariantCandidates(PTRef init, PTRef transition, PTRef
 
 std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink,
                                                                               ArithLogic & logic) {
+    vec<PTRef> strictCandidates;
     // Kept local so every (recursive) analyzeTS invocation gets its own cache: a candidate inspected
     // for one state-space must not be skipped when a nested call analyzes a different one.
     std::set<PTRef> checkedCandidates;
@@ -532,9 +533,10 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
             // This is an extension of the approach, constructing TrInv and attempting to prove termination
             // and non-termination using invariants
             if (num > 0) {
-                if (!generateWellfoundedDisjuncts(originalTransition, sink, trace, num, logic, checkedCandidates))
+                if (!generateWellfoundedDisjuncts(originalTransition, sink, trace, num, logic, strictCandidates,
+                                                  checkedCandidates))
                     continue;
-                auto [answer, res] = checkTermination(init, transition, sink, logic);
+                auto [answer, res] = checkTermination(init, transition, sink, logic, strictCandidates);
                 if (answer != Answer::UNKNOWN) return {answer, res};
             }
         } else if (res.getAnswer() == VerificationAnswer::SAFE) {
@@ -620,8 +622,6 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
     // and inductive invariants to prove nontermination
     DETERMINISTIC_TRANSITION = determinismCheck(transition, logic, vars, aux_vars);
     covered = logic.getTerm_false();
-    strictCandidates.clear();
-    strictCandidatesUpdates = 0;
     // Safety-Based Termination Analysis
     // TODO: Figure out why passing in transition is problematic
     auto [answer, trInvOrRecurringSet] = analyzeTS(init, normTransition, sink, logic);
@@ -704,7 +704,8 @@ std::tuple<PTRef, PTRef> ReachabilityNonterm::blockDeterministicPrefix(PTRef ini
 // This function attempts to construct well founded disjuncts to produce transition invariant, using interpolation.
 // Interpolants are DNFized, and disjuncts are checked for well-foundness.
 bool ReachabilityNonterm::generateWellfoundedDisjuncts(PTRef transition, PTRef sink, PTRef trace, uint num,
-                                                       ArithLogic & logic, std::set<PTRef> & checkedCandidates) {
+                                                       ArithLogic & logic, vec<PTRef> & strictCandidates,
+                                                       std::set<PTRef> & checkedCandidates) {
     SMTSolver SMTsolver(logic, SMTSolver::WitnessProduction::NONE);
     // Calculate the states that are guaranteed to terminate within num transitions:
     // Tr^n(x,x') /\ not Sink(x') - is a formula, which can be satisfied by any x which can
@@ -730,40 +731,7 @@ bool ReachabilityNonterm::generateWellfoundedDisjuncts(PTRef transition, PTRef s
             addedCands++;
         }
     }
-    // Every 5 generations that extended the candidates, they are minimized to avoid overgeneralization
-    if (addedCands != 0 && ++strictCandidatesUpdates == 5) {
-        strictCandidatesUpdates = 0;
-        shrinkStrictCandidates(transition, logic);
-    }
     return addedCands != 0;
-}
-
-// This function minimizes strictCandidates, preserving Tr => \/ strictCandidates.
-// Candidates come from overapproximating interpolants, so their union tends to overgeneralize.
-// Dropping the redundant ones keeps the smallest relation that still covers Tr, which is more likely
-// to be inductive. If the candidates do not cover Tr, they are left unchanged.
-void ReachabilityNonterm::shrinkStrictCandidates(PTRef transition, ArithLogic & logic) {
-    SMTSolver checker(logic, SMTSolver::WitnessProduction::NONE);
-    // Tr => \/ C holds iff Tr /\ not (\/ C) is UNSAT
-    checker.assertProp(logic.mkAnd(transition, logic.mkNot(logic.mkOr(strictCandidates))));
-    if (checker.check() != SMTSolver::Answer::UNSAT) { return; }
-
-    std::vector<bool> kept(strictCandidates.size(), true);
-    for (int i = 0; i < strictCandidates.size(); ++i) {
-        // Candidate is redundant if Tr /\ not (remaining candidates) is UNSAT
-        checker.resetSolver();
-        checker.assertProp(transition);
-        for (int j = 0; j < strictCandidates.size(); ++j) {
-            if (j != i && kept[j]) { checker.assertProp(logic.mkNot(strictCandidates[j])); }
-        }
-        if (checker.check() == SMTSolver::Answer::UNSAT) { kept[i] = false; }
-    }
-
-    vec<PTRef> minimized;
-    for (int i = 0; i < strictCandidates.size(); ++i) {
-        if (kept[i]) { minimized.push(strictCandidates[i]); }
-    }
-    strictCandidates = std::move(minimized);
 }
 
 // This function uses transition invariants candidates, cheking termination.
@@ -771,7 +739,8 @@ void ReachabilityNonterm::shrinkStrictCandidates(PTRef transition, ArithLogic & 
 // These states are checked for reachability. If they are not reachable - TS is terminating.
 // If they are reachable - TS checks the termination for these states.
 std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::checkTermination(PTRef init, PTRef transition,
-                                                                                     PTRef & sink, ArithLogic & logic) {
+                                                                                     PTRef & sink, ArithLogic & logic,
+                                                                                     vec<PTRef> & strictCandidates) {
     PTRef trInv = logic.mkOr(strictCandidates);
     PTRef id = getId(vars, logic);
     SMTSolver smt_checker(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
