@@ -439,6 +439,56 @@ PTRef extendCovered(PTRef covered, PTRef newlyCovered, ArithLogic & logic) {
     return utils.simplifyMax(logic.mkOr(minimized));
 }
 
+// Function computes the states, from which TrInv is not inductive:
+// Exists x', x''. (TrInv(x,x') \/ Id(x,x')) /\ Tr(x',x'') /\ not TrInv(x,x'')
+PTRef nonCoveredStates(PTRef trInv, PTRef transition, ArithLogic & logic, std::vector<PTRef> const & vars) {
+    return QuantifierElimination(logic).keepOnly(
+        logic.mkAnd({logic.mkOr(trInv, getId(vars, logic)), TimeMachine(logic).sendFlaThroughTime(transition, 1),
+                     logic.mkNot(shiftOnlyNextVars(trInv, vars, logic))}),
+        vars);
+}
+
+// Function merges the disjuncts of the inductive subinvariant with the previous transition invariant candidates.
+// Disjuncts of subinv are always kept. A previous candidate is added only if it enlarges the set of covered states
+// (states from which the result is inductive) without losing any of them, so the result is not overgeneralized.
+// Afterwards, the remaining previous candidates are added until Tr => \/ candidates holds (if they suffice).
+vec<PTRef> mergeTransitionInvariants(PTRef subinv, vec<PTRef> const & oldCandidates, PTRef transition,
+                                     ArithLogic & logic, std::vector<PTRef> const & vars) {
+    SMTSolver checker(logic, SMTSolver::WitnessProduction::NONE);
+    auto implies = [&](PTRef a, PTRef b) {
+        checker.resetSolver();
+        checker.assertProp(logic.mkAnd(a, logic.mkNot(b)));
+        return checker.check() == SMTSolver::Answer::UNSAT;
+    };
+
+    vec<PTRef> merged = TermUtils(logic).getTopLevelDisjuncts(subinv);
+    PTRef nonCovered = nonCoveredStates(logic.mkOr(merged), transition, logic, vars);
+    vec<PTRef> skipped;
+    for (PTRef cand : oldCandidates) {
+        // Candidate does not add any new transitions
+        if (implies(cand, logic.mkOr(merged))) { continue; }
+        vec<PTRef> extended;
+        merged.copyTo(extended);
+        extended.push(cand);
+        PTRef extendedNonCovered = nonCoveredStates(logic.mkOr(extended), transition, logic, vars);
+        // Covered states must strictly grow: no covered state is lost and at least one is gained
+        if (implies(extendedNonCovered, nonCovered) && !implies(nonCovered, extendedNonCovered)) {
+            merged = std::move(extended);
+            nonCovered = extendedNonCovered;
+        } else {
+            skipped.push(cand);
+        }
+    }
+
+    for (PTRef cand : skipped) {
+        // Transitions not yet captured by the candidates: Tr /\ not (\/ candidates)
+        PTRef uncaptured = logic.mkAnd(transition, logic.mkNot(logic.mkOr(merged)));
+        if (implies(uncaptured, logic.getTerm_false())) { break; }
+        if (!implies(cand, logic.mkNot(uncaptured))) { merged.push(cand); }
+    }
+    return merged;
+}
+
 PTRef constructTransitionInvariantCandidates(PTRef init, PTRef transition, PTRef sink, int depth, ArithLogic & logic,
                                              std::vector<PTRef> const & vars) {
     PTRef id = getId(vars, logic);
@@ -567,6 +617,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
             // Then invariant is translated, so the variables correspond to the encoding of the CHC system,
             // pre-normalization
             inv = TermUtils(logic).varSubstitute(inv, varSubstitutions);
+            // TODO: limit states based on the invariant
 
             SMTsolver.resetSolver();
             SMTsolver.assertProp(
@@ -754,12 +805,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::checkTermina
         return {Answer::YES, trInv};
     }
 
-    // TODO: Check QE /\ not covered
-    PTRef noncoveredStates = QuantifierElimination(logic).keepOnly(
-        logic.mkAnd({logic.mkOr(trInv, id), TimeMachine(logic).sendFlaThroughTime(transition, 1),
-                     logic.mkNot(shiftOnlyNextVars(trInv, vars, logic)), logic.mkNot(covered)}),
-        vars);
-    // TODO: try adding covered to sink (new noncovered)
+    PTRef noncoveredStates = nonCoveredStates(trInv, transition, logic, vars);
     covered = extendCovered(covered, logic.mkNot(noncoveredStates), logic);
 
     // We check if the states that are not covered by TrInv are reachable
@@ -805,24 +851,21 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::checkTermina
             ModelBasedProjection(logic).keepOnly(transitions, last_vars, *smt_checker.getModel()), -num_non));
     }
 
-    // TODO: Think what to do if init is "REACHED" (ideally I want init to be in covered by TrINV)
-    //   SMTsolver.assertProp(logic.mkAnd(logic.mkNot(init), reached));
-    // TODO: Reached are not in the initial states
+    // Sometimes Reached is init because init = true is an often initial state. Then it is reduced to "not sink"
     assert(reached != logic.getTerm_false());
     // Algorithm checks if reachable states are terminating
-    // TODO: I can also extract all covered states from here and use them as terminating (updating tr)
     auto [answer, subinv] =
         analyzeTS(reached, transition, covered, logic);
-    // TODO: It is possible to do check differently, analyzing <noncoveredStates, tr,
-    //   not(noncoveredStates)>
-    //   If this terminates, then the whole TS terminates, but if it nonterinates we need to prove
-    //   reachability
+    // TODO: It is possible to do check differently, analyzing <noncoveredStates, tr, covered>
+
+    //   If this nonterminates, then the whole TS nonterminates,
+    //   If it terminates we can use learned covered sates and reached states terminate
     if (answer == Answer::YES) {
-        // TODO: Need to change TrInv, adding found subinv in a better way
-        // TODO: Try not to merge trInv and split subinv into disjuncts
-        strictCandidates.clear();
-        strictCandidates.push(subinv);
-        strictCandidates.push(trInv);
+        // Candidates are reset to the disjuncts of subinv, extended by the previous candidates where it
+        // maximizes the covered states, while keeping Tr => \/ strictCandidates
+        vec<PTRef> oldCandidates;
+        strictCandidates.copyTo(oldCandidates);
+        strictCandidates = mergeTransitionInvariants(subinv, oldCandidates, transition, logic, vars);
         PTRef newCov = TimeMachine(logic).sendFlaThroughTime(QuantifierElimination(logic).eliminate(
             logic.mkAnd({reached, subinv}),vars), -1);
         // TODO: Think if maybe sink can be even more restricted...
