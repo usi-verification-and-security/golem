@@ -448,47 +448,6 @@ PTRef nonCoveredStates(PTRef trInv, PTRef transition, ArithLogic & logic, std::v
         vars);
 }
 
-// Function merges the disjuncts of the inductive subinvariant with the previous transition invariant candidates.
-// Disjuncts of subinv are always kept. A previous candidate is added only if it enlarges the set of covered states
-// (states from which the result is inductive) without losing any of them, so the result is not overgeneralized.
-// Afterwards, the remaining previous candidates are added until Tr => \/ candidates holds (if they suffice).
-vec<PTRef> mergeTransitionInvariants(PTRef subinv, vec<PTRef> const & oldCandidates, PTRef transition,
-                                     ArithLogic & logic, std::vector<PTRef> const & vars) {
-    SMTSolver checker(logic, SMTSolver::WitnessProduction::NONE);
-    auto implies = [&](PTRef a, PTRef b) {
-        checker.resetSolver();
-        checker.assertProp(logic.mkAnd(a, logic.mkNot(b)));
-        return checker.check() == SMTSolver::Answer::UNSAT;
-    };
-
-    vec<PTRef> merged = TermUtils(logic).getTopLevelDisjuncts(subinv);
-    PTRef nonCovered = nonCoveredStates(logic.mkOr(merged), transition, logic, vars);
-    vec<PTRef> skipped;
-    for (PTRef cand : oldCandidates) {
-        // Candidate does not add any new transitions
-        if (implies(cand, logic.mkOr(merged))) { continue; }
-        vec<PTRef> extended;
-        merged.copyTo(extended);
-        extended.push(cand);
-        PTRef extendedNonCovered = nonCoveredStates(logic.mkOr(extended), transition, logic, vars);
-        // Covered states must strictly grow: no covered state is lost and at least one is gained
-        if (implies(extendedNonCovered, nonCovered) && !implies(nonCovered, extendedNonCovered)) {
-            merged = std::move(extended);
-            nonCovered = extendedNonCovered;
-        } else {
-            skipped.push(cand);
-        }
-    }
-
-    for (PTRef cand : skipped) {
-        // Transitions not yet captured by the candidates: Tr /\ not (\/ candidates)
-        PTRef uncaptured = logic.mkAnd(transition, logic.mkNot(logic.mkOr(merged)));
-        if (implies(uncaptured, logic.getTerm_false())) { break; }
-        if (!implies(cand, logic.mkNot(uncaptured))) { merged.push(cand); }
-    }
-    return merged;
-}
-
 PTRef constructTransitionInvariantCandidates(PTRef init, PTRef transition, PTRef sink, int depth, ArithLogic & logic,
                                              std::vector<PTRef> const & vars) {
     PTRef id = getId(vars, logic);
@@ -549,7 +508,6 @@ PTRef constructTransitionInvariantCandidates(PTRef init, PTRef transition, PTRef
 
 std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink,
                                                                               ArithLogic & logic) {
-    vec<PTRef> strictCandidates;
     // Kept local so every (recursive) analyzeTS invocation gets its own cache: a candidate inspected
     // for one state-space must not be skipped when a nested call analyzes a different one.
     std::set<PTRef> checkedCandidates;
@@ -583,10 +541,9 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
             // This is an extension of the approach, constructing TrInv and attempting to prove termination
             // and non-termination using invariants
             if (num > 0) {
-                if (!generateWellfoundedDisjuncts(originalTransition, sink, trace, num, logic, strictCandidates,
-                                                  checkedCandidates))
+                if (!generateWellfoundedDisjuncts(originalTransition, sink, trace, num, logic, checkedCandidates))
                     continue;
-                auto [answer, res] = checkTermination(init, transition, sink, logic, strictCandidates);
+                auto [answer, res] = checkTermination(init, transition, sink, logic);
                 if (answer != Answer::UNKNOWN) return {answer, res};
             }
         } else if (res.getAnswer() == VerificationAnswer::SAFE) {
@@ -673,6 +630,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
     // and inductive invariants to prove nontermination
     DETERMINISTIC_TRANSITION = determinismCheck(transition, logic, vars, aux_vars);
     covered = logic.getTerm_false();
+    strictCandidates.clear();
     // Safety-Based Termination Analysis
     // TODO: Figure out why passing in transition is problematic
     auto [answer, trInvOrRecurringSet] = analyzeTS(init, normTransition, sink, logic);
@@ -755,9 +713,7 @@ std::tuple<PTRef, PTRef> ReachabilityNonterm::blockDeterministicPrefix(PTRef ini
 // This function attempts to construct well founded disjuncts to produce transition invariant, using interpolation.
 // Interpolants are DNFized, and disjuncts are checked for well-foundness.
 bool ReachabilityNonterm::generateWellfoundedDisjuncts(PTRef transition, PTRef sink, PTRef trace, uint num,
-                                                       ArithLogic & logic, vec<PTRef> & strictCandidates,
-                                                       std::set<PTRef> & checkedCandidates) {
-    SMTSolver SMTsolver(logic, SMTSolver::WitnessProduction::NONE);
+                                                       ArithLogic & logic, std::set<PTRef> & checkedCandidates) {
     // Calculate the states that are guaranteed to terminate within num transitions:
     // Tr^n(x,x') /\ not Sink(x') - is a formula, which can be satisfied by any x which can
     // reach "not Sink(x')" in n transitions:
@@ -773,16 +729,36 @@ bool ReachabilityNonterm::generateWellfoundedDisjuncts(PTRef transition, PTRef s
     auto newCands = extractWellFoundedCandidates(itp, sink, logic, vars, checkedCandidates);
 
     // TODO: Try syntactic check
-    uint addedCands = 0;
-    for (auto cand : newCands) {
-        SMTsolver.resetSolver();
-        SMTsolver.assertProp(logic.mkAnd(cand, logic.mkNot(logic.mkOr(strictCandidates))));
-        if (SMTsolver.check() == SMTSolver::Answer::SAT) {
+    return addCoveringCandidates(newCands, transition, logic) != 0;
+}
+
+// This function adds candidates to strictCandidates one by one, keeping only those that strictly enlarge
+// the set of covered states (states from which \/ strictCandidates is inductive) without losing any of them.
+// This way the transition invariant candidate is not overgeneralized.
+// Returns the number of added candidates.
+uint ReachabilityNonterm::addCoveringCandidates(vec<PTRef> const & candidates, PTRef transition, ArithLogic & logic) {
+    SMTSolver checker(logic, SMTSolver::WitnessProduction::NONE);
+    auto implies = [&](PTRef a, PTRef b) {
+        checker.resetSolver();
+        checker.assertProp(logic.mkAnd(a, logic.mkNot(b)));
+        return checker.check() == SMTSolver::Answer::UNSAT;
+    };
+
+    uint added = 0;
+    PTRef nonCovered = nonCoveredStates(logic.mkOr(strictCandidates), transition, logic, vars);
+    for (PTRef cand : candidates) {
+        // Candidate does not add any new transitions
+        if (implies(cand, logic.mkOr(strictCandidates))) { continue; }
+        PTRef extendedNonCovered =
+            nonCoveredStates(logic.mkOr(logic.mkOr(strictCandidates), cand), transition, logic, vars);
+        // Covered states must strictly grow: no covered state is lost and at least one is gained
+        if (implies(extendedNonCovered, nonCovered) && !implies(nonCovered, extendedNonCovered)) {
             strictCandidates.push(cand);
-            addedCands++;
+            nonCovered = extendedNonCovered;
+            added++;
         }
     }
-    return addedCands != 0;
+    return added;
 }
 
 // This function uses transition invariants candidates, cheking termination.
@@ -790,8 +766,7 @@ bool ReachabilityNonterm::generateWellfoundedDisjuncts(PTRef transition, PTRef s
 // These states are checked for reachability. If they are not reachable - TS is terminating.
 // If they are reachable - TS checks the termination for these states.
 std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::checkTermination(PTRef init, PTRef transition,
-                                                                                     PTRef & sink, ArithLogic & logic,
-                                                                                     vec<PTRef> & strictCandidates) {
+                                                                                     PTRef & sink, ArithLogic & logic) {
     PTRef trInv = logic.mkOr(strictCandidates);
     PTRef id = getId(vars, logic);
     SMTSolver smt_checker(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
@@ -861,11 +836,8 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::checkTermina
     //   If this nonterminates, then the whole TS nonterminates,
     //   If it terminates we can use learned covered sates and reached states terminate
     if (answer == Answer::YES) {
-        // Candidates are reset to the disjuncts of subinv, extended by the previous candidates where it
-        // maximizes the covered states, while keeping Tr => \/ strictCandidates
-        vec<PTRef> oldCandidates;
-        strictCandidates.copyTo(oldCandidates);
-        strictCandidates = mergeTransitionInvariants(subinv, oldCandidates, transition, logic, vars);
+        // Disjuncts of subinv are added to the candidates only if they enlarge the covered states
+        addCoveringCandidates(TermUtils(logic).getTopLevelDisjuncts(subinv), transition, logic);
         PTRef newCov = TimeMachine(logic).sendFlaThroughTime(QuantifierElimination(logic).eliminate(
             logic.mkAnd({reached, subinv}),vars), -1);
         // TODO: Think if maybe sink can be even more restricted...
