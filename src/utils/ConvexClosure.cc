@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cassert>
 #include <cstddef>
+#include <map>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -410,10 +411,292 @@ private:
     bool integers;
 };
 
+// Orders coefficient vectors lexicographically, by variable and then by value.
+struct CoefficientsLess {
+    bool operator()(Coefficients const & a, Coefficients const & b) const {
+        return std::lexicographical_compare(a.begin(), a.end(), b.begin(), b.end(), [](auto const & x, auto const & y) {
+            return x.first.x != y.first.x ? x.first.x < y.first.x : x.second < y.second;
+        });
+    }
+};
+
+/*
+ * Brings the normal of an atom into a canonical form: coefficients sorted by variable and scaled to
+ * coprime integers, by a positive factor for an inequality and so that the first coefficient is positive
+ * for an equality. Scaling does not change the set the atom describes, so atoms with parallel normals end
+ * up with the same coefficients and differ only in their constants.
+ */
+void canonicalize(LinearAtom & atom) {
+    std::sort(atom.coefficients.begin(), atom.coefficients.end(),
+              [](auto const & a, auto const & b) { return a.first.x < b.first.x; });
+    FastRational scale(1);
+    for (auto const & [var, coeff] : atom.coefficients) {
+        (void)var;
+        scale = lcm(scale, coeff.get_den());
+    }
+    FastRational divisor(0);
+    for (auto const & [var, coeff] : atom.coefficients) {
+        (void)var;
+        divisor = gcd(divisor, absoluteValue(coeff * scale));
+    }
+    scale = scale / divisor;
+    if (atom.equality and atom.coefficients.front().second.sign() < 0) { scale = -scale; }
+    if (scale.isOne()) { return; }
+    for (auto & [var, coeff] : atom.coefficients) {
+        (void)var;
+        coeff = coeff * scale;
+    }
+    atom.constant = atom.constant * scale;
+}
+
+Coefficients negated(Coefficients coefficients) {
+    for (auto & entry : coefficients) { entry.second = -entry.second; }
+    return coefficients;
+}
+
+/*
+ * A non-empty polyhedron as its tightest constant per normal: `upper` maps a canonical normal d to the
+ * least k among its atoms d.x <= k, and `equal` maps a canonical normal to the constant of its equality.
+ * Two bounds d.x <= k and -d.x <= -k become the equality d.x = k, and an equality makes every bound on
+ * its normal or the opposite one redundant (the polyhedron is non-empty, so that bound holds). The
+ * polyhedron described is the same; only redundant atoms are gone.
+ */
+class RowMap {
+public:
+    explicit RowMap(std::vector<LinearAtom> atoms) {
+        for (auto & atom : atoms) {
+            canonicalize(atom);
+            auto & target = atom.equality ? equal : upper;
+            auto [it, inserted] = target.emplace(atom.coefficients, atom.constant);
+            if (not inserted and not atom.equality and atom.constant < it->second) { it->second = atom.constant; }
+        }
+        std::vector<Coefficients> paired;
+        for (auto const & [normal, constant] : upper) {
+            if (normal.front().second.sign() < 0) { continue; } // each pair once, from its canonical side
+            auto opposite = upper.find(negated(normal));
+            if (opposite != upper.end() and opposite->second == -constant) { paired.push_back(normal); }
+        }
+        for (auto const & normal : paired) { equal.emplace(normal, upper.at(normal)); }
+        for (auto const & [normal, constant] : equal) {
+            (void)constant;
+            upper.erase(normal);
+            upper.erase(negated(normal));
+        }
+    }
+
+    // Syntactic containment: every atom of `other` is implied by an atom of this polyhedron.
+    bool containedIn(RowMap const & other) const {
+        for (auto const & [normal, constant] : other.upper) {
+            if (not impliesUpper(normal, constant)) { return false; }
+        }
+        for (auto const & [normal, constant] : other.equal) {
+            auto it = equal.find(normal);
+            if (it == equal.end() or it->second != constant) { return false; }
+        }
+        return true;
+    }
+
+    std::vector<LinearAtom> atoms() const {
+        std::vector<LinearAtom> result;
+        for (auto const & [normal, constant] : equal) { result.push_back(LinearAtom{normal, constant, true}); }
+        for (auto const & [normal, constant] : upper) { result.push_back(LinearAtom{normal, constant, false}); }
+        return result;
+    }
+
+    // The least k such that some atom of this polyhedron states normal.x <= k, if any does.
+    std::optional<FastRational> upperBound(Coefficients const & normal) const {
+        std::optional<FastRational> bound;
+        if (auto it = upper.find(normal); it != upper.end()) { bound = it->second; }
+        bool const canonical = normal.front().second.sign() > 0;
+        if (auto eq = equal.find(canonical ? normal : negated(normal)); eq != equal.end()) {
+            FastRational const value = canonical ? eq->second : -eq->second;
+            if (not bound or value < *bound) { bound = value; }
+        }
+        return bound;
+    }
+
+private:
+    bool impliesUpper(Coefficients const & normal, FastRational const & constant) const {
+        auto bound = upperBound(normal);
+        return bound and *bound <= constant;
+    }
+
+    std::map<Coefficients, FastRational, CoefficientsLess> upper;
+    std::map<Coefficients, FastRational, CoefficientsLess> equal;
+};
+
+/*
+ * Exact reductions of the closure's inputs, which leave the hull unchanged: redundant atoms of each
+ * polyhedron go (`RowMap`), and so does a polyhedron syntactically contained in another one, which adds
+ * no point to the hull; of two equal ones the first is kept. Cubes expanded from one formula repeat its
+ * common conjuncts, and a cube that only adds atoms to a sibling is contained in it.
+ */
+std::vector<std::vector<LinearAtom>> reducePolyhedra(std::vector<std::vector<LinearAtom>> polyhedra) {
+    std::vector<RowMap> maps;
+    for (auto & poly : polyhedra) { maps.emplace_back(std::move(poly)); }
+    std::vector<bool> dropped(maps.size(), false);
+    for (std::size_t i = 0; i < maps.size(); ++i) {
+        for (std::size_t j = 0; j < maps.size() and not dropped[i]; ++j) {
+            if (i == j or dropped[j] or not maps[i].containedIn(maps[j])) { continue; }
+            bool const same = maps[j].containedIn(maps[i]);
+            if (not same or j < i) { dropped[i] = true; }
+        }
+    }
+    std::vector<std::vector<LinearAtom>> result;
+    for (std::size_t i = 0; i < maps.size(); ++i) {
+        if (not dropped[i]) { result.push_back(maps[i].atoms()); }
+    }
+    return result;
+}
+
+/*
+ * Real copies of the source variables in a private QF_LRA logic. The closure is encoded there, since
+ * its multipliers are rational, and redundancy is decided there, over the rationals, so that dropping
+ * an atom never changes the rational polyhedron the encoding sees.
+ */
+class RationalCopies {
+public:
+    RationalCopies() : logic(opensmt::Logic_t::QF_LRA) {}
+
+    PTRef copy(PTRef var) {
+        auto it = toCopy.find(var);
+        if (it != toCopy.end()) { return it->second; }
+        std::string name = "cc_x_" + std::to_string(var.x);
+        PTRef copied = logic.mkRealVar(name.c_str());
+        toCopy.emplace(var, copied);
+        toOriginal.emplace(copied, var);
+        return copied;
+    }
+
+    PTRef atom(LinearAtom const & atom) {
+        SRef sort = logic.getSort_real();
+        vec<PTRef> summands;
+        for (auto const & [var, coeff] : atom.coefficients) {
+            summands.push(logic.mkTimes(logic.mkConst(sort, coeff), copy(var)));
+        }
+        PTRef lhs = summands.size() == 1 ? summands[0] : logic.mkPlus(summands);
+        PTRef rhs = logic.mkConst(sort, atom.constant);
+        return atom.equality ? logic.mkEq(lhs, rhs) : logic.mkLeq(lhs, rhs);
+    }
+
+    ArithLogic logic;
+    std::unordered_map<PTRef, PTRef, PTRefHash> toCopy;
+    std::unordered_map<PTRef, PTRef, PTRefHash> toOriginal;
+};
+
+/*
+ * Which conjuncts to keep so that none is implied by the others, the conjunction staying equivalent.
+ * Greedy, in order: a conjunct is checked against the ones kept so far and the ones not checked yet,
+ * so the result is irredundant. Each conjunct sits behind an activation literal, asserted once; a check
+ * enables the other kept ones and the negated conjunct in a pushed frame.
+ */
+std::vector<bool> irredundant(Logic & logic, std::vector<PTRef> const & conjuncts) {
+    std::vector<bool> keep(conjuncts.size(), true);
+    if (conjuncts.size() < 2) { return keep; }
+    SMTSolver solver(logic, SMTSolver::WitnessProduction::NONE);
+    std::vector<PTRef> activation;
+    for (std::size_t i = 0; i < conjuncts.size(); ++i) {
+        std::string name = "cc_on_" + std::to_string(i);
+        activation.push_back(logic.mkBoolVar(name.c_str()));
+        solver.assertProp(logic.mkImpl(activation.back(), conjuncts[i]));
+    }
+    for (std::size_t i = 0; i < conjuncts.size(); ++i) {
+        solver.push();
+        for (std::size_t j = 0; j < conjuncts.size(); ++j) {
+            if (j != i and keep[j]) { solver.assertProp(activation[j]); }
+        }
+        solver.assertProp(logic.mkNot(conjuncts[i]));
+        keep[i] = solver.check() != SMTSolver::Answer::UNSAT;
+        solver.pop();
+    }
+    return keep;
+}
+
+// The atoms of `poly` that no other atom of it implies, over the rationals.
+void dropImpliedAtoms(RationalCopies & copies, std::vector<LinearAtom> & poly) {
+    if (poly.size() < 2) { return; }
+    std::vector<PTRef> terms;
+    for (auto const & atom : poly) { terms.push_back(copies.atom(atom)); }
+    auto keep = irredundant(copies.logic, terms);
+    std::vector<LinearAtom> kept;
+    for (std::size_t i = 0; i < poly.size(); ++i) {
+        if (keep[i]) { kept.push_back(std::move(poly[i])); }
+    }
+    poly = std::move(kept);
+}
+
+/*
+ * Merges the atoms of a closure on parallel normals into the tightest one (`RowMap`). Each round of the
+ * elimination contributes the literals it found implied, so the same facet recurs with different
+ * constants; the merged polyhedron is the same, and its atoms are what the next closures over pobs built
+ * from it start with. A result that is not a conjunction of linear atoms is returned unchanged.
+ */
+PTRef mergeParallelAtoms(ArithLogic & logic, PTRef hull) {
+    std::vector<LinearAtom> atoms;
+    for (PTRef conj : TermUtils(logic).getTopLevelConjuncts(hull)) {
+        PTRef lit = conj;
+        bool const negated = logic.isNot(conj);
+        if (negated) { lit = logic.getPterm(conj)[0]; }
+        if (not isArithmeticRelation(logic, lit)) { return hull; }
+        auto atom = normalizeArithmeticLiteral(logic, lit, negated);
+        if (not atom or atom->coefficients.empty()) { return hull; }
+        atoms.push_back(std::move(*atom));
+    }
+    if (atoms.size() < 2) { return hull; }
+    return polyhedronToTerm(logic, RowMap(std::move(atoms)).atoms());
+}
+
+// The satisfiable inputs of a closure: their polyhedra, reduced, and the Boolean conjuncts they all share.
+struct Inputs {
+    bool satisfiable = false;       // some input is satisfiable
+    bool arithUnconstrained = false; // some satisfiable input constrains no arithmetic variable
+    std::vector<PTRef> sharedBoolConjuncts;
+    std::vector<std::vector<LinearAtom>> polyhedra;
+};
+
+Inputs collectInputs(ArithLogic & logic, std::vector<Disjunct> disjuncts, RationalCopies * copies) {
+    Inputs inputs;
+    for (auto & disjunct : disjuncts) {
+        if (not disjunct.polyhedron.empty() or not disjunct.boolConjuncts.empty()) {
+            // The syntactic convex closure is exact only for non-empty polyhedra: for an empty one the
+            // sigma_i = 0 case still admits its recession cone and would add spurious directions.
+            // The Boolean conjuncts take part in the check as well, so an input that only its Boolean
+            // part makes unsatisfiable contributes neither its conjuncts nor its polyhedron.
+            SMTSolver solver(logic, SMTSolver::WitnessProduction::NONE);
+            if (not disjunct.polyhedron.empty()) { solver.assertProp(polyhedronToTerm(logic, disjunct.polyhedron)); }
+            for (PTRef conj : disjunct.boolConjuncts) { solver.assertProp(conj); }
+            if (solver.check() == SMTSolver::Answer::UNSAT) { continue; }
+        }
+
+        if (not inputs.satisfiable) {
+            // The order of the first surviving input decides the order of the result.
+            inputs.sharedBoolConjuncts = disjunct.boolConjuncts;
+            inputs.satisfiable = true;
+        } else {
+            std::unordered_set<PTRef, PTRefHash> present(disjunct.boolConjuncts.begin(), disjunct.boolConjuncts.end());
+            auto & shared = inputs.sharedBoolConjuncts;
+            shared.erase(std::remove_if(shared.begin(), shared.end(),
+                                        [&present](PTRef conj) { return present.find(conj) == present.end(); }),
+                         shared.end());
+        }
+
+        if (disjunct.polyhedron.empty()) {
+            inputs.arithUnconstrained = true;
+        } else {
+            inputs.polyhedra.push_back(std::move(disjunct.polyhedron));
+        }
+    }
+    inputs.polyhedra = reducePolyhedra(std::move(inputs.polyhedra));
+    if (copies) {
+        for (auto & poly : inputs.polyhedra) { dropImpliedAtoms(*copies, poly); }
+    }
+    return inputs;
+}
+
 } // namespace
 
-ConvexClosure::ConvexClosure(Logic & logic, QEOptions options, std::size_t maxCubesPerFormula)
-    : logic(logic), options(options), maxCubesPerFormula(maxCubesPerFormula) {
+ConvexClosure::ConvexClosure(Logic & logic, QEOptions options, std::size_t maxCubesPerFormula, bool dropImplied)
+    : logic(logic), options(options), maxCubesPerFormula(maxCubesPerFormula), dropImplied(dropImplied) {
     if (not options.compute_overapproximation) {
         throw std::invalid_argument(
             "ConvexClosure requires QEOptions::compute_overapproximation to be set");
@@ -444,9 +727,9 @@ PTRef ConvexClosure::getConvexClosure(vec<PTRef> const & formulas) {
                 fprintf(stderr, "@@CC_EXPANDED@@\n");
                 for (PTRef cube : TermUtils(logic).getTopLevelDisjuncts(TermUtils(logic).toDNF(nnf))) {
                     bool cubeHasMixed = false;
-                    auto expanded = buildDisjunct(*arithLogic, cube, cubeHasMixed);
+                    auto expandedCube = buildDisjunct(*arithLogic, cube, cubeHasMixed);
                     assert(not cubeHasMixed);
-                    if (expanded) { disjuncts.push_back(std::move(*expanded)); }
+                    if (expandedCube) { disjuncts.push_back(std::move(*expandedCube)); }
                 }
                 continue;
             }
@@ -454,61 +737,27 @@ PTRef ConvexClosure::getConvexClosure(vec<PTRef> const & formulas) {
         if (disjunct) { disjuncts.push_back(std::move(*disjunct)); }
     }
 
-    // Keep the satisfiable inputs, collect their polyhedra, and intersect their Boolean conjuncts.
-    std::vector<std::vector<LinearAtom>> polyhedra;
-    std::vector<PTRef> sharedBoolConjuncts;
-    bool sharedInitialized = false;
-    bool arithUnconstrained = false;
-
-    for (auto & disjunct : disjuncts) {
-        if (not disjunct.polyhedron.empty() or not disjunct.boolConjuncts.empty()) {
-            // The syntactic convex closure is exact only for non-empty polyhedra: for an empty one the
-            // sigma_i = 0 case still admits its recession cone and would add spurious directions.
-            // The Boolean conjuncts take part in the check as well, so an input that only its Boolean
-            // part makes unsatisfiable contributes neither its conjuncts nor its polyhedron.
-            SMTSolver solver(logic, SMTSolver::WitnessProduction::NONE);
-            if (not disjunct.polyhedron.empty()) {
-                solver.assertProp(polyhedronToTerm(*arithLogic, disjunct.polyhedron));
-            }
-            for (PTRef conj : disjunct.boolConjuncts) { solver.assertProp(conj); }
-            if (solver.check() == SMTSolver::Answer::UNSAT) { continue; }
-        }
-
-        if (not sharedInitialized) {
-            // The order of the first surviving input decides the order of the result.
-            sharedBoolConjuncts = disjunct.boolConjuncts;
-            sharedInitialized = true;
-        } else {
-            std::unordered_set<PTRef, PTRefHash> present(disjunct.boolConjuncts.begin(),
-                                                         disjunct.boolConjuncts.end());
-            sharedBoolConjuncts.erase(
-                std::remove_if(sharedBoolConjuncts.begin(), sharedBoolConjuncts.end(),
-                               [&present](PTRef conj) { return present.find(conj) == present.end(); }),
-                sharedBoolConjuncts.end());
-        }
-
-        if (disjunct.polyhedron.empty()) {
-            arithUnconstrained = true;
-        } else {
-            polyhedra.push_back(std::move(disjunct.polyhedron));
-        }
-    }
+    // Keep the satisfiable inputs, reduce their polyhedra, and intersect their Boolean conjuncts.
+    RationalCopies copies;
+    Inputs inputs = collectInputs(*arithLogic, std::move(disjuncts), dropImplied ? &copies : nullptr);
 
     // Every input formula is unsatisfiable, so is their disjunction.
-    if (not sharedInitialized) { return logic.getTerm_false(); }
+    if (not inputs.satisfiable) { return logic.getTerm_false(); }
 
     // Every conjunct left here is a conjunct of each satisfiable input, hence it holds in their
     // union: conjoining it to the closure is sound, and it is all that is left of the Boolean part.
     PTRef sharedBool = logic.getTerm_true();
     {
         vec<PTRef> conjuncts;
-        for (PTRef conj : sharedBoolConjuncts) { conjuncts.push(conj); }
+        for (PTRef conj : inputs.sharedBoolConjuncts) { conjuncts.push(conj); }
         if (conjuncts.size() > 0) { sharedBool = logic.mkAnd(std::move(conjuncts)); }
     }
 
     // A satisfiable input that constrains no arithmetic variable makes the arithmetic part of the
     // closure unconstrained; the shared Boolean part is still valid.
-    if (arithUnconstrained) { return sharedBool; }
+    if (inputs.arithUnconstrained) { return sharedBool; }
+
+    std::vector<std::vector<LinearAtom>> & polyhedra = inputs.polyhedra;
 
     // Collect all variables appearing in any polyhedron, in a deterministic order.
     std::vector<PTRef> variables;
@@ -535,24 +784,24 @@ PTRef ConvexClosure::getConvexClosure(vec<PTRef> const & formulas) {
     }
     bool const integers = sort == arithLogic->getSort_int();
 
+    // The hull of a single polyhedron is that polyhedron.
+    if (polyhedra.size() == 1) { return logic.mkAnd(sharedBool, polyhedronToTerm(*arithLogic, polyhedra.front())); }
+
     // The syntactic convex closure needs rational multipliers, so the encoding is always built in a
     // private LRA logic over shadow copies of the original variables. Over the integers this is the
     // rational relaxation of the convex closure, which still over-approximates the union; the result
     // is mapped back to integer atoms (and tightened) by `BackTranslator`.
-    ArithLogic encodingLogic(Logic_t::QF_LRA);
+    ArithLogic & encodingLogic = copies.logic;
     SRef encodingSort = encodingLogic.getSort_real();
     auto encodingConst = [&](FastRational const & value) { return encodingLogic.mkConst(encodingSort, value); };
 
     std::unordered_map<PTRef, std::size_t, PTRefHash> variableIndex;
     std::vector<PTRef> shadowVariables;
-    std::unordered_map<PTRef, PTRef, PTRefHash> shadowToOriginal;
     for (std::size_t j = 0; j < variables.size(); ++j) {
-        std::string name = "cc_x_" + std::to_string(j);
-        PTRef shadow = encodingLogic.mkRealVar(name.c_str());
         variableIndex[variables[j]] = j;
-        shadowVariables.push_back(shadow);
-        shadowToOriginal[shadow] = variables[j];
+        shadowVariables.push_back(copies.copy(variables[j]));
     }
+    std::unordered_map<PTRef, PTRef, PTRefHash> shadowToOriginal = copies.toOriginal;
 
     // Variables of the encoding:
     //   x      : shadow copies of the original variables
@@ -624,8 +873,19 @@ PTRef ConvexClosure::getConvexClosure(vec<PTRef> const & formulas) {
         if (shadowToOriginal.find(var) == shadowToOriginal.end()) { return sharedBool; }
     }
 
+    PTRef over = result.over;
+    if (dropImplied) {
+        auto const conjuncts = TermUtils(encodingLogic).getTopLevelConjuncts(over);
+        std::vector<PTRef> terms(conjuncts.begin(), conjuncts.end());
+        auto keep = irredundant(encodingLogic, terms);
+        vec<PTRef> kept;
+        for (std::size_t i = 0; i < terms.size(); ++i) {
+            if (keep[i]) { kept.push(terms[i]); }
+        }
+        over = encodingLogic.mkAnd(std::move(kept));
+    }
     BackTranslator translator(encodingLogic, *arithLogic, std::move(shadowToOriginal), integers);
-    return logic.mkAnd(sharedBool, translator.translate(result.over));
+    return logic.mkAnd(sharedBool, mergeParallelAtoms(*arithLogic, translator.translate(over)));
 }
 
 } // namespace golem

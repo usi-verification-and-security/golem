@@ -57,9 +57,19 @@ public:
      * within the budget; past the budget, and at 0, such a conjunct is simply dropped instead,
      * which is sound but loses the case split. The cube count is bounded *before* the conversion
      * runs, so the budget caps the work, not just the result.
+     *
+     * Before the encoding is built, the polyhedra are reduced without changing the hull: atoms with
+     * parallel normals are merged into the tightest one, and a polyhedron syntactically contained in
+     * another is dropped. A single polyhedron left is returned as it is.
+     *
+     * With `dropImplied`, every atom implied by the other atoms of its polyhedron is dropped before the
+     * encoding is built, and so is every atom of the elimination's result implied by the others. Both
+     * are decided over the rationals, one SMT check per atom, so the hull does not change.
      */
+    static constexpr std::size_t defaultMaxCubesPerFormula = 8;
+
     explicit ConvexClosure(Logic & logic, QEOptions options = defaultOptions(),
-                           std::size_t maxCubesPerFormula = 8);
+                           std::size_t maxCubesPerFormula = defaultMaxCubesPerFormula, bool dropImplied = true);
 
     PTRef getConvexClosure(vec<PTRef> const & formulas);
 
@@ -67,6 +77,7 @@ private:
     Logic & logic;
     QEOptions options;
     std::size_t maxCubesPerFormula;
+    bool dropImplied;
 };
 
 } // namespace golem

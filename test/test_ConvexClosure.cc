@@ -6,6 +6,7 @@
 
 #include "utils/ConvexClosure.h"
 
+#include "TermUtils.h"
 #include "utils/SmtSolver.h"
 
 #include <gtest/gtest.h>
@@ -377,6 +378,58 @@ TEST_F(ConvexClosure_IntTest, test_NonComplementaryClauseStillCountsAgainstTheBu
     PTRef gap = any({lt(z, num(0)), lt(num(1), z)});
     PTRef branches = any({point(0, 0), point(1, 1)});
     expectClosure({all({branches, gap}), point(4, 4)}, logic.getTerm_true(), /* maxCubesPerFormula */ 2);
+}
+
+/* ------------------------------------------------------------- reductions */
+
+// The closure of `polyhedra`, with or without the semantic reduction, and the number of its atoms.
+std::size_t closureAtoms(ArithLogic & logic, std::vector<PTRef> const & polyhedra, bool dropImplied, PTRef & closure) {
+    closure = ConvexClosure(logic, ConvexClosure::defaultOptions(), 0, dropImplied).getConvexClosure(vec<PTRef>(polyhedra));
+    return TermUtils(logic).getTopLevelConjuncts(closure).size();
+}
+
+// A polyhedron contained in another adds nothing to the hull, so the hull is the larger one, returned
+// without an elimination.
+TEST_F(ConvexClosure_IntTest, test_ContainedPolyhedronLeavesTheOther) {
+    expectClosure({box(0, 4, 0, 4), box(1, 2, 1, 2), point(3, 3)}, box(0, 4, 0, 4));
+}
+
+// The second cube of the first input repeats the first one and adds `z = 5`: it is contained in it, and
+// dropping it leaves the hull exact.
+TEST_F(ConvexClosure_IntTest, test_ContainedCubeOfAnExpansion) {
+    PTRef branches = any({point(0, 0), all({point(0, 0), eq(z, num(5))})});
+    expectClosure({branches, point(4, 4)}, all({eq(x, y), leq(num(0), x), leq(x, num(4))}),
+                  /* maxCubesPerFormula */ 2);
+}
+
+// The point lies in the square, so the hull is the square itself, returned as it was reduced. `x <= 3`
+// is parallel to `x <= 1` and weaker, so the syntactic reduction drops it; `x + y <= 5` follows from the
+// four bounds, so only the semantic one does.
+TEST_F(ConvexClosure_IntTest, test_ImpliedAtomsAreDropped) {
+    std::vector<PTRef> polyhedra = {all({box(0, 1, 0, 1), leq(x, num(3)), leq(sum({x, y}), num(5))}), point(0, 0)};
+    PTRef closure;
+    EXPECT_EQ(closureAtoms(logic, polyhedra, true, closure), 4) << "got " << logic.pp(closure);
+    EXPECT_TRUE(isEquivalent(closure, box(0, 1, 0, 1), logic));
+    EXPECT_EQ(closureAtoms(logic, polyhedra, false, closure), 5) << "got " << logic.pp(closure);
+    EXPECT_TRUE(isEquivalent(closure, box(0, 1, 0, 1), logic));
+}
+
+// Two bounds with opposite normals and opposite constants are an equality.
+TEST_F(ConvexClosure_IntTest, test_OppositeBoundsBecomeAnEquality) {
+    std::vector<PTRef> polyhedra = {all({leq(x, num(2)), leq(num(2), x), leq(num(0), y), leq(y, num(1))}),
+                                    point(2, 0)};
+    PTRef closure;
+    EXPECT_EQ(closureAtoms(logic, polyhedra, false, closure), 3) << "got " << logic.pp(closure);
+    EXPECT_TRUE(isEquivalent(closure, all({eq(x, num(2)), leq(num(0), y), leq(y, num(1))}), logic));
+}
+
+// The elimination's rounds each contribute the literals they found implied; what comes back keeps only
+// the facets, here the three sides of the triangle.
+TEST_F(ConvexClosure_IntTest, test_ResultKeepsNoImpliedAtom) {
+    std::vector<PTRef> polyhedra = {point(0, 0), point(4, 0), point(0, 4)};
+    PTRef closure = ConvexClosure(logic).getConvexClosure(vec<PTRef>(polyhedra));
+    expectCovers(closure, polyhedra);
+    EXPECT_EQ(TermUtils(logic).getTopLevelConjuncts(closure).size(), 3) << "got " << logic.pp(closure);
 }
 
 /* ---------------------------------------------------------------- options */
