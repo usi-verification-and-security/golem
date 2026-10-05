@@ -65,6 +65,7 @@ struct SpacerConfig {
     /// both learnt lemmas are added
     bool interpolation = true;   // lemma from the interpolant of the blocked query
     bool indConflict = false;    // lemma from the mbp-based inductive conflict
+    bool splitInterpolants = true; // a conjunctive interpolant becomes one lemma per conjunct
 
     bool debug = true;           // run validity checks of new lemmas
 
@@ -1526,27 +1527,51 @@ SpacerContext::BoundedSafetyResult SpacerContext::boundSafety(std::size_t curren
                       << " nr disj: " << TermUtils(logic).getTopLevelDisjuncts(originalNewLemma).size()
                       << " nr vars: " << TermUtils(logic).getVars(originalNewLemma).size());
 
-                if (cfg.generalize) {
-                    originalNewLemma =
-                        cfg.gdown
-                        ? generalize_down(originalNewLemma, maySummary, transitions, inductiveSources)
-                        : generalize(originalNewLemma, maySummary, transitions, inductiveSources);
-                    TRACE(1,
-                          "---- [ITP] Generalization: " << originalNewLemma.x
-                          << " nr disj: " << TermUtils(logic).getTopLevelDisjuncts(originalNewLemma).size()
-                          << " nr vars: " << TermUtils(logic).getVars(originalNewLemma).size());
+                // A conjunctive interpolant becomes one lemma per conjunct. Each conjunct follows from the
+                // interpolant, so each is a lemma at this level; together they still block the pob. Each is
+                // generalized on its own, against a frame that already holds the conjuncts before it, and
+                // each is pushed on its own. `newLemma`, what CC-lemma and the CC updates see, stays the
+                // conjunction of the parts.
+                vec<PTRef> parts;
+                if (cfg.splitInterpolants) {
+                    for (PTRef conj : TermUtils(logic).getTopLevelConjuncts(originalNewLemma)) {
+                        if (not logic.isTrue(conj)) { parts.push(conj); }
+                    }
                 }
-                TRACE(2,
-                      "Lemma for " << pob.vertex.x << " at level " << pob.bound << " - "
-                      << logic.pp(originalNewLemma));
+                if (parts.size() < 2) {
+                    parts.clear();
+                    parts.push(originalNewLemma);
+                } else {
+                    TRACE(1, "---- [ITP] Split into " << parts.size() << " lemmas");
+                }
+                for (int k = 0; k < parts.size(); ++k) {
+                    PTRef & part = parts[k];
+                    // the frame below this level now holds the parts added before this one
+                    if (k > 0) { maySummary = getGuardedMaySummary(sourceGuards, pob.bound - 1); }
+                    if (cfg.generalize) {
+                        part = cfg.gdown ? generalize_down(part, maySummary, transitions, inductiveSources)
+                                         : generalize(part, maySummary, transitions, inductiveSources);
+                        TRACE(1,
+                              "---- [ITP] Generalization: " << part.x
+                              << " nr disj: " << TermUtils(logic).getTopLevelDisjuncts(part).size()
+                              << " nr vars: " << TermUtils(logic).getVars(part).size());
+                    }
+                    TRACE(2, "Lemma for " << pob.vertex.x << " at level " << pob.bound << " - " << logic.pp(part));
 
-                if (cfg.debug and not checkNewLemma(pob.vertex, pob.bound - 1, originalNewLemma)) {
-                    throw std::logic_error("After generalization, originalNewLemma is not consistent with edeges!");
+                    if (cfg.debug and not checkNewLemma(pob.vertex, pob.bound - 1, part)) {
+                        throw std::logic_error("After generalization, originalNewLemma is not consistent with edeges!");
+                    }
+                    addMaySummary(pob.vertex, pob.bound, part, LemmaOrigin::Itp | lemmaOriginOfPob(pob));
                 }
 
-                newLemma = originalNewLemma;
-                addMaySummary(pob.vertex, pob.bound, newLemma,
-                              LemmaOrigin::Itp | lemmaOriginOfPob(pob));
+                if (parts.size() == 1) {
+                    newLemma = parts[0];
+                } else {
+                    vec<PTRef> conjunction;
+                    for (PTRef part : parts) { conjunction.push(part); }
+                    newLemma = logic.mkAnd(std::move(conjunction));
+                }
+                originalNewLemma = newLemma;
             }
 
             if (cfg.indConflict) {
