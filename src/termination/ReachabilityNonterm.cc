@@ -732,47 +732,10 @@ bool ReachabilityNonterm::generateWellfoundedDisjuncts(PTRef transition, PTRef s
     return addCoveringCandidates(newCands, transition, logic) != 0;
 }
 
-// This function traverses strictCandidates (oldest first) and drops a disjunct whenever
-// 1. the transitions of Tr captured by \/ strictCandidates are preserved (so Tr => \/ strictCandidates is kept if it
-//    held before), and
-// 2. the non-covered states (states from which \/ strictCandidates is not inductive) do not grow.
-// The resulting candidate is less general, with non-covered states as small as the greedy traversal allows.
-void ReachabilityNonterm::reduceStrictCandidates(PTRef transition, ArithLogic & logic) {
-    SMTSolver checker(logic, SMTSolver::WitnessProduction::NONE);
-    auto implies = [&](PTRef a, PTRef b) {
-        checker.resetSolver();
-        checker.assertProp(logic.mkAnd(a, logic.mkNot(b)));
-        return checker.check() == SMTSolver::Answer::UNSAT;
-    };
-
-    PTRef nonCovered = nonCoveredStates(logic.mkOr(strictCandidates), transition, logic, vars);
-    int i = 0;
-    while (i < strictCandidates.size()) {
-        vec<PTRef> remaining;
-        for (int j = 0; j < strictCandidates.size(); ++j) {
-            if (j != i) { remaining.push(strictCandidates[j]); }
-        }
-        // Captured transitions are preserved iff Tr /\ C_i => \/ remaining
-        if (!implies(logic.mkAnd(transition, strictCandidates[i]), logic.mkOr(remaining))) {
-            ++i;
-            continue;
-        }
-        PTRef reducedNonCovered = nonCoveredStates(logic.mkOr(remaining), transition, logic, vars);
-        if (!implies(reducedNonCovered, nonCovered)) {
-            ++i;
-            continue;
-        }
-        // Candidate is dropped, the next one moves to index i
-        strictCandidates = std::move(remaining);
-        nonCovered = reducedNonCovered;
-    }
-}
-
 // This function adds candidates to strictCandidates one by one. While the candidates do not capture Tr, every
 // candidate is added. Afterwards, only those that strictly enlarge the set of covered states
 // (states from which \/ strictCandidates is inductive) without losing any of them are added.
 // This way the transition invariant candidate is not overgeneralized.
-// Afterwards, if anything was added, strictCandidates are reduced.
 // Returns the number of added candidates.
 uint ReachabilityNonterm::addCoveringCandidates(vec<PTRef> const & candidates, PTRef transition, ArithLogic & logic) {
     SMTSolver checker(logic, SMTSolver::WitnessProduction::NONE);
@@ -786,6 +749,8 @@ uint ReachabilityNonterm::addCoveringCandidates(vec<PTRef> const & candidates, P
     // Computed lazily, since candidates are added without the coverage check while they do not capture Tr
     PTRef nonCovered = PTRef_Undef;
     for (PTRef cand : candidates) {
+        // Candidate does not add any new transitions
+        if (implies(cand, logic.mkOr(strictCandidates))) { continue; }
         // While Tr => \/ strictCandidates does not hold (e.g., initially, when the disjunction is false),
         // the candidate is added without the coverage check
         if (!implies(transition, logic.mkOr(strictCandidates))) {
@@ -806,8 +771,6 @@ uint ReachabilityNonterm::addCoveringCandidates(vec<PTRef> const & candidates, P
             added++;
         }
     }
-    // Whenever the candidates are extended, they are reduced to avoid overgeneralization
-    if (added != 0) { reduceStrictCandidates(transition, logic); }
     return added;
 }
 
