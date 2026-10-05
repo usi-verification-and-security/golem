@@ -496,11 +496,11 @@ PTRef constructTransitionInvariantCandidates(PTRef init, PTRef transition, PTRef
     // depth..2*depth-1 steps, while init only guarantees reaching Sink in exactly depth steps. Without this, a sink
     // state that still has successors (e.g. covered states added to sink in checkTermination) makes the query SAT.
     // When Sink has no successors the conjunct is redundant, so it is skipped to keep the formula small.
-    {
-        SMTSolver sinkChecker(logic, SMTSolver::WitnessProduction::NONE);
-        sinkChecker.assertProp(logic.mkAnd(sink, transition));
-        if (sinkChecker.check() == SMTSolver::Answer::SAT) { transition = logic.mkAnd(logic.mkNot(sink), transition); }
-    }
+    // {
+    //    SMTSolver sinkChecker(logic, SMTSolver::WitnessProduction::NONE);
+    //    sinkChecker.assertProp(logic.mkAnd(sink, transition));
+    //    if (sinkChecker.check() == SMTSolver::Answer::SAT) { transition = logic.mkAnd(logic.mkNot(sink), transition); }
+    // }
     PTRef transitionOrId = logic.mkOr(transition, id);
     std::vector overapproximated_trace{transition};
     for (int k = 1; k < depth; k++) {
@@ -576,9 +576,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
             smtSolver.assertProp(logic.mkAnd(init, transition));
             // We check if init states are blocked (it's impossible to make a transition from initial state)
             // When it is the case, TS is terminating
-            if (smtSolver.check() == SMTSolver::Answer::UNSAT) {
-                return {Answer::YES, logic.getTerm_false()};
-            }
+            if (smtSolver.check() == SMTSolver::Answer::UNSAT) { return {Answer::YES, logic.mkOr(strictCandidates)}; }
 
             // This is an extension of the approach, constructing TrInv and attempting to prove termination
             // and non-termination using invariants
@@ -675,7 +673,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
     covered = logic.getTerm_false();
     // Safety-Based Termination Analysis
     // TODO: Figure out why passing in transition is problematic
-    auto [answer, trInvOrRecurringSet] = analyzeTS(init, normTransition, sink, logic);
+    auto [answer, trInvOrRecurringSet] = analyzeTS(init, transition, sink, logic);
     return answer;
 }
 
