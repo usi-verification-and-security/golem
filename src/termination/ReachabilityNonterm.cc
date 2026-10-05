@@ -732,9 +732,8 @@ bool ReachabilityNonterm::generateWellfoundedDisjuncts(PTRef transition, PTRef s
     return addCoveringCandidates(newCands, transition, logic) != 0;
 }
 
-// This function adds candidates to strictCandidates one by one. While the candidates do not capture Tr, every
-// candidate is added. Afterwards, only those that strictly enlarge the set of covered states
-// (states from which \/ strictCandidates is inductive) without losing any of them are added.
+// This function adds candidates to strictCandidates one by one, keeping only those that strictly enlarge
+// the set of covered states (states from which \/ strictCandidates is inductive) without losing any of them.
 // This way the transition invariant candidate is not overgeneralized.
 // Returns the number of added candidates.
 uint ReachabilityNonterm::addCoveringCandidates(vec<PTRef> const & candidates, PTRef transition, ArithLogic & logic) {
@@ -746,22 +745,10 @@ uint ReachabilityNonterm::addCoveringCandidates(vec<PTRef> const & candidates, P
     };
 
     uint added = 0;
-    // Computed lazily, since candidates are added without the coverage check while they do not capture Tr
-    PTRef nonCovered = PTRef_Undef;
+    PTRef nonCovered = nonCoveredStates(logic.mkOr(strictCandidates), transition, logic, vars);
     for (PTRef cand : candidates) {
         // Candidate does not add any new transitions
         if (implies(cand, logic.mkOr(strictCandidates))) { continue; }
-        // While Tr => \/ strictCandidates does not hold (e.g., initially, when the disjunction is false),
-        // the candidate is added without the coverage check
-        if (!implies(transition, logic.mkOr(strictCandidates))) {
-            strictCandidates.push(cand);
-            nonCovered = PTRef_Undef;
-            added++;
-            continue;
-        }
-        if (nonCovered == PTRef_Undef) {
-            nonCovered = nonCoveredStates(logic.mkOr(strictCandidates), transition, logic, vars);
-        }
         PTRef extendedNonCovered =
             nonCoveredStates(logic.mkOr(logic.mkOr(strictCandidates), cand), transition, logic, vars);
         // Covered states must strictly grow: no covered state is lost and at least one is gained
