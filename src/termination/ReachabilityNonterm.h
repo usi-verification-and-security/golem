@@ -44,6 +44,8 @@ private:
 
     uint addCoveringCandidates(vec<PTRef> const & candidates, PTRef transition, ArithLogic & logic);
 
+    void reduceStrictCandidates(PTRef transition, ArithLogic & logic);
+
     std::tuple<Answer, PTRef> checkTermination(PTRef init, PTRef transition, PTRef & sink, ArithLogic & logic);
 };
 } // namespace golem::termination
