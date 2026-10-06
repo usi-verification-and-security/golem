@@ -672,8 +672,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
     DETERMINISTIC_TRANSITION = determinismCheck(transition, logic, vars, aux_vars);
     covered = logic.getTerm_false();
     // Safety-Based Termination Analysis
-    // TODO: Figure out why passing in transition is problematic
-    auto [answer, trInvOrRecurringSet] = analyzeTS(init, normTransition, sink, logic);
+    auto [answer, trInvOrRecurringSet] = analyzeTS(init, transition, sink, logic);
     return answer;
 }
 
@@ -710,7 +709,6 @@ std::tuple<PTRef, PTRef> ReachabilityNonterm::blockDeterministicPrefix(PTRef ini
             }
             // Base is a formula, depicting all states reachable in j-1 transitions, which can reach
             // termination in n-j+1 transitions
-            // TODO: Maybe overapproximating QE can be used here.
             SMTsolver.resetSolver();
             SMTsolver.assertProp(transitions);
             SMTsolver.check();
@@ -770,7 +768,6 @@ bool ReachabilityNonterm::generateWellfoundedDisjuncts(PTRef transition, PTRef s
     // Extract well-founded disjuncts from the transition invariant
     auto newCands = extractWellFoundedCandidates(itp, sink, logic, vars, checkedCandidates);
 
-    // TODO: Try syntactic check
     uint addedCands = 0;
     for (auto cand : newCands) {
         SMTsolver.resetSolver();
@@ -853,7 +850,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::checkTermina
     assert(reached != logic.getTerm_false());
     // Algorithm checks if reachable states are terminating
     auto [answer, subinv] =
-        analyzeTS(reached, transition, covered, logic);
+        analyzeTS(reached, transition, sink, logic);
     // TODO: It is possible to do check differently, analyzing <noncoveredStates, tr, covered>
 
     //   If this nonterminates, then the whole TS nonterminates,
