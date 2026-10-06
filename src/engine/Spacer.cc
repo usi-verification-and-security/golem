@@ -1043,13 +1043,17 @@ class SpacerContext {
 
     /// `withMaySummary`: whether the MBP argument keeps the refined source's may-summary (see
     /// SpacerConfig::mbpWithMaySummary). `recordApproximations`: whether the predecessor's under- and
-    /// over-approximations feed the BMBP / CC-pob caches of `pob`. The predecessor extends `pob`'s chain.
+    /// over-approximations feed the BMBP / CC-pob caches of `pob`; the over-approximation is computed only
+    /// with BMBP. The predecessor extends `pob`'s chain.
     std::optional<ProofObligation> computePredecessor(EId eid, ProofObligation const & pob, bool withMaySummary,
                                                       bool recordApproximations) const;
 
     PTRef projectFormula(PTRef fla, vec<PTRef> const & vars, Model & model) const;
 
-    std::pair<PTRef, PTRef> projectFormulaWithOver(PTRef fla, vec<PTRef> const & vars, Model & model) const;
+    /// The projection, and with `withOver` its over-approximation (the projection's literals implied by `fla`,
+    /// one SMT check each); without it the second component is PTRef_Undef.
+    std::pair<PTRef, PTRef> projectFormulaWithOver(PTRef fla, vec<PTRef> const & vars, Model & model,
+                                                   bool withOver) const;
 
     void logNewFactIntoDatabase(PTRef fact, SymRef vertex, std::size_t sourceLevel, EId eid, Model & model);
 
@@ -2571,8 +2575,9 @@ std::optional<ProofObligation> SpacerContext::computePredecessor(EId eid, ProofO
             PTRef mbpArgument = withMaySummary
                                     ? maySummary
                                     : getEdgeMustOnlySummary(eid, sourceBound, 0);
+            bool const recordOver = cfg.maypo and cfg.bmbp and recordApproximations;
             auto [newConstraint, newOverConstraint] = \
-                projectFormulaWithOver(logic.mkAnd(mbpArgument, pob.constraint), predicateVars, *res.model);
+                projectFormulaWithOver(logic.mkAnd(mbpArgument, pob.constraint), predicateVars, *res.model, recordOver);
             PTRef newPob = VersionManager(logic).sourceFormulaToTarget(newConstraint); // ensure POB is target fla
             ProofObligation predPob{source, sourceBound, newPob, pob.isMayPO};
             predPob.family = pob.family;
@@ -2580,10 +2585,12 @@ std::optional<ProofObligation> SpacerContext::computePredecessor(EId eid, ProofO
             predPob.maySource = pob.maySource;
             linkChain(predPob, pob, ProofObligation::Via{eid, 0});
             if (cfg.maypo and recordApproximations) {
-            PTRef newOverPob = VersionManager(logic).sourceFormulaToTarget(newOverConstraint); // ensure POB is target fla
-            if (newOverPob != newPob and newOverPob != logic.getTerm_true()) {
-                PobInfo::atBound(pobInfo(pob.vertex, pob.constraint).overPredCache, pob.bound)
-                    .insert(eid, 0, newOverPob, 0);
+            if (recordOver) {
+                PTRef newOverPob = VersionManager(logic).sourceFormulaToTarget(newOverConstraint); // ensure POB is target fla
+                if (newOverPob != newPob and newOverPob != logic.getTerm_true()) {
+                    PobInfo::atBound(pobInfo(pob.vertex, pob.constraint).overPredCache, pob.bound)
+                        .insert(eid, 0, newOverPob, 0);
+                }
             }
             if (cfg.ccPob and newPob != logic.getTerm_true()) {
                 recordUnderApprox(predPob, ProofObligation::Via{eid, 0});
@@ -2624,8 +2631,9 @@ std::optional<ProofObligation> SpacerContext::computePredecessor(EId eid, ProofO
             PTRef mbpArgument = withMaySummary
                                     ? mixedEdgeSummary
                                     : getEdgeMustOnlySummary(eid, sourceBound, vertexToRefine);
+            bool const recordOver = cfg.maypo and cfg.bmbp and recordApproximations;
             auto [newConstraint, newOverConstraint] =
-                projectFormulaWithOver(logic.mkAnd(mbpArgument, pob.constraint), predicateVars, *res.model);
+                projectFormulaWithOver(logic.mkAnd(mbpArgument, pob.constraint), predicateVars, *res.model, recordOver);
             PTRef newPob = VersionManager(logic).sourceFormulaToTarget(newConstraint); // ensure POB is target fla
             TRACE(2, "New proof obligation generated")
             ProofObligation predPob{sources[vertexToRefine], sourceBound, newPob, pob.isMayPO};
@@ -2634,10 +2642,12 @@ std::optional<ProofObligation> SpacerContext::computePredecessor(EId eid, ProofO
             predPob.maySource = pob.maySource;
             linkChain(predPob, pob, ProofObligation::Via{eid, vertexToRefine});
             if (cfg.maypo and recordApproximations) {
-            PTRef newOverPob = VersionManager(logic).sourceFormulaToTarget(newOverConstraint); // ensure POB is target fla
-            if (newOverPob != newPob and newOverPob != logic.getTerm_true()) {
-                PobInfo::atBound(pobInfo(pob.vertex, pob.constraint).overPredCache, pob.bound)
-                    .insert(eid, vertexToRefine, newOverPob, 0);
+            if (recordOver) {
+                PTRef newOverPob = VersionManager(logic).sourceFormulaToTarget(newOverConstraint); // ensure POB is target fla
+                if (newOverPob != newPob and newOverPob != logic.getTerm_true()) {
+                    PobInfo::atBound(pobInfo(pob.vertex, pob.constraint).overPredCache, pob.bound)
+                        .insert(eid, vertexToRefine, newOverPob, 0);
+                }
             }
             if (cfg.ccPob and newPob != logic.getTerm_true()) {
                 recordUnderApprox(predPob, ProofObligation::Via{eid, vertexToRefine});
@@ -2775,7 +2785,8 @@ PTRef SpacerContext::projectFormula(PTRef fla, const vec<PTRef> & toVars, Model 
     return res;
 }
 
-std::pair<PTRef, PTRef> SpacerContext::projectFormulaWithOver(PTRef fla, const vec<PTRef> & toVars, Model & model) const {
+std::pair<PTRef, PTRef> SpacerContext::projectFormulaWithOver(PTRef fla, const vec<PTRef> & toVars, Model & model,
+                                                              bool withOver) const {
     assert(std::all_of(toVars.begin(), toVars.end(), [this](PTRef var) { return logic.isVar(var); }));
     //    std::cout << "Projecting " << logic.printTerm(fla) << " to variables ";
     //    std::for_each(toVars.begin(), toVars.end(), [&](PTRef var) { std::cout << logic.printTerm(var) << ' '; });
@@ -2789,7 +2800,7 @@ std::pair<PTRef, PTRef> SpacerContext::projectFormulaWithOver(PTRef fla, const v
     }
     ModelBasedProjection mbp(logic);
     PTRef overapprox = PTRef_Undef;
-    PTRef res = mbp.project(fla, toEliminate, model, overapprox);
+    PTRef res = withOver ? mbp.project(fla, toEliminate, model, overapprox) : mbp.project(fla, toEliminate, model);
     //    std::cout << "\nResult is " << logic.printTerm(res) << std::endl;
     return {res, overapprox};
 }
