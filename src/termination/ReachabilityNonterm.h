@@ -41,7 +41,7 @@ private:
                                       vec<PTRef> & strictCandidates, std::set<PTRef> & checkedCandidates);
 
     std::tuple<Answer, PTRef> checkTermination(PTRef init, PTRef transition, PTRef & sink, ArithLogic & logic,
-                                               vec<PTRef> & strictCandidates);
+                                               vec<PTRef> & strictCandidates, PTRef inv);
 };
 } // namespace golem::termination
 

@@ -496,11 +496,6 @@ PTRef constructTransitionInvariantCandidates(PTRef init, PTRef transition, PTRef
     // depth..2*depth-1 steps, while init only guarantees reaching Sink in exactly depth steps. Without this, a sink
     // state that still has successors (e.g. covered states added to sink in checkTermination) makes the query SAT.
     // When Sink has no successors the conjunct is redundant, so it is skipped to keep the formula small.
-    // {
-    //    SMTSolver sinkChecker(logic, SMTSolver::WitnessProduction::NONE);
-    //    sinkChecker.assertProp(logic.mkAnd(sink, transition));
-    //    if (sinkChecker.check() == SMTSolver::Answer::SAT) { transition = logic.mkAnd(logic.mkNot(sink), transition); }
-    // }
     PTRef transitionOrId = logic.mkOr(transition, id);
     std::vector overapproximated_trace{transition};
     for (int k = 1; k < depth; k++) {
@@ -525,8 +520,23 @@ PTRef constructTransitionInvariantCandidates(PTRef init, PTRef transition, PTRef
     smt_solver.push();
     smt_solver.assertProp(logic.mkAnd(nonTerminating));
     if (smt_solver.check() != SMTSolver::Answer::UNSAT) {
-        assert(false);
-        return logic.getTerm_false();
+        overapproximated_trace.clear();
+        for (int k = 0; k < depth; k++) {
+            // For every transition deterministic trace is updated, adding an Id or Tr
+            // This is needed so that Interpolant overapproximates 1 <= n <= num transitions
+            overapproximated_trace.push_back(TimeMachine(logic).sendFlaThroughTime(transition, k));
+        }
+        nonTerminating.clear();
+        vec<PTRef> nonTerminating{init};
+        nonTerminating.push(logic.mkNot(TimeMachine(logic).sendFlaThroughTime(sink, depth)));
+        smt_solver.resetSolver();
+        smt_solver.assertProp(trace);
+        smt_solver.assertProp(logic.mkAnd(nonTerminating));
+
+        if (smt_solver.check() != SMTSolver::Answer::UNSAT) {
+            assert(false);
+            return logic.getTerm_false();
+        }
     }
 
     auto itpContext = smt_solver.getInterpolationContext();
@@ -550,6 +560,7 @@ PTRef constructTransitionInvariantCandidates(PTRef init, PTRef transition, PTRef
 std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink,
                                                                               ArithLogic & logic) {
     vec<PTRef> strictCandidates;
+    PTRef inv = logic.getTerm_true();
     // Kept local so every (recursive) analyzeTS invocation gets its own cache: a candidate inspected
     // for one state-space must not be skipped when a nested call analyzes a different one.
     std::set<PTRef> checkedCandidates;
@@ -584,7 +595,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
                 if (!generateWellfoundedDisjuncts(originalTransition, sink, trace, num, logic, strictCandidates,
                                                   checkedCandidates))
                     continue;
-                auto [answer, res] = checkTermination(init, transition, sink, logic, strictCandidates);
+                auto [answer, res] = checkTermination(init, transition, sink, logic, strictCandidates, inv);
                 if (answer != Answer::UNKNOWN) return {answer, res};
             }
         } else if (res.getAnswer() == VerificationAnswer::SAFE) {
@@ -599,13 +610,13 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
             // initially.
             auto witness = res.getValidityWitness();
             assert(witness.getDefinitions().size() == 3);
-            PTRef inv = logic.getTerm_true();
             std::vector<PTRef> repr;
+            PTRef tmpinv;
             // First, we extract the invariant from the witness. It is interpretation of predicate P.
             for (auto wtn : witness.getDefinitions()) {
                 if (wtn.first.x != 3 && wtn.first.x != 0) {
                     repr = graph->predicateRepresentation().getRepresentation(wtn.first);
-                    inv = wtn.second;
+                    tmpinv = wtn.second;
                 }
             }
             TermUtils::substitutions_map varSubstitutions;
@@ -614,9 +625,9 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
             }
             // Then invariant is translated, so the variables correspond to the encoding of the CHC system,
             // pre-normalization
-            inv = TermUtils(logic).varSubstitute(inv, varSubstitutions);
-            // TODO: limit states based on the invariant
+            inv = logic.mkAnd(inv, TermUtils(logic).varSubstitute(tmpinv, varSubstitutions));
 
+            // TODO: limit states based on the invariant
             SMTsolver.resetSolver();
             SMTsolver.assertProp(
                 logic.mkAnd({inv, transition, logic.mkNot(TimeMachine(logic).sendFlaThroughTime(inv, 1))}));
@@ -670,7 +681,8 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
     // Witness computation is required, as we need to use both counterexample traces to limit terminating states
     // and inductive invariants to prove nontermination
     DETERMINISTIC_TRANSITION = determinismCheck(transition, logic, vars, aux_vars);
-    covered = logic.getTerm_false();
+    if (DETERMINISTIC_TRANSITION) std::cout << "Deterministic transition" << std::endl;
+    covered = sink;
     // Safety-Based Termination Analysis
     auto [answer, trInvOrRecurringSet] = analyzeTS(init, transition, sink, logic);
     return answer;
@@ -759,7 +771,6 @@ bool ReachabilityNonterm::generateWellfoundedDisjuncts(PTRef transition, PTRef s
     // reach "not Sink(x')" in n transitions:
     PTRef NT = QuantifierElimination(logic).keepOnly(
         logic.mkAnd({trace, logic.mkNot(TimeMachine(logic).sendFlaThroughTime(sink, num))}), vars);
-    // std::cout << "NT: " << logic.pp(NT) << std::endl;
     // States that can not reach "not Sink(x')" in n transitions (therefore necesarily reach Sink(x')):
     // TODO: Can underapproximate
     PTRef T = logic.mkNot(NT);
@@ -804,13 +815,14 @@ bool ReachabilityNonterm::generateWellfoundedDisjuncts(PTRef transition, PTRef s
 // If they are reachable - TS checks the termination for these states.
 std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::checkTermination(PTRef init, PTRef transition,
                                                                                      PTRef & sink, ArithLogic & logic,
-                                                                                     vec<PTRef> & strictCandidates) {
+                                                                                     vec<PTRef> & strictCandidates,
+                                                                                     PTRef inv) {
     PTRef trInv = logic.mkOr(strictCandidates);
     PTRef id = getId(vars, logic);
     SMTSolver smt_checker(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
     // We check if TrInv is a general transition invariant
     // (trInv \/ Id) /\ Tr => trInv
-    smt_checker.assertProp(logic.mkAnd({logic.mkOr(trInv, id), TimeMachine(logic).sendFlaThroughTime(transition, 1),
+    smt_checker.assertProp(logic.mkAnd({inv, logic.mkOr(trInv, id), TimeMachine(logic).sendFlaThroughTime(transition, 1),
                                         logic.mkNot(shiftOnlyNextVars(trInv, vars, logic))}));
     // Check if trInv is Transition Invariant
     if (smt_checker.check() == SMTSolver::Answer::UNSAT) {
@@ -869,8 +881,6 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::checkTermina
     // Algorithm checks if reachable states are terminating
     auto [answer, subinv] =
         analyzeTS(reached, transition, covered, logic);
-    // TODO: It is possible to do check differently, analyzing <noncoveredStates, tr, covered>
-
     //   If this nonterminates, then the whole TS nonterminates,
     //   If it terminates we can use learned covered sates and reached states terminate
     if (answer == Answer::YES) {
@@ -884,9 +894,8 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::checkTermina
             logic.mkAnd({reached, subinv}),vars), -1);
         sink = TermUtils(logic).simplifyMax(logic.mkOr({sink, newCov, reached}));
         smt_checker.resetSolver();
-        // TODO: Remove this check because this is reduced
         smt_checker.assertProp(
-            logic.mkAnd({noncoveredStates, logic.mkOr(subinv, id), TimeMachine(logic).sendFlaThroughTime(transition, 1),
+            logic.mkAnd({inv, noncoveredStates, logic.mkOr(subinv, id), TimeMachine(logic).sendFlaThroughTime(transition, 1),
                          logic.mkNot(shiftOnlyNextVars(subinv, vars, logic))}));
         // Check if trInv is Transition Invariant on the whole state-space
         if (smt_checker.check() == SMTSolver::Answer::UNSAT) {
