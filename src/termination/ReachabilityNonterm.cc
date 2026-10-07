@@ -850,7 +850,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::checkTermina
     assert(reached != logic.getTerm_false());
     // Algorithm checks if reachable states are terminating
     auto [answer, subinv] =
-        analyzeTS(reached, transition, sink, logic);
+        analyzeTS(reached, transition, covered, logic);
     // TODO: It is possible to do check differently, analyzing <noncoveredStates, tr, covered>
 
     //   If this nonterminates, then the whole TS nonterminates,
@@ -860,17 +860,12 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::checkTermina
         // maximizes the covered states, while keeping Tr => \/ strictCandidates
         vec<PTRef> oldCandidates;
         strictCandidates.copyTo(oldCandidates);
-        strictCandidates = mergeTransitionInvariants(subinv, oldCandidates, transition, logic, vars);
+        strictCandidates = TermUtils(logic).getTopLevelDisjuncts(subinv);
+        // strictCandidates = mergeTransitionInvariants(subinv, oldCandidates, transition, logic, vars);
         PTRef newCov = TimeMachine(logic).sendFlaThroughTime(QuantifierElimination(logic).eliminate(
             logic.mkAnd({reached, subinv}),vars), -1);
-        // TODO: Think if maybe sink can be even more restricted...
         sink = TermUtils(logic).simplifyMax(logic.mkOr({sink, newCov, reached}));
-        // sink = TermUtils(logic).simplifyMax(logic.mkOr({sink, newCov, reached}));
-        // transition = TermUtils(logic).simplifyMax(logic.mkAnd({transition,
-        //     TimeMachine(logic).sendFlaThroughTime(logic.mkNot(logic.mkOr(newCov, reached)),1)}));
         smt_checker.resetSolver();
-        // TODO: It should work for  subinv \/ TrInv, but it does not
-        //    weaker TrInv seems to fail more often then stronger TrInv :(
         // TODO: Remove this check because this is reduced
         smt_checker.assertProp(
             logic.mkAnd({noncoveredStates, logic.mkOr(subinv, id), TimeMachine(logic).sendFlaThroughTime(transition, 1),
