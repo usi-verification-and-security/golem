@@ -878,8 +878,8 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::checkTermina
         // maximizes the covered states, while keeping Tr => \/ strictCandidates
         vec<PTRef> oldCandidates;
         strictCandidates.copyTo(oldCandidates);
-        strictCandidates = TermUtils(logic).getTopLevelDisjuncts(subinv);
-        // strictCandidates = mergeTransitionInvariants(subinv, oldCandidates, transition, logic, vars);
+        // strictCandidates = TermUtils(logic).getTopLevelDisjuncts(subinv);
+        strictCandidates = mergeTransitionInvariants(subinv, oldCandidates, transition, logic, vars);
         PTRef newCov = TimeMachine(logic).sendFlaThroughTime(QuantifierElimination(logic).eliminate(
             logic.mkAnd({reached, subinv}),vars), -1);
         sink = TermUtils(logic).simplifyMax(logic.mkOr({sink, newCov, reached}));
