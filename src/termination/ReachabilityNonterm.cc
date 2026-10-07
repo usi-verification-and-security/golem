@@ -626,6 +626,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
             // Then invariant is translated, so the variables correspond to the encoding of the CHC system,
             // pre-normalization
             inv = logic.mkAnd(inv, TermUtils(logic).varSubstitute(tmpinv, varSubstitutions));
+            transition = logic.mkAnd({inv, transition, TimeMachine(logic).sendFlaThroughTime(inv, 1)});
 
             // TODO: limit states based on the invariant
             SMTsolver.resetSolver();
