@@ -472,7 +472,7 @@ vec<PTRef> mergeTransitionInvariants(PTRef subinv, vec<PTRef> const & oldCandida
         extended.push(cand);
         PTRef extendedNonCovered = nonCoveredStates(logic.mkOr(extended), transition, logic, vars);
         // Covered states must strictly grow: no covered state is lost and at least one is gained
-        if (implies(extendedNonCovered, nonCovered) && !implies(nonCovered, extendedNonCovered)) {
+        if (implies(nonCovered, extendedNonCovered)) {
             merged = std::move(extended);
             nonCovered = extendedNonCovered;
         } else {
