@@ -526,8 +526,9 @@ PTRef constructTransitionInvariantCandidates(PTRef init, PTRef transition, PTRef
             // This is needed so that Interpolant overapproximates 1 <= n <= num transitions
             overapproximated_trace.push_back(TimeMachine(logic).sendFlaThroughTime(transition, k));
         }
+        trace = logic.mkAnd(overapproximated_trace);
         nonTerminating.clear();
-        vec<PTRef> nonTerminating{init};
+        nonTerminating.push(init);
         nonTerminating.push(logic.mkNot(TimeMachine(logic).sendFlaThroughTime(sink, depth)));
         smt_solver.resetSolver();
         smt_solver.assertProp(trace);
@@ -616,7 +617,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
             for (auto wtn : witness.getDefinitions()) {
                 if (wtn.first.x != 3 && wtn.first.x != 0) {
                     repr = graph->predicateRepresentation().getRepresentation(wtn.first);
-                    tmpinv = wtn.second;
+                    inv = wtn.second;
                 }
             }
             TermUtils::substitutions_map varSubstitutions;
@@ -625,15 +626,14 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
             }
             // Then invariant is translated, so the variables correspond to the encoding of the CHC system,
             // pre-normalization
-            inv = logic.mkAnd(inv, TermUtils(logic).varSubstitute(tmpinv, varSubstitutions));
-            transition = logic.mkAnd({inv, transition, TimeMachine(logic).sendFlaThroughTime(inv, 1)});
+            inv = TermUtils(logic).varSubstitute(inv, varSubstitutions);
 
             // TODO: limit states based on the invariant
             SMTsolver.resetSolver();
             SMTsolver.assertProp(
                 logic.mkAnd({inv, transition, logic.mkNot(TimeMachine(logic).sendFlaThroughTime(inv, 1))}));
             assert(SMTsolver.check() == SMTSolver::Answer::UNSAT);
-            PTRef constr = logic.mkNot(QuantifierElimination(logic).keepOnly(logic.mkAnd(inv,transition), vars));
+            PTRef constr = logic.mkNot(QuantifierElimination(logic).keepOnly(logic.mkAnd(inv, transition), vars));
             SMTsolver.resetSolver();
             SMTsolver.assertProp(logic.mkAnd({inv, constr}));
             // We check if from any state satisfying the invariant it is possible to take a transition.
