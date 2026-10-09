@@ -685,7 +685,7 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
     if (DETERMINISTIC_TRANSITION) std::cout << "Deterministic transition" << std::endl;
     covered = sink;
     // Safety-Based Termination Analysis
-    auto [answer, trInvOrRecurringSet] = analyzeTS(init, transition, sink, logic);
+    auto [answer, trInvOrRecurringSet] = analyzeTS(init, normTransition, sink, logic);
     return answer;
 }
 
