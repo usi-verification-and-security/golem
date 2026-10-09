@@ -40,7 +40,7 @@
 #ifdef GOLEM_TRACE_LEVEL
 #define TRACE_LEVEL GOLEM_TRACE_LEVEL
 #else
-#define TRACE_LEVEL 1
+#define TRACE_LEVEL 0
 #endif
 
 namespace golem {
@@ -67,7 +67,7 @@ struct SpacerConfig {
     bool indConflict = false;    // lemma from the mbp-based inductive conflict
     bool splitInterpolants = true; // a conjunctive interpolant becomes one lemma per conjunct
 
-    bool debug = true;           // run validity checks of new lemmas
+    bool debug = false;           // run validity checks of new lemmas
 
     bool mayPobOnLastVisit = false; // also build may-POBs on a pob's final visit
 
@@ -111,7 +111,7 @@ struct SpacerConfig {
     // tuning parameters (wired: --spacer.maypo-gas / --spacer.maypo-trigger / --spacer.max-lemmas-cc
     // / --spacer.min-pobs-cc / --spacer.max-pobs-cc / --spacer.conjecture-trigger
     // / --spacer.cc-chain-ancestors)
-    std::size_t mayPoGas = 5;             // pobs a may-POB family may push below its root
+    std::size_t mayPoGas = 20;             // pobs a may-POB family may push below its root
     std::size_t triggerMayPo = 3;         // visits before may-POBs are built
     std::size_t triggerConjecture = 5;    // visits, summed over every bound, before `conjecture` fires
     std::size_t minLemmasForCc = 2;       // blocking lemmas needed before CC-lemma fires
