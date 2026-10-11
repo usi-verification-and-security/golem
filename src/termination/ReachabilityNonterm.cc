@@ -724,29 +724,13 @@ bool ReachabilityNonterm::generateWellfoundedDisjuncts(PTRef inv, PTRef transiti
     auto newCands = extractWellFoundedCandidates(itp, sink, logic, vars, checkedCandidates);
 
     uint addedCands = 0;
-    SMTsolver.resetSolver();
-    SMTsolver.assertProp(logic.mkAnd({transition, logic.mkNot(logic.mkOr(strictCandidates))}));
-    if (SMTsolver.check() == SMTSolver::Answer::SAT) {
-        for (auto cand : newCands) {
-            SMTsolver.resetSolver();
-            SMTsolver.assertProp(logic.mkAnd(cand, logic.mkNot(logic.mkOr(strictCandidates))));
-            if (SMTsolver.check() == SMTSolver::Answer::SAT) {
-                strictCandidates.push(cand);
-                addedCands++;
-            }
-        }
-    } else {
-        PTRef oldNoncovered = nonCoveredStates(inv, logic.mkOr(strictCandidates), transition, logic, vars);
-        for (auto cand : newCands) {
-            PTRef newNoncovered = nonCoveredStates(inv, logic.mkOr(logic.mkOr(strictCandidates), cand), transition, logic, vars);
-            SMTsolver.resetSolver();
-            SMTsolver.assertProp(logic.mkAnd(oldNoncovered, logic.mkNot(newNoncovered)));
-            if (SMTsolver.check() == SMTSolver::Answer::UNSAT) {
-                oldNoncovered = newNoncovered;
-                strictCandidates.push(cand);
-                addedCands++;
-            }
-        }
+    for (auto cand : newCands) {
+        // SMTsolver.resetSolver();
+        // SMTsolver.assertProp(logic.mkAnd(cand, logic.mkNot(logic.mkOr(strictCandidates))));
+        // if (SMTsolver.check() == SMTSolver::Answer::SAT) {
+            strictCandidates.push(cand);
+            addedCands++;
+        // }
     }
     return addedCands != 0;
 
