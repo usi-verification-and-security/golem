@@ -740,19 +740,21 @@ PTRef ReachabilityNonterm::synthesizeInvariant(PTRef inv, PTRef transition, Arit
     SMTSolver checker(logic, SMTSolver::WitnessProduction::NONE);
     vec<PTRef> tempCands;
     strictCandidates.copyTo(tempCands);
+    std::cout << "Strict cands size before: " << strictCandidates.size() << '\n';
+    // std::cout << "Cands: " << logic.pp(logic.mkOr(strictCandidates))<< '\n';;
     std::vector<bool> kept(strictCandidates.size(), true);
     auto keptWithout = [&](int skip) {
         vec<PTRef> rest;
         for (int j = 0; j < strictCandidates.size(); ++j) {
             if (j != skip && kept[j]) { rest.push(strictCandidates[j]); }
         }
-        return logic.mkOr(std::move(rest));
+        return std::move(rest);
      };
 
 
     PTRef noncoveredStates = nonCoveredStates(inv, logic.mkOr(strictCandidates), transition, logic, vars);
-    for (auto i = 0; i < tempCands.size(); i++) {
-        PTRef rest = keptWithout(i);
+    for (auto i = tempCands.size() - 1; i >= 0; i--) {
+        PTRef rest = logic.mkOr(keptWithout(i));
         PTRef newNoncovered = nonCoveredStates(inv, rest, transition, logic, vars);
         checker.resetSolver();
         checker.assertProp(logic.mkAnd({newNoncovered, logic.mkNot(noncoveredStates)}));
@@ -761,7 +763,10 @@ PTRef ReachabilityNonterm::synthesizeInvariant(PTRef inv, PTRef transition, Arit
             noncoveredStates = newNoncovered;
         }
     }
-    return keptWithout(-1);
+    strictCandidates = keptWithout(-1);
+    std::cout << "Strict cands size after: " << strictCandidates.size() << '\n';
+    // std::cout << "Cands: " << logic.pp(logic.mkOr(strictCandidates))<< '\n';;
+    return logic.mkOr(strictCandidates);
 }
 
 // This function uses transition invariants candidates, cheking termination.
