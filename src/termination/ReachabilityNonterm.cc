@@ -553,10 +553,10 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
             // that it doesn't contain any sink states itself.
             // It is possible since we add constraints to the transition relation, which were not accounted for
             // initially.
+            if (!res.hasWitness()) { return {Answer::NO, logic.getTerm_false()}; };
             auto witness = res.getValidityWitness();
             assert(witness.getDefinitions().size() == 3);
             std::vector<PTRef> repr;
-            PTRef tmpinv;
             // First, we extract the invariant from the witness. It is interpretation of predicate P.
             for (auto wtn : witness.getDefinitions()) {
                 if (wtn.first.x != 3 && wtn.first.x != 0) {
