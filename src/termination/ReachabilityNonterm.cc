@@ -440,7 +440,7 @@ PTRef extendCovered(PTRef covered, PTRef newlyCovered, ArithLogic & logic) {
 // Exists x', x''. (TrInv(x,x') \/ Id(x,x')) /\ Tr(x',x'') /\ not TrInv(x,x'')
 PTRef nonCoveredStates(PTRef inv, PTRef trInv, PTRef transition, ArithLogic & logic, std::vector<PTRef> const & vars) {
     return QuantifierElimination(logic).keepOnly(
-        logic.mkAnd({inv, logic.mkOr(trInv, getId(vars, logic)), TimeMachine(logic).sendFlaThroughTime(inv, 1), TimeMachine(logic).sendFlaThroughTime(transition, 1),
+        logic.mkAnd({inv, transition, TimeMachine(logic).sendFlaThroughTime(inv, 1), TimeMachine(logic).sendFlaThroughTime(logic.mkOr(trInv, getId(vars, logic)), 1),
                      logic.mkNot(shiftOnlyNextVars(trInv, vars, logic))}),
         vars);
 }
@@ -717,7 +717,7 @@ bool ReachabilityNonterm::generateWellfoundedDisjuncts(PTRef inv, PTRef transiti
     uint strictCandsBefore = strictCandidates.size();
     // Extract well-founded disjuncts from the transition invariant
     extractWellFoundedCandidates(itp, sink, logic, vars);
-    synthesizeInvariant(inv, transition, logic);
+    // synthesizeInvariant(inv, transition, logic);
     return strictCandsBefore != strictCandidates.size();
 
 }
@@ -728,7 +728,7 @@ void ReachabilityNonterm::synthesizeInvariant(PTRef inv, PTRef transition, Arith
     strictCandidates.copyTo(tempCands);
     std::cout << "Strict cands size before: " << strictCandidates.size() << '\n';
     // std::cout << "Cands: " << logic.pp(logic.mkOr(strictCandidates))<< '\n';;
-    std::vector<bool> kept(strictCandidates.size(), true);
+    std::vector kept(strictCandidates.size(), true);
     auto keptWithout = [&](int skip) {
         vec<PTRef> rest;
         for (int j = 0; j < strictCandidates.size(); ++j) {
@@ -771,7 +771,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::checkTermina
     SMTSolver smt_checker(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
     // We check if TrInv is a general transition invariant
     // (trInv \/ Id) /\ Tr => trInv
-    smt_checker.assertProp(logic.mkAnd({inv, logic.mkOr(trInv, id), TimeMachine(logic).sendFlaThroughTime(inv,1), TimeMachine(logic).sendFlaThroughTime(transition, 1),
+    smt_checker.assertProp(logic.mkAnd({inv, transition, TimeMachine(logic).sendFlaThroughTime(inv,1), TimeMachine(logic).sendFlaThroughTime(logic.mkOr(trInv, id), 1),
                                         logic.mkNot(shiftOnlyNextVars(trInv, vars, logic))}));
     // Check if trInv is Transition Invariant
     if (smt_checker.check() == SMTSolver::Answer::UNSAT) {
@@ -828,7 +828,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::checkTermina
     // Sometimes Reached is init because init = true is an often initial state. Then it is reduced to "not sink"
     assert(reached != logic.getTerm_false());
     // Algorithm checks if reachable states are terminating
-    // strictCandidates.clear();
+    strictCandidates.clear();
     auto currentChecked = checkedCandidates;
     checkedCandidates.clear();
     auto [answer, subinv] =
@@ -844,7 +844,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::checkTermina
         sink = TermUtils(logic).simplifyMax(logic.mkOr({sink, newCov, reached}));
         smt_checker.resetSolver();
         smt_checker.assertProp(
-            logic.mkAnd({inv, noncoveredStates, logic.mkOr(subinv, id), TimeMachine(logic).sendFlaThroughTime(inv,1), TimeMachine(logic).sendFlaThroughTime(transition, 1),
+            logic.mkAnd({inv, noncoveredStates, transition, TimeMachine(logic).sendFlaThroughTime(inv,1), TimeMachine(logic).sendFlaThroughTime(logic.mkOr(subinv, id), 1),
                          logic.mkNot(shiftOnlyNextVars(subinv, vars, logic))}));
         // Check if trInv is Transition Invariant on the whole state-space
         if (smt_checker.check() == SMTSolver::Answer::UNSAT) {
