@@ -337,8 +337,7 @@ PTRef enumerativeDNF(PTRef formula, Logic & logic, int bound = 0) {
 // This function extracts well-founded disjuncts from the interpolant.
 // checkedCandidates caches the disjuncts already inspected within one analyzeTS invocation so the
 // (expensive) well-foundedness check is not repeated across loop iterations of the same call.
-vec<PTRef> extractWellFoundedCandidates(PTRef itp, PTRef sink, ArithLogic & logic, const std::vector<PTRef> & vars,
-                                        std::set<PTRef> & checkedCandidates) {
+void ReachabilityNonterm::extractWellFoundedCandidates(PTRef itp, PTRef sink, ArithLogic & logic, const std::vector<PTRef> & vars) {
     TermUtils utils(logic);
     SMTSolver smt_solver(logic, SMTSolver::WitnessProduction::NONE);
 
@@ -346,7 +345,6 @@ vec<PTRef> extractWellFoundedCandidates(PTRef itp, PTRef sink, ArithLogic & logi
         utils.getTopLevelDisjuncts(enumerativeDNF(utils.simplifyMax(normalize(logic.mkNot(sink), logic)), logic));
     auto candidates =
         utils.getTopLevelDisjuncts(enumerativeDNF(utils.simplifyMax(normalize(itp, logic)), logic, DNFIZATION_BOUND));
-    vec<PTRef> strictCandidates;
     for (auto cand : candidates) {
         if (!checkedCandidates.insert(cand).second) { continue; }
         assert(cand != logic.getTerm_true());
@@ -363,7 +361,6 @@ vec<PTRef> extractWellFoundedCandidates(PTRef itp, PTRef sink, ArithLogic & logi
             }
         }
     }
-    return strictCandidates;
 }
 
 // Function evaluates if Tr(x,x',a) determenistic, where a are auxiliary variables
@@ -508,7 +505,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
     PTRef inv = logic.getTerm_true();
     // Kept local so every (recursive) analyzeTS invocation gets its own cache: a candidate inspected
     // for one state-space must not be skipped when a nested call analyzes a different one.
-    std::set<PTRef> checkedCandidates;
+
     while (true) {
         // TODO:  graph based instead of TS
         auto graph = constructHyperGraph(init, transition, sink, logic, vars);
@@ -537,8 +534,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
             // This is an extension of the approach, constructing TrInv and attempting to prove termination
             // and non-termination using invariants
             if (num > 0) {
-                if (!generateWellfoundedDisjuncts(inv, originalTransition, sink, trace, num, logic,
-                                                  checkedCandidates))
+                if (!generateWellfoundedDisjuncts(inv, originalTransition, sink, trace, num, logic))
                     continue;
                 auto [answer, res] = checkTermination(init, transition, sink, logic, inv);
                 if (answer != Answer::UNKNOWN) return {answer, res};
@@ -708,7 +704,7 @@ std::tuple<PTRef, PTRef> ReachabilityNonterm::blockDeterministicPrefix(PTRef ini
 // This function attempts to construct well founded disjuncts to produce transition invariant, using interpolation.
 // Interpolants are DNFized, and disjuncts are checked for well-foundness.
 bool ReachabilityNonterm::generateWellfoundedDisjuncts(PTRef inv, PTRef transition, PTRef sink, PTRef trace, uint num,
-                                                       ArithLogic & logic, std::set<PTRef> & checkedCandidates) {
+                                                       ArithLogic & logic) {
     SMTSolver SMTsolver(logic, SMTSolver::WitnessProduction::NONE);
     // Calculate the states that are guaranteed to terminate within num transitions:
     // Tr^n(x,x') /\ not Sink(x') - is a formula, which can be satisfied by any x which can
@@ -720,23 +716,15 @@ bool ReachabilityNonterm::generateWellfoundedDisjuncts(PTRef inv, PTRef transiti
     PTRef T = logic.mkNot(NT);
     // The procedure to construct transition invariants is executed
     PTRef itp = constructTransitionInvariantCandidates(T, transition, sink, num, logic, vars);
+    uint strictCandsBefore = strictCandidates.size();
     // Extract well-founded disjuncts from the transition invariant
-    auto newCands = extractWellFoundedCandidates(itp, sink, logic, vars, checkedCandidates);
-
-    uint addedCands = 0;
-    for (auto cand : newCands) {
-        // SMTsolver.resetSolver();
-        // SMTsolver.assertProp(logic.mkAnd(cand, logic.mkNot(logic.mkOr(strictCandidates))));
-        // if (SMTsolver.check() == SMTSolver::Answer::SAT) {
-            strictCandidates.push(cand);
-            addedCands++;
-        // }
-    }
-    return addedCands != 0;
+    extractWellFoundedCandidates(itp, sink, logic, vars);
+    synthesizeInvariant(inv, transition, logic);
+    return strictCandsBefore != strictCandidates.size();
 
 }
 
-PTRef ReachabilityNonterm::synthesizeInvariant(PTRef inv, PTRef transition, ArithLogic & logic) {
+void ReachabilityNonterm::synthesizeInvariant(PTRef inv, PTRef transition, ArithLogic & logic) {
     SMTSolver checker(logic, SMTSolver::WitnessProduction::NONE);
     vec<PTRef> tempCands;
     strictCandidates.copyTo(tempCands);
@@ -766,7 +754,7 @@ PTRef ReachabilityNonterm::synthesizeInvariant(PTRef inv, PTRef transition, Arit
     strictCandidates = keptWithout(-1);
     std::cout << "Strict cands size after: " << strictCandidates.size() << '\n';
     // std::cout << "Cands: " << logic.pp(logic.mkOr(strictCandidates))<< '\n';;
-    return logic.mkOr(strictCandidates);
+    // return logic.mkOr(strictCandidates);
 }
 
 // This function uses transition invariants candidates, cheking termination.
@@ -776,8 +764,7 @@ PTRef ReachabilityNonterm::synthesizeInvariant(PTRef inv, PTRef transition, Arit
 std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::checkTermination(PTRef init, PTRef transition,
                                                                                      PTRef & sink, ArithLogic & logic,
                                                                                      PTRef inv) {
-    // PTRef trInv = logic.mkOr(strictCandidates);
-    PTRef trInv = synthesizeInvariant(inv, transition, logic);
+    PTRef trInv = logic.mkOr(strictCandidates);
     PTRef id = getId(vars, logic);
     SMTSolver smt_checker(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
     // We check if TrInv is a general transition invariant

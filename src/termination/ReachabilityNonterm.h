@@ -32,18 +32,20 @@ private:
     Options options;
     PTRef covered;
     vec<PTRef> strictCandidates;
+    std::set<PTRef> checkedCandidates;
 
-    PTRef synthesizeInvariant(PTRef inv, PTRef transition, ArithLogic & logic);
+    void synthesizeInvariant(PTRef inv, PTRef transition, ArithLogic & logic);
 
     std::tuple<Answer, PTRef> analyzeTS(PTRef init, PTRef transition, PTRef sink, ArithLogic & logic);
 
     std::tuple<PTRef, PTRef> blockDeterministicPrefix(PTRef init, PTRef transition, PTRef sink, PTRef trace, uint num,
                                                       ArithLogic & logic);
 
-    bool generateWellfoundedDisjuncts(PTRef inv, PTRef transition, PTRef sink, PTRef trace, uint num, ArithLogic & logic,
-                                        std::set<PTRef> & checkedCandidates);
+    bool generateWellfoundedDisjuncts(PTRef inv, PTRef transition, PTRef sink, PTRef trace, uint num, ArithLogic & logic);
 
     std::tuple<Answer, PTRef> checkTermination(PTRef init, PTRef transition, PTRef & sink, ArithLogic & logic, PTRef inv);
+
+    void extractWellFoundedCandidates(PTRef itp, PTRef sink, ArithLogic & logic, const std::vector<PTRef> & vars);
 };
 } // namespace golem::termination
 
