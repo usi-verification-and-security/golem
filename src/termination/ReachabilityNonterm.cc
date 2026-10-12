@@ -776,7 +776,8 @@ PTRef ReachabilityNonterm::synthesizeInvariant(PTRef inv, PTRef transition, Arit
 std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::checkTermination(PTRef init, PTRef transition,
                                                                                      PTRef & sink, ArithLogic & logic,
                                                                                      PTRef inv) {
-    PTRef trInv = logic.mkOr(strictCandidates);
+    // PTRef trInv = logic.mkOr(strictCandidates);
+    PTRef trInv = synthesizeInvariant(inv, transition, logic);
     PTRef id = getId(vars, logic);
     SMTSolver smt_checker(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
     // We check if TrInv is a general transition invariant
@@ -838,7 +839,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::checkTermina
     // Sometimes Reached is init because init = true is an often initial state. Then it is reduced to "not sink"
     assert(reached != logic.getTerm_false());
     // Algorithm checks if reachable states are terminating
-    strictCandidates.clear();
+    // strictCandidates.clear();
     auto [answer, subinv] =
         analyzeTS(reached, transition, covered, logic);
     //   If this nonterminates, then the whole TS nonterminates,
