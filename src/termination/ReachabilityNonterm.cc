@@ -719,7 +719,7 @@ bool ReachabilityNonterm::generateWellfoundedDisjuncts(PTRef inv, PTRef transiti
     uint strictCandsBefore = strictCandidates.size();
     // Extract well-founded disjuncts from the transition invariant
     extractWellFoundedCandidates(itp, sink, logic, vars);
-    synthesizeInvariant(inv, transition, logic);
+    // synthesizeInvariant(inv, transition, logic);
     return strictCandsBefore != strictCandidates.size();
 
 }
@@ -826,7 +826,8 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::checkTermina
     // Sometimes Reached is init because init = true is an often initial state. Then it is reduced to "not sink"
     assert(reached != logic.getTerm_false());
     // Algorithm checks if reachable states are terminating
-    // strictCandidates.clear();
+    strictCandidates.clear();
+    checkedCandidates.clear();
     auto [answer, subinv] =
         analyzeTS(reached, transition, covered, logic);
     //   If this nonterminates, then the whole TS nonterminates,
@@ -834,8 +835,6 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::checkTermina
     if (answer == Answer::YES) {
         // Candidates are reset to the disjuncts of subinv, extended by the previous candidates where it
         // maximizes the covered states, while keeping Tr => \/ strictCandidates
-        // vec<PTRef> newCandidates = TermUtils(logic).getTopLevelDisjuncts(subinv);
-        // for (auto cand : newCandidates) { strictCandidates.push(cand); }
         PTRef newCov = TimeMachine(logic).sendFlaThroughTime(QuantifierElimination(logic).eliminate(
             logic.mkAnd({reached, subinv}),vars), -1);
         sink = TermUtils(logic).simplifyMax(logic.mkOr({sink, newCov, reached}));
