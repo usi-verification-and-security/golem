@@ -840,7 +840,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::checkTermina
     // Algorithm checks if reachable states are terminating
     strictCandidates.clear();
     auto [answer, subinv] =
-        analyzeTS(reached, transition, sink, logic);
+        analyzeTS(reached, transition, covered, logic);
     //   If this nonterminates, then the whole TS nonterminates,
     //   If it terminates we can use learned covered sates and reached states terminate
     if (answer == Answer::YES) {
