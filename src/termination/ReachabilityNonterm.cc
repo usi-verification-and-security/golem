@@ -476,10 +476,8 @@ PTRef constructTransitionInvariantCandidates(PTRef init, PTRef transition, PTRef
     smt_solver.push();
     smt_solver.assertProp(logic.mkAnd(nonTerminating));
     if (smt_solver.check() != SMTSolver::Answer::UNSAT) {
-        if (smt_solver.check() != SMTSolver::Answer::UNSAT) {
-            assert(false);
-            return logic.getTerm_false();
-        }
+        assert(false);
+        return logic.getTerm_false();
     }
 
     auto itpContext = smt_solver.getInterpolationContext();
@@ -747,8 +745,12 @@ void ReachabilityNonterm::synthesizeInvariant(PTRef inv, PTRef transition, Arith
         checker.resetSolver();
         checker.assertProp(logic.mkAnd({newNoncovered, logic.mkNot(noncoveredStates)}));
         if (checker.check() == SMTSolver::Answer::UNSAT) {
-            kept[i] = false;
-            noncoveredStates = newNoncovered;
+            checker.resetSolver();
+            checker.assertProp(logic.mkAnd({noncoveredStates, logic.mkNot(newNoncovered)}));
+            if (checker.check() == SMTSolver::Answer::SAT) {
+                kept[i] = false;
+                noncoveredStates = newNoncovered;
+            }
         }
     }
     strictCandidates = keptWithout(-1);
