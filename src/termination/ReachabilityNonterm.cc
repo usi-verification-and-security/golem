@@ -776,7 +776,7 @@ PTRef ReachabilityNonterm::synthesizeInvariant(PTRef inv, PTRef transition, Arit
 std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::checkTermination(PTRef init, PTRef transition,
                                                                                      PTRef & sink, ArithLogic & logic,
                                                                                      PTRef inv) {
-    PTRef trInv = synthesizeInvariant(inv, transition, logic);
+    PTRef trInv = logic.mkOr(strictCandidates);
     PTRef id = getId(vars, logic);
     SMTSolver smt_checker(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
     // We check if TrInv is a general transition invariant
@@ -845,8 +845,8 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::checkTermina
     if (answer == Answer::YES) {
         // Candidates are reset to the disjuncts of subinv, extended by the previous candidates where it
         // maximizes the covered states, while keeping Tr => \/ strictCandidates
-        vec<PTRef> newCandidates = TermUtils(logic).getTopLevelDisjuncts(subinv);
-        for (auto cand : newCandidates) { strictCandidates.push(cand); }
+        // vec<PTRef> newCandidates = TermUtils(logic).getTopLevelDisjuncts(subinv);
+        // for (auto cand : newCandidates) { strictCandidates.push(cand); }
         PTRef newCov = TimeMachine(logic).sendFlaThroughTime(QuantifierElimination(logic).eliminate(
             logic.mkAnd({reached, subinv}),vars), -1);
         sink = TermUtils(logic).simplifyMax(logic.mkOr({sink, newCov, reached}));
