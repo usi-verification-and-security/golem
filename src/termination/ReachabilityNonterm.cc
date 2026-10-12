@@ -828,7 +828,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::checkTermina
     // Sometimes Reached is init because init = true is an often initial state. Then it is reduced to "not sink"
     assert(reached != logic.getTerm_false());
     // Algorithm checks if reachable states are terminating
-    strictCandidates.clear();
+    // strictCandidates.clear();
     auto currentChecked = checkedCandidates;
     checkedCandidates.clear();
     auto [answer, subinv] =
