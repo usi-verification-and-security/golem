@@ -719,7 +719,7 @@ bool ReachabilityNonterm::generateWellfoundedDisjuncts(PTRef inv, PTRef transiti
     uint strictCandsBefore = strictCandidates.size();
     // Extract well-founded disjuncts from the transition invariant
     extractWellFoundedCandidates(itp, sink, logic, vars);
-    // synthesizeInvariant(inv, transition, logic);
+    synthesizeInvariant(inv, transition, logic);
     return strictCandsBefore != strictCandidates.size();
 
 }
@@ -831,7 +831,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::checkTermina
     checkedCandidates.clear();
     auto [answer, subinv] =
         analyzeTS(reached, transition, covered, logic);
-    // checkedCandidates.insert(currentChecked.begin(), currentChecked.end());
+    checkedCandidates.insert(currentChecked.begin(), currentChecked.end());
     //   If this nonterminates, then the whole TS nonterminates,
     //   If it terminates we can use learned covered sates and reached states terminate
     if (answer == Answer::YES) {
