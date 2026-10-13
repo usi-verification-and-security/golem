@@ -31,9 +31,6 @@ private:
     std::vector<PTRef> vars;
     Options options;
     PTRef covered;
-    // Every candidate whose coverage was added to covered. Unlike strictCandidates it is never reset, so the
-    // left-extension check can be done against all relations justifying covered states.
-    vec<PTRef> usedCandidates;
     vec<PTRef> strictCandidates;
     std::set<PTRef> checkedCandidates;
 

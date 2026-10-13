@@ -436,26 +436,11 @@ PTRef extendCovered(PTRef covered, PTRef newlyCovered, ArithLogic & logic) {
     return utils.simplifyMax(logic.mkOr(minimized));
 }
 
-// Function computes the states, from which TrInv is not inductive (right extension):
+// Function computes the states, from which TrInv is not inductive:
 // Exists x', x''. (TrInv(x,x') \/ Id(x,x')) /\ Tr(x',x'') /\ not TrInv(x,x'')
-// For a state x outside of this set Tr+(x,.) is contained in TrInv(x,.). This holds for x alone, so states covered by
-// different TrInv can be accumulated.
 PTRef nonCoveredStates(PTRef inv, PTRef trInv, PTRef transition, ArithLogic & logic, std::vector<PTRef> const & vars) {
     return QuantifierElimination(logic).keepOnly(
         logic.mkAnd({inv, logic.mkOr(trInv, getId(vars, logic)), TimeMachine(logic).sendFlaThroughTime(inv, 1), TimeMachine(logic).sendFlaThroughTime(transition, 1),
-                     logic.mkNot(shiftOnlyNextVars(trInv, vars, logic))}),
-        vars);
-}
-
-// Function computes the states, from which TrInv is not inductive (left extension):
-// Exists x', x''. Tr(x,x') /\ (TrInv(x',x'') \/ Id(x',x'')) /\ not TrInv(x,x'')
-// For a state x outside of this set TrInv(x,.) holds only if TrInv(x',.) holds for its successors. Therefore, these
-// states must not be accumulated: the result is only valid together with the states covered w.r.t. the same TrInv.
-PTRef nonCoveredStatesLeft(PTRef inv, PTRef trInv, PTRef transition, ArithLogic & logic,
-                           std::vector<PTRef> const & vars) {
-    return QuantifierElimination(logic).keepOnly(
-        logic.mkAnd({inv, transition, TimeMachine(logic).sendFlaThroughTime(inv, 1),
-                     TimeMachine(logic).sendFlaThroughTime(logic.mkOr(trInv, getId(vars, logic)), 1),
                      logic.mkNot(shiftOnlyNextVars(trInv, vars, logic))}),
         vars);
 }
@@ -637,7 +622,6 @@ ReachabilityNonterm::Answer ReachabilityNonterm::run(TransitionSystem const & ts
     DETERMINISTIC_TRANSITION = determinismCheck(transition, logic, vars, aux_vars);
     if (DETERMINISTIC_TRANSITION) std::cout << "Deterministic transition" << std::endl;
     covered = sink;
-    usedCandidates.clear();
     // Safety-Based Termination Analysis
     auto [answer, trInvOrRecurringSet] = analyzeTS(init, transition, sink, logic);
     return answer;
@@ -794,38 +778,20 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::checkTermina
         // If trInv is Transition invariant, then Tr leads to termination on the whole state-space
         return {Answer::YES, trInv};
     }
-    // Tr /\ (trInv \/ Id) => trInv also implies that trInv is a Transition Invariant on the whole state-space
-    smt_checker.resetSolver();
-    smt_checker.assertProp(logic.mkAnd({inv, transition, TimeMachine(logic).sendFlaThroughTime(inv, 1),
-                                        TimeMachine(logic).sendFlaThroughTime(logic.mkOr(trInv, id), 1),
-                                        logic.mkNot(shiftOnlyNextVars(trInv, vars, logic))}));
-    if (smt_checker.check() == SMTSolver::Answer::UNSAT) { return {Answer::YES, trInv}; }
 
     PTRef noncoveredStates = nonCoveredStates(inv, trInv, transition, logic, vars);
     covered = extendCovered(covered, logic.mkNot(noncoveredStates), logic);
-    for (PTRef cand : strictCandidates) {
-        if (std::find(usedCandidates.begin(), usedCandidates.end(), cand) == usedCandidates.end()) {
-            usedCandidates.push(cand);
-        }
-    }
-    // Union of all candidates justifying covered states. It is well-founded as a finite union of well-founded
-    // relations, and for every covered state x, Tr+(x,.) is contained in usedTrInv(x,.)
-    PTRef usedTrInv = logic.mkOr(usedCandidates);
-    // States, not covered by usedTrInv via left extension. If every state of the run is either in covered or
-    // outside of noncoveredLeft, every pair of states of the run is in usedTrInv (by induction on the distance).
-    // Left extension is not accumulated, since it relies on successors being covered w.r.t. the same usedTrInv.
-    PTRef noncoveredLeft = nonCoveredStatesLeft(inv, usedTrInv, transition, logic, vars);
-    PTRef query = logic.mkAnd({logic.mkNot(sink), logic.mkNot(covered), noncoveredLeft});
 
     // We check if the states that are not covered by TrInv are reachable
-    auto graph = constructHyperGraph(init, transition, query, logic, vars);
+    auto graph =
+        constructHyperGraph(init, transition, logic.mkAnd({logic.mkNot(sink), logic.mkNot(covered)}), logic, vars);
     auto engine = EngineFactory(logic, options).getEngine(options.getOrDefault(Options::ENGINE, "spacer"));
 
-    // If states not covered by TrInv are not reachable - then usedTrInv is transition invariant on all
+    // If states not covered by TrInv are not reachable - then TrInv is transition invariant on all
     // reachable states, therefore it is well-founded transition invariant
     auto res = engine->solve(*graph);
     if (res.getAnswer() == VerificationAnswer::SAFE) {
-        return {Answer::YES, usedTrInv}; }
+        return {Answer::YES, trInv}; }
     // Otherwise, if states not covered by TrInv are reachable, then the following procedure should
     // take place:
     // 1. Detect the states outside of TrInv that are reachable
@@ -849,8 +815,9 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::checkTermina
             formulas[k] = TimeMachine(logic).sendFlaThroughTime(transition, k);
         }
         smt_checker.resetSolver();
-        PTRef transitions =
-            logic.mkAnd({init, logic.mkAnd(formulas), TimeMachine(logic).sendFlaThroughTime(query, num_non)});
+        PTRef transitions = logic.mkAnd(
+            {init, logic.mkAnd(formulas),
+             TimeMachine(logic).sendFlaThroughTime(logic.mkAnd({logic.mkNot(sink), logic.mkNot(covered)}), num_non)});
         smt_checker.assertProp(transitions);
         if (smt_checker.check() != SMTSolver::Answer::SAT) assert(false);
         // We get some of the reachable states
@@ -881,9 +848,8 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::checkTermina
                          logic.mkNot(shiftOnlyNextVars(subinv, vars, logic))}));
         // Check if trInv is Transition Invariant on the whole state-space
         if (smt_checker.check() == SMTSolver::Answer::UNSAT) {
-            // Covered states have Tr+(x,.) in trInv(x,.), noncovered ones in subinv(x,.) (right extension is
-            // per-state), so trInv \/ subinv is Transition invariant on the whole state-space
-            return {Answer::YES, logic.mkOr(trInv, subinv)};
+            // If trInv is Transition invariant, then Tr leads to termination on the whole state-space
+            return {Answer::YES, subinv};
         }
     } else if (answer == Answer::NO)
         return {Answer::NO, subinv};
