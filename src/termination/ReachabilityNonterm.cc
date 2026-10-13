@@ -538,9 +538,10 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
             // This is an extension of the approach, constructing TrInv and attempting to prove termination
             // and non-termination using invariants
             if (num > 0) {
+                uint originalSize = strictCandidates.size();
                 if (!generateWellfoundedDisjuncts(inv, originalTransition, sink, trace, num, logic))
                     continue;
-                auto [answer, res] = checkTermination(init, transition, sink, logic, inv);
+                auto [answer, res] = checkTermination(init, transition, sink, logic, inv, originalSize);
                 if (answer != Answer::UNKNOWN) return {answer, res};
             }
         } else if (res.getAnswer() == VerificationAnswer::SAFE) {
@@ -771,7 +772,7 @@ void ReachabilityNonterm::synthesizeInvariant(PTRef inv, PTRef transition, Arith
 // If they are reachable - TS checks the termination for these states.
 std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::checkTermination(PTRef init, PTRef transition,
                                                                                      PTRef & sink, ArithLogic & logic,
-                                                                                     PTRef inv) {
+                                                                                     PTRef inv, uint originalSize) {
     PTRef trInv = logic.mkOr(strictCandidates);
     PTRef id = getId(vars, logic);
     SMTSolver smt_checker(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
@@ -787,6 +788,16 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::checkTermina
 
     PTRef noncoveredStates = nonCoveredStates(inv, trInv, transition, logic, vars);
     covered = extendCovered(covered, logic.mkNot(noncoveredStates), logic);
+    // Coverage is not monotone in trInv: candidates from the pool can make states covered by the newly generated
+    // candidates noncovered. Since covered states can be accumulated, coverage of the new candidates is added as well
+    if (originalSize > 0 && originalSize , strictCandidates.size()) {
+        vec<PTRef> newCandidates;
+        for (int i = static_cast<int>(originalSize); i < strictCandidates.size(); ++i) {
+            newCandidates.push(strictCandidates[i]);
+        }
+        PTRef noncoveredNew = nonCoveredStates(inv, logic.mkOr(newCandidates), transition, logic, vars);
+        covered = extendCovered(covered, logic.mkNot(noncoveredNew), logic);
+    }
 
     // We check if the states that are not covered by TrInv are reachable
     auto graph =
