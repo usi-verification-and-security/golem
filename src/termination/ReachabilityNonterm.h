@@ -31,10 +31,13 @@ private:
     std::vector<PTRef> vars;
     Options options;
     PTRef covered;
+    // Every candidate whose coverage was added to covered. Unlike strictCandidates it is never reset, so the
+    // left-extension check can be done against all relations justifying covered states.
+    vec<PTRef> usedCandidates;
     vec<PTRef> strictCandidates;
     std::set<PTRef> checkedCandidates;
 
-    void synthesizeInvariant(PTRef inv, PTRef transition, PTRef sink, ArithLogic & logic);
+    void synthesizeInvariant(PTRef inv, PTRef transition, ArithLogic & logic);
 
     std::tuple<Answer, PTRef> analyzeTS(PTRef init, PTRef transition, PTRef sink, ArithLogic & logic);
 
