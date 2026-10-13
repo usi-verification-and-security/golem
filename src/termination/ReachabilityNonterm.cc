@@ -439,9 +439,10 @@ PTRef extendCovered(PTRef covered, PTRef newlyCovered, ArithLogic & logic) {
 // Function computes the states, from which TrInv is not inductive:
 // Exists x', x''. (TrInv(x,x') \/ Id(x,x')) /\ Tr(x',x'') /\ not TrInv(x,x'')
 PTRef nonCoveredStates(PTRef inv, PTRef trInv, PTRef transition, ArithLogic & logic, std::vector<PTRef> const & vars) {
-    PTRef base = QuantifierElimination(logic).keepOnly(logic.mkAnd({inv, transition, logic.mkNot(trInv)}), vars);
-    PTRef induction = QuantifierElimination(logic).keepOnly(logic.mkAnd({inv, trInv,  TimeMachine(logic).sendFlaThroughTime(transition,1),logic.mkNot(shiftOnlyNextVars(trInv, vars, logic))}), vars);
-    return logic.mkOr(base, induction);
+    return QuantifierElimination(logic).keepOnly(
+        logic.mkAnd({inv, transition, TimeMachine(logic).sendFlaThroughTime(inv, 1), TimeMachine(logic).sendFlaThroughTime(logic.mkOr(trInv, getId(vars, logic)), 1),
+                     logic.mkNot(shiftOnlyNextVars(trInv, vars, logic))}),
+        vars);
 }
 
 PTRef constructTransitionInvariantCandidates(PTRef init, PTRef transition, PTRef sink, int depth, ArithLogic & logic,
@@ -770,7 +771,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::checkTermina
     SMTSolver smt_checker(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
     // We check if TrInv is a general transition invariant
     // (trInv \/ Id) /\ Tr => trInv
-    smt_checker.assertProp(logic.mkAnd({inv, logic.mkOr(trInv, id), TimeMachine(logic).sendFlaThroughTime(inv,1), TimeMachine(logic).sendFlaThroughTime(transition, 1),
+    smt_checker.assertProp(logic.mkAnd({inv, transition, TimeMachine(logic).sendFlaThroughTime(inv,1), TimeMachine(logic).sendFlaThroughTime(logic.mkOr(trInv, id), 1),
                                         logic.mkNot(shiftOnlyNextVars(trInv, vars, logic))}));
     // Check if trInv is Transition Invariant
     if (smt_checker.check() == SMTSolver::Answer::UNSAT) {
@@ -831,7 +832,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::checkTermina
     auto currentChecked = checkedCandidates;
     checkedCandidates.clear();
     auto [answer, subinv] =
-        analyzeTS(reached, transition, covered, logic);
+        analyzeTS(reached, transition, sink, logic);
     checkedCandidates.insert(currentChecked.begin(), currentChecked.end());
     //   If this nonterminates, then the whole TS nonterminates,
     //   If it terminates we can use learned covered sates and reached states terminate
@@ -843,7 +844,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::checkTermina
         sink = TermUtils(logic).simplifyMax(logic.mkOr({sink, newCov, reached}));
         smt_checker.resetSolver();
         smt_checker.assertProp(
-            logic.mkAnd({inv, noncoveredStates, logic.mkOr(subinv, id), TimeMachine(logic).sendFlaThroughTime(inv,1), TimeMachine(logic).sendFlaThroughTime(transition, 1),
+            logic.mkAnd({inv, noncoveredStates, transition, TimeMachine(logic).sendFlaThroughTime(inv,1), TimeMachine(logic).sendFlaThroughTime(logic.mkOr(trInv, id), 1),
                          logic.mkNot(shiftOnlyNextVars(subinv, vars, logic))}));
         // Check if trInv is Transition Invariant on the whole state-space
         if (smt_checker.check() == SMTSolver::Answer::UNSAT) {
