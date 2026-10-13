@@ -34,7 +34,7 @@ private:
     vec<PTRef> strictCandidates;
     std::set<PTRef> checkedCandidates;
 
-    void synthesizeInvariant(PTRef inv, PTRef transition, ArithLogic & logic);
+    void synthesizeInvariant(PTRef inv, PTRef transition, PTRef sink, ArithLogic & logic);
 
     std::tuple<Answer, PTRef> analyzeTS(PTRef init, PTRef transition, PTRef sink, ArithLogic & logic);
 
