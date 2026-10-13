@@ -335,30 +335,38 @@ PTRef enumerativeDNF(PTRef formula, Logic & logic, int bound = 0) {
 }
 
 // This function extracts well-founded disjuncts from the interpolant.
-// checkedCandidates caches the disjuncts already inspected within one analyzeTS invocation so the
-// (expensive) well-foundedness check is not repeated across loop iterations of the same call.
+// checkedCandidates caches the verdict for every inspected formula, so the (expensive) well-foundedness check is
+// done once per formula. Candidates are added to the strictCandidates pool only on their first positive verdict.
+// Conjunctions with sink disjuncts are still built for every not well-founded candidate, since sink differs between
+// recursive analyzeTS invocations.
 void ReachabilityNonterm::extractWellFoundedCandidates(PTRef itp, PTRef sink, ArithLogic & logic, const std::vector<PTRef> & vars) {
     TermUtils utils(logic);
     SMTSolver smt_solver(logic, SMTSolver::WitnessProduction::NONE);
+    // Returns true if formula is well-founded. Newly detected well-founded formulas are added to the pool
+    auto checkCandidate = [&](PTRef formula, bool checkSat) {
+        auto [it, inserted] = checkedCandidates.insert({formula, false});
+        if (not inserted) { return it->second; }
+        if (checkSat) {
+            smt_solver.resetSolver();
+            smt_solver.assertProp(formula);
+            if (smt_solver.check() != SMTSolver::Answer::SAT) { return false; }
+        }
+        if (checkWellFounded(formula, logic, vars)) {
+            it->second = true;
+            strictCandidates.push(formula);
+        }
+        return it->second;
+    };
 
     auto sink_disjuncts =
         utils.getTopLevelDisjuncts(enumerativeDNF(utils.simplifyMax(normalize(logic.mkNot(sink), logic)), logic));
     auto candidates =
         utils.getTopLevelDisjuncts(enumerativeDNF(utils.simplifyMax(normalize(itp, logic)), logic, DNFIZATION_BOUND));
     for (auto cand : candidates) {
-        if (!checkedCandidates.insert(cand).second) { continue; }
         assert(cand != logic.getTerm_true());
-        if (checkWellFounded(cand, logic, vars)) {
-            strictCandidates.push(cand);
-        } else {
-            for (auto sink_cand : sink_disjuncts) {
-                PTRef conjunction = utils.simplifyMax(logic.mkAnd(sink_cand, cand));
-                smt_solver.resetSolver();
-                smt_solver.assertProp(conjunction);
-                if (smt_solver.check() == SMTSolver::Answer::SAT && checkWellFounded(conjunction, logic, vars)) {
-                    strictCandidates.push(conjunction);
-                }
-            }
+        if (checkCandidate(cand, false)) { continue; }
+        for (auto sink_cand : sink_disjuncts) {
+            checkCandidate(utils.simplifyMax(logic.mkAnd(sink_cand, cand)), true);
         }
     }
 }
@@ -501,8 +509,6 @@ PTRef constructTransitionInvariantCandidates(PTRef init, PTRef transition, PTRef
 std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PTRef init, PTRef transition, PTRef sink,
                                                                               ArithLogic & logic) {
     PTRef inv = logic.getTerm_true();
-    // Kept local so every (recursive) analyzeTS invocation gets its own cache: a candidate inspected
-    // for one state-space must not be skipped when a nested call analyzes a different one.
 
     while (true) {
         // TODO:  graph based instead of TS
@@ -828,12 +834,12 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::checkTermina
     // Sometimes Reached is init because init = true is an often initial state. Then it is reduced to "not sink"
     assert(reached != logic.getTerm_false());
     // Algorithm checks if reachable states are terminating
-    strictCandidates.clear();
-    auto currentChecked = checkedCandidates;
-    checkedCandidates.clear();
+    // strictCandidates.clear();
+    // auto currentChecked = checkedCandidates;
+    // checkedCandidates.clear();
     auto [answer, subinv] =
         analyzeTS(reached, transition, covered, logic);
-    checkedCandidates.insert(currentChecked.begin(), currentChecked.end());
+    // checkedCandidates.insert(currentChecked.begin(), currentChecked.end());
     //   If this nonterminates, then the whole TS nonterminates,
     //   If it terminates we can use learned covered sates and reached states terminate
     if (answer == Answer::YES) {

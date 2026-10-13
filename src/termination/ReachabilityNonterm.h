@@ -12,6 +12,7 @@
 #include "Options.h"
 #include "TransitionSystem.h"
 
+#include <map>
 #include <set>
 
 namespace golem::termination {
@@ -31,8 +32,11 @@ private:
     std::vector<PTRef> vars;
     Options options;
     PTRef covered;
+    // Pool of well-founded candidates, shared between recursive analyzeTS invocations
     vec<PTRef> strictCandidates;
-    std::set<PTRef> checkedCandidates;
+    // Verdict of every checked candidate (is it satisfiable and well-founded). Well-foundedness does not depend on
+    // the analyzed state-space, so the cache is shared between recursive analyzeTS invocations as well.
+    std::map<PTRef, bool> checkedCandidates;
 
     void synthesizeInvariant(PTRef inv, PTRef transition, ArithLogic & logic);
 
