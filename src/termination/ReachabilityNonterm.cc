@@ -741,7 +741,7 @@ void ReachabilityNonterm::synthesizeInvariant(PTRef inv, PTRef transition, PTRef
     PTRef noncoveredStates = nonCoveredStates(inv, logic.mkOr(strictCandidates), transition, sink, logic, vars);
     for (auto i = tempCands.size() - 1; i >= 0; i--) {
         PTRef rest = logic.mkOr(keptWithout(i));
-        PTRef newNoncovered = nonCoveredStates(inv, rest, transition, logic, sink, vars);
+        PTRef newNoncovered = nonCoveredStates(inv, rest, transition, sink, logic, vars);
         checker.resetSolver();
         checker.assertProp(logic.mkAnd({newNoncovered, logic.mkNot(noncoveredStates)}));
         if (checker.check() == SMTSolver::Answer::UNSAT) {
