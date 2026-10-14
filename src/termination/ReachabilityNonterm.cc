@@ -17,6 +17,8 @@
 #include <set>
 
 #define DNFIZATION_BOUND 500
+// Maximal number of attempts to cover reachable noncovered states with the pool, before the recursive analysis
+#define COVERAGE_REPAIR_BOUND 3
 
 namespace golem::termination {
 
@@ -453,6 +455,25 @@ PTRef nonCoveredStates(PTRef inv, PTRef trInv, PTRef transition, ArithLogic & lo
         vars);
 }
 
+// Function constructs the trace of the counterexample of the length num:
+// Init(x) /\ Tr(x,x') /\ ... /\ Query(x^(num))
+PTRef counterexampleTrace(PTRef init, PTRef transition, PTRef query, int num, Logic & logic) {
+    std::vector<PTRef> formulas(num);
+    for (int k = 0; k < num; k++) {
+        formulas[k] = TimeMachine(logic).sendFlaThroughTime(transition, k);
+    }
+    return logic.mkAnd({init, logic.mkAnd(formulas), TimeMachine(logic).sendFlaThroughTime(query, num)});
+}
+
+// Function extracts the concrete state x^(num) from the model: x = model(x^(num))
+PTRef concreteState(Model & model, int num, std::vector<PTRef> const & vars, Logic & logic) {
+    vec<PTRef> equalities;
+    for (auto var : vars) {
+        equalities.push(logic.mkEq(var, model.evaluate(TimeMachine(logic).sendVarThroughTime(var, num))));
+    }
+    return logic.mkAnd(equalities);
+}
+
 PTRef constructTransitionInvariantCandidates(PTRef init, PTRef transition, PTRef sink, int depth, ArithLogic & logic,
                                              std::vector<PTRef> const & vars) {
     PTRef id = getId(vars, logic);
@@ -766,6 +787,59 @@ void ReachabilityNonterm::synthesizeInvariant(PTRef inv, PTRef transition, Arith
     // return logic.mkOr(strictCandidates);
 }
 
+// This function attempts to cover the (concrete) state using the candidates from the pool.
+// It greedily constructs a subset F of the pool, such that the state is covered w.r.t. \/F:
+// while (\/F \/ Id)(state,x') /\ Tr(x',x'') /\ not \/F(state,x'') is SAT, a candidate containing the escaping pair
+// (state,x'') is added to F. Then, coverage of \/F is added to covered. F is a subset of the pool, therefore
+// \/F is disjunctively well-founded, and the coverage can be accumulated.
+bool ReachabilityNonterm::coverState(PTRef state, PTRef inv, PTRef transition, ArithLogic & logic) {
+    PTRef id = getId(vars, logic);
+    PTRef nextTransition =
+        logic.mkAnd(TimeMachine(logic).sendFlaThroughTime(inv, 1), TimeMachine(logic).sendFlaThroughTime(transition, 1));
+    // SAT if Tr leads from the state through the "from" relation to the pair (state,x'') outside of trInv
+    auto escapingPairs = [&](PTRef from, PTRef trInv) {
+        return logic.mkAnd({state, inv, from, nextTransition, logic.mkNot(shiftOnlyNextVars(trInv, vars, logic))});
+    };
+    SMTSolver solver(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
+    SMTSolver choiceSolver(logic, SMTSolver::WitnessProduction::NONE);
+    vec<PTRef> subset;
+    std::vector<bool> inSubset(strictCandidates.size(), false);
+    while (true) {
+        PTRef subsetInv = logic.mkOr(subset);
+        solver.resetSolver();
+        solver.assertProp(escapingPairs(logic.mkOr(subsetInv, id), subsetInv));
+        if (solver.check() == SMTSolver::Answer::UNSAT) { break; }
+        auto model = solver.getModel();
+        // Candidates containing the escaping pair, newest first
+        std::vector<int> containing;
+        for (int i = strictCandidates.size() - 1; i >= 0; --i) {
+            if (not inSubset[i] &&
+                model->evaluate(shiftOnlyNextVars(strictCandidates[i], vars, logic)) == logic.getTerm_true()) {
+                containing.push_back(i);
+            }
+        }
+        // No candidate of the pool can cover the escaping pair
+        if (containing.empty()) { return false; }
+        // Candidate, which does not introduce new escaping pairs, is preferred
+        int chosen = containing[0];
+        for (int i : containing) {
+            choiceSolver.resetSolver();
+            choiceSolver.assertProp(escapingPairs(strictCandidates[i], logic.mkOr(subsetInv, strictCandidates[i])));
+            if (choiceSolver.check() == SMTSolver::Answer::UNSAT) {
+                chosen = i;
+                break;
+            }
+        }
+        inSubset[chosen] = true;
+        subset.push(strictCandidates[chosen]);
+    }
+    PTRef noncoveredSubset = nonCoveredStates(inv, logic.mkOr(subset), transition, logic, vars);
+    PTRef extended = extendCovered(covered, logic.mkNot(noncoveredSubset), logic);
+    if (extended == covered) { return false; }
+    covered = extended;
+    return true;
+}
+
 // This function uses transition invariants candidates, cheking termination.
 // It constructs the states which are not covered by the current transition invariant candidate.
 // These states are checked for reachability. If they are not reachable - TS is terminating.
@@ -809,6 +883,22 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::checkTermina
     auto res = engine->solve(*graph);
     if (res.getAnswer() == VerificationAnswer::SAFE) {
         return {Answer::YES, trInv}; }
+    // Before analyzing reachable noncovered states recursively, they are covered using the candidates from the pool,
+    // if possible. Each successful attempt strictly extends covered, then reachability is checked again.
+    for (int repair = 0; repair < COVERAGE_REPAIR_BOUND; ++repair) {
+        int num = res.getInvalidityWitness().getDerivation().size() - 3;
+        smt_checker.resetSolver();
+        smt_checker.assertProp(counterexampleTrace(
+            init, transition, logic.mkAnd({logic.mkNot(sink), logic.mkNot(covered)}), num, logic));
+        if (smt_checker.check() != SMTSolver::Answer::SAT) { break; }
+        if (not coverState(concreteState(*smt_checker.getModel(), num, vars, logic), inv, transition, logic)) { break; }
+        graph =
+            constructHyperGraph(init, transition, logic.mkAnd({logic.mkNot(sink), logic.mkNot(covered)}), logic, vars);
+        engine = EngineFactory(logic, options).getEngine(options.getOrDefault(Options::ENGINE, "spacer"));
+        res = engine->solve(*graph);
+        // Every covered state is covered by a subset of the pool, therefore trInv covers all reachable states
+        if (res.getAnswer() == VerificationAnswer::SAFE) { return {Answer::YES, trInv}; }
+    }
     // Otherwise, if states not covered by TrInv are reachable, then the following procedure should
     // take place:
     // 1. Detect the states outside of TrInv that are reachable
@@ -827,14 +917,9 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::checkTermina
         }
         // Construct the logical formula representing the trace:
         // Init(x) /\ Tr(x,x') /\ ... /\ Bad(x^(num))
-        std::vector<PTRef> formulas(num_non);
-        for (int k = 0; k < num_non; k++) {
-            formulas[k] = TimeMachine(logic).sendFlaThroughTime(transition, k);
-        }
         smt_checker.resetSolver();
-        PTRef transitions = logic.mkAnd(
-            {init, logic.mkAnd(formulas),
-             TimeMachine(logic).sendFlaThroughTime(logic.mkAnd({logic.mkNot(sink), logic.mkNot(covered)}), num_non)});
+        PTRef transitions = counterexampleTrace(
+            init, transition, logic.mkAnd({logic.mkNot(sink), logic.mkNot(covered)}), num_non, logic);
         smt_checker.assertProp(transitions);
         if (smt_checker.check() != SMTSolver::Answer::SAT) assert(false);
         // We get some of the reachable states
@@ -857,9 +942,9 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::checkTermina
         // if (subinv == logic.getTerm_false()) subinv = logic.mkOr(strictCandidates);
         // Candidates are reset to the disjuncts of subinv, extended by the previous candidates where it
         // maximizes the covered states, while keeping Tr => \/ strictCandidates
-        // PTRef newCov = TimeMachine(logic).sendFlaThroughTime(QuantifierElimination(logic).eliminate(
-        //    logic.mkAnd({reached, subinv}),vars), -1);
-        sink = TermUtils(logic).simplifyMax(logic.mkOr({sink, reached}));
+        PTRef newCov = TimeMachine(logic).sendFlaThroughTime(QuantifierElimination(logic).eliminate(
+           logic.mkAnd({reached, subinv}),vars), -1);
+        sink = TermUtils(logic).simplifyMax(logic.mkOr({sink, newCov, reached}));
         smt_checker.resetSolver();
         smt_checker.assertProp(
             logic.mkAnd({inv, logic.mkOr(subinv, id), TimeMachine(logic).sendFlaThroughTime(inv,1), TimeMachine(logic).sendFlaThroughTime(transition, 1),
