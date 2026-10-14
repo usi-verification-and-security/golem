@@ -50,6 +50,8 @@ private:
     std::tuple<Answer, PTRef> checkTermination(PTRef init, PTRef transition, PTRef & sink, ArithLogic & logic, PTRef inv,
                                                uint originalSize);
 
+    bool coverState(PTRef state, PTRef inv, PTRef transition, ArithLogic & logic);
+
     void extractWellFoundedCandidates(PTRef itp, PTRef sink, ArithLogic & logic, const std::vector<PTRef> & vars);
 };
 } // namespace golem::termination
