@@ -361,7 +361,7 @@ void ReachabilityNonterm::extractWellFoundedCandidates(PTRef itp, PTRef sink, Ar
     };
 
     auto sink_disjuncts =
-        utils.getTopLevelDisjuncts(enumerativeDNF(utils.simplifyMax(normalize(logic.mkNot(sink), logic)), logic));
+        utils.getTopLevelDisjuncts(enumerativeDNF(utils.simplifyMax(normalize(logic.mkNot(sink), logic)), logic, DNFIZATION_BOUND));
     auto candidates =
         utils.getTopLevelDisjuncts(enumerativeDNF(utils.simplifyMax(normalize(itp, logic)), logic, DNFIZATION_BOUND));
     for (auto cand : candidates) {
