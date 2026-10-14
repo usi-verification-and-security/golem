@@ -533,7 +533,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
             smtSolver.assertProp(logic.mkAnd(init, transition));
             // We check if init states are blocked (it's impossible to make a transition from initial state)
             // When it is the case, TS is terminating
-            if (smtSolver.check() == SMTSolver::Answer::UNSAT) { return {Answer::YES, logic.mkOr(strictCandidates)}; }
+            if (smtSolver.check() == SMTSolver::Answer::UNSAT) { return {Answer::YES, logic.getTerm_false()}; }
 
             // This is an extension of the approach, constructing TrInv and attempting to prove termination
             // and non-termination using invariants
@@ -790,7 +790,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::checkTermina
     covered = extendCovered(covered, logic.mkNot(noncoveredStates), logic);
     // Coverage is not monotone in trInv: candidates from the pool can make states covered by the newly generated
     // candidates noncovered. Since covered states can be accumulated, coverage of the new candidates is added as well
-    if (originalSize > 0 && originalSize , strictCandidates.size()) {
+    if (originalSize > 0 && originalSize < strictCandidates.size()) {
         vec<PTRef> newCandidates;
         for (int i = static_cast<int>(originalSize); i < strictCandidates.size(); ++i) {
             newCandidates.push(strictCandidates[i]);
