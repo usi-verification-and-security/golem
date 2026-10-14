@@ -446,11 +446,19 @@ PTRef extendCovered(PTRef covered, PTRef newlyCovered, ArithLogic & logic) {
     return utils.simplifyMax(logic.mkOr(minimized));
 }
 
-// Function computes the states, from which TrInv is not inductive:
-// Exists x', x''. (TrInv(x,x') \/ Id(x,x')) /\ Tr(x',x'') /\ not TrInv(x,x'')
-PTRef nonCoveredStates(PTRef inv, PTRef trInv, PTRef transition, ArithLogic & logic, std::vector<PTRef> const & vars) {
+// Function computes the states, from which TrInv is not inductive until the run reaches Terminating states:
+// Exists x', x''. (TrInv(x,x') \/ Id(x,x')) /\ not Terminating(x') /\ Tr(x',x'') /\ not Terminating(x'') /\
+// not TrInv(x,x'')
+// For a state x outside of this set every pair (x,y) of a run from x, which does not reach Terminating states, is in
+// TrInv. This is sufficient if Terminating states are themselves either covered (earlier) or terminating: on an
+// infinite run consider the earliest covered states visited infinitely often, every pair between them is in TrInv.
+PTRef nonCoveredStates(PTRef inv, PTRef trInv, PTRef terminating, PTRef transition, ArithLogic & logic,
+                       std::vector<PTRef> const & vars) {
     return QuantifierElimination(logic).keepOnly(
-        logic.mkAnd({inv, logic.mkOr(trInv, getId(vars, logic)), TimeMachine(logic).sendFlaThroughTime(inv, 1), TimeMachine(logic).sendFlaThroughTime(transition, 1),
+        logic.mkAnd({inv, logic.mkOr(trInv, getId(vars, logic)), TimeMachine(logic).sendFlaThroughTime(inv, 1),
+                     logic.mkNot(TimeMachine(logic).sendFlaThroughTime(terminating, 1)),
+                     TimeMachine(logic).sendFlaThroughTime(transition, 1),
+                     logic.mkNot(TimeMachine(logic).sendFlaThroughTime(terminating, 2)),
                      logic.mkNot(shiftOnlyNextVars(trInv, vars, logic))}),
         vars);
 }
@@ -766,10 +774,11 @@ void ReachabilityNonterm::synthesizeInvariant(PTRef inv, PTRef transition, Arith
      };
 
 
-    PTRef noncoveredStates = nonCoveredStates(inv, logic.mkOr(strictCandidates), transition, logic, vars);
+    PTRef noncoveredStates =
+        nonCoveredStates(inv, logic.mkOr(strictCandidates), logic.getTerm_false(), transition, logic, vars);
     for (auto i = tempCands.size() - 1; i >= 0; i--) {
         PTRef rest = logic.mkOr(keptWithout(i));
-        PTRef newNoncovered = nonCoveredStates(inv, rest, transition, logic, vars);
+        PTRef newNoncovered = nonCoveredStates(inv, rest, logic.getTerm_false(), transition, logic, vars);
         checker.resetSolver();
         checker.assertProp(logic.mkAnd({newNoncovered, logic.mkNot(noncoveredStates)}));
         if (checker.check() == SMTSolver::Answer::UNSAT) {
@@ -789,13 +798,15 @@ void ReachabilityNonterm::synthesizeInvariant(PTRef inv, PTRef transition, Arith
 
 // This function attempts to cover the (concrete) state using the candidates from the pool.
 // It greedily constructs a subset F of the pool, such that the state is covered w.r.t. \/F:
-// while (\/F \/ Id)(state,x') /\ Tr(x',x'') /\ not \/F(state,x'') is SAT, a candidate containing the escaping pair
-// (state,x'') is added to F. Then, coverage of \/F is added to covered. F is a subset of the pool, therefore
-// \/F is disjunctively well-founded, and the coverage can be accumulated.
-bool ReachabilityNonterm::coverState(PTRef state, PTRef inv, PTRef transition, ArithLogic & logic) {
+// while (\/F \/ Id)(state,x') /\ not Terminating(x') /\ Tr(x',x'') /\ not Terminating(x'') /\ not \/F(state,x'') is
+// SAT, a candidate containing the escaping pair (state,x'') is added to F. Then, coverage of \/F is added to covered.
+// F is a subset of the pool, therefore \/F is disjunctively well-founded, and the coverage can be accumulated.
+bool ReachabilityNonterm::coverState(PTRef state, PTRef inv, PTRef terminating, PTRef transition, ArithLogic & logic) {
     PTRef id = getId(vars, logic);
-    PTRef nextTransition =
-        logic.mkAnd(TimeMachine(logic).sendFlaThroughTime(inv, 1), TimeMachine(logic).sendFlaThroughTime(transition, 1));
+    PTRef nextTransition = logic.mkAnd({TimeMachine(logic).sendFlaThroughTime(inv, 1),
+                                        logic.mkNot(TimeMachine(logic).sendFlaThroughTime(terminating, 1)),
+                                        TimeMachine(logic).sendFlaThroughTime(transition, 1),
+                                        logic.mkNot(TimeMachine(logic).sendFlaThroughTime(terminating, 2))});
     // SAT if Tr leads from the state through the "from" relation to the pair (state,x'') outside of trInv
     auto escapingPairs = [&](PTRef from, PTRef trInv) {
         return logic.mkAnd({state, inv, from, nextTransition, logic.mkNot(shiftOnlyNextVars(trInv, vars, logic))});
@@ -833,7 +844,7 @@ bool ReachabilityNonterm::coverState(PTRef state, PTRef inv, PTRef transition, A
         inSubset[chosen] = true;
         subset.push(strictCandidates[chosen]);
     }
-    PTRef noncoveredSubset = nonCoveredStates(inv, logic.mkOr(subset), transition, logic, vars);
+    PTRef noncoveredSubset = nonCoveredStates(inv, logic.mkOr(subset), terminating, transition, logic, vars);
     PTRef extended = extendCovered(covered, logic.mkNot(noncoveredSubset), logic);
     if (extended == covered) { return false; }
     covered = extended;
@@ -860,7 +871,8 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::checkTermina
         return {Answer::YES, trInv};
     }
 
-    PTRef noncoveredStates = nonCoveredStates(inv, trInv, transition, logic, vars);
+    // States are covered until the run reaches sink or previously covered states
+    PTRef noncoveredStates = nonCoveredStates(inv, trInv, logic.mkOr(sink, covered), transition, logic, vars);
     covered = extendCovered(covered, logic.mkNot(noncoveredStates), logic);
     // Coverage is not monotone in trInv: candidates from the pool can make states covered by the newly generated
     // candidates noncovered. Since covered states can be accumulated, coverage of the new candidates is added as well
@@ -869,7 +881,8 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::checkTermina
         for (int i = static_cast<int>(originalSize); i < strictCandidates.size(); ++i) {
             newCandidates.push(strictCandidates[i]);
         }
-        PTRef noncoveredNew = nonCoveredStates(inv, logic.mkOr(newCandidates), transition, logic, vars);
+        PTRef noncoveredNew =
+            nonCoveredStates(inv, logic.mkOr(newCandidates), logic.mkOr(sink, covered), transition, logic, vars);
         covered = extendCovered(covered, logic.mkNot(noncoveredNew), logic);
     }
 
@@ -891,7 +904,8 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::checkTermina
         smt_checker.assertProp(counterexampleTrace(
             init, transition, logic.mkAnd({logic.mkNot(sink), logic.mkNot(covered)}), num, logic));
         if (smt_checker.check() != SMTSolver::Answer::SAT) { break; }
-        if (not coverState(concreteState(*smt_checker.getModel(), num, vars, logic), inv, transition, logic)) { break; }
+        PTRef state = concreteState(*smt_checker.getModel(), num, vars, logic);
+        if (not coverState(state, inv, logic.mkOr(sink, covered), transition, logic)) { break; }
         graph =
             constructHyperGraph(init, transition, logic.mkAnd({logic.mkNot(sink), logic.mkNot(covered)}), logic, vars);
         engine = EngineFactory(logic, options).getEngine(options.getOrDefault(Options::ENGINE, "spacer"));
