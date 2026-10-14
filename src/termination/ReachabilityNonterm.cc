@@ -472,7 +472,7 @@ PTRef constructTransitionInvariantCandidates(PTRef init, PTRef transition, PTRef
     // States guaranteed to reach termination: Sink at exactly `depth` steps, plus (if depth > 1)
     // states reachable from `init` within 1..depth-1 steps that already satisfy the trace.
     std::vector<PTRef> checked_states;
-    vec<PTRef> nonTerminating{init};                                                                                                                                                                                       
+    vec<PTRef> nonTerminating{init};
     for (int k = depth; k < 2 * depth - 1; k++) {
          nonTerminating.push(TimeMachine(logic).sendFlaThroughTime(transition, k));
     }
@@ -533,7 +533,7 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::analyzeTS(PT
             smtSolver.assertProp(logic.mkAnd(init, transition));
             // We check if init states are blocked (it's impossible to make a transition from initial state)
             // When it is the case, TS is terminating
-            if (smtSolver.check() == SMTSolver::Answer::UNSAT) { return {Answer::YES, logic.getTerm_false()}; }
+            if (smtSolver.check() == SMTSolver::Answer::UNSAT) { return {Answer::YES, logic.mkOr(strictCandidates)}; }
 
             // This is an extension of the approach, constructing TrInv and attempting to prove termination
             // and non-termination using invariants
@@ -854,14 +854,15 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::checkTermina
     //   If this nonterminates, then the whole TS nonterminates,
     //   If it terminates we can use learned covered sates and reached states terminate
     if (answer == Answer::YES) {
+        // if (subinv == logic.getTerm_false()) subinv = logic.mkOr(strictCandidates);
         // Candidates are reset to the disjuncts of subinv, extended by the previous candidates where it
         // maximizes the covered states, while keeping Tr => \/ strictCandidates
-        PTRef newCov = TimeMachine(logic).sendFlaThroughTime(QuantifierElimination(logic).eliminate(
-            logic.mkAnd({reached, subinv}),vars), -1);
-        sink = TermUtils(logic).simplifyMax(logic.mkOr({sink, newCov, reached}));
+        // PTRef newCov = TimeMachine(logic).sendFlaThroughTime(QuantifierElimination(logic).eliminate(
+        //    logic.mkAnd({reached, subinv}),vars), -1);
+        sink = TermUtils(logic).simplifyMax(logic.mkOr({sink, reached}));
         smt_checker.resetSolver();
         smt_checker.assertProp(
-            logic.mkAnd({inv, noncoveredStates, logic.mkOr(subinv, id), TimeMachine(logic).sendFlaThroughTime(inv,1), TimeMachine(logic).sendFlaThroughTime(transition, 1),
+            logic.mkAnd({inv, logic.mkOr(subinv, id), TimeMachine(logic).sendFlaThroughTime(inv,1), TimeMachine(logic).sendFlaThroughTime(transition, 1),
                          logic.mkNot(shiftOnlyNextVars(subinv, vars, logic))}));
         // Check if trInv is Transition Invariant on the whole state-space
         if (smt_checker.check() == SMTSolver::Answer::UNSAT) {
