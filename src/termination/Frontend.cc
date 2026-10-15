@@ -344,6 +344,8 @@ std::optional<Method> parseMethod(std::string const & str) {
     if (str == "nontermination-via-safety") { return NONTERMINATION_VIA_SAFETY; }
     if (str == "nontermination-via-safety-tpa") { return NONTERMINATION_VIA_SAFETY_TPA; }
     if (str == "nontermination-via-safety-pdkind") { return NONTERMINATION_VIA_SAFETY_PDKIND; }
+    if (str == "nontermination-via-safety-lawi") { return NONTERMINATION_VIA_SAFETY_LAWI; }
+    if (str == "nontermination-via-safety-imc") { return NONTERMINATION_VIA_SAFETY_IMC; }
     return std::nullopt;
 }
 
