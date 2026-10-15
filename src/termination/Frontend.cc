@@ -330,26 +330,19 @@ namespace {
 enum class TerminationAnswer { TERMINATING, NONTERMINATING, UNKNOWN, ERROR };
 
 enum Method {
-    LASSO_FINDER,
-    STEP_COUNTER,
     NONTERMINATION_VIA_SAFETY,
     NONTERMINATION_VIA_SAFETY_TPA,
     NONTERMINATION_VIA_SAFETY_PDKIND,
     NONTERMINATION_VIA_SAFETY_LAWI,
-    NONTERMINATION_VIA_SAFETY_IMC,
     LASSO_FINDER_LAWI,
     STEP_COUNTER_PDKIND,
     SENTINEL
 };
 
 std::optional<Method> parseMethod(std::string const & str) {
-    if (str == "lasso-finder") { return LASSO_FINDER; }
-    if (str == "step-counter") { return STEP_COUNTER; }
     if (str == "nontermination-via-safety") { return NONTERMINATION_VIA_SAFETY; }
     if (str == "nontermination-via-safety-tpa") { return NONTERMINATION_VIA_SAFETY_TPA; }
     if (str == "nontermination-via-safety-pdkind") { return NONTERMINATION_VIA_SAFETY_PDKIND; }
-    if (str == "nontermination-via-safety-lawi") { return NONTERMINATION_VIA_SAFETY_LAWI; }
-    if (str == "nontermination-via-safety-imc") { return NONTERMINATION_VIA_SAFETY_IMC; }
     if (str == "lasso-finder-lawi") { return LASSO_FINDER_LAWI; }
     if (str == "step-counter-pdkind") { return STEP_COUNTER_PDKIND; }
     return std::nullopt;
@@ -385,20 +378,14 @@ Options withEngine(Options options, std::string const & engine) {
 
 TerminationAnswer solve(Method method, Options const & options, TransitionSystem const & ts) {
     switch (method) {
-        case LASSO_FINDER:
-            return lassoFinder(options, ts);
-        case STEP_COUNTER:
-            return stepCounter(options, ts);
         case NONTERMINATION_VIA_SAFETY:
-            return nonterminationViaSafety(options, ts);
+            return nonterminationViaSafety(withEngine(options, "spacer"), ts);
         case NONTERMINATION_VIA_SAFETY_TPA:
             return nonterminationViaSafety(withEngine(options, "split-tpa"), ts);
         case NONTERMINATION_VIA_SAFETY_PDKIND:
             return nonterminationViaSafety(withEngine(options, "pdkind"), ts);
         case NONTERMINATION_VIA_SAFETY_LAWI:
             return nonterminationViaSafety(withEngine(options, "lawi"), ts);
-        case NONTERMINATION_VIA_SAFETY_IMC:
-            return nonterminationViaSafety(withEngine(options, "imc"), ts);
         case LASSO_FINDER_LAWI:
             return lassoFinder(withEngine(options, "lawi"), ts);
         case STEP_COUNTER_PDKIND:
