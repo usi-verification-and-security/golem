@@ -69,6 +69,8 @@ void printUsage() {
            "--termination-backend <name>    Select backend algorithm for termination problems:\n"
            "                                  lasso-finder - searches for lasso in the system\n"
            "                                  nontermination-via-safety - gradually eliminates terminating traces from the system\n"
+           "                                  nontermination-via-safety-tpa - nontermination-via-safety using split-tpa engine\n"
+           "                                  nontermination-via-safety-pdkind - nontermination-via-safety using pdkind engine\n"
            "                                  step-counter - searches for upper bound on number of steps the system can make\n";
     std::cout << std::flush;
 }

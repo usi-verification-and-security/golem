@@ -18,6 +18,9 @@ class Options {
 public:
     void addOption(std::string key, std::string value) { options.emplace(std::move(key), std::move(value)); }
 
+    // Unlike addOption, overrides the value if the option is already present
+    void setOption(std::string key, std::string value) { options.insert_or_assign(std::move(key), std::move(value)); }
+
     [[nodiscard]] std::optional<std::string> getOption(std::string const & key) const {
         auto it = options.find(key);
         return it == options.end() ? std::nullopt : std::optional<std::string>(it->second);

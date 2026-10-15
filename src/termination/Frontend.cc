@@ -329,13 +329,36 @@ ChcSystem ITS::asChcs(ArithLogic & logic) const {
 namespace {
 enum class TerminationAnswer { TERMINATING, NONTERMINATING, UNKNOWN, ERROR };
 
-enum Method { LASSO_FINDER, STEP_COUNTER, NONTERMINATION_VIA_SAFETY, SENTINEL };
+enum Method {
+    LASSO_FINDER,
+    STEP_COUNTER,
+    NONTERMINATION_VIA_SAFETY,
+    NONTERMINATION_VIA_SAFETY_TPA,
+    NONTERMINATION_VIA_SAFETY_PDKIND,
+    SENTINEL
+};
 
 std::optional<Method> parseMethod(std::string const & str) {
     if (str == "lasso-finder") { return LASSO_FINDER; }
     if (str == "step-counter") { return STEP_COUNTER; }
     if (str == "nontermination-via-safety") { return NONTERMINATION_VIA_SAFETY; }
+    if (str == "nontermination-via-safety-tpa") { return NONTERMINATION_VIA_SAFETY_TPA; }
+    if (str == "nontermination-via-safety-pdkind") { return NONTERMINATION_VIA_SAFETY_PDKIND; }
     return std::nullopt;
+}
+
+TerminationAnswer nonterminationViaSafety(Options const & options, TransitionSystem const & ts) {
+    auto const res = ReachabilityNonterm{options}.run(ts);
+    if (res == ReachabilityNonterm::Answer::YES) { return TerminationAnswer::TERMINATING; }
+    if (res == ReachabilityNonterm::Answer::NO) { return TerminationAnswer::NONTERMINATING; }
+    if (res == ReachabilityNonterm::Answer::UNKNOWN) { return TerminationAnswer::UNKNOWN; }
+    return TerminationAnswer::ERROR;
+}
+
+// Copy of the options where the engine used for the safety checks is replaced by the given one
+Options withEngine(Options options, std::string const & engine) {
+    options.setOption(Options::ENGINE, engine);
+    return options;
 }
 
 TerminationAnswer solve(Method method, Options const & options, TransitionSystem const & ts) {
@@ -352,13 +375,12 @@ TerminationAnswer solve(Method method, Options const & options, TransitionSystem
             if (res == ReachabilityTerm::Answer::UNKNOWN) { return TerminationAnswer::UNKNOWN; }
             return TerminationAnswer::ERROR;
         }
-        case NONTERMINATION_VIA_SAFETY: {
-            auto const res = ReachabilityNonterm{options}.run(ts);
-            if (res == ReachabilityNonterm::Answer::YES) { return TerminationAnswer::TERMINATING; }
-            if (res == ReachabilityNonterm::Answer::NO) { return TerminationAnswer::NONTERMINATING; }
-            if (res == ReachabilityNonterm::Answer::UNKNOWN) { return TerminationAnswer::UNKNOWN; }
-            return TerminationAnswer::ERROR;
-        }
+        case NONTERMINATION_VIA_SAFETY:
+            return nonterminationViaSafety(options, ts);
+        case NONTERMINATION_VIA_SAFETY_TPA:
+            return nonterminationViaSafety(withEngine(options, "split-tpa"), ts);
+        case NONTERMINATION_VIA_SAFETY_PDKIND:
+            return nonterminationViaSafety(withEngine(options, "pdkind"), ts);
         default:
             return TerminationAnswer::UNKNOWN;
     }
