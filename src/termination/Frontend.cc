@@ -337,6 +337,8 @@ enum Method {
     NONTERMINATION_VIA_SAFETY_PDKIND,
     NONTERMINATION_VIA_SAFETY_LAWI,
     NONTERMINATION_VIA_SAFETY_IMC,
+    LASSO_FINDER_LAWI,
+    STEP_COUNTER_PDKIND,
     SENTINEL
 };
 
@@ -348,6 +350,8 @@ std::optional<Method> parseMethod(std::string const & str) {
     if (str == "nontermination-via-safety-pdkind") { return NONTERMINATION_VIA_SAFETY_PDKIND; }
     if (str == "nontermination-via-safety-lawi") { return NONTERMINATION_VIA_SAFETY_LAWI; }
     if (str == "nontermination-via-safety-imc") { return NONTERMINATION_VIA_SAFETY_IMC; }
+    if (str == "lasso-finder-lawi") { return LASSO_FINDER_LAWI; }
+    if (str == "step-counter-pdkind") { return STEP_COUNTER_PDKIND; }
     return std::nullopt;
 }
 
@@ -359,6 +363,20 @@ TerminationAnswer nonterminationViaSafety(Options const & options, TransitionSys
     return TerminationAnswer::ERROR;
 }
 
+TerminationAnswer lassoFinder(Options const & options, TransitionSystem const & ts) {
+    auto const res = LassoDetector{options}.find_lasso(ts);
+    if (res == LassoDetector::Answer::LASSO) { return TerminationAnswer::NONTERMINATING; }
+    if (res == LassoDetector::Answer::NO_LASSO) { return TerminationAnswer::UNKNOWN; }
+    return TerminationAnswer::ERROR;
+}
+
+TerminationAnswer stepCounter(Options const & options, TransitionSystem const & ts) {
+    auto const res = ReachabilityTerm{options}.termination(ts);
+    if (res == ReachabilityTerm::Answer::YES) { return TerminationAnswer::TERMINATING; }
+    if (res == ReachabilityTerm::Answer::UNKNOWN) { return TerminationAnswer::UNKNOWN; }
+    return TerminationAnswer::ERROR;
+}
+
 // Copy of the options where the engine used for the safety checks is replaced by the given one
 Options withEngine(Options options, std::string const & engine) {
     options.setOption(Options::ENGINE, engine);
@@ -367,18 +385,10 @@ Options withEngine(Options options, std::string const & engine) {
 
 TerminationAnswer solve(Method method, Options const & options, TransitionSystem const & ts) {
     switch (method) {
-        case LASSO_FINDER: {
-            auto const res = LassoDetector{options}.find_lasso(ts);
-            if (res == LassoDetector::Answer::LASSO) { return TerminationAnswer::NONTERMINATING; }
-            if (res == LassoDetector::Answer::NO_LASSO) { return TerminationAnswer::UNKNOWN; }
-            return TerminationAnswer::ERROR;
-        }
-        case STEP_COUNTER: {
-            auto const res = ReachabilityTerm{options}.termination(ts);
-            if (res == ReachabilityTerm::Answer::YES) { return TerminationAnswer::TERMINATING; }
-            if (res == ReachabilityTerm::Answer::UNKNOWN) { return TerminationAnswer::UNKNOWN; }
-            return TerminationAnswer::ERROR;
-        }
+        case LASSO_FINDER:
+            return lassoFinder(options, ts);
+        case STEP_COUNTER:
+            return stepCounter(options, ts);
         case NONTERMINATION_VIA_SAFETY:
             return nonterminationViaSafety(options, ts);
         case NONTERMINATION_VIA_SAFETY_TPA:
@@ -389,6 +399,10 @@ TerminationAnswer solve(Method method, Options const & options, TransitionSystem
             return nonterminationViaSafety(withEngine(options, "lawi"), ts);
         case NONTERMINATION_VIA_SAFETY_IMC:
             return nonterminationViaSafety(withEngine(options, "imc"), ts);
+        case LASSO_FINDER_LAWI:
+            return lassoFinder(withEngine(options, "lawi"), ts);
+        case STEP_COUNTER_PDKIND:
+            return stepCounter(withEngine(options, "pdkind"), ts);
         default:
             return TerminationAnswer::UNKNOWN;
     }
