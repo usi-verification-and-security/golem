@@ -335,6 +335,8 @@ enum Method {
     NONTERMINATION_VIA_SAFETY,
     NONTERMINATION_VIA_SAFETY_TPA,
     NONTERMINATION_VIA_SAFETY_PDKIND,
+    NONTERMINATION_VIA_SAFETY_LAWI,
+    NONTERMINATION_VIA_SAFETY_IMC,
     SENTINEL
 };
 
@@ -383,6 +385,10 @@ TerminationAnswer solve(Method method, Options const & options, TransitionSystem
             return nonterminationViaSafety(withEngine(options, "split-tpa"), ts);
         case NONTERMINATION_VIA_SAFETY_PDKIND:
             return nonterminationViaSafety(withEngine(options, "pdkind"), ts);
+        case NONTERMINATION_VIA_SAFETY_LAWI:
+            return nonterminationViaSafety(withEngine(options, "lawi"), ts);
+        case NONTERMINATION_VIA_SAFETY_IMC:
+            return nonterminationViaSafety(withEngine(options, "imc"), ts);
         default:
             return TerminationAnswer::UNKNOWN;
     }
