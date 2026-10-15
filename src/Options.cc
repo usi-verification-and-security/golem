@@ -68,10 +68,12 @@ void printUsage() {
            "                                Add a reset state so IC3IA does not seed from the full init formula (default: true)\n"
            "--termination-backend <name>    Select backend algorithm for termination problems:\n"
            "                                  lasso-finder - searches for lasso in the system\n"
+           "                                  lasso-finder-lawi - lasso-finder using lawi engine\n"
            "                                  nontermination-via-safety - gradually eliminates terminating traces from the system\n"
            "                                  nontermination-via-safety-tpa - nontermination-via-safety using split-tpa engine\n"
            "                                  nontermination-via-safety-pdkind - nontermination-via-safety using pdkind engine\n"
-           "                                  step-counter - searches for upper bound on number of steps the system can make\n";
+           "                                  step-counter - searches for upper bound on number of steps the system can make\n"
+           "                                  step-counter-pdkind - step-counter using pdkind engine\n";
     std::cout << std::flush;
 }
 
