@@ -37,6 +37,8 @@ private:
     void dumpImplicant(std::ostream & out, implicant_t const & implicant);
 
     void postprocess(implicant_t & literals, ArithLogic & logic);
+    /// Builds the conjunction of the implicant and checks that none of the variables in [beg, end) remains
+    PTRef toConjunction(implicant_t const & implicant, PTRef const * beg, PTRef const * end);
 
     // LIA version
 
@@ -48,6 +50,8 @@ private:
     using div_constraints_t = std::vector<DivisibilityConstraint>;
 
     implicant_t projectIntegerVars(PTRef * beg, PTRef * end, implicant_t implicant, Model & model);
+    void purifyModAndDivTerms(PTRef const * beg, PTRef const * end, implicant_t & implicant,
+                              div_constraints_t & divConstraints, Model & model);
 
     void processDivConstraints(PTRef var, div_constraints_t & divConstraints, implicant_t & implicant, Model & model);
 

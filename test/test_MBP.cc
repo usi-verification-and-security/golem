@@ -7,6 +7,7 @@
 #include <gtest/gtest.h>
 
 #include "ModelBasedProjection.h"
+#include "TermUtils.h"
 
 #include "utils/SmtSolver.h"
 
@@ -569,3 +570,70 @@ TEST_F(MBP_IntTest, test_ExtendedModelForDivisibilityInThePresenceOfDisequality)
     ASSERT_EQ(res, logic.getTerm_true());
 }
 
+
+namespace {
+// Checks the MBP contract for projecting var from a formula with the given model:
+// the result does not contain var, holds in the model, and implies the expected projection
+void checkProjection(ArithLogic & logic, PTRef result, PTRef var, PTRef expected, Model & model) {
+    std::cout << logic.pp(result) << std::endl;
+    auto vars = TermUtils(logic).getVars(result);
+    ASSERT_EQ(std::find(vars.begin(), vars.end(), var), vars.end());
+    ASSERT_EQ(model.evaluate(result), logic.getTerm_true());
+    SMTSolver solver(logic);
+    solver.assertProp(logic.mkAnd(result, logic.mkNot(expected)));
+    ASSERT_EQ(solver.check(), SMTSolver::Answer::UNSAT);
+}
+} // namespace
+
+TEST_F(MBP_IntTest, test_ModInInequality) {
+    PTRef two = logic.mkIntConst(2);
+    PTRef fla = logic.mkLeq(one, logic.mkMod(logic.mkPlus(logic.mkTimes(logic.mkIntConst(3), x), y), two));
+    auto model = getModel({{x, one}, {y, zero}});
+    PTRef res = mbp.project(fla, {x}, *model);
+    checkProjection(logic, res, x, logic.getTerm_true(), *model);
+}
+
+TEST_F(MBP_IntTest, test_ModEqualToNonZero) {
+    PTRef two = logic.mkIntConst(2);
+    PTRef modEq = logic.mkEq(one, logic.mkMod(logic.mkPlus(x, y), two));
+    PTRef xEven = logic.mkEq(x, logic.mkTimes(two, z));
+    auto model = getModel({{x, two}, {y, one}, {z, one}});
+    PTRef res = mbp.project(logic.mkAnd(modEq, xEven), {x}, *model);
+    checkProjection(logic, res, x, logic.mkEq(one, logic.mkMod(y, two)), *model);
+}
+
+TEST_F(MBP_IntTest, test_NegatedDivisibility) {
+    PTRef three = logic.mkIntConst(3);
+    PTRef notDivisible = logic.mkNot(logic.mkEq(zero, logic.mkMod(logic.mkPlus(x, y), three)));
+    PTRef xMultiple = logic.mkEq(x, logic.mkTimes(three, z));
+    auto model = getModel({{x, zero}, {y, one}, {z, zero}});
+    PTRef res = mbp.project(logic.mkAnd(notDivisible, xMultiple), {x}, *model);
+    checkProjection(logic, res, x, logic.mkNot(logic.mkEq(zero, logic.mkMod(y, three))), *model);
+}
+
+TEST_F(MBP_IntTest, test_NestedMod) {
+    PTRef three = logic.mkIntConst(3);
+    PTRef inner = logic.mkMod(x, logic.mkIntConst(2));
+    PTRef fla = logic.mkEq(one, logic.mkMod(logic.mkPlus(vec<PTRef>{x, inner, y}), three));
+    auto model = getModel({{x, three}, {y, zero}});
+    PTRef res = mbp.project(fla, {x}, *model);
+    checkProjection(logic, res, x, logic.getTerm_true(), *model);
+}
+
+TEST_F(MBP_IntTest, test_ModWithNegativeDivisor) {
+    PTRef two = logic.mkIntConst(2);
+    PTRef fla = logic.mkLeq(one, logic.mkMod(logic.mkPlus(x, y), logic.mkIntConst(-2)));
+    PTRef xEven = logic.mkEq(x, logic.mkTimes(two, z));
+    auto model = getModel({{x, zero}, {y, one}, {z, zero}});
+    PTRef res = mbp.project(logic.mkAnd(fla, xEven), {x}, *model);
+    checkProjection(logic, res, x, logic.mkEq(one, logic.mkMod(y, two)), *model);
+}
+
+TEST_F(MBP_IntTest, test_IntDiv) {
+    PTRef five = logic.mkIntConst(5);
+    PTRef fla = logic.mkAnd({logic.mkEq(y, logic.mkIntDiv(x, logic.mkIntConst(3))), logic.mkLeq(zero, x),
+                             logic.mkLeq(x, five)});
+    auto model = getModel({{x, logic.mkIntConst(4)}, {y, one}});
+    PTRef res = mbp.project(fla, {x}, *model);
+    checkProjection(logic, res, x, logic.mkAnd(logic.mkLeq(zero, y), logic.mkLeq(y, one)), *model);
+}

@@ -474,11 +474,7 @@ PTRef ModelBasedProjection::project(PTRef fla, const vec<PTRef> & varsToEliminat
         implicant = projectIntegerVars(boolEndIt, tmp.end(), std::move(implicant), model);
         implicant.insert(implicant.end(), withoutVarsToEliminate.begin(), withoutVarsToEliminate.end());
         postprocess(implicant, dynamic_cast<ArithLogic &>(logic));
-        tmp.clear();
-        for (PtAsgn literal : implicant) {
-            tmp.push(literal.sgn == l_True ? literal.tr : logic.mkNot(literal.tr));
-        }
-        return logic.mkAnd(std::move(tmp));
+        return toConjunction(implicant, boolEndIt, tmp.end());
     }
     for (auto it = boolEndIt; it != tmp.end(); ++it) {
         PTRef var = *it;
@@ -489,11 +485,20 @@ PTRef ModelBasedProjection::project(PTRef fla, const vec<PTRef> & varsToEliminat
     }
     implicant.insert(implicant.end(), withoutVarsToEliminate.begin(), withoutVarsToEliminate.end());
     postprocess(implicant, dynamic_cast<ArithLogic &>(logic));
-    tmp.clear();
+    return toConjunction(implicant, boolEndIt, tmp.end());
+}
+
+PTRef ModelBasedProjection::toConjunction(implicant_t const & implicant, PTRef const * beg, PTRef const * end) {
+    vec<PTRef> conjuncts;
     for (PtAsgn literal : implicant) {
-        tmp.push(literal.sgn == l_True ? literal.tr : logic.mkNot(literal.tr));
+        conjuncts.push(literal.sgn == l_True ? literal.tr : logic.mkNot(literal.tr));
     }
-    return logic.mkAnd(std::move(tmp));
+    PTRef result = logic.mkAnd(std::move(conjuncts));
+    auto vars = TermUtils(logic).getVars(result);
+    if (std::any_of(vars.begin(), vars.end(), [&](PTRef var) { return std::find(beg, end, var) != end; })) {
+        throw std::logic_error("MBP failed to eliminate all variables");
+    }
+    return result;
 }
 
 void ModelBasedProjection::dumpImplicant(std::ostream & out, implicant_t const & implicant) {
@@ -512,7 +517,10 @@ ModelBasedProjection::implicant_t ModelBasedProjection::projectIntegerVars(PTRef
         if (lialogic.isNumEq(lit.tr)) {
             PTRef lhs = lialogic.getPterm(lit.tr)[0];
             PTRef rhs = lialogic.getPterm(lit.tr)[1];
-            if (lialogic.isMod(lialogic.getSymRef(lhs)) or lialogic.isMod(lialogic.getSymRef(rhs))) {
+            // Only "0 = t mod c" is a divisibility constraint; other literals with mod are purified
+            PTRef zero = lialogic.getTerm_IntZero();
+            if ((lhs == zero and lialogic.isMod(lialogic.getSymRef(rhs))) or
+                (rhs == zero and lialogic.isMod(lialogic.getSymRef(lhs)))) {
                 return lit.sgn == l_True;
             }
         }
@@ -539,6 +547,7 @@ ModelBasedProjection::implicant_t ModelBasedProjection::projectIntegerVars(PTRef
         divConstraints.push_back(toDivConstraint(*it));
     }
     implicant.erase(divConstraintsBeg, implicant.end());
+    purifyModAndDivTerms(beg, end, implicant, divConstraints, model);
     for (PTRef * it = beg; it != end; ++it) {
         PTRef var = *it;
         if (not(lialogic.isNumVar(lialogic.getSymRef(var)) and lialogic.getSortRef(var) == lialogic.getSort_int())) {
@@ -575,6 +584,56 @@ std::unique_ptr<Model> extendModel(Model const & model, std::pair<PTRef, PTRef> 
     return model.extend(varValPair.first, varValPair.second);
 }
 
+/*
+ * Model-based purification of mod and div terms whose dividend contains a variable to eliminate.
+ * Such a term is replaced by its value in the model, and the side constraint fixing this value is recorded:
+ *   (mod t c) = r  <=>  |c| divides (t - r)
+ *   (div t c) = q  <=>  c*q <= t <= c*q + |c| - 1
+ * Children are rewritten first, so the recorded dividends are already free of nested mod and div terms.
+ */
+class PurificationConfig : public DefaultRewriterConfig {
+public:
+    PurificationConfig(ArithLogic & logic, Model & model, PTRef const * beg, PTRef const * end)
+        : logic(logic), model(model), beg(beg), end(end) {}
+
+    PTRef rewrite(PTRef term) override {
+        SymRef symbol = logic.getSymRef(term);
+        if (not logic.isMod(symbol) and not logic.isIntDiv(symbol)) { return term; }
+        PTRef value;
+        if (purified.peek(term, value)) { return value; }
+        PTRef dividend = logic.getPterm(term)[0];
+        PTRef divisor = logic.getPterm(term)[1];
+        if (not containsAnyOf(dividend)) { return term; }
+        value = model.evaluate(term);
+        assert(logic.isNumConst(value) and logic.isNumConst(divisor));
+        FastRational absDivisor = abs(logic.getNumConst(divisor));
+        if (logic.isMod(symbol)) {
+            divisibilityConstraints.emplace_back(logic.mkIntConst(absDivisor), logic.mkMinus(dividend, value));
+        } else {
+            PTRef lowest = logic.mkTimes(divisor, value);
+            sideLiterals.push_back(logic.mkLeq(lowest, dividend));
+            sideLiterals.push_back(logic.mkLeq(dividend, logic.mkPlus(lowest, logic.mkIntConst(absDivisor - 1))));
+        }
+        purified.insert(term, value);
+        return value;
+    }
+
+    bool containsAnyOf(PTRef term) const {
+        auto vars = TermUtils(logic).getVars(term);
+        return std::any_of(vars.begin(), vars.end(), [this](PTRef var) { return std::find(beg, end, var) != end; });
+    }
+
+    std::vector<std::pair<PTRef, PTRef>> divisibilityConstraints; // (constant, term)
+    std::vector<PTRef> sideLiterals;
+
+private:
+    ArithLogic & logic;
+    Model & model;
+    PTRef const * beg;
+    PTRef const * end;
+    Map<PTRef, PTRef, PTRefHash> purified;
+};
+
 template<class ForwardIt, class Funct> ForwardIt maxElementWithProjection(ForwardIt first, ForwardIt last, Funct f) {
     if (first == last) return last;
 
@@ -590,6 +649,37 @@ template<class ForwardIt, class Funct> ForwardIt maxElementWithProjection(Forwar
     return largest;
 }
 } // namespace
+
+/*
+ * Removes the variables to eliminate from mod and div terms, see PurificationConfig.
+ * Afterwards, these variables occur only in linear literals of the implicant and in divisibility constraints.
+ */
+void ModelBasedProjection::purifyModAndDivTerms(PTRef const * beg, PTRef const * end, implicant_t & implicant,
+                                                div_constraints_t & divConstraints, Model & model) {
+    auto & lialogic = dynamic_cast<ArithLogic &>(logic);
+    PurificationConfig config(lialogic, model, beg, end);
+    Rewriter<PurificationConfig> purifier(lialogic, config);
+    for (auto & constraint : divConstraints) {
+        constraint.term = purifier.rewrite(constraint.term);
+    }
+    implicant_t purifiedImplicant;
+    for (PtAsgn literal : implicant) {
+        PTRef purifiedLiteral = purifier.rewrite(literal.tr);
+        if (lialogic.isConstant(purifiedLiteral)) {
+            // The literal is decided by the values of the purified terms, and it holds in the model
+            assert((purifiedLiteral == lialogic.getTerm_true()) == (literal.sgn == l_True));
+            continue;
+        }
+        purifiedImplicant.emplace_back(purifiedLiteral, literal.sgn);
+    }
+    for (PTRef sideLiteral : config.sideLiterals) {
+        if (sideLiteral != lialogic.getTerm_true()) { purifiedImplicant.emplace_back(sideLiteral, l_True); }
+    }
+    for (auto [constant, term] : config.divisibilityConstraints) {
+        divConstraints.push_back(DivisibilityConstraint{.constant = constant, .term = term});
+    }
+    implicant = std::move(purifiedImplicant);
+}
 
 /*
  * Projecting single integer variable in the presence of divisibility constraints.
