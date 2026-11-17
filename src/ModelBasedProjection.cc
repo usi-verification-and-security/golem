@@ -10,6 +10,8 @@
 #include "utils/SmtSolver.h"
 
 #include <memory>
+#include <numeric>
+#include <queue>
 
 namespace {
 enum class BoundType { LOWER, UPPER };
