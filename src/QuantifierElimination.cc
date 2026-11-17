@@ -73,11 +73,11 @@ QEResult eliminate_aux(Logic & logic, PTRef fla, vec<PTRef> const & vars, QEOpti
             // This costs precision only when what remains is not already a cube.
             if (not isCube(logic, implicant)) { result.precise_over = false; }
             // std::cerr << "OUT: exceeded limit " << outer_iter << "..." << std::endl;
-            // std::cerr << "   remaining part: " << logic.printTerm(implicant) << std::endl;
+            // std::cerr << "   remaining part: " << logic.termToSMT2String(implicant) << std::endl;
         } else {
             implicant = mbp.getModelBasedImplicant(fla, vars, *model);
             // std::cerr << "OUT: Getting implicant " << outer_iter << "..." << std::endl;
-            // std::cerr << "   implicant: " << logic.printTerm(implicant) << std::endl;
+            // std::cerr << "   implicant: " << logic.termToSMT2String(implicant) << std::endl;
         }
 
         // Here, perform QE only on the implicant
@@ -98,8 +98,8 @@ QEResult eliminate_aux(Logic & logic, PTRef fla, vec<PTRef> const & vars, QEOpti
             PTRef under_projection = mbp.project(implicant, vars, *inner_model, over_projection);
 
             // std::cerr << "   IN: projected" << inner_iter + 1 << "..." << std::endl;
-            // std::cerr << "     under projection: " << logic.printTerm(under_projection) << std::endl;
-            // std::cerr << "     over projection: " << logic.printTerm(over_projection) << std::endl;
+            // std::cerr << "     under projection: " << logic.termToSMT2String(under_projection) << std::endl;
+            // std::cerr << "     over projection: " << logic.termToSMT2String(over_projection) << std::endl;
 
             implicant_over_conjuncts.push(over_projection);
             implicant_under_disjuncts.push(under_projection);

@@ -316,7 +316,7 @@ private:
         auto [it, inserted] = declaredSorts.emplace(name, sort);
         if (not inserted and it->second != sort) {
             throw ParseError(std::string("'") + name + "' is used with two different sorts (" +
-                             logic.printSort(it->second) + " and " + logic.printSort(sort) + ")");
+                             logic.sortToString(it->second) + " and " + logic.sortToString(sort) + ")");
         }
         return logic.mkVar(sort, name);
     }
@@ -453,9 +453,9 @@ private:
 std::string asSmtLib(ArithLogic const & logic, PTRef term) {
     std::string out;
     for (PTRef var : opensmt::variables(logic, term)) {
-        out += "(declare-fun " + logic.printTerm(var) + " () " + logic.printSort(logic.getSortRef(var)) + ")\n";
+        out += "(declare-fun " + logic.termToSMT2String(var) + " () " + logic.sortToString(logic.getSortRef(var)) + ")\n";
     }
-    out += "(assert " + logic.printTerm(term) + ")\n";
+    out += "(assert " + logic.termToSMT2String(term) + ")\n";
     return out;
 }
 

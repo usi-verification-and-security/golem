@@ -672,7 +672,7 @@ PTRef ModelBasedProjection::project_aux(PTRef fla,
         // TODO: sort variables here
         for (auto it = boolEndIt; it != tmp.end(); ++it) {
             PTRef var = *it;
-            // std::cout << "Eliminating " << logic.printTerm(var) << std::endl;
+            // std::cout << "Eliminating " << logic.termToSMT2String(var) << std::endl;
             implicant = projectSingleVar(var, std::move(implicant), model);
             // dumpImplicant(std::cout, implicant);
             checkImplicant(implicant, logic, model);
