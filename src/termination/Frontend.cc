@@ -475,6 +475,7 @@ void run(std::string const & filename, Options const & options) {
         stages.push_back(std::make_unique<MultiEdgeMerger>());
         stages.push_back(std::make_unique<SimpleChainSummarizer>());
         stages.push_back(std::make_unique<TrivialEdgePruner>());
+        stages.push_back(std::make_unique<RemoveForwardUnreachableNodes>());
         auto [transformedGraph, _] = TransformationPipeline(std::move(stages)).transform(std::move(hypergraph));
         assert(transformedGraph->isNormalGraph());
         auto graph = transformedGraph->toNormalGraph();
