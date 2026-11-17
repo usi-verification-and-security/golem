@@ -50,6 +50,9 @@ public:
     static const std::string FORCE_TS;
     static const std::string SIMPLIFY_NESTED;
     static const std::string TERMINATION_BACKEND;
+    static const std::string NONTERM_QE_OVER;
+    static const std::string NONTERM_QE_MAX_DISJUNCTIONS;
+    static const std::string NONTERM_QE_MAX_MBP_PER_POLY;
 };
 
 class CommandLineParser {

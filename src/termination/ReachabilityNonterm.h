@@ -10,6 +10,7 @@
 #include "osmt_terms.h"
 
 #include "Options.h"
+#include "QuantifierElimination.h"
 #include "TransitionSystem.h"
 
 #include <map>
@@ -21,6 +22,7 @@ class ReachabilityNonterm {
 public:
     explicit ReachabilityNonterm(Options const & givenOptions) : options(givenOptions) {
         options.addOption(options.COMPUTE_WITNESS, "true");
+        qeOptions = parseQEOptions(options);
     }
 
     enum struct Answer { YES, NO, UNKNOWN, ERROR };
@@ -31,12 +33,17 @@ private:
     bool DETERMINISTIC_TRANSITION;
     std::vector<PTRef> vars;
     Options options;
+    // Configuration of the QE computing the states that may avoid termination (see generateWellfoundedDisjuncts).
+    // With compute_overapproximation == false (the default) the precise QE is used.
+    QEOptions qeOptions;
     PTRef covered;
     // Pool of well-founded candidates, shared between recursive analyzeTS invocations
     vec<PTRef> strictCandidates;
     // Verdict of every checked candidate (is it satisfiable and well-founded). Well-foundedness does not depend on
     // the analyzed state-space, so the cache is shared between recursive analyzeTS invocations as well.
     std::map<PTRef, bool> checkedCandidates;
+
+    static QEOptions parseQEOptions(Options const & options);
 
     void synthesizeInvariant(PTRef inv, PTRef transition, ArithLogic & logic);
 

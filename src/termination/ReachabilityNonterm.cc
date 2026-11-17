@@ -14,6 +14,7 @@
 
 #include "engine/EngineFactory.h"
 #include "graph/ChcGraphBuilder.h"
+#include <limits>
 #include <set>
 
 #define DNFIZATION_BOUND 500
@@ -735,6 +736,25 @@ std::tuple<PTRef, PTRef> ReachabilityNonterm::blockDeterministicPrefix(PTRef ini
     return {init, transition};
 }
 
+QEOptions ReachabilityNonterm::parseQEOptions(Options const & options) {
+    auto parseLimit = [&options](std::string const & key) -> short {
+        auto const value = options.getOption(key);
+        if (not value.has_value()) { return 0; }
+        std::size_t pos = 0;
+        int parsed = -1;
+        try {
+            parsed = std::stoi(value.value(), &pos);
+        } catch (std::exception const &) { pos = 0; }
+        if (pos == 0 or pos != value->size() or parsed < 0 or parsed > std::numeric_limits<short>::max()) {
+            throw std::invalid_argument("Invalid value for option " + key + ": " + value.value());
+        }
+        return static_cast<short>(parsed);
+    };
+    bool const over = options.getOrDefault(Options::NONTERM_QE_OVER, "false") == "true";
+    return QEOptions(parseLimit(Options::NONTERM_QE_MAX_DISJUNCTIONS), parseLimit(Options::NONTERM_QE_MAX_MBP_PER_POLY),
+                     over);
+}
+
 // This function attempts to construct well founded disjuncts to produce transition invariant, using interpolation.
 // Interpolants are DNFized, and disjuncts are checked for well-foundness.
 bool ReachabilityNonterm::generateWellfoundedDisjuncts(PTRef inv, PTRef transition, PTRef sink, PTRef trace, uint num,
@@ -743,10 +763,22 @@ bool ReachabilityNonterm::generateWellfoundedDisjuncts(PTRef inv, PTRef transiti
     // Calculate the states that are guaranteed to terminate within num transitions:
     // Tr^n(x,x') /\ not Sink(x') - is a formula, which can be satisfied by any x which can
     // reach "not Sink(x')" in n transitions:
-    PTRef NT = QuantifierElimination(logic).keepOnly(
-        logic.mkAnd({trace, logic.mkNot(TimeMachine(logic).sendFlaThroughTime(sink, num))}), vars);
+    PTRef NT;
+    if (qeOptions.compute_overapproximation) {
+        // Over-approximating NT under-approximates T below, which is sound: T only has to contain states that are
+        // guaranteed to reach Sink. `over` stays an over-approximation even when the configured limits are hit.
+        NT = QuantifierElimination(logic)
+                 .keepOnly(logic.mkAnd({trace, logic.mkNot(TimeMachine(logic).sendFlaThroughTime(sink, num))}), vars,
+                           qeOptions)
+                 .over;
+        // Nothing is known to terminate within num steps, so no candidates can be extracted
+        if (NT == logic.getTerm_true()) { return false; }
+    } else {
+        NT = QuantifierElimination(logic).keepOnly(
+            logic.mkAnd({trace, logic.mkNot(TimeMachine(logic).sendFlaThroughTime(sink, num))}), vars);
+    }
     // States that can not reach "not Sink(x')" in n transitions (therefore necesarily reach Sink(x')):
-    // TODO: Can underapproximate
+    // Under-approximated when qeOptions.compute_overapproximation is set
     PTRef T = logic.mkNot(NT);
     // The procedure to construct transition invariants is executed
     PTRef itp = constructTransitionInvariantCandidates(T, transition, sink, num, logic, vars);

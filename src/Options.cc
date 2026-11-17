@@ -10,6 +10,7 @@
 #include <cassert>
 #include <cstring>
 #include <iostream>
+#include <limits>
 
 namespace golem {
 const std::string Options::INPUT_FILE = "input";
@@ -29,6 +30,9 @@ const std::string Options::FORCE_TS = "force-ts";
 const std::string Options::SIMPLIFY_NESTED = "simplify-nested";
 const std::string Options::PROOF_FORMAT = "proof-format";
 const std::string Options::TERMINATION_BACKEND = "termination-backend";
+const std::string Options::NONTERM_QE_OVER = "nonterm.qe.over";
+const std::string Options::NONTERM_QE_MAX_DISJUNCTIONS = "nonterm.qe.max-disjunctions";
+const std::string Options::NONTERM_QE_MAX_MBP_PER_POLY = "nonterm.qe.max-mbp-per-poly";
 
 namespace {
 
@@ -69,8 +73,33 @@ void printUsage() {
            "--termination-backend <name>    Select backend algorithm for termination problems:\n"
            "                                  lasso-finder - searches for lasso in the system\n"
            "                                  nontermination-via-safety - gradually eliminates terminating traces from the system\n"
-           "                                  step-counter - searches for upper bound on number of steps the system can make\n";
+           "                                  step-counter - searches for upper bound on number of steps the system can make\n"
+           "--nonterm.qe.over[=bool]        nontermination-via-safety: over-approximate the QE of states that may\n"
+           "                                avoid termination within n steps (default: false)\n"
+           "--nonterm.qe.max-disjunctions=<n>\n"
+           "                                Max. number of disjuncts in the over-approximating QE,\n"
+           "                                0 = unlimited (default: 0)\n"
+           "--nonterm.qe.max-mbp-per-poly=<n>\n"
+           "                                Max. number of MBPs per convex implicant in the over-approximating QE,\n"
+           "                                0 = unlimited (default: 0)\n";
     std::cout << std::flush;
+}
+
+// Accepts a non-negative integer that fits into a short (the type of the QE limits)
+bool isValidQELimit(const char * word) {
+    if (word == nullptr or *word == '\0') { return false; }
+    char * end = nullptr;
+    long value = std::strtol(word, &end, 10);
+    return *end == '\0' and value >= 0 and value <= std::numeric_limits<short>::max();
+}
+
+void addQELimitOption(Options & res, std::string const & key, const char * value) {
+    if (not isValidQELimit(value)) {
+        std::cerr << "Invalid value for --" << key << ": " << (value ? value : "") << " (expected integer in [0, "
+                  << std::numeric_limits<short>::max() << "])\n";
+        exit(1);
+    }
+    res.addOption(key, value);
 }
 
 bool isDisableKeyword(const char * word) {
@@ -113,6 +142,9 @@ Options CommandLineParser::parse(int argc, char ** argv) {
                                     {Options::FORCE_TS.c_str(), no_argument, &forceTS, 1},
                                     {Options::SIMPLIFY_NESTED.c_str(), no_argument, &simplifyNested, 1},
                                     {Options::TERMINATION_BACKEND.c_str(), required_argument, nullptr, 0},
+                                    {Options::NONTERM_QE_OVER.c_str(), optional_argument, nullptr, 0},
+                                    {Options::NONTERM_QE_MAX_DISJUNCTIONS.c_str(), required_argument, nullptr, 0},
+                                    {Options::NONTERM_QE_MAX_MBP_PER_POLY.c_str(), required_argument, nullptr, 0},
                                     {0, 0, 0, 0}};
 
     while (true) {
@@ -161,6 +193,12 @@ Options CommandLineParser::parse(int argc, char ** argv) {
                     simplifyNested = 1;
                 } else if (long_options[option_index].name == Options::TERMINATION_BACKEND.c_str()) {
                     res.addOption(Options::TERMINATION_BACKEND, optarg);
+                } else if (long_options[option_index].name == Options::NONTERM_QE_OVER) {
+                    res.addOption(Options::NONTERM_QE_OVER, (optarg and isDisableKeyword(optarg)) ? "false" : "true");
+                } else if (long_options[option_index].name == Options::NONTERM_QE_MAX_DISJUNCTIONS) {
+                    addQELimitOption(res, Options::NONTERM_QE_MAX_DISJUNCTIONS, optarg);
+                } else if (long_options[option_index].name == Options::NONTERM_QE_MAX_MBP_PER_POLY) {
+                    addQELimitOption(res, Options::NONTERM_QE_MAX_MBP_PER_POLY, optarg);
                 }
                 break;
             case 'e':

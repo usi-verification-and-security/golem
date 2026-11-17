@@ -7,6 +7,7 @@
 #include "ModelBasedProjection.h"
 
 #include "TermUtils.h"
+#include "utils/SmtSolver.h"
 
 #include <memory>
 
