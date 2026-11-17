@@ -95,7 +95,7 @@ TEST_F(QE_RealTest, test_strictInequalities) {
 TEST_F(QE_RealTest, test_LRA_eliminateSingleVar_SimpleBound) {
     PTRef fla = logic.mkAnd(logic.mkLeq(zero, x), logic.mkLeq(x, y));
     PTRef res = QuantifierElimination(logic).eliminate(fla, x);
-    std::cout << logic.printTerm(res) << std::endl;
+    std::cout << logic.termToSMT2String(res) << std::endl;
     EXPECT_EQ(res, logic.mkLeq(zero, y));
 }
 
@@ -123,18 +123,18 @@ TEST_F(QE_RealTest, test_LRA_eliminateSingleVar_AllEliminated_UNSAT) {
 TEST_F(QE_RealTest, test_LRA_eliminateMultipleVars) {
     PTRef fla = logic.mkAnd({logic.mkLeq(zero, x), logic.mkLeq(x, y), logic.mkLeq(y, z)});
     PTRef res = QuantifierElimination(logic).eliminate(fla, vec<PTRef>{x, y});
-    std::cout << logic.printTerm(res) << std::endl;
+    std::cout << logic.termToSMT2String(res) << std::endl;
     EXPECT_EQ(res, logic.mkLeq(zero, z));
 
     PTRef res2 = QuantifierElimination(logic).keepOnly(fla, vec<PTRef>{z});
-    std::cout << logic.printTerm(res2) << std::endl;
+    std::cout << logic.termToSMT2String(res2) << std::endl;
     EXPECT_EQ(res2, res);
 }
 
 TEST_F(QE_RealTest, test_LRA_BoolAndReal_eliminateReal) {
     PTRef fla = logic.mkAnd(logic.mkOr(a, logic.mkGt(x, zero)), logic.mkLeq(x, zero));
     PTRef res = QuantifierElimination(logic).eliminate(fla, x);
-    std::cout << logic.printTerm(res) << std::endl;
+    std::cout << logic.termToSMT2String(res) << std::endl;
     EXPECT_TRUE(isEquivalent(res, a, logic));
 }
 
@@ -143,7 +143,7 @@ TEST_F(QE_RealTest, test_LRA_keepOnly_BoolsWithRealWitness) {
         logic.mkOr(a, logic.mkGt(x, zero)),
         logic.mkOr(b, logic.mkLeq(x, zero)));
     PTRef res = QuantifierElimination(logic).keepOnly(fla, vec<PTRef>{a, b});
-    std::cout << logic.printTerm(res) << std::endl;
+    std::cout << logic.termToSMT2String(res) << std::endl;
     EXPECT_TRUE(isEquivalent(res, logic.mkOr(a, b), logic));
 }
 
@@ -226,7 +226,7 @@ TEST_F(QE_RealTest, test_LRA_disjunctive) {
     PTRef fla = logic.mkOr(blockA, blockB);
 
     PTRef precise = QuantifierElimination(logic).eliminate(fla, y);
-    std::cout << "Precise result: " << logic.printTerm(precise) << std::endl;
+    std::cout << "Precise result: " << logic.termToSMT2String(precise) << std::endl;
 
     QEResult result;
     QEOptions option;
@@ -239,8 +239,8 @@ TEST_F(QE_RealTest, test_LRA_disjunctive) {
               << option.compute_overapproximation << " "
               << option.max_mbp_per_poly << " "
               << option.max_disjunctions_in_over << std::endl;
-    std::cout << "Obtianed under: " << logic.printTerm(result.under) << std::endl;
-    std::cout << "Obtianed over: " << logic.printTerm(result.over) << std::endl;
+    std::cout << "Obtianed under: " << logic.termToSMT2String(result.under) << std::endl;
+    std::cout << "Obtianed over: " << logic.termToSMT2String(result.over) << std::endl;
     EXPECT_EQ(result.under, precise);
     EXPECT_EQ(result.over, logic.getTerm_true());
 
@@ -252,8 +252,8 @@ TEST_F(QE_RealTest, test_LRA_disjunctive) {
               << option.compute_overapproximation << " "
               << option.max_mbp_per_poly << " "
               << option.max_disjunctions_in_over << std::endl;
-    std::cout << "Obtianed under: " << logic.printTerm(result.under) << std::endl;
-    std::cout << "Obtianed over: " << logic.printTerm(result.over) << std::endl;
+    std::cout << "Obtianed under: " << logic.termToSMT2String(result.under) << std::endl;
+    std::cout << "Obtianed over: " << logic.termToSMT2String(result.over) << std::endl;
     EXPECT_TRUE(isEquivalent(result.over, result.under, logic));
     EXPECT_TRUE(isEquivalent(result.over, precise, logic));
     EXPECT_TRUE(result.precise_over);
@@ -267,8 +267,8 @@ TEST_F(QE_RealTest, test_LRA_disjunctive) {
               << option.compute_overapproximation << " "
               << option.max_mbp_per_poly << " "
               << option.max_disjunctions_in_over << std::endl;
-    std::cout << "Obtianed under: " << logic.printTerm(result.under) << std::endl;
-    std::cout << "Obtianed over: " << logic.printTerm(result.over) << std::endl;
+    std::cout << "Obtianed under: " << logic.termToSMT2String(result.under) << std::endl;
+    std::cout << "Obtianed over: " << logic.termToSMT2String(result.over) << std::endl;
     EXPECT_TRUE(isEquivalent(result.under, precise, logic));
     EXPECT_TRUE(result.precise_under);
     EXPECT_FALSE(isEquivalent(result.over, precise, logic));
@@ -283,8 +283,8 @@ TEST_F(QE_RealTest, test_LRA_disjunctive) {
               << option.compute_overapproximation << " "
               << option.max_mbp_per_poly << " "
               << option.max_disjunctions_in_over << std::endl;
-    std::cout << "Obtianed under: " << logic.printTerm(result.under) << std::endl;
-    std::cout << "Obtianed over: " << logic.printTerm(result.over) << std::endl;
+    std::cout << "Obtianed under: " << logic.termToSMT2String(result.under) << std::endl;
+    std::cout << "Obtianed over: " << logic.termToSMT2String(result.over) << std::endl;
     EXPECT_FALSE(isEquivalent(result.under, precise, logic));
     EXPECT_FALSE(result.precise_over);
     EXPECT_FALSE(isEquivalent(result.over, precise, logic));

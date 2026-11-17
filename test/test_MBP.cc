@@ -405,12 +405,12 @@ TEST_F(MBP_RealTest, test_heuristic_1) {
     // greatest lower bound: -2
     // result: x = 0 (and -4 < x < 4 redundant)
     PTRef res = mbp.project(fla, {y}, *model);
-    std::cout << "Obtained: " << logic.printTerm(res) << std::endl;
+    std::cout << "Obtained: " << logic.termToSMT2String(res) << std::endl;
     PTRef expected_res = logic.mkAnd({
             logic.mkLeq(zero, x), logic.mkLeq(x, zero),
             logic.mkLt(minusfour, x), logic.mkLt(x, four),
         });
-    std::cout << "Expected: " << logic.printTerm(expected_res) << std::endl;
+    std::cout << "Expected: " << logic.termToSMT2String(expected_res) << std::endl;
     EXPECT_EQ(res, expected_res);
 
     // Pick_best_side heuristic + FM_th = 1
@@ -418,23 +418,23 @@ TEST_F(MBP_RealTest, test_heuristic_1) {
     // Result is more general: 0 <= x < 2
     ModelBasedProjection mbp_side(logic, MBPOptions(1, true, true));
     res = mbp_side.project(fla, {y}, *model);
-    std::cout << "Obtained: " << logic.printTerm(res) << std::endl;
+    std::cout << "Obtained: " << logic.termToSMT2String(res) << std::endl;
     expected_res = logic.mkAnd({
                 logic.mkLeq(zero, x), logic.mkLt(x, two)
         });
-    std::cout << "Expected: " << logic.printTerm(expected_res) << std::endl;
+    std::cout << "Expected: " << logic.termToSMT2String(expected_res) << std::endl;
     EXPECT_EQ(res, expected_res);
 
     // FM_th = 2: complete result
     // -2 <= x < 2 (and redundant -4 < x)
     ModelBasedProjection mbp_fm(logic, MBPOptions(2, false, true));
     res = mbp_fm.project(fla, {y}, *model);
-    std::cout << "Obtained: " << logic.printTerm(res) << std::endl;
+    std::cout << "Obtained: " << logic.termToSMT2String(res) << std::endl;
     expected_res = logic.mkAnd({
             logic.mkGt(x, minusfour),
             logic.mkLeq(minustwo, x), logic.mkLt(x, two)
         });
-    std::cout << "Expected: " << logic.printTerm(expected_res) << std::endl;
+    std::cout << "Expected: " << logic.termToSMT2String(expected_res) << std::endl;
     EXPECT_EQ(res, expected_res);
 }
 
@@ -469,8 +469,8 @@ TEST_F(MBP_RealTest, test_heuristic_1_overapprox) {
     // Expected over: -4 < x < 4
     PTRef res_over = PTRef_Undef;
     PTRef res = mbp.project(fla, {y}, *model, res_over);
-    std::cout << "Obtained: " << logic.printTerm(res) << std::endl;
-    std::cout << "Obtained over: " << logic.printTerm(res_over) << std::endl;
+    std::cout << "Obtained: " << logic.termToSMT2String(res) << std::endl;
+    std::cout << "Obtained over: " << logic.termToSMT2String(res_over) << std::endl;
     PTRef expected_res = logic.mkAnd({
             logic.mkLeq(zero, x), logic.mkLeq(x, zero),
             logic.mkLt(minusfour, x), logic.mkLt(x, four),
@@ -478,9 +478,9 @@ TEST_F(MBP_RealTest, test_heuristic_1_overapprox) {
     PTRef expected_over = logic.mkAnd({
             logic.mkLt(minusfour, x), logic.mkLt(x, four),
         });
-    std::cout << "Expected: " << logic.printTerm(expected_res) << std::endl;
+    std::cout << "Expected: " << logic.termToSMT2String(expected_res) << std::endl;
     EXPECT_EQ(res, expected_res);
-    std::cout << "Expected over: " << logic.printTerm(expected_over) << std::endl;
+    std::cout << "Expected over: " << logic.termToSMT2String(expected_over) << std::endl;
     EXPECT_EQ(res_over, expected_over);
 
     // Pick_best_side heuristic + FM_th = 1
@@ -489,15 +489,15 @@ TEST_F(MBP_RealTest, test_heuristic_1_overapprox) {
     // Expected over: x < 2
     ModelBasedProjection mbp_side(logic, MBPOptions(1, true, true));
     res = mbp_side.project(fla, {y}, *model, res_over);
-    std::cout << "Obtained: " << logic.printTerm(res) << std::endl;
-    std::cout << "Obtained over: " << logic.printTerm(res_over) << std::endl;
+    std::cout << "Obtained: " << logic.termToSMT2String(res) << std::endl;
+    std::cout << "Obtained over: " << logic.termToSMT2String(res_over) << std::endl;
     expected_res = logic.mkAnd({
                 logic.mkLeq(zero, x), logic.mkLt(x, two)
         });
     expected_over = logic.mkLt(x, two);
-    std::cout << "Expected: " << logic.printTerm(expected_res) << std::endl;
+    std::cout << "Expected: " << logic.termToSMT2String(expected_res) << std::endl;
     EXPECT_EQ(res, expected_res);
-    std::cout << "Expected over: " << logic.printTerm(expected_over) << std::endl;
+    std::cout << "Expected over: " << logic.termToSMT2String(expected_over) << std::endl;
     EXPECT_EQ(res_over, expected_over);
 
     // FM_th = 2: complete result
@@ -505,16 +505,16 @@ TEST_F(MBP_RealTest, test_heuristic_1_overapprox) {
     // Expected over: -2 <= x < 2 (and redundant -4 < x)
     ModelBasedProjection mbp_fm(logic, MBPOptions(2, false, true));
     res = mbp_fm.project(fla, {y}, *model, res_over);
-    std::cout << "Obtained: " << logic.printTerm(res) << std::endl;
-    std::cout << "Obtained over: " << logic.printTerm(res_over) << std::endl;
+    std::cout << "Obtained: " << logic.termToSMT2String(res) << std::endl;
+    std::cout << "Obtained over: " << logic.termToSMT2String(res_over) << std::endl;
     expected_res = logic.mkAnd({
             logic.mkGt(x, minusfour),
             logic.mkLeq(minustwo, x), logic.mkLt(x, two)
         });
     expected_over = expected_res;
-    std::cout << "Expected: " << logic.printTerm(expected_res) << std::endl;
+    std::cout << "Expected: " << logic.termToSMT2String(expected_res) << std::endl;
     EXPECT_EQ(res, expected_res);
-    std::cout << "Expected over: " << logic.printTerm(expected_over) << std::endl;
+    std::cout << "Expected over: " << logic.termToSMT2String(expected_over) << std::endl;
     EXPECT_EQ(res_over, expected_over);
 }
 
@@ -549,8 +549,8 @@ TEST_F(MBP_RealTest, test_heuristic_2_overapprox) {
     // Expected over: -4 < x < 4
     PTRef res_over = PTRef_Undef;
     PTRef res = mbp.project(fla, {y}, *model, res_over);
-    std::cout << "Obtained: " << logic.printTerm(res) << std::endl;
-    std::cout << "Obtained over: " << logic.printTerm(res_over) << std::endl;
+    std::cout << "Obtained: " << logic.termToSMT2String(res) << std::endl;
+    std::cout << "Obtained over: " << logic.termToSMT2String(res_over) << std::endl;
     PTRef expected_res = logic.mkAnd({
             logic.mkLeq(zero, x), logic.mkLeq(x, zero),
             logic.mkLt(minusfour, x), logic.mkLt(x, four),
@@ -558,9 +558,9 @@ TEST_F(MBP_RealTest, test_heuristic_2_overapprox) {
     PTRef expected_over = logic.mkAnd({
             logic.mkLt(minusfour, x), logic.mkLt(x, four),
         });
-    std::cout << "Expected: " << logic.printTerm(expected_res) << std::endl;
+    std::cout << "Expected: " << logic.termToSMT2String(expected_res) << std::endl;
     EXPECT_EQ(res, expected_res);
-    std::cout << "Expected over: " << logic.printTerm(expected_over) << std::endl;
+    std::cout << "Expected over: " << logic.termToSMT2String(expected_over) << std::endl;
     EXPECT_EQ(res_over, expected_over);
 
     // Pick_best_side heuristic + FM_th = 1
@@ -569,15 +569,15 @@ TEST_F(MBP_RealTest, test_heuristic_2_overapprox) {
     // Expected over: x < 2
     ModelBasedProjection mbp_side(logic, MBPOptions(1, true, true));
     res = mbp_side.project(fla, {y}, *model, res_over);
-    std::cout << "Obtained: " << logic.printTerm(res) << std::endl;
-    std::cout << "Obtained over: " << logic.printTerm(res_over) << std::endl;
+    std::cout << "Obtained: " << logic.termToSMT2String(res) << std::endl;
+    std::cout << "Obtained over: " << logic.termToSMT2String(res_over) << std::endl;
     expected_res = logic.mkAnd({
                 logic.mkLeq(zero, x), logic.mkLt(x, two)
         });
     expected_over = logic.mkLt(x, two);
-    std::cout << "Expected: " << logic.printTerm(expected_res) << std::endl;
+    std::cout << "Expected: " << logic.termToSMT2String(expected_res) << std::endl;
     EXPECT_EQ(res, expected_res);
-    std::cout << "Expected over: " << logic.printTerm(expected_over) << std::endl;
+    std::cout << "Expected over: " << logic.termToSMT2String(expected_over) << std::endl;
     EXPECT_EQ(res_over, expected_over);
 
     // FM_th = 2: complete result
@@ -585,16 +585,16 @@ TEST_F(MBP_RealTest, test_heuristic_2_overapprox) {
     // Expected over: -2 <= x < 2 (and redundant -4 < x)
     ModelBasedProjection mbp_fm(logic, MBPOptions(2, false, true));
     res = mbp_fm.project(fla, {y}, *model, res_over);
-    std::cout << "Obtained: " << logic.printTerm(res) << std::endl;
-    std::cout << "Obtained over: " << logic.printTerm(res_over) << std::endl;
+    std::cout << "Obtained: " << logic.termToSMT2String(res) << std::endl;
+    std::cout << "Obtained over: " << logic.termToSMT2String(res_over) << std::endl;
     expected_res = logic.mkAnd({
             logic.mkGt(x, minusfour),
             logic.mkLeq(minustwo, x), logic.mkLt(x, two)
         });
     expected_over = expected_res;
-    std::cout << "Expected: " << logic.printTerm(expected_res) << std::endl;
+    std::cout << "Expected: " << logic.termToSMT2String(expected_res) << std::endl;
     EXPECT_EQ(res, expected_res);
-    std::cout << "Expected over: " << logic.printTerm(expected_over) << std::endl;
+    std::cout << "Expected over: " << logic.termToSMT2String(expected_over) << std::endl;
     EXPECT_EQ(res_over, expected_over);
 }
 
@@ -823,11 +823,11 @@ TEST_F(MBP_IntTest, test_heuristic_1) {
     // greatest lower bound: -2, transformed into a non-strict -1
     // result: -1 <= x = 1
     PTRef res = mbp.project(fla, {y}, *model);
-    std::cout << "Obtained: " << logic.printTerm(res) << std::endl;
+    std::cout << "Obtained: " << logic.termToSMT2String(res) << std::endl;
     PTRef expected_res = logic.mkAnd({
             logic.mkLeq(minusone, x), logic.mkLeq(x, one),
         });
-    std::cout << "Expected: " << logic.printTerm(expected_res) << std::endl;
+    std::cout << "Expected: " << logic.termToSMT2String(expected_res) << std::endl;
     EXPECT_EQ(res, expected_res);
 
     // Pick_best_side heuristic + FM_th = 1
@@ -835,22 +835,22 @@ TEST_F(MBP_IntTest, test_heuristic_1) {
     // Result is more general: 0 <= x <= 1
     ModelBasedProjection mbp_side(logic, MBPOptions(1, true, true));
     res = mbp_side.project(fla, {y}, *model);
-    std::cout << "Obtained: " << logic.printTerm(res) << std::endl;
+    std::cout << "Obtained: " << logic.termToSMT2String(res) << std::endl;
     expected_res = logic.mkAnd({
                 logic.mkLeq(zero, x), logic.mkLeq(x, one)
         });
-    std::cout << "Expected: " << logic.printTerm(expected_res) << std::endl;
+    std::cout << "Expected: " << logic.termToSMT2String(expected_res) << std::endl;
     EXPECT_EQ(res, expected_res);
 
     // FM_th = 2: complete result
     // -2 <= x <= 1
     ModelBasedProjection mbp_fm(logic, MBPOptions(2, false, true));
     res = mbp_fm.project(fla, {y}, *model);
-    std::cout << "Obtained: " << logic.printTerm(res) << std::endl;
+    std::cout << "Obtained: " << logic.termToSMT2String(res) << std::endl;
     expected_res = logic.mkAnd({
             logic.mkLeq(minustwo, x), logic.mkLeq(x, one)
         });
-    std::cout << "Expected: " << logic.printTerm(expected_res) << std::endl;
+    std::cout << "Expected: " << logic.termToSMT2String(expected_res) << std::endl;
     EXPECT_EQ(res, expected_res);
 }
 
@@ -886,15 +886,15 @@ TEST_F(MBP_IntTest, test_heuristic_1_overapprox) {
     // over: x <= 1
     PTRef res_over = PTRef_Undef;
     PTRef res = mbp.project(fla, {y}, *model, res_over);
-    std::cout << "Obtained: " << logic.printTerm(res) << std::endl;
-    std::cout << "Obtained over: " << logic.printTerm(res_over) << std::endl;
+    std::cout << "Obtained: " << logic.termToSMT2String(res) << std::endl;
+    std::cout << "Obtained over: " << logic.termToSMT2String(res_over) << std::endl;
     PTRef expected_res = logic.mkAnd({
             logic.mkLeq(minusone, x), logic.mkLeq(x, one),
         });
     PTRef expected_over = logic.mkLeq(x, one);
-    std::cout << "Expected: " << logic.printTerm(expected_res) << std::endl;
+    std::cout << "Expected: " << logic.termToSMT2String(expected_res) << std::endl;
     EXPECT_EQ(res, expected_res);
-    std::cout << "Expected over: " << logic.printTerm(expected_over) << std::endl;
+    std::cout << "Expected over: " << logic.termToSMT2String(expected_over) << std::endl;
     EXPECT_EQ(res_over, expected_over);
 
     // Pick_best_side heuristic + FM_th = 1
@@ -903,15 +903,15 @@ TEST_F(MBP_IntTest, test_heuristic_1_overapprox) {
     // over: x <= 1
     ModelBasedProjection mbp_side(logic, MBPOptions(1, true, true));
     res = mbp_side.project(fla, {y}, *model, res_over);
-    std::cout << "Obtained: " << logic.printTerm(res) << std::endl;
-    std::cout << "Obtained over: " << logic.printTerm(res_over) << std::endl;
+    std::cout << "Obtained: " << logic.termToSMT2String(res) << std::endl;
+    std::cout << "Obtained over: " << logic.termToSMT2String(res_over) << std::endl;
     expected_res = logic.mkAnd({
             logic.mkLeq(zero, x), logic.mkLeq(x, one)
         });
     expected_over = logic.mkLeq(x, one);
-    std::cout << "Expected: " << logic.printTerm(expected_res) << std::endl;
+    std::cout << "Expected: " << logic.termToSMT2String(expected_res) << std::endl;
     EXPECT_EQ(res, expected_res);
-    std::cout << "Expected over: " << logic.printTerm(expected_over) << std::endl;
+    std::cout << "Expected over: " << logic.termToSMT2String(expected_over) << std::endl;
     EXPECT_EQ(res_over, expected_over);
 
     // FM_th = 2: complete result
@@ -919,15 +919,15 @@ TEST_F(MBP_IntTest, test_heuristic_1_overapprox) {
     // over = complete result
     ModelBasedProjection mbp_fm(logic, MBPOptions(2, false, true));
     res = mbp_fm.project(fla, {y}, *model, res_over);
-    std::cout << "Obtained: " << logic.printTerm(res) << std::endl;
-    std::cout << "Obtained over: " << logic.printTerm(res_over) << std::endl;
+    std::cout << "Obtained: " << logic.termToSMT2String(res) << std::endl;
+    std::cout << "Obtained over: " << logic.termToSMT2String(res_over) << std::endl;
     expected_res = logic.mkAnd({
             logic.mkLeq(minustwo, x), logic.mkLeq(x, one)
         });
     expected_over = expected_res;
-    std::cout << "Expected: " << logic.printTerm(expected_res) << std::endl;
+    std::cout << "Expected: " << logic.termToSMT2String(expected_res) << std::endl;
     EXPECT_EQ(res, expected_res);
-    std::cout << "Expected over: " << logic.printTerm(expected_over) << std::endl;
+    std::cout << "Expected over: " << logic.termToSMT2String(expected_over) << std::endl;
     EXPECT_EQ(res_over, expected_over);
 }
 
@@ -954,7 +954,7 @@ TEST_F(MBP_IntTest, test_NegatedDivisibilityOverEliminatedVar) {
     PTRef fla = logic.mkAnd(logic.mkNot(logic.mkEq(logic.mkMod(x, three), zero)), logic.mkLeq(y, x));
     auto model = getModel({{x, one}, {y, zero}});
     PTRef res = ModelBasedProjection(logic).project(fla, {x}, *model);
-    std::cout << "Obtained: " << logic.printTerm(res) << std::endl;
+    std::cout << "Obtained: " << logic.termToSMT2String(res) << std::endl;
     EXPECT_EQ(model->evaluate(res), logic.getTerm_true());
     EXPECT_FALSE(mentionsAny(logic, res, {x}));
 }
@@ -965,7 +965,7 @@ TEST_F(MBP_IntTest, test_NonDivisibilityBoundOverEliminatedVar) {
     PTRef fla = logic.mkAnd(logic.mkLeq(one, logic.mkMod(x, three)), logic.mkLeq(y, x));
     auto model = getModel({{x, one}, {y, zero}});
     PTRef res = ModelBasedProjection(logic).project(fla, {x}, *model);
-    std::cout << "Obtained: " << logic.printTerm(res) << std::endl;
+    std::cout << "Obtained: " << logic.termToSMT2String(res) << std::endl;
     EXPECT_EQ(model->evaluate(res), logic.getTerm_true());
     EXPECT_FALSE(mentionsAny(logic, res, {x}));
 }
@@ -981,7 +981,7 @@ TEST_F(MBP_IntTest, test_NegatedDivisibilityLeaksTemporary) {
                              logic.mkNot(logic.mkEq(logic.mkMod(x, three), zero)), logic.mkLeq(y, x)});
     auto model = getModel({{x, one}, {y, zero}});
     PTRef res = ModelBasedProjection(logic).project(fla, {x}, *model);
-    std::cout << "Obtained: " << logic.printTerm(res) << std::endl;
+    std::cout << "Obtained: " << logic.termToSMT2String(res) << std::endl;
     EXPECT_FALSE(mentionsAny(logic, res, {x}));
 }
 
@@ -991,7 +991,7 @@ TEST_F(MBP_IntTest, test_RemainderEqualityOverEliminatedVar) {
     PTRef fla = logic.mkAnd(logic.mkEq(logic.mkMod(x, three), one), logic.mkLeq(y, x));
     auto model = getModel({{x, one}, {y, zero}});
     PTRef res = ModelBasedProjection(logic).project(fla, {x}, *model);
-    std::cout << "Obtained: " << logic.printTerm(res) << std::endl;
+    std::cout << "Obtained: " << logic.termToSMT2String(res) << std::endl;
     EXPECT_EQ(model->evaluate(res), logic.getTerm_true());
     EXPECT_FALSE(mentionsAny(logic, res, {x}));
 }
@@ -1002,7 +1002,7 @@ TEST_F(MBP_IntTest, test_PositiveDivisibilityOverEliminatedVar) {
     PTRef fla = logic.mkAnd(logic.mkEq(logic.mkMod(x, three), zero), logic.mkLeq(y, x));
     auto model = getModel({{x, three}, {y, zero}});
     PTRef res = ModelBasedProjection(logic).project(fla, {x}, *model);
-    std::cout << "Obtained: " << logic.printTerm(res) << std::endl;
+    std::cout << "Obtained: " << logic.termToSMT2String(res) << std::endl;
     EXPECT_EQ(model->evaluate(res), logic.getTerm_true());
     EXPECT_FALSE(mentionsAny(logic, res, {x}));
 }
@@ -1014,7 +1014,7 @@ TEST_F(MBP_IntTest, test_ModTermsOnBothSides) {
     PTRef fla = logic.mkEq(logic.mkMod(x, three), logic.mkMod(y, two));
     auto model = getModel({{x, one}, {y, three}});
     PTRef res = ModelBasedProjection(logic).project(fla, {x}, *model);
-    std::cout << "Obtained: " << logic.printTerm(res) << std::endl;
+    std::cout << "Obtained: " << logic.termToSMT2String(res) << std::endl;
     EXPECT_EQ(model->evaluate(res), logic.getTerm_true());
     EXPECT_FALSE(mentionsAny(logic, res, {x}));
     EXPECT_EQ(res, logic.mkEq(logic.mkMod(y, two), one));
@@ -1027,7 +1027,7 @@ TEST_F(MBP_IntTest, test_ModTermConstrainsKeptVar) {
     PTRef fla = logic.mkAnd(logic.mkEq(x, logic.mkTimes(two, y)), logic.mkNot(logic.mkEq(logic.mkMod(x, three), zero)));
     auto model = getModel({{x, two}, {y, one}});
     PTRef res = ModelBasedProjection(logic).project(fla, {x}, *model);
-    std::cout << "Obtained: " << logic.printTerm(res) << std::endl;
+    std::cout << "Obtained: " << logic.termToSMT2String(res) << std::endl;
     EXPECT_EQ(model->evaluate(res), logic.getTerm_true());
     EXPECT_FALSE(mentionsAny(logic, res, {x}));
     SMTSolver solver(logic);
@@ -1042,7 +1042,7 @@ TEST_F(MBP_IntTest, test_NestedModTerms) {
     PTRef fla = logic.mkAnd(logic.mkEq(logic.mkMod(logic.mkPlus(x, logic.mkMod(x, two)), three), one), logic.mkLeq(y, x));
     auto model = getModel({{x, three}, {y, zero}});
     PTRef res = ModelBasedProjection(logic).project(fla, {x}, *model);
-    std::cout << "Obtained: " << logic.printTerm(res) << std::endl;
+    std::cout << "Obtained: " << logic.termToSMT2String(res) << std::endl;
     EXPECT_EQ(model->evaluate(res), logic.getTerm_true());
     EXPECT_FALSE(mentionsAny(logic, res, {x}));
 }
