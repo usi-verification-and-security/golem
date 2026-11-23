@@ -988,9 +988,10 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::checkTermina
         // if (subinv == logic.getTerm_false()) subinv = logic.mkOr(strictCandidates);
         // Candidates are reset to the disjuncts of subinv, extended by the previous candidates where it
         // maximizes the covered states, while keeping Tr => \/ strictCandidates
-        PTRef newCov = TimeMachine(logic).sendFlaThroughTime(QuantifierElimination(logic).eliminate(
-           logic.mkAnd({reached, subinv}),vars), -1);
-        sink = TermUtils(logic).simplifyMax(logic.mkOr({sink, newCov, reached}));
+        // Only the reached states are proven to terminate. The image of reached under subinv must not be added:
+        // subinv is a transition invariant, i.e. an over-approximation of the transitive closure, so its image
+        // contains states unreachable from reached, which are not known to terminate (and may be nonterminating).
+        sink = TermUtils(logic).simplifyMax(logic.mkOr({sink, reached}));
         smt_checker.resetSolver();
         smt_checker.assertProp(
             logic.mkAnd({inv, logic.mkOr(subinv, id), TimeMachine(logic).sendFlaThroughTime(inv,1), TimeMachine(logic).sendFlaThroughTime(transition, 1),
