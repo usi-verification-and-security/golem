@@ -20,6 +20,8 @@
 #define DNFIZATION_BOUND 500
 // Maximal number of attempts to cover reachable noncovered states with the pool, before the recursive analysis
 #define COVERAGE_REPAIR_BOUND 3
+// Maximal number of model-based projections under-approximating a single forward image in forwardCone
+#define SINK_POST_MBP_CUBES 3
 
 namespace golem::termination {
 
@@ -883,6 +885,44 @@ bool ReachabilityNonterm::coverState(PTRef state, PTRef inv, PTRef terminating, 
     return true;
 }
 
+// Function extends sink states by the states reachable from Reached within sinkPostDepth transitions.
+// Reached states are proven to either terminate or reach covered states (covered states are the sink of the recursive
+// analysis). This property is preserved by every transition from a state outside of covered, therefore it holds for
+// every state reachable from Reached by a path, which does not leave covered states:
+// Cone = Reached \/ Post(Cone /\ not Covered)
+// Every image is under-approximated by at most SINK_POST_MBP_CUBES model-based projections, so only states that are
+// really reachable from Reached are added. An over-approximation (e.g. image under a transition invariant, or an
+// over-approximating QE) is unsound here: it adds states which may be nonterminating.
+PTRef ReachabilityNonterm::forwardCone(PTRef reached, PTRef transition, PTRef sink, ArithLogic & logic) {
+    vec<PTRef> nextVars;
+    for (auto var : vars) {
+        nextVars.push(TimeMachine(logic).sendVarThroughTime(var, 1));
+    }
+    PTRef known = logic.mkOr({sink, reached});
+    PTRef frontier = reached;
+    SMTSolver solver(logic, SMTSolver::WitnessProduction::ONLY_MODEL);
+    for (uint step = 0; step < sinkPostDepth; ++step) {
+        // Successors of the frontier, which are not known yet:
+        // Frontier(x) /\ not Covered(x) /\ Tr(x,x') /\ not (Known \/ Covered)(x')
+        PTRef image = logic.mkAnd({frontier, logic.mkNot(covered), transition,
+                                   logic.mkNot(TimeMachine(logic).sendFlaThroughTime(logic.mkOr(known, covered), 1))});
+        solver.resetSolver();
+        solver.assertProp(image);
+        vec<PTRef> cubes;
+        for (int i = 0; i < SINK_POST_MBP_CUBES; ++i) {
+            if (solver.check() != SMTSolver::Answer::SAT) { break; }
+            PTRef cube = ModelBasedProjection(logic).keepOnly(image, nextVars, *solver.getModel());
+            cubes.push(cube);
+            solver.assertProp(logic.mkNot(cube));
+        }
+        // Fixpoint: every successor of the frontier is known or covered
+        if (cubes.size() == 0) { break; }
+        frontier = TermUtils(logic).simplifyMax(TimeMachine(logic).sendFlaThroughTime(logic.mkOr(cubes), -1));
+        known = logic.mkOr(known, frontier);
+    }
+    return TermUtils(logic).simplifyMax(known);
+}
+
 // This function uses transition invariants candidates, cheking termination.
 // It constructs the states which are not covered by the current transition invariant candidate.
 // These states are checked for reachability. If they are not reachable - TS is terminating.
@@ -991,7 +1031,9 @@ std::tuple<ReachabilityNonterm::Answer, PTRef> ReachabilityNonterm::checkTermina
         // Only the reached states are proven to terminate. The image of reached under subinv must not be added:
         // subinv is a transition invariant, i.e. an over-approximation of the transitive closure, so its image
         // contains states unreachable from reached, which are not known to terminate (and may be nonterminating).
-        sink = TermUtils(logic).simplifyMax(logic.mkOr({sink, reached}));
+        // Optionally, the states really reachable from reached (avoiding covered states) are added, see forwardCone.
+        sink = sinkPostDepth > 0 ? forwardCone(reached, transition, sink, logic)
+                                 : TermUtils(logic).simplifyMax(logic.mkOr({sink, reached}));
         smt_checker.resetSolver();
         smt_checker.assertProp(
             logic.mkAnd({inv, logic.mkOr(subinv, id), TimeMachine(logic).sendFlaThroughTime(inv,1), TimeMachine(logic).sendFlaThroughTime(transition, 1),

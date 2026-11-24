@@ -23,6 +23,7 @@ public:
     explicit ReachabilityNonterm(Options const & givenOptions) : options(givenOptions) {
         options.addOption(options.COMPUTE_WITNESS, "true");
         qeOptions = parseQEOptions(options);
+        sinkPostDepth = std::stoul(options.getOrDefault(Options::NONTERM_SINK_POST_DEPTH, "0"));
     }
 
     enum struct Answer { YES, NO, UNKNOWN, ERROR };
@@ -36,6 +37,9 @@ private:
     // Configuration of the QE computing the states that may avoid termination (see generateWellfoundedDisjuncts).
     // With compute_overapproximation == false (the default) the precise QE is used.
     QEOptions qeOptions;
+    // Number of forward-image steps of the proven terminating states added to the sink states (see forwardCone).
+    // 0 (the default) adds only the proven terminating states themselves.
+    uint sinkPostDepth = 0;
     PTRef covered;
     // Pool of well-founded candidates, shared between recursive analyzeTS invocations
     vec<PTRef> strictCandidates;
@@ -58,6 +62,8 @@ private:
                                                uint originalSize);
 
     bool coverState(PTRef state, PTRef inv, PTRef terminating, PTRef transition, ArithLogic & logic);
+
+    PTRef forwardCone(PTRef reached, PTRef transition, PTRef sink, ArithLogic & logic);
 
     void extractWellFoundedCandidates(PTRef itp, PTRef sink, ArithLogic & logic, const std::vector<PTRef> & vars);
 };

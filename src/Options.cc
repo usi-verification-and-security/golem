@@ -33,6 +33,7 @@ const std::string Options::TERMINATION_BACKEND = "termination-backend";
 const std::string Options::NONTERM_QE_OVER = "nonterm.qe.over";
 const std::string Options::NONTERM_QE_MAX_DISJUNCTIONS = "nonterm.qe.max-disjunctions";
 const std::string Options::NONTERM_QE_MAX_MBP_PER_POLY = "nonterm.qe.max-mbp-per-poly";
+const std::string Options::NONTERM_SINK_POST_DEPTH = "nonterm.sink-post-depth";
 
 namespace {
 
@@ -81,7 +82,10 @@ void printUsage() {
            "                                0 = unlimited (default: 0)\n"
            "--nonterm.qe.max-mbp-per-poly=<n>\n"
            "                                Max. number of MBPs per convex implicant in the over-approximating QE,\n"
-           "                                0 = unlimited (default: 0)\n";
+           "                                0 = unlimited (default: 0)\n"
+           "--nonterm.sink-post-depth=<n>\n"
+           "                                Number of forward-image steps of proven terminating states added to\n"
+           "                                the sink states, 0 = disabled (default: 0)\n";
     std::cout << std::flush;
 }
 
@@ -145,6 +149,7 @@ Options CommandLineParser::parse(int argc, char ** argv) {
                                     {Options::NONTERM_QE_OVER.c_str(), optional_argument, nullptr, 0},
                                     {Options::NONTERM_QE_MAX_DISJUNCTIONS.c_str(), required_argument, nullptr, 0},
                                     {Options::NONTERM_QE_MAX_MBP_PER_POLY.c_str(), required_argument, nullptr, 0},
+                                    {Options::NONTERM_SINK_POST_DEPTH.c_str(), required_argument, nullptr, 0},
                                     {0, 0, 0, 0}};
 
     while (true) {
@@ -199,6 +204,8 @@ Options CommandLineParser::parse(int argc, char ** argv) {
                     addQELimitOption(res, Options::NONTERM_QE_MAX_DISJUNCTIONS, optarg);
                 } else if (long_options[option_index].name == Options::NONTERM_QE_MAX_MBP_PER_POLY) {
                     addQELimitOption(res, Options::NONTERM_QE_MAX_MBP_PER_POLY, optarg);
+                } else if (long_options[option_index].name == Options::NONTERM_SINK_POST_DEPTH) {
+                    addQELimitOption(res, Options::NONTERM_SINK_POST_DEPTH, optarg);
                 }
                 break;
             case 'e':

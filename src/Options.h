@@ -53,6 +53,7 @@ public:
     static const std::string NONTERM_QE_OVER;
     static const std::string NONTERM_QE_MAX_DISJUNCTIONS;
     static const std::string NONTERM_QE_MAX_MBP_PER_POLY;
+    static const std::string NONTERM_SINK_POST_DEPTH;
 };
 
 class CommandLineParser {
